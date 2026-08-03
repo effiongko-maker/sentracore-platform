@@ -15,6 +15,15 @@ export {
   AssetService,
   type IAssetService,
 } from "./assets/AssetService";
+export {
+  EntityResolver,
+  EntityKinds,
+  registerEntityResolver,
+  type EntityKind,
+  type EntityResolverRegistration,
+  type IEntityResolver,
+  type ResolvedEntity,
+} from "./entityResolver";
 export { DashboardService } from "./DashboardService";
 export { MaintenanceService } from "./MaintenanceService";
 export { WorkOrderService } from "./WorkOrderService";
