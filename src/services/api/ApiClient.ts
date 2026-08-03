@@ -372,7 +372,9 @@ export class ApiClient {
           ? { endpoint: "/api/facilities", resource: "facilities" }
           : path === "/assets"
             ? { endpoint: "/api/assets", resource: "assets" }
-            : null;
+            : path === "/work-orders"
+              ? { endpoint: "/api/work-orders", resource: "work-orders" }
+              : null;
 
     if (liveProxy) {
       const response = await fetch(liveProxy.endpoint, {

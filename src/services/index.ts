@@ -24,7 +24,11 @@ export {
   type IEntityResolver,
   type ResolvedEntity,
 } from "./entityResolver";
+export {
+  WorkOrderService,
+  type IWorkOrderService,
+} from "./workOrders/WorkOrderService";
 export { DashboardService } from "./DashboardService";
 export { MaintenanceService } from "./MaintenanceService";
-export { WorkOrderService } from "./WorkOrderService";
+
 

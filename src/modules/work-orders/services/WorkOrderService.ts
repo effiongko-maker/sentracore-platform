@@ -4,4 +4,4 @@
 export {
   WorkOrderService,
   type IWorkOrderService,
-} from "./workOrders/WorkOrderService";
+} from "@/services/workOrders/WorkOrderService";

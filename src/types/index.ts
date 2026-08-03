@@ -58,16 +58,26 @@ export {
 } from "./asset";
 
 
-export interface WorkOrder {
-  id: string;
-  title: string;
-  priority: "low" | "medium" | "high" | "critical";
-  status: "open" | "in_progress" | "on_hold" | "completed" | "cancelled";
-  assignee: string;
-  facility: string;
-  dueDate: string;
-  createdAt: string;
-}
+export type {
+  CreateWorkOrderInput,
+  UpdateWorkOrderInput,
+  WorkOrder,
+  WorkOrderListParams,
+  WorkOrderMaintenanceType,
+  WorkOrderPriority,
+  WorkOrderSource,
+  WorkOrderStatus,
+  WorkOrderType,
+} from "./work-order";
+
+export {
+  WORK_ORDER_MAINTENANCE_TYPES,
+  WORK_ORDER_PRIORITIES,
+  WORK_ORDER_SOURCES,
+  WORK_ORDER_STATUSES,
+  WORK_ORDER_TYPES,
+} from "./work-order";
+
 
 export interface Incident {
   id: string;
