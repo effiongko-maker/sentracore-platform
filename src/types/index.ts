@@ -79,15 +79,26 @@ export {
 } from "./work-order";
 
 
-export interface Incident {
-  id: string;
-  title: string;
-  severity: "low" | "medium" | "high" | "critical";
-  status: "open" | "investigating" | "resolved" | "closed";
-  facility: string;
-  reportedBy: string;
-  reportedAt: string;
-}
+export type {
+  CreateIncidentInput,
+  Incident,
+  IncidentChannel,
+  IncidentListParams,
+  IncidentSeverity,
+  IncidentSource,
+  IncidentStatus,
+  IncidentType,
+  UpdateIncidentInput,
+} from "./incident";
+
+export {
+  INCIDENT_CHANNELS,
+  INCIDENT_SEVERITIES,
+  INCIDENT_SOURCES,
+  INCIDENT_STATUSES,
+  INCIDENT_TYPES,
+} from "./incident";
+
 
 export interface MaintenanceTask {
   id: string;

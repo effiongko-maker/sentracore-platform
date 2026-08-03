@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { formatDate, formatRelativeTime } from "@/lib/utils";
 import { useFacilityName } from "@/hooks/useEntityLabel";
+
 import type {
   ActivityItem,
   ApprovalItem,
@@ -152,6 +153,32 @@ export function OpenWorkOrdersCard({ items }: { items: WorkOrder[] }) {
   );
 }
 
+function CriticalIncidentRow({ item }: { item: Incident }) {
+  const facilityName = useFacilityName(item.facilityId);
+
+  return (
+    <div className="rounded-sc-sm border border-red-100 bg-red-50/40 px-3.5 py-3">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-danger shadow-sc">
+          <AlertTriangle className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-medium text-foreground">{item.title}</p>
+            <Badge variant={severityVariant[item.severity]}>
+              {item.severity}
+            </Badge>
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            {item.id} · {facilityName || item.facilityId} ·{" "}
+            {formatRelativeTime(item.reportedAt)}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CriticalIncidentsCard({ items }: { items: Incident[] }) {
   return (
     <Card className="h-full">
@@ -168,29 +195,7 @@ export function CriticalIncidentsCard({ items }: { items: Incident[] }) {
       </CardHeader>
       <CardContent className="space-y-3">
         {items.map((item) => (
-          <div
-            key={item.id}
-            className="rounded-sc-sm border border-red-100 bg-red-50/40 px-3.5 py-3"
-          >
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-danger shadow-sc">
-                <AlertTriangle className="h-4 w-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-medium text-foreground">
-                    {item.title}
-                  </p>
-                  <Badge variant={severityVariant[item.severity]}>
-                    {item.severity}
-                  </Badge>
-                </div>
-                <p className="mt-1 text-xs text-muted">
-                  {item.id} · {item.facility} · {formatRelativeTime(item.reportedAt)}
-                </p>
-              </div>
-            </div>
-          </div>
+          <CriticalIncidentRow key={item.id} item={item} />
         ))}
       </CardContent>
     </Card>

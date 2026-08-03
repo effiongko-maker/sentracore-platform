@@ -57,3 +57,7 @@ export function useFacilityName(id: string | null | undefined) {
 export function useAssetName(id: string | null | undefined) {
   return useEntityLabel(EntityKinds.asset, id);
 }
+
+export function useWorkOrderTitle(id: string | null | undefined) {
+  return useEntityLabel(EntityKinds.workOrder, id);
+}

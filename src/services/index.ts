@@ -28,7 +28,12 @@ export {
   WorkOrderService,
   type IWorkOrderService,
 } from "./workOrders/WorkOrderService";
+export {
+  IncidentService,
+  type IIncidentService,
+} from "./incidents/IncidentService";
 export { DashboardService } from "./DashboardService";
 export { MaintenanceService } from "./MaintenanceService";
+
 
 
