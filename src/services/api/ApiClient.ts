@@ -381,6 +381,7 @@ export class ApiClient {
                   : null;
 
     if (liveProxy) {
+      const started = performance.now();
       const response = await fetch(liveProxy.endpoint, {
         method: "POST",
         headers: {
@@ -400,15 +401,10 @@ export class ApiClient {
 
       // Diagnose before assuming JSON (HTML 404/redirect pages break response.json()).
       const text = await response.text();
-      console.log(`[ApiClient.post ${path}]`);
-      console.log("  status:", response.status);
-      console.log("  url:", response.url);
-      console.log("  content-type:", response.headers.get("content-type"));
+      const elapsed = Math.round(performance.now() - started);
       console.log(
-        "  headers:",
-        Object.fromEntries(response.headers.entries())
+        `[perf] ApiClient.post ${path} → ${liveProxy.endpoint} ${response.status} in ${elapsed}ms`
       );
-      console.log("  body (first 400 chars):", text.slice(0, 400));
 
       const trimmed = text.trim();
       if (!trimmed || trimmed.startsWith("<")) {

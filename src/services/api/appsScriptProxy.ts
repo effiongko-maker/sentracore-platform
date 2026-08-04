@@ -1,8 +1,10 @@
 /**
  * Shared Apps Script proxy helper used by Next.js API routes.
- * Behavior matches the Users /api/users implementation exactly.
+ * All module routes (users, facilities, assets, work-orders, incidents, maintenance)
+ * call this helper — same EXEC URL, same fetch behavior.
  */
 
+/** Prefer env; default matches the verified public Web App EXEC URL. */
 const APPS_SCRIPT_URL =
   process.env.APPS_SCRIPT_URL ??
   process.env.NEXT_PUBLIC_API_URL ??
@@ -13,20 +15,6 @@ export type AppsScriptProxyBody = {
   action?: string;
   payload?: unknown;
 };
-
-async function readAndLog(label: string, response: Response, logPrefix: string) {
-  const text = await response.text();
-  const headers = Object.fromEntries(response.headers.entries());
-
-  console.log(`[${logPrefix}] ${label}`);
-  console.log("  status:", response.status);
-  console.log("  url:", response.url);
-  console.log("  content-type:", response.headers.get("content-type"));
-  console.log("  headers:", headers);
-  console.log("  body (first 400 chars):", text.slice(0, 400));
-
-  return text;
-}
 
 function parseJsonOrThrow(text: string, context: string) {
   const trimmed = text.trim();
@@ -57,55 +45,37 @@ export async function postToAppsScript(
   });
 
   console.log(`[${logPrefix}] POST → Apps Script`, APPS_SCRIPT_URL);
+  console.log(`[${logPrefix}] body:`, payload);
 
-  const initial = await fetch(APPS_SCRIPT_URL, {
+  // Match verified curl -L: follow redirects on the original POST.
+  // Do not convert the redirect hop to GET (that drops the JSON body).
+  const response = await fetch(APPS_SCRIPT_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",
     },
     body: payload,
-    redirect: "manual",
+    redirect: "follow",
   });
 
-  if (initial.status >= 300 && initial.status < 400) {
-    const location = initial.headers.get("location");
-    await readAndLog("initial 3xx response", initial, logPrefix);
+  const text = await response.text();
 
-    if (!location) {
-      throw new Error(
-        `Apps Script returned ${initial.status} without Location header`
-      );
-    }
+  console.log(response.status);
+  console.log(response.url);
+  console.log(text);
 
-    console.log(`[${logPrefix}] Following redirect with GET →`, location);
+  console.log(`[${logPrefix}] response`);
+  console.log("  status:", response.status);
+  console.log("  url:", response.url);
+  console.log("  content-type:", response.headers.get("content-type"));
+  console.log("  body (first 400 chars):", text.slice(0, 400));
 
-    const redirected = await fetch(location, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
-      redirect: "follow",
-    });
-
-    const text = await readAndLog("redirect GET response", redirected, logPrefix);
-
-    if (!redirected.ok) {
-      throw new Error(
-        `Apps Script redirect target failed: ${redirected.status} ${redirected.statusText}`
-      );
-    }
-
-    return parseJsonOrThrow(text, "Apps Script redirect GET");
-  }
-
-  const text = await readAndLog("direct response", initial, logPrefix);
-
-  if (!initial.ok) {
+  if (!response.ok) {
     throw new Error(
-      `Apps Script request failed: ${initial.status} ${initial.statusText}`
+      `Apps Script request failed: ${response.status} ${response.statusText}`
     );
   }
 
-  return parseJsonOrThrow(text, "Apps Script direct response");
+  return parseJsonOrThrow(text, `[${logPrefix}] Apps Script response`);
 }

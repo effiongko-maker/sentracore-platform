@@ -36,17 +36,10 @@ export {
   MaintenanceService,
   type IMaintenanceService,
 } from "./maintenance/MaintenanceService";
-export {
-  DashboardService,
-  type IDashboardService,
-} from "./dashboard/DashboardService";
-export {
-  ReportingService,
-  type IReportingService,
-  type ReportingSnapshot,
-  type ReportingQuery,
-  registerDashboardWidget,
-  getDashboardWidgets,
-  registerDefaultDashboardWidgets,
-} from "./reporting";
+
+// Dashboard / Reporting are intentionally NOT re-exported from this barrel.
+// Import from their own entrypoints so AppShell/TopBar does not eagerly pull
+// the reporting stack into the shared client layout:
+//   @/services/dashboard
+//   @/services/reporting
 

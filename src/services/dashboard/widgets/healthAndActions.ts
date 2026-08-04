@@ -2,14 +2,14 @@ import { registerDashboardWidget } from "../registry";
 
 export function registerHealthAndActionWidgets() {
   registerDashboardWidget({
-    id: "health.summary",
+    id: "summary.operational_health",
     sectionId: "context",
     kind: "health_summary",
-    title: "Operational health",
+    title: "Operational Health",
     order: 10,
     resolve: (report) => ({
-      id: "card.health.summary",
-      widgetId: "health.summary",
+      id: "card.summary.operational_health",
+      widgetId: "summary.operational_health",
       kind: "health_summary",
       tone:
         report.health.band === "healthy"
@@ -17,7 +17,7 @@ export function registerHealthAndActionWidgets() {
           : report.health.band === "watch"
             ? "warning"
             : "danger",
-      title: "Operational health",
+      title: "Operational Health",
       description: report.health.summary,
       primaryValue: report.health.score,
       secondaryLabel: report.health.band,
@@ -37,8 +37,11 @@ export function registerHealthAndActionWidgets() {
       kind: "kpi_stat",
       tone: "info",
       title: "Facilities",
-      primaryValue: report.kpis.activeFacilities,
-      secondaryLabel: "Active sites in scope",
+      primaryValue: report.kpis.totalFacilities,
+      secondaryLabel:
+        report.kpis.totalFacilities === 0
+          ? "No facilities loaded"
+          : `${report.kpis.activeFacilities} active`,
       module: "facilities",
     }),
   });
@@ -56,8 +59,11 @@ export function registerHealthAndActionWidgets() {
       kind: "kpi_stat",
       tone: "success",
       title: "Assets",
-      primaryValue: report.kpis.activeAssets,
-      secondaryLabel: "Active assets in scope",
+      primaryValue: report.kpis.totalAssets,
+      secondaryLabel:
+        report.kpis.totalAssets === 0
+          ? "No assets loaded"
+          : `${report.kpis.activeAssets} active`,
       module: "assets",
     }),
   });
@@ -66,7 +72,7 @@ export function registerHealthAndActionWidgets() {
     id: "kpi.estate_workforce",
     sectionId: "estate_baseline",
     kind: "kpi_stat",
-    title: "Workforce",
+    title: "Users",
     module: "users",
     order: 30,
     resolve: (report) => ({
@@ -74,40 +80,47 @@ export function registerHealthAndActionWidgets() {
       widgetId: "kpi.estate_workforce",
       kind: "kpi_stat",
       tone: "neutral",
-      title: "Workforce",
-      primaryValue: report.kpis.activeWorkforce,
-      secondaryLabel: "Active users",
+      title: "Users",
+      primaryValue: report.kpis.totalUsers,
+      secondaryLabel:
+        report.kpis.totalUsers === 0
+          ? "No users loaded"
+          : `${report.kpis.activeWorkforce} active`,
       module: "users",
     }),
   });
 
-  const actions: Array<{ id: string; title: string; description: string; order: number }> =
-    [
-      {
-        id: "create-work-order",
-        title: "Work orders",
-        description: "Review and manage jobs",
-        order: 10,
-      },
-      {
-        id: "report-incident",
-        title: "Incidents",
-        description: "Capture operational events",
-        order: 20,
-      },
-      {
-        id: "schedule-maintenance",
-        title: "Maintenance",
-        description: "Open maintenance requests",
-        order: 30,
-      },
-      {
-        id: "view-facilities",
-        title: "Facilities",
-        description: "Browse sites",
-        order: 40,
-      },
-    ];
+  const actions: Array<{
+    id: string;
+    title: string;
+    description: string;
+    order: number;
+  }> = [
+    {
+      id: "create-incident",
+      title: "Create Incident",
+      description: "Log a new operational event",
+      order: 10,
+    },
+    {
+      id: "create-work-order",
+      title: "Create Work Order",
+      description: "Open a new work job",
+      order: 20,
+    },
+    {
+      id: "create-maintenance",
+      title: "Create Maintenance Request",
+      description: "Start a maintenance request",
+      order: 30,
+    },
+    {
+      id: "view-facilities",
+      title: "View Facilities",
+      description: "Browse the estate",
+      order: 40,
+    },
+  ];
 
   for (const action of actions) {
     registerDashboardWidget({

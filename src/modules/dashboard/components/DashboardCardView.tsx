@@ -5,10 +5,11 @@ import {
   AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
+  Building2,
   ClipboardList,
   Minus,
+  Plus,
   Wrench,
-  Zap,
 } from "lucide-react";
 import {
   Card,
@@ -19,8 +20,8 @@ import {
 } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { formatRelativeTime, cn } from "@/lib/utils";
-import { useUserName } from "@/hooks/useEntityLabel";
+import { formatDate, formatRelativeTime, cn } from "@/lib/utils";
+import { useFacilityName, useUserName } from "@/hooks/useEntityLabel";
 import type { DashboardCard, DashboardCardItem } from "../types";
 import { resolveActionPath, resolveModulePath } from "../utils";
 
@@ -32,8 +33,17 @@ const toneClass: Record<string, string> = {
   neutral: "bg-slate-100 text-muted",
 };
 
+function labelize(value?: string) {
+  if (!value) return "";
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function ItemRow({ item }: { item: DashboardCardItem }) {
   const href = resolveModulePath(item.module, item.entityId);
+  const facilityName = useFacilityName(item.facilityId);
 
   return (
     <Link
@@ -52,23 +62,25 @@ function ItemRow({ item }: { item: DashboardCardItem }) {
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm font-medium text-foreground">{item.title}</p>
-          {item.tone ? (
-            <Badge variant={item.tone}>{item.meta?.split(" · ")[0]}</Badge>
+          {item.priority ? (
+            <Badge variant={item.tone ?? "neutral"}>
+              {labelize(item.priority)}
+            </Badge>
+          ) : null}
+          {item.status ? (
+            <Badge variant="neutral">{labelize(item.status)}</Badge>
           ) : null}
         </div>
-        {item.meta ? (
-          <p className="mt-1 text-xs text-muted">{item.meta}</p>
-        ) : null}
-        {item.reportedAt ? (
-          <p className="mt-1 text-[11px] text-slate-400">
-            {formatRelativeTime(item.reportedAt)}
-          </p>
-        ) : null}
+        <p className="mt-1 text-xs text-muted">
+          {item.facilityId ? facilityName || item.facilityId : "No facility"}
+          {item.reportedAt ? ` · ${formatRelativeTime(item.reportedAt)}` : ""}
+        </p>
       </div>
     </Link>
   );
 }
 
+/** Renders `kpi_stat` cards from DashboardSnapshot. */
 export function DashboardKpiCard({
   card,
   index = 0,
@@ -86,7 +98,10 @@ export function DashboardKpiCard({
   const href = card.module ? resolveModulePath(card.module) : undefined;
 
   const body = (
-    <Card className="p-5 transition-shadow duration-200 hover:shadow-sc-lg">
+    <Card
+      className="p-5 transition-shadow duration-200 hover:shadow-sc-lg"
+      style={{ animationDelay: `${index * 40}ms` }}
+    >
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm font-medium text-muted">{card.title}</p>
         <span
@@ -102,19 +117,20 @@ export function DashboardKpiCard({
         {card.primaryValue ?? "—"}
       </p>
       {card.secondaryLabel ? (
-        <p className="mt-2 text-xs text-muted">{card.secondaryLabel}</p>
+        <p className="mt-2 text-xs leading-5 text-muted">{card.secondaryLabel}</p>
       ) : null}
     </Card>
   );
 
   if (!href) return body;
   return (
-    <Link href={href} className="block" style={{ animationDelay: `${index * 40}ms` }}>
+    <Link href={href} className="block">
       {body}
     </Link>
   );
 }
 
+/** Renders `entity_list` and `attention_queue` cards. */
 export function DashboardListCard({ card }: { card: DashboardCard }) {
   const href = card.module ? resolveModulePath(card.module) : undefined;
   const items = card.items ?? [];
@@ -138,15 +154,12 @@ export function DashboardListCard({ card }: { card: DashboardCard }) {
       </CardHeader>
       <CardContent className="space-y-3">
         {items.length === 0 ? (
-          <p className="text-sm text-muted">
+          <p className="rounded-sc-sm border border-dashed border-border/80 bg-slate-50/60 px-3.5 py-4 text-sm text-muted">
             {card.emptyMessage ?? "Nothing to show."}
           </p>
         ) : (
           items.map((item) => (
-            <ItemRow
-              key={`${item.module}:${item.entityId}`}
-              item={item}
-            />
+            <ItemRow key={`${item.module}:${item.entityId}`} item={item} />
           ))
         )}
       </CardContent>
@@ -154,6 +167,7 @@ export function DashboardListCard({ card }: { card: DashboardCard }) {
   );
 }
 
+/** Renders `health_summary` cards. */
 export function DashboardHealthCard({ card }: { card: DashboardCard }) {
   return (
     <Card className="p-5">
@@ -161,19 +175,22 @@ export function DashboardHealthCard({ card }: { card: DashboardCard }) {
         <div>
           <p className="text-sm font-medium text-muted">{card.title}</p>
           <p className="mt-2 text-sm text-foreground">
-            {card.description ?? "—"}
+            {card.description ?? card.secondaryLabel ?? "—"}
           </p>
         </div>
         <Badge variant={card.tone}>{card.secondaryLabel ?? "health"}</Badge>
       </div>
-      <p className="mt-4 text-3xl font-semibold tracking-tight text-primary">
-        {card.primaryValue ?? "—"}
-        <span className="ml-2 text-sm font-normal text-muted">/ 100</span>
-      </p>
+      {card.primaryValue != null ? (
+        <p className="mt-4 text-3xl font-semibold tracking-tight text-primary">
+          {card.primaryValue}
+          <span className="ml-2 text-sm font-normal text-muted">/ 100</span>
+        </p>
+      ) : null}
     </Card>
   );
 }
 
+/** Renders `quick_action` cards — navigation via actionId only. */
 export function DashboardQuickActionCard({ card }: { card: DashboardCard }) {
   if (!card.actionId) return null;
   const href = resolveActionPath(card.actionId);
@@ -183,7 +200,11 @@ export function DashboardQuickActionCard({ card }: { card: DashboardCard }) {
       <Card className="h-full p-4 transition-shadow hover:shadow-sc-lg">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-soft text-accent">
-            <Zap className="h-4 w-4" />
+            {card.actionId === "view-facilities" ? (
+              <Building2 className="h-4 w-4" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
           </div>
           <div>
             <p className="text-sm font-medium text-foreground">{card.title}</p>
@@ -212,10 +233,17 @@ export function DashboardContextBanner({
   const hour = new Date(asOf).getHours();
   const greeting =
     hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const dateLabel = formatDate(asOf, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 
   return (
     <div className="relative overflow-hidden rounded-sc border border-border/80 bg-primary px-6 py-7 text-white shadow-sc-lg sm:px-8">
       <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-accent/30 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-24 right-20 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
       <div className="relative">
         <p className="mb-2 text-xs font-medium uppercase tracking-wider text-white/70">
           {title ?? "Operations Command Center"}
@@ -224,10 +252,26 @@ export function DashboardContextBanner({
           {greeting}
           {userName ? `, ${userName.split(" ")[0]}` : ""}
         </h2>
-        <p className="mt-2 max-w-xl text-sm leading-6 text-white/65">
-          {subtitle ?? "Live operational health across your estate."}
+        <p className="mt-2 text-sm text-white/75">{dateLabel}</p>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-white/65">
+          {subtitle ?? "Here's what's happening across your facilities today."}
         </p>
       </div>
     </div>
+  );
+}
+
+export function NeedsAttentionEmpty() {
+  return (
+    <Card className="border-dashed">
+      <CardContent className="py-8 text-center">
+        <p className="text-sm font-medium text-foreground">
+          Everything looks good. No items require immediate attention.
+        </p>
+        <p className="mt-1 text-xs text-muted">
+          Critical incidents, overdue work, and blocked items will appear here.
+        </p>
+      </CardContent>
+    </Card>
   );
 }

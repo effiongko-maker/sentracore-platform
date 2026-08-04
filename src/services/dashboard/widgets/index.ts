@@ -1,13 +1,11 @@
+import { clearDashboardWidgets } from "../registry";
 import { registerHealthAndActionWidgets } from "./healthAndActions";
 import { registerKpiWidgets } from "./kpiWidgets";
 import { registerListWidgets } from "./listWidgets";
 
-let registered = false;
-
-/** Idempotent bootstrap of built-in dashboard widgets. */
+/** Register built-in dashboard widgets (idempotent bootstrap). */
 export function registerDefaultDashboardWidgets(): void {
-  if (registered) return;
-  registered = true;
+  clearDashboardWidgets();
   registerKpiWidgets();
   registerListWidgets();
   registerHealthAndActionWidgets();

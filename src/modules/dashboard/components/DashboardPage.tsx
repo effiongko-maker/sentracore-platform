@@ -9,8 +9,10 @@ import {
   DashboardKpiCard,
   DashboardListCard,
   DashboardQuickActionCard,
+  NeedsAttentionEmpty,
 } from "./DashboardCardView";
 
+/** Pure renderer for one DashboardCard by frozen widget kind. */
 function renderCard(card: DashboardCard, index: number) {
   switch (card.kind) {
     case "kpi_stat":
@@ -27,9 +29,21 @@ function renderCard(card: DashboardCard, index: number) {
   }
 }
 
+function sectionHasItems(section: DashboardSection) {
+  return section.cards.some((card) => (card.items?.length ?? 0) > 0);
+}
+
 function SectionBlock({ section }: { section: DashboardSection }) {
   if (section.id === "context") {
-    return null;
+    const healthCards = section.cards.filter(
+      (card) => card.kind === "health_summary"
+    );
+    if (!healthCards.length) return null;
+    return (
+      <section className="max-w-xl space-y-3">
+        {healthCards.map((card, index) => renderCard(card, index))}
+      </section>
+    );
   }
 
   if (section.id === "health_strip" || section.id === "estate_baseline") {
@@ -43,7 +57,54 @@ function SectionBlock({ section }: { section: DashboardSection }) {
             <p className="text-xs text-muted">{section.description}</p>
           ) : null}
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div
+          className={
+            section.id === "estate_baseline"
+              ? "grid gap-4 sm:grid-cols-3"
+              : "grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+          }
+        >
+          {section.cards.map((card, index) => renderCard(card, index))}
+        </div>
+      </section>
+    );
+  }
+
+  if (section.id === "needs_attention") {
+    const hasItems = sectionHasItems(section);
+    return (
+      <section className="space-y-3">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">
+            {section.title}
+          </h3>
+          {section.description ? (
+            <p className="text-xs text-muted">{section.description}</p>
+          ) : null}
+        </div>
+        {hasItems ? (
+          <div className="grid gap-4 xl:grid-cols-2">
+            {section.cards.map((card, index) => renderCard(card, index))}
+          </div>
+        ) : (
+          <NeedsAttentionEmpty />
+        )}
+      </section>
+    );
+  }
+
+  if (section.id === "work_in_motion") {
+    return (
+      <section className="space-y-3">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">
+            {section.title}
+          </h3>
+          {section.description ? (
+            <p className="text-xs text-muted">{section.description}</p>
+          ) : null}
+        </div>
+        <div className="grid gap-4 xl:grid-cols-2">
           {section.cards.map((card, index) => renderCard(card, index))}
         </div>
       </section>
@@ -74,17 +135,18 @@ function SectionBlock({ section }: { section: DashboardSection }) {
         <h3 className="text-sm font-semibold text-foreground">
           {section.title}
         </h3>
-        {section.description ? (
-          <p className="text-xs text-muted">{section.description}</p>
-        ) : null}
       </div>
-      <div className="grid gap-4 xl:grid-cols-3">
+      <div className="grid gap-4 xl:grid-cols-2">
         {section.cards.map((card, index) => renderCard(card, index))}
       </div>
     </section>
   );
 }
 
+/**
+ * Pure DashboardSnapshot renderer.
+ * No ReportingService or domain service calls.
+ */
 export function DashboardPage() {
   const { snapshot, loading, error, reload } = useDashboard();
 
@@ -115,12 +177,8 @@ export function DashboardPage() {
     );
   }
 
-  const healthCard = snapshot.sections
-    .flatMap((section) => section.cards)
-    .find((card) => card.kind === "health_summary");
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <DashboardContextBanner
         title={snapshot.context.title}
         subtitle={snapshot.context.subtitle ?? snapshot.health?.summary}
@@ -128,17 +186,9 @@ export function DashboardPage() {
         asOf={snapshot.asOf}
       />
 
-      {healthCard ? (
-        <div className="max-w-xl">
-          <DashboardHealthCard card={healthCard} />
-        </div>
-      ) : null}
-
-      {snapshot.sections
-        .filter((section) => section.id !== "context")
-        .map((section) => (
-          <SectionBlock key={section.id} section={section} />
-        ))}
+      {snapshot.sections.map((section) => (
+        <SectionBlock key={section.id} section={section} />
+      ))}
     </div>
   );
 }

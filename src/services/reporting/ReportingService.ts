@@ -27,8 +27,8 @@ function filterByFacilityId<T extends { facilityId?: string; facility?: string }
 
 /**
  * Platform-wide reporting engine.
- * Sole aggregation layer over domain services.
- * Returns ReportingSnapshot only.
+ * Aggregates domain services into ReportingSnapshot only.
+ * No UI knowledge, routing, or Dashboard types.
  */
 export const ReportingService = {
   async getReportingSnapshot(
@@ -68,7 +68,7 @@ export const ReportingService = {
     ]);
 
     const scopedFacilities = facilityId
-      ? facilities.filter((f) => f.id === facilityId)
+      ? facilities.filter((facility) => facility.id === facilityId)
       : facilities;
     const scopedAssets = filterByFacilityId(assets, facilityId);
     const scopedIncidents = filterByFacilityId(incidents, facilityId);

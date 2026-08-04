@@ -4,6 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { DashboardService } from "@/services/dashboard/DashboardService";
 import type { DashboardSnapshot } from "../types";
 
+/**
+ * Loads DashboardSnapshot via DashboardService.getOperationalHealth().
+ * UI never calls ReportingService or domain services.
+ */
 export function useDashboard() {
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,8 +37,34 @@ export function useDashboard() {
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    const id = ++requestId.current;
+
+    DashboardService.getOperationalHealth()
+      .then((next) => {
+        if (cancelled || id !== requestId.current) return;
+        setSnapshot(next);
+        setError(null);
+      })
+      .catch((err: unknown) => {
+        if (cancelled || id !== requestId.current) return;
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load dashboard right now."
+        );
+        setSnapshot(null);
+      })
+      .finally(() => {
+        if (!cancelled && id === requestId.current) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return {
     snapshot,

@@ -12,16 +12,25 @@ export interface ReportingQuery {
 
 export interface ReportingKpis {
   activeFacilities: number;
+  inactiveFacilities: number;
+  totalFacilities: number;
   activeAssets: number;
+  totalAssets: number;
+  assetsOperationalPercent: number | null;
+  assetsInPoorCondition: number;
+  activeWorkforce: number;
+  totalUsers: number;
   openWorkOrders: number;
+  workOrdersCreatedToday: number;
   workOrdersDueToday: number;
   overdueWorkOrders: number;
   criticalIncidents: number;
+  criticalIncidentsUnassigned: number;
+  incidentsNeedingWorkOrder: number;
   maintenanceBacklog: number;
   overdueMaintenance: number;
-  activeWorkforce: number;
-  assetsInPoorCondition: number;
-  incidentsNeedingWorkOrder: number;
+  maintenanceOnHold: number;
+  workOrdersOnHold: number;
 }
 
 export interface ReportingListItem {
@@ -34,6 +43,9 @@ export interface ReportingListItem {
     | "work-orders";
   entityId: string;
   title: string;
+  status?: string;
+  priority?: string;
+  facilityId?: string;
   meta?: string;
   reportedAt?: string;
   tone?: "neutral" | "info" | "success" | "warning" | "danger";
@@ -41,11 +53,11 @@ export interface ReportingListItem {
 
 export interface ReportingProjections {
   criticalIncidents: ReportingListItem[];
-  openWorkOrders: ReportingListItem[];
   overdueWorkOrders: ReportingListItem[];
-  upcomingMaintenance: ReportingListItem[];
-  inProgressWorkOrders: ReportingListItem[];
-  inProgressMaintenance: ReportingListItem[];
+  maintenanceAttention: ReportingListItem[];
+  blockedItems: ReportingListItem[];
+  latestOpenWorkOrders: ReportingListItem[];
+  latestActiveMaintenance: ReportingListItem[];
 }
 
 export type ReportingHealthBand = "healthy" | "watch" | "critical";

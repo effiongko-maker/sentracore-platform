@@ -4,7 +4,7 @@ import { Bell, Menu, Search } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getNavItemByPath } from "@/lib/navigation";
-import { UserService } from "@/services";
+import { UserService } from "@/services/users/UserService";
 import type { CurrentUser, NotificationItem } from "@/types";
 import { useSidebar } from "@/hooks/useSidebar";
 import { NotificationPanel } from "@/components/layout/NotificationPanel";

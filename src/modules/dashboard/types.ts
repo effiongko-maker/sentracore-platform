@@ -84,6 +84,9 @@ export interface DashboardCardItem {
   module: DashboardModuleRef;
   entityId: string;
   title: string;
+  status?: string;
+  priority?: string;
+  facilityId?: string;
   meta?: string;
   reportedAt?: string;
   tone?: DashboardCardTone;

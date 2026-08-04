@@ -8,9 +8,4 @@ export type {
   ReportingQuery,
   ReportingSnapshot,
 } from "./types";
-export {
-  registerDashboardWidget,
-  getDashboardWidgets,
-  clearDashboardWidgets,
-} from "./registry";
-export { registerDefaultDashboardWidgets } from "./widgets";
+export { kpiInsightLabels } from "./kpis";

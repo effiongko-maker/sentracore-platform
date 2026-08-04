@@ -6,8 +6,7 @@ import {
 
 /**
  * Server-only proxy: browser → /api/facilities → Apps Script.
- * Frontend must never call Apps Script directly.
- * Mirrors /api/users exactly.
+ * Identical pattern to /api/work-orders, /api/incidents, /api/maintenance.
  */
 
 export async function POST(request: Request) {

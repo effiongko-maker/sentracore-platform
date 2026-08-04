@@ -10,7 +10,7 @@ export const DASHBOARD_SECTION_META: Record<
     order: 1,
   },
   health_strip: {
-    title: "Health strip",
+    title: "Operational health",
     description: "Live pulse across the estate",
     order: 2,
   },
@@ -21,12 +21,12 @@ export const DASHBOARD_SECTION_META: Record<
   },
   work_in_motion: {
     title: "Work in motion",
-    description: "Active execution across work orders and maintenance",
+    description: "Latest open work and active maintenance",
     order: 4,
   },
   estate_baseline: {
     title: "Estate baseline",
-    description: "Facilities, assets, and workforce capacity",
+    description: "Facilities, assets, and users",
     order: 5,
   },
   quick_actions: {
@@ -37,12 +37,10 @@ export const DASHBOARD_SECTION_META: Record<
 };
 
 export const DASHBOARD_ACTION_ROUTES: Record<string, string> = {
+  "create-incident": "/incidents",
   "create-work-order": "/work-orders",
-  "report-incident": "/incidents",
-  "schedule-maintenance": "/maintenance",
+  "create-maintenance": "/maintenance",
   "view-facilities": "/facilities",
-  "view-assets": "/assets",
-  "view-users": "/users",
 };
 
 export const DASHBOARD_MODULE_ROUTES: Record<string, string> = {

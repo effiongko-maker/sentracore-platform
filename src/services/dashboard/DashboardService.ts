@@ -6,11 +6,9 @@ import type {
   DashboardSectionId,
   DashboardSnapshot,
 } from "@/modules/dashboard/types";
-import {
-  getDashboardWidgets,
-  registerDefaultDashboardWidgets,
-  ReportingService,
-} from "@/services/reporting";
+import { ReportingService } from "@/services/reporting";
+import { getDashboardWidgets } from "./registry";
+import { registerDefaultDashboardWidgets } from "./widgets";
 
 function buildSections(cards: DashboardCard[]): DashboardSection[] {
   const widgets = getDashboardWidgets();
@@ -55,8 +53,8 @@ function buildSections(cards: DashboardCard[]): DashboardSection[] {
 
 /**
  * Dashboard composition service.
- * Converts ReportingSnapshot → DashboardSnapshot via the widget registry.
- * Must never call domain services directly.
+ * ReportingSnapshot → Widget Registry → DashboardSnapshot.
+ * Calls only ReportingService. Never calls domain services.
  */
 export const DashboardService = {
   async getOperationalHealth(
