@@ -6,9 +6,13 @@ import type {
   DashboardSectionId,
   DashboardSnapshot,
 } from "@/modules/dashboard/types";
+import { traceRequest } from "@/services/debug/requestTrace";
 import { ReportingService } from "@/services/reporting";
 import { getDashboardWidgets } from "./registry";
 import { registerDefaultDashboardWidgets } from "./widgets";
+
+/** Dedupe overlapping mounts (React Strict Mode) so one load = one reporting batch. */
+let inflightOperationalHealth: Promise<DashboardSnapshot> | null = null;
 
 function buildSections(cards: DashboardCard[]): DashboardSection[] {
   const widgets = getDashboardWidgets();
@@ -60,29 +64,45 @@ export const DashboardService = {
   async getOperationalHealth(
     params: DashboardQuery = {}
   ): Promise<DashboardSnapshot> {
-    registerDefaultDashboardWidgets();
+    if (inflightOperationalHealth) {
+      console.log(
+        "[hang] DashboardService.getOperationalHealth JOIN in-flight (dedupe)"
+      );
+      return inflightOperationalHealth;
+    }
 
-    const report = await ReportingService.getReportingSnapshot(params);
+    inflightOperationalHealth = traceRequest(
+      "DashboardService.getOperationalHealth",
+      async () => {
+        registerDefaultDashboardWidgets();
 
-    const cards = getDashboardWidgets()
-      .map((definition) => definition.resolve(report))
-      .filter((card): card is DashboardCard => card != null);
+        const report = await ReportingService.getReportingSnapshot(params);
 
-    return {
-      asOf: report.asOf,
-      facilityId: report.facilityId,
-      context: {
-        currentUserId: report.currentUserId,
-        title: "Operations Command Center",
-        subtitle: report.health.summary,
-      },
-      health: {
-        band: report.health.band,
-        score: report.health.score,
-        summary: report.health.summary,
-      },
-      sections: buildSections(cards),
-    };
+        const cards = getDashboardWidgets()
+          .map((definition) => definition.resolve(report))
+          .filter((card): card is DashboardCard => card != null);
+
+        return {
+          asOf: report.asOf,
+          facilityId: report.facilityId,
+          context: {
+            currentUserId: report.currentUserId,
+            title: "Operations Command Center",
+            subtitle: report.health.summary,
+          },
+          health: {
+            band: report.health.band,
+            score: report.health.score,
+            summary: report.health.summary,
+          },
+          sections: buildSections(cards),
+        };
+      }
+    ).finally(() => {
+      inflightOperationalHealth = null;
+    });
+
+    return inflightOperationalHealth;
   },
 };
 

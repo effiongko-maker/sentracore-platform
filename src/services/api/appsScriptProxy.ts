@@ -44,8 +44,10 @@ export async function postToAppsScript(
     payload: body.payload ?? {},
   });
 
-  console.log(`[${logPrefix}] POST → Apps Script`, APPS_SCRIPT_URL);
-  console.log(`[${logPrefix}] body:`, payload);
+  const started = performance.now();
+  console.log(
+    `[hang] ${logPrefix} AppsScript START resource=${body.resource ?? defaults.resource}`
+  );
 
   // Match verified curl -L: follow redirects on the original POST.
   // Do not convert the redirect hop to GET (that drops the JSON body).
@@ -60,16 +62,10 @@ export async function postToAppsScript(
   });
 
   const text = await response.text();
-
-  console.log(response.status);
-  console.log(response.url);
-  console.log(text);
-
-  console.log(`[${logPrefix}] response`);
-  console.log("  status:", response.status);
-  console.log("  url:", response.url);
-  console.log("  content-type:", response.headers.get("content-type"));
-  console.log("  body (first 400 chars):", text.slice(0, 400));
+  const ms = Math.round(performance.now() - started);
+  console.log(
+    `[hang] ${logPrefix} AppsScript FINISH ${response.status} ${ms}ms bytes=${text.length}`
+  );
 
   if (!response.ok) {
     throw new Error(

@@ -6,6 +6,7 @@ import type {
   User,
   UserListParams,
 } from "@/types";
+import { traceRequest } from "@/services/debug/requestTrace";
 import {
   ApiError,
   fail,
@@ -381,67 +382,61 @@ export class ApiClient {
                   : null;
 
     if (liveProxy) {
-      const started = performance.now();
-      const response = await fetch(liveProxy.endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          ...options?.headers,
-        },
-        body: JSON.stringify(
-          body ?? {
-            resource: liveProxy.resource,
-            action: "getAll",
-            payload: {},
-          }
-        ),
-        signal: options?.signal,
+      return traceRequest(`ApiClient.post ${path}`, async () => {
+        const response = await fetch(liveProxy.endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            ...options?.headers,
+          },
+          body: JSON.stringify(
+            body ?? {
+              resource: liveProxy.resource,
+              action: "getAll",
+              payload: {},
+            }
+          ),
+          signal: options?.signal,
+        });
+
+        // Diagnose before assuming JSON (HTML 404/redirect pages break response.json()).
+        const text = await response.text();
+        const trimmed = text.trim();
+        if (!trimmed || trimmed.startsWith("<")) {
+          throw new ApiError(
+            `Expected JSON from ${liveProxy.endpoint} but received HTML (status ${response.status}). Is the Next.js route at src/app/api/${liveProxy.resource}/route.ts?`,
+            response.status,
+            trimmed.slice(0, 200)
+          );
+        }
+
+        let json: ApiResponse<T>;
+        try {
+          json = JSON.parse(trimmed) as ApiResponse<T>;
+        } catch {
+          throw new ApiError(
+            `Invalid JSON from ${liveProxy.endpoint} (status ${response.status})`,
+            response.status,
+            trimmed.slice(0, 200)
+          );
+        }
+
+        if (!response.ok || json.success === false) {
+          throw new ApiError(
+            json.message ?? `Request failed with status ${response.status}`,
+            response.status || json.status || 500,
+            json
+          );
+        }
+
+        return {
+          success: true,
+          status: response.status,
+          data: json.data,
+          message: json.message,
+        };
       });
-
-      // Diagnose before assuming JSON (HTML 404/redirect pages break response.json()).
-      const text = await response.text();
-      const elapsed = Math.round(performance.now() - started);
-      console.log(
-        `[perf] ApiClient.post ${path} → ${liveProxy.endpoint} ${response.status} in ${elapsed}ms`
-      );
-
-      const trimmed = text.trim();
-      if (!trimmed || trimmed.startsWith("<")) {
-        throw new ApiError(
-          `Expected JSON from ${liveProxy.endpoint} but received HTML (status ${response.status}). Is the Next.js route at src/app/api/${liveProxy.resource}/route.ts?`,
-          response.status,
-          trimmed.slice(0, 200)
-        );
-      }
-
-      let json: ApiResponse<T>;
-      try {
-        json = JSON.parse(trimmed) as ApiResponse<T>;
-      } catch {
-        throw new ApiError(
-          `Invalid JSON from ${liveProxy.endpoint} (status ${response.status})`,
-          response.status,
-          trimmed.slice(0, 200)
-        );
-      }
-
-      console.log(`[ApiClient.post ${path}] parsed JSON:`, json);
-
-      if (!response.ok || json.success === false) {
-        throw new ApiError(
-          json.message ?? `Request failed with status ${response.status}`,
-          response.status || json.status || 500,
-          json
-        );
-      }
-
-      return {
-        success: true,
-        status: response.status,
-        data: json.data,
-        message: json.message,
-      };
     }
 
     return mockRequest("POST", path, body, options) as Promise<ApiResponse<T>>;

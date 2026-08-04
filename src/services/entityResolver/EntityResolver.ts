@@ -1,3 +1,4 @@
+import { traceRequest } from "@/services/debug/requestTrace";
 import {
   getEntityRegistration,
   listEntityRegistrations,
@@ -20,10 +21,20 @@ function normalizeId(id: string | null | undefined): string {
 
 async function ensureDirectory(kind: EntityKind): Promise<Map<string, string>> {
   const cached = directories.get(kind);
-  if (cached) return cached;
+  if (cached) {
+    console.log(
+      `[hang] EntityResolver.ensureDirectory(${kind}) CACHE HIT size=${cached.size}`
+    );
+    return cached;
+  }
 
   const pending = inflight.get(kind);
-  if (pending) return pending;
+  if (pending) {
+    console.log(
+      `[hang] EntityResolver.ensureDirectory(${kind}) JOIN in-flight`
+    );
+    return pending;
+  }
 
   const registration = getEntityRegistration(kind);
   if (!registration) {
@@ -32,23 +43,25 @@ async function ensureDirectory(kind: EntityKind): Promise<Map<string, string>> {
     return empty;
   }
 
-  const load = registration
-    .loadDirectory()
-    .then((map) => {
-      directories.set(kind, map);
-      inflight.delete(kind);
-      return map;
-    })
-    .catch((error) => {
-      inflight.delete(kind);
-      // Graceful: leave empty directory so callers get id fallback.
-      directories.set(kind, new Map());
-      console.error(
-        `[EntityResolver] Failed to load directory for "${kind}":`,
-        error
-      );
-      return directories.get(kind)!;
-    });
+  const load = traceRequest(`EntityResolver.loadDirectory(${kind})`, () =>
+    registration
+      .loadDirectory()
+      .then((map) => {
+        directories.set(kind, map);
+        inflight.delete(kind);
+        return map;
+      })
+      .catch((error) => {
+        inflight.delete(kind);
+        // Graceful: leave empty directory so callers get id fallback.
+        directories.set(kind, new Map());
+        console.error(
+          `[EntityResolver] Failed to load directory for "${kind}":`,
+          error
+        );
+        return directories.get(kind)!;
+      })
+  );
 
   inflight.set(kind, load);
   return load;
