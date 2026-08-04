@@ -36,7 +36,17 @@ export {
   MaintenanceService,
   type IMaintenanceService,
 } from "./maintenance/MaintenanceService";
-export { DashboardService } from "./DashboardService";
-
-
+export {
+  DashboardService,
+  type IDashboardService,
+} from "./dashboard/DashboardService";
+export {
+  ReportingService,
+  type IReportingService,
+  type ReportingSnapshot,
+  type ReportingQuery,
+  registerDashboardWidget,
+  getDashboardWidgets,
+  registerDefaultDashboardWidgets,
+} from "./reporting";
 
