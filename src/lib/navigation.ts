@@ -9,6 +9,7 @@ import {
   Boxes,
   Zap,
   BarChart3,
+  FileBarChart2,
   Settings2,
   type LucideIcon,
 } from "lucide-react";
@@ -26,8 +27,8 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Home",
     href: "/",
     icon: LayoutDashboard,
-    title: "Home",
-    description: "Operations overview and quick actions",
+    title: "Workspace",
+    description: "Your daily launchpad — what to do today",
   },
   {
     label: "Facilities",
@@ -91,6 +92,13 @@ export const NAV_ITEMS: NavItem[] = [
     icon: BarChart3,
     title: "Dashboards",
     description: "Analytics and operational insights",
+  },
+  {
+    label: "Reports",
+    href: "/reports",
+    icon: FileBarChart2,
+    title: "Reports",
+    description: "Historical analysis and exports",
   },
   {
     label: "Platform",

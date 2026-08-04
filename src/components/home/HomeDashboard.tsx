@@ -1,4 +1,4 @@
 "use client";
 
-/** @deprecated Prefer `@/modules/dashboard` DashboardPage. */
-export { DashboardPage as HomeDashboard } from "@/modules/dashboard";
+/** @deprecated Prefer `@/modules/workspace` WorkspacePage for Home. */
+export { WorkspacePage as HomeDashboard } from "@/modules/workspace";
