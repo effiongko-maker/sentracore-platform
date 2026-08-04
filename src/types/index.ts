@@ -99,7 +99,25 @@ export {
   INCIDENT_TYPES,
 } from "./incident";
 
+export type {
+  CreateMaintenanceInput,
+  Maintenance,
+  MaintenanceListParams,
+  MaintenancePriority,
+  MaintenanceSource,
+  MaintenanceStatus,
+  MaintenanceType,
+  UpdateMaintenanceInput,
+} from "./maintenance";
 
+export {
+  MAINTENANCE_PRIORITIES,
+  MAINTENANCE_SOURCES,
+  MAINTENANCE_STATUSES,
+  MAINTENANCE_TYPES,
+} from "./maintenance";
+
+/** Dashboard card shape — not the canonical Maintenance aggregate. */
 export interface MaintenanceTask {
   id: string;
   title: string;

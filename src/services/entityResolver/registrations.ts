@@ -2,6 +2,7 @@ import { UserService } from "@/services/users/UserService";
 import { FacilityService } from "@/services/facilities/FacilityService";
 import { AssetService } from "@/services/assets/AssetService";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
+import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 import { loadDirectoryPages } from "./loadDirectoryPages";
 import { registerEntityResolver } from "./registry";
 
@@ -11,6 +12,7 @@ export const EntityKinds = {
   facility: "facility",
   asset: "asset",
   workOrder: "workOrder",
+  maintenance: "maintenance",
 } as const;
 
 let defaultsRegistered = false;
@@ -65,6 +67,18 @@ export function registerDefaultEntityResolvers(): void {
           WorkOrderService.listWorkOrders({ page, pageSize }),
         getId: (workOrder) => workOrder.id,
         getName: (workOrder) => workOrder.title,
+      }),
+  });
+
+  registerEntityResolver({
+    kind: EntityKinds.maintenance,
+    label: "Maintenance",
+    loadDirectory: () =>
+      loadDirectoryPages({
+        listPage: (page, pageSize) =>
+          MaintenanceService.listMaintenance({ page, pageSize }),
+        getId: (row) => row.id,
+        getName: (row) => row.title,
       }),
   });
 }

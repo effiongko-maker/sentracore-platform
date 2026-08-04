@@ -1,4 +1,4 @@
 export {
   MaintenanceService,
   type IMaintenanceService,
-} from "./maintenance/MaintenanceService";
+} from "@/services/maintenance/MaintenanceService";

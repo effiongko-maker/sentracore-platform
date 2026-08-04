@@ -32,8 +32,11 @@ export {
   IncidentService,
   type IIncidentService,
 } from "./incidents/IncidentService";
+export {
+  MaintenanceService,
+  type IMaintenanceService,
+} from "./maintenance/MaintenanceService";
 export { DashboardService } from "./DashboardService";
-export { MaintenanceService } from "./MaintenanceService";
 
 
 
