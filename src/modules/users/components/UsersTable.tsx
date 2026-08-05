@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { Users } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { DataTable, type Column } from "@/components/tables/DataTable";
 import { USER_STATUS_VARIANT } from "../constants";
@@ -125,8 +126,9 @@ export function UsersTable({
       totalPages={totalPages}
       total={total}
       onPageChange={onPageChange}
+      emptyIcon={Users}
       emptyTitle="No users match your filters"
-      emptyDescription="Clear search or adjust role, facility, and status filters."
+      emptyDescription="Clear search or adjust role, facility, and status filters to find people."
       className="min-w-0"
     />
   );

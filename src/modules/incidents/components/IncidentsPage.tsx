@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { AlertTriangle, Plus } from "lucide-react";
 import { useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
@@ -72,7 +72,7 @@ export function IncidentsPage() {
     <div>
       <PageHeader
         title="Incidents"
-        description="Capture, escalate, and resolve safety and operational events across the SentraCore platform."
+        description="Capture, escalate, and resolve safety and operational events."
         actions={
           <Button onClick={() => setModal({ type: "create" })}>
             <Plus className="h-4 w-4" />
@@ -98,6 +98,7 @@ export function IncidentsPage() {
 
       {error ? (
         <EmptyState
+          icon={AlertTriangle}
           title="Couldn’t load incidents"
           description={error}
           actionLabel="Retry"

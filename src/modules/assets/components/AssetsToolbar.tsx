@@ -2,11 +2,9 @@
 
 import { SlidersHorizontal } from "lucide-react";
 import { SearchBox } from "@/components/ui/SearchBox";
-import {
-  ASSET_CATEGORIES,
-  ASSET_FACILITIES,
-  ASSET_STATUSES,
-} from "../constants";
+import { toolbarSelectClassName } from "@/components/forms/FormField";
+import { useFacilityOptions } from "@/hooks/useFacilityOptions";
+import { ASSET_CATEGORIES, ASSET_STATUSES } from "../constants";
 import { labelize } from "../utils";
 import type { AssetCategory, AssetStatus } from "../types";
 
@@ -21,9 +19,6 @@ interface AssetsToolbarProps {
   onStatusChange: (value: AssetStatus | "all") => void;
 }
 
-const selectClassName =
-  "h-10 rounded-[12px] border border-border bg-card px-3 text-sm outline-none transition-colors focus:border-accent/40 focus:ring-2 focus:ring-accent/15";
-
 export function AssetsToolbar({
   search,
   onSearchChange,
@@ -34,6 +29,8 @@ export function AssetsToolbar({
   status,
   onStatusChange,
 }: AssetsToolbarProps) {
+  const { facilities } = useFacilityOptions();
+
   return (
     <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
       <SearchBox
@@ -54,7 +51,7 @@ export function AssetsToolbar({
           onChange={(event) =>
             onCategoryChange(event.target.value as AssetCategory | "all")
           }
-          className={selectClassName}
+          className={toolbarSelectClassName}
           aria-label="Filter by category"
         >
           <option value="all">All categories</option>
@@ -70,13 +67,13 @@ export function AssetsToolbar({
           onChange={(event) =>
             onFacilityChange(event.target.value as string | "all")
           }
-          className={selectClassName}
+          className={toolbarSelectClassName}
           aria-label="Filter by facility"
         >
           <option value="all">All facilities</option>
-          {ASSET_FACILITIES.map((value) => (
-            <option key={value} value={value}>
-              {value}
+          {facilities.map((item) => (
+            <option key={item.id} value={item.name}>
+              {item.name}
             </option>
           ))}
         </select>
@@ -86,7 +83,7 @@ export function AssetsToolbar({
           onChange={(event) =>
             onStatusChange(event.target.value as AssetStatus | "all")
           }
-          className={selectClassName}
+          className={toolbarSelectClassName}
           aria-label="Filter by status"
         >
           <option value="all">All statuses</option>

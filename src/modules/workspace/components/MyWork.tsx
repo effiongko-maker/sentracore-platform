@@ -11,7 +11,7 @@ export function MyWork({ items }: { items: WorkspaceWorkSummary[] }) {
         <h2 className="text-sm font-semibold text-foreground">My work</h2>
         <p className="mt-1 text-sm text-muted">Your personal workload for today.</p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {items.map((item) => (
           <Link key={item.id} href={item.href} className="block">
             <Card className="h-full transition-shadow hover:shadow-sc-lg">

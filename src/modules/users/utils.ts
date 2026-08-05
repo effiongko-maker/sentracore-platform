@@ -24,7 +24,7 @@ export function toCreateFormValues(user?: User | null) {
     phone: user?.phone ?? "",
     role: user?.role ?? ("technician" as const),
     specialization: user?.specialization ?? "General Operations",
-    facility: user?.facility ?? "Lagos HQ",
+    facility: user?.facility ?? "",
     status: user?.status ?? ("pending" as const),
   };
 }

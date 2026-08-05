@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CalendarClock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatRelativeTime } from "@/lib/utils";
@@ -33,8 +34,9 @@ export function TodaySchedule({ items }: { items: WorkspaceScheduleItem[] }) {
         <CardContent className="space-y-2">
           {items.length === 0 ? (
             <EmptyState
+              icon={CalendarClock}
               className="border-0 bg-transparent py-10"
-              title="Nothing on the schedule"
+              title="Nothing scheduled for today"
               description="Maintenance due today, scheduled work orders, and newly reported incidents will appear here."
             />
           ) : (

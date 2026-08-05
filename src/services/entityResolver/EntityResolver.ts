@@ -1,4 +1,3 @@
-import { traceRequest } from "@/services/debug/requestTrace";
 import {
   getEntityRegistration,
   listEntityRegistrations,
@@ -15,26 +14,67 @@ const directories = new Map<EntityKind, Map<string, string>>();
 /** In-flight directory loads (dedupe concurrent warm-ups). */
 const inflight = new Map<EntityKind, Promise<Map<string, string>>>();
 
+/**
+ * Kinds seeded from ReportingSnapshot.
+ * Once primed, ensureDirectory never performs Apps Script list calls.
+ */
+const primedKinds = new Set<EntityKind>();
+
+/** Diagnostic counter — network directory loads since last reset. */
+let networkDirectoryLoads = 0;
+
 function normalizeId(id: string | null | undefined): string {
   return String(id ?? "").trim();
 }
 
+function fieldOf(row: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const direct = row[key];
+    if (direct != null && String(direct).trim()) return String(direct).trim();
+  }
+  const lowered = new Map(
+    Object.keys(row).map((key) => [key.toLowerCase(), key] as const)
+  );
+  for (const key of keys) {
+    const actual = lowered.get(key.toLowerCase());
+    if (!actual) continue;
+    const value = row[actual];
+    if (value != null && String(value).trim()) return String(value).trim();
+  }
+  return "";
+}
+
+function upsertDirectory(
+  kind: EntityKind,
+  rows: unknown[],
+  idKeys: string[],
+  nameKeys: string[]
+) {
+  const map = new Map<string, string>();
+  for (const raw of rows) {
+    if (!raw || typeof raw !== "object") continue;
+    const row = raw as Record<string, unknown>;
+    const id = fieldOf(row, idKeys);
+    const name = fieldOf(row, nameKeys);
+    if (!id || !name) continue;
+    map.set(id, name);
+  }
+  directories.set(kind, map);
+  primedKinds.add(kind);
+  inflight.delete(kind);
+}
+
 async function ensureDirectory(kind: EntityKind): Promise<Map<string, string>> {
-  const cached = directories.get(kind);
-  if (cached) {
-    console.log(
-      `[hang] EntityResolver.ensureDirectory(${kind}) CACHE HIT size=${cached.size}`
-    );
-    return cached;
+  // Snapshot-primed directories are authoritative — never fan out to Apps Script.
+  if (primedKinds.has(kind)) {
+    return directories.get(kind) ?? new Map();
   }
 
+  const cached = directories.get(kind);
+  if (cached) return cached;
+
   const pending = inflight.get(kind);
-  if (pending) {
-    console.log(
-      `[hang] EntityResolver.ensureDirectory(${kind}) JOIN in-flight`
-    );
-    return pending;
-  }
+  if (pending) return pending;
 
   const registration = getEntityRegistration(kind);
   if (!registration) {
@@ -43,25 +83,24 @@ async function ensureDirectory(kind: EntityKind): Promise<Map<string, string>> {
     return empty;
   }
 
-  const load = traceRequest(`EntityResolver.loadDirectory(${kind})`, () =>
-    registration
-      .loadDirectory()
-      .then((map) => {
-        directories.set(kind, map);
-        inflight.delete(kind);
-        return map;
-      })
-      .catch((error) => {
-        inflight.delete(kind);
-        // Graceful: leave empty directory so callers get id fallback.
-        directories.set(kind, new Map());
-        console.error(
-          `[EntityResolver] Failed to load directory for "${kind}":`,
-          error
-        );
-        return directories.get(kind)!;
-      })
-  );
+  networkDirectoryLoads += 1;
+
+  const load = registration
+    .loadDirectory()
+    .then((map) => {
+      directories.set(kind, map);
+      inflight.delete(kind);
+      return map;
+    })
+    .catch((error) => {
+      inflight.delete(kind);
+      directories.set(kind, new Map());
+      console.error(
+        `[EntityResolver] Failed to load directory for "${kind}":`,
+        error
+      );
+      return directories.get(kind)!;
+    });
 
   inflight.set(kind, load);
   return load;
@@ -82,6 +121,44 @@ export const EntityResolver = {
 
   /** Stable built-in kind constants. */
   kinds: EntityKinds,
+
+  /**
+   * Seed directories from a ReportingSnapshot so Dashboard/Reports can resolve
+   * names without additional Apps Script list calls.
+   */
+  primeFromReportingSnapshot(snapshot: {
+    users?: unknown[];
+    facilities?: unknown[];
+    assets?: unknown[];
+    workOrders?: unknown[];
+    maintenance?: unknown[];
+  }): void {
+    upsertDirectory(EntityKinds.user, snapshot.users ?? [], ["id"], ["name"]);
+    upsertDirectory(
+      EntityKinds.facility,
+      snapshot.facilities ?? [],
+      ["id", "Facility ID"],
+      ["name", "Facility Name"]
+    );
+    upsertDirectory(
+      EntityKinds.asset,
+      snapshot.assets ?? [],
+      ["id", "Asset ID"],
+      ["name", "Asset Name"]
+    );
+    upsertDirectory(
+      EntityKinds.workOrder,
+      snapshot.workOrders ?? [],
+      ["id"],
+      ["title", "name"]
+    );
+    upsertDirectory(
+      EntityKinds.maintenance,
+      snapshot.maintenance ?? [],
+      ["id"],
+      ["title", "name"]
+    );
+  },
 
   /**
    * Resolve a single id → display name.
@@ -159,10 +236,12 @@ export const EntityResolver = {
     if (kind) {
       directories.delete(kind);
       inflight.delete(kind);
+      primedKinds.delete(kind);
       return;
     }
     directories.clear();
     inflight.clear();
+    primedKinds.clear();
   },
 
   /** Sync cache peek — undefined if directory not loaded or id missing. */
@@ -170,6 +249,16 @@ export const EntityResolver = {
     const normalized = normalizeId(id);
     if (!normalized) return undefined;
     return directories.get(kind)?.get(normalized);
+  },
+
+  /** Test/diagnostics: Apps Script directory fan-out count. */
+  getNetworkDirectoryLoadCount(): number {
+    return networkDirectoryLoads;
+  },
+
+  /** Test/diagnostics: reset network load counter. */
+  resetNetworkDirectoryLoadCount(): void {
+    networkDirectoryLoads = 0;
   },
 };
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { SlidersHorizontal } from "lucide-react";
 import { SearchBox } from "@/components/ui/SearchBox";
+import { toolbarSelectClassName } from "@/components/forms/FormField";
 import { FacilityService } from "@/services/facilities/FacilityService";
 import { UserService } from "@/services/users/UserService";
 import type { Facility } from "@/modules/facilities/types";
@@ -26,8 +27,6 @@ interface IncidentsToolbarProps {
   onRequiresWorkOrderChange: (value: boolean | "all") => void;
 }
 
-const selectClassName =
-  "h-10 rounded-[12px] border border-border bg-card px-3 text-sm outline-none transition-colors focus:border-accent/40 focus:ring-2 focus:ring-accent/15";
 
 export function IncidentsToolbar({
   search,
@@ -87,7 +86,7 @@ export function IncidentsToolbar({
           onChange={(event) =>
             onSeverityChange(event.target.value as IncidentSeverity | "all")
           }
-          className={selectClassName}
+          className={toolbarSelectClassName}
           aria-label="Filter by severity"
         >
           <option value="all">All severities</option>
@@ -103,7 +102,7 @@ export function IncidentsToolbar({
           onChange={(event) =>
             onStatusChange(event.target.value as IncidentStatus | "all")
           }
-          className={selectClassName}
+          className={toolbarSelectClassName}
           aria-label="Filter by status"
         >
           <option value="all">All statuses</option>
@@ -119,7 +118,7 @@ export function IncidentsToolbar({
           onChange={(event) =>
             onFacilityIdChange(event.target.value as string | "all")
           }
-          className={selectClassName}
+          className={toolbarSelectClassName}
           aria-label="Filter by facility"
         >
           <option value="all">All facilities</option>
@@ -135,7 +134,7 @@ export function IncidentsToolbar({
           onChange={(event) =>
             onAssignedToUserIdChange(event.target.value as string | "all")
           }
-          className={selectClassName}
+          className={toolbarSelectClassName}
           aria-label="Filter by assigned user"
         >
           <option value="all">All assignees</option>
@@ -160,7 +159,7 @@ export function IncidentsToolbar({
               value === "all" ? "all" : value === "true"
             );
           }}
-          className={selectClassName}
+          className={toolbarSelectClassName}
           aria-label="Filter by requires work order"
         >
           <option value="all">WO requirement: all</option>

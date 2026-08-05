@@ -6,7 +6,6 @@ import type {
   DashboardSectionId,
   DashboardSnapshot,
 } from "@/modules/dashboard/types";
-import { traceRequest } from "@/services/debug/requestTrace";
 import { ReportingService } from "@/services/reporting";
 import { getDashboardWidgets } from "./registry";
 import { registerDefaultDashboardWidgets } from "./widgets";
@@ -65,40 +64,34 @@ export const DashboardService = {
     params: DashboardQuery = {}
   ): Promise<DashboardSnapshot> {
     if (inflightOperationalHealth) {
-      console.log(
-        "[hang] DashboardService.getOperationalHealth JOIN in-flight (dedupe)"
-      );
       return inflightOperationalHealth;
     }
 
-    inflightOperationalHealth = traceRequest(
-      "DashboardService.getOperationalHealth",
-      async () => {
-        registerDefaultDashboardWidgets();
+    inflightOperationalHealth = (async () => {
+      registerDefaultDashboardWidgets();
 
-        const report = await ReportingService.getReportingSnapshot(params);
+      const report = await ReportingService.getReportingSnapshot(params);
 
-        const cards = getDashboardWidgets()
-          .map((definition) => definition.resolve(report))
-          .filter((card): card is DashboardCard => card != null);
+      const cards = getDashboardWidgets()
+        .map((definition) => definition.resolve(report))
+        .filter((card): card is DashboardCard => card != null);
 
-        return {
-          asOf: report.asOf,
-          facilityId: report.facilityId,
-          context: {
-            currentUserId: report.currentUserId,
-            title: "Operations Command Center",
-            subtitle: report.health.summary,
-          },
-          health: {
-            band: report.health.band,
-            score: report.health.score,
-            summary: report.health.summary,
-          },
-          sections: buildSections(cards),
-        };
-      }
-    ).finally(() => {
+      return {
+        asOf: report.asOf,
+        facilityId: report.facilityId,
+        context: {
+          currentUserId: report.currentUserId,
+          title: "Dashboard",
+          subtitle: report.health.summary,
+        },
+        health: {
+          band: report.health.band,
+          score: report.health.score,
+          summary: report.health.summary,
+        },
+        sections: buildSections(cards),
+      };
+    })().finally(() => {
       inflightOperationalHealth = null;
     });
 

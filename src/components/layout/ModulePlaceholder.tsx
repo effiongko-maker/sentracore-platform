@@ -23,8 +23,8 @@ export function ModulePlaceholder({
         <CardContent className="py-4">
           <EmptyState
             icon={icon}
-            title={`${moduleName} module is ready for build-out`}
-            description="This route is wired into the shell and navigation. Connect its service layer and screens when the module is prioritized."
+            title={`${moduleName} is not enabled yet`}
+            description="This area is reserved for future facility operations capability. It is connected to navigation and will open when the module is activated."
             className="border-0 bg-transparent"
           />
         </CardContent>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Package, Plus } from "lucide-react";
 import { useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
@@ -68,7 +68,7 @@ export function AssetsPage() {
     <div>
       <PageHeader
         title="Assets"
-        description="Track equipment, systems, and critical infrastructure across the SentraCore platform."
+        description="Track equipment, systems, and critical infrastructure."
         actions={
           <Button onClick={() => setModal({ type: "create" })}>
             <Plus className="h-4 w-4" />
@@ -90,6 +90,7 @@ export function AssetsPage() {
 
       {error ? (
         <EmptyState
+          icon={Package}
           title="Couldn’t load assets"
           description={error}
           actionLabel="Retry"

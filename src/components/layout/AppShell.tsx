@@ -12,25 +12,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <SidebarContext.Provider value={sidebar}>
       <ToastProvider>
-        <div className="min-h-screen bg-background">
-          <Sidebar />
+        <div className="min-h-screen bg-background print:bg-white">
+          <div className="print:hidden">
+            <Sidebar />
+          </div>
           <div
             className={cn(
-              "flex min-h-screen flex-col transition-[padding] duration-200 ease-out",
+              "flex min-h-screen flex-col transition-[padding] duration-200 ease-out print:pl-0",
               sidebar.collapsed
                 ? "lg:pl-[var(--sc-sidebar-collapsed)]"
                 : "lg:pl-[var(--sc-sidebar-width)]"
             )}
           >
-            <TopBar />
-            <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
-              <div className="mx-auto w-full max-w-[1400px]">{children}</div>
+            <div className="print:hidden">
+              <TopBar />
+            </div>
+            <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 print:px-0 print:py-0">
+              <div className="mx-auto w-full max-w-[1400px] print:max-w-none">
+                {children}
+              </div>
             </main>
-            <footer className="border-t border-border/70 px-4 py-4 sm:px-6 lg:px-8">
+            <footer className="print:hidden border-t border-border/70 px-4 py-4 sm:px-6 lg:px-8">
               <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs text-muted">Powered by Beacon Africa</p>
+                <p className="text-xs text-muted">Powered by Beacon Africa Limited</p>
                 <p className="text-[11px] text-slate-400">
-                  SentraCore™ is a trademark of Beacon Africa Technologies Ltd.
+                  SentraCore™ is a trademark of Beacon Africa Limited.
                 </p>
               </div>
             </footer>

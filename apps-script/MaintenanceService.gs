@@ -120,10 +120,22 @@ var MaintenanceService = (function () {
     };
   }
 
+  function sortNewestFirst_(rows) {
+    return rows.slice().sort(function (a, b) {
+      var aAt = String(a.createdAt || a.reportedAt || a.updatedAt || "");
+      var bAt = String(b.createdAt || b.reportedAt || b.updatedAt || "");
+      if (aAt === bAt) {
+        return String(b.id || "").localeCompare(String(a.id || ""));
+      }
+      return aAt < bAt ? 1 : -1;
+    });
+  }
+
   function getAll(payload) {
     var rows = MaintenanceRepository.getAll();
     var filtered = applyFilters_(rows, payload);
-    return paginate_(filtered, payload);
+    var sorted = sortNewestFirst_(filtered);
+    return paginate_(sorted, payload);
   }
 
   function getById(payload) {
@@ -140,7 +152,11 @@ var MaintenanceService = (function () {
       throw new Error("Maintenance title is required.");
     }
     if (!payload.facilityId) throw new Error("Facility id is required.");
-    return MaintenanceRepository.create(payload);
+    var created = MaintenanceRepository.create(payload);
+    if (typeof ReportingSnapshotService !== "undefined") {
+      ReportingSnapshotService.notifyModuleChanged("maintenance");
+    }
+    return created;
   }
 
   function update(payload) {
@@ -148,6 +164,9 @@ var MaintenanceService = (function () {
     if (!payload || !payload.id) throw new Error("Maintenance id is required.");
     var updated = MaintenanceRepository.update(payload.id, payload);
     if (!updated) throw new Error("Maintenance " + payload.id + " not found.");
+    if (typeof ReportingSnapshotService !== "undefined") {
+      ReportingSnapshotService.notifyModuleChanged("maintenance");
+    }
     return updated;
   }
 
@@ -155,6 +174,9 @@ var MaintenanceService = (function () {
     if (!payload || !payload.id) throw new Error("Maintenance id is required.");
     var updated = MaintenanceRepository.deactivate(payload.id);
     if (!updated) throw new Error("Maintenance " + payload.id + " not found.");
+    if (typeof ReportingSnapshotService !== "undefined") {
+      ReportingSnapshotService.notifyModuleChanged("maintenance");
+    }
     return updated;
   }
 

@@ -147,6 +147,12 @@ export const AssetService = {
       action: "create",
       payload: input,
     });
+    if (response.data == null) {
+      throw new ApiError(
+        "Asset create returned no record. Redeploy AssetRepository.gs if the Assets sheet uses legacy headers.",
+        502
+      );
+    }
     return mapRemoteAsset(response.data as unknown as RemoteAsset);
   },
 
@@ -156,6 +162,9 @@ export const AssetService = {
       action: "update",
       payload: { id, ...input },
     });
+    if (response.data == null) {
+      throw new ApiError("Asset update returned no record.", 502);
+    }
     return mapRemoteAsset(response.data as unknown as RemoteAsset);
   },
 
@@ -166,6 +175,9 @@ export const AssetService = {
       action: "deactivate",
       payload: { id },
     });
+    if (response.data == null) {
+      throw new ApiError("Asset deactivate returned no record.", 502);
+    }
     return mapRemoteAsset(response.data as unknown as RemoteAsset);
   },
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,7 @@ interface DataTableProps<T> {
   totalPages?: number;
   total?: number;
   onPageChange?: (page: number) => void;
+  emptyIcon?: LucideIcon;
   emptyTitle?: string;
   emptyDescription?: string;
   className?: string;
@@ -35,6 +36,7 @@ export function DataTable<T>({
   totalPages = 1,
   total,
   onPageChange,
+  emptyIcon,
   emptyTitle = "No results found",
   emptyDescription = "Try adjusting your search or filters.",
   className,
@@ -78,6 +80,7 @@ export function DataTable<T>({
               <tr>
                 <td colSpan={columns.length} className="p-6">
                   <EmptyState
+                    icon={emptyIcon}
                     title={emptyTitle}
                     description={emptyDescription}
                     className="border-0 bg-transparent py-10"

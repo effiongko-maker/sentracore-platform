@@ -1,0 +1,39 @@
+---
+description: Keep Apps Script deployment pack current whenever .gs files change
+globs: apps-script/**/*.gs
+alwaysApply: false
+---
+
+# Apps Script Deployment Pack (mandatory)
+
+The folder `apps-script/deployment/` is the **single source of truth** for deploying Google Apps Script.
+
+## When this rule applies
+
+Any time you create, modify, delete, or rename a file matching `apps-script/**/*.gs` (including `apps-script/deployment/ROUTER.gs`).
+
+## Required actions before marking the task complete
+
+1. Update `apps-script/deployment/release-meta.json` if the change warrants release-note edits (features / performance / flags / smoke tests).
+2. Run:
+
+```bash
+npm run apps-script:pack
+```
+
+3. Ensure these generated files are included with the change:
+   - `apps-script/deployment/DEPLOYMENT_PACK.md` (full source of every deployable `.gs` file)
+   - `apps-script/deployment/DEPLOYMENT_CHECKLIST.md`
+   - `apps-script/deployment/VERSION.md`
+
+4. Do **not** ask the user to request individual `.gs` file dumps. Point them to `apps-script/deployment/DEPLOYMENT_PACK.md`.
+
+## Do not
+
+- Leave deployment docs stale after a `.gs` edit
+- Provide partial patches when the user needs Apps Script source — regenerate the pack and point to it
+- Edit `DEPLOYMENT_PACK.md` / `DEPLOYMENT_CHECKLIST.md` / `VERSION.md` by hand (they are generated)
+
+## Commit policy
+
+If a commit touches any `apps-script/**/*.gs` file, the regenerated deployment artifacts must be part of that same commit.

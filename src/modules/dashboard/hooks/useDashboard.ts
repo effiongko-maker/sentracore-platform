@@ -41,8 +41,6 @@ export function useDashboard() {
     const id = ++requestId.current;
     // Strict Mode remounts this effect; DashboardService dedupes in-flight work
     // so the second invoke joins the same promise instead of a second fan-out.
-    console.log(`[hang] useDashboard effect start requestId=${id}`);
-
     DashboardService.getOperationalHealth()
       .then((next) => {
         if (cancelled || id !== requestId.current) return;
@@ -66,7 +64,6 @@ export function useDashboard() {
 
     return () => {
       cancelled = true;
-      console.log(`[hang] useDashboard effect cleanup requestId=${id}`);
     };
   }, []);
 

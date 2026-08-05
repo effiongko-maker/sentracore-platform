@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import type { CurrentUser } from "@/types";
@@ -10,6 +10,7 @@ interface WelcomeCardProps {
   user: CurrentUser | null;
 }
 
+/** @deprecated Prefer Home WelcomeHero / DashboardContextBanner. Kept for compatibility. */
 export function WelcomeCard({ user }: WelcomeCardProps) {
   const hour = new Date().getHours();
   const greeting =
@@ -27,17 +28,15 @@ export function WelcomeCard({ user }: WelcomeCardProps) {
 
       <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-2xl">
-          <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white/80">
-            <Sparkles className="h-3.5 w-3.5" />
-            Operations Command Center
-          </div>
+          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-white/70">
+            Home
+          </p>
           <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
             {greeting}
             {user ? `, ${user.name.split(" ")[0]}` : ""}
           </h2>
           <p className="mt-2 max-w-xl text-sm leading-6 text-white/65">
-            Your facilities portfolio is running at 98.2% asset uptime. Three
-            critical items need attention before end of day.
+            Your personal starting point for today&apos;s facility work.
           </p>
         </div>
 

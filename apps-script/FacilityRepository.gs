@@ -81,10 +81,13 @@ var FacilityRepository = (function () {
     var sheet = getSheet_();
     var now = new Date().toISOString();
     var id = nextId_();
+    // Human-friendly display code — auto-assigned, immutable after create.
+    var code = String((payload && payload.code) || "").trim();
+    if (!code) code = id;
     var row = [
       id,
       payload.name || "",
-      payload.code || "",
+      code,
       payload.location || "",
       payload.type || "office",
       payload.manager || "",
@@ -94,7 +97,18 @@ var FacilityRepository = (function () {
       now,
     ];
     sheet.appendRow(row);
-    return getById(id);
+    return getById(id) || {
+      id: id,
+      name: payload.name || "",
+      code: code,
+      location: payload.location || "",
+      type: payload.type || "office",
+      manager: payload.manager || "",
+      status: payload.status || "pending",
+      description: payload.description || "",
+      createdAt: now,
+      updatedAt: now,
+    };
   }
 
   function update(id, payload) {
@@ -118,7 +132,8 @@ var FacilityRepository = (function () {
     var updated = {
       id: id,
       name: payload.name != null ? payload.name : current.name,
-      code: payload.code != null ? payload.code : current.code,
+      // Identifiers are immutable after create.
+      code: current.code || id,
       location: payload.location != null ? payload.location : current.location,
       type: payload.type != null ? payload.type : current.type,
       manager: payload.manager != null ? payload.manager : current.manager,

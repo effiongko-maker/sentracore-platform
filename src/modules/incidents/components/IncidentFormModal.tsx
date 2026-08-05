@@ -9,6 +9,7 @@ import {
   selectClassName,
 } from "@/components/forms/FormField";
 import { useToast } from "@/components/ui/Toast";
+import { MasterLocationFields } from "@/components/forms/MasterLocationFields";
 import { FacilityService } from "@/services/facilities/FacilityService";
 import { AssetService } from "@/services/assets/AssetService";
 import { UserService } from "@/services/users/UserService";
@@ -471,21 +472,14 @@ export function IncidentFormModal({
           </select>
         </FormField>
 
-        <FormField
-          label="Location detail"
-          htmlFor="inc-location"
-          className="sm:col-span-2"
-        >
-          <input
-            id="inc-location"
-            className={inputClassName}
-            placeholder="e.g. Plant Room 3 / Level B2"
-            value={form.locationDetail ?? ""}
-            onChange={(event) =>
-              updateField("locationDetail", event.target.value)
-            }
-          />
-        </FormField>
+        <MasterLocationFields
+          facilityId={form.facilityId}
+          value={form.locationDetail ?? ""}
+          onChange={(value) => updateField("locationDetail", value)}
+          includeFacility={false}
+          label="Location"
+          hint="Building → floor → room from Master Data. Select a facility above first."
+        />
 
         <FormField
           label="Description"

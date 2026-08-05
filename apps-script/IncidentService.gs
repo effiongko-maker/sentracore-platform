@@ -107,10 +107,22 @@ var IncidentService = (function () {
     };
   }
 
+  function sortNewestFirst_(rows) {
+    return rows.slice().sort(function (a, b) {
+      var aAt = String(a.createdAt || a.reportedAt || a.updatedAt || "");
+      var bAt = String(b.createdAt || b.reportedAt || b.updatedAt || "");
+      if (aAt === bAt) {
+        return String(b.id || "").localeCompare(String(a.id || ""));
+      }
+      return aAt < bAt ? 1 : -1;
+    });
+  }
+
   function getAll(payload) {
     var rows = IncidentRepository.getAll();
     var filtered = applyFilters_(rows, payload);
-    return paginate_(filtered, payload);
+    var sorted = sortNewestFirst_(filtered);
+    return paginate_(sorted, payload);
   }
 
   function getById(payload) {
@@ -125,7 +137,11 @@ var IncidentService = (function () {
     payload = applyWorkOrderRule_(payload);
     if (!payload || !payload.title) throw new Error("Incident title is required.");
     if (!payload.facilityId) throw new Error("Facility id is required.");
-    return IncidentRepository.create(payload);
+    var created = IncidentRepository.create(payload);
+    if (typeof ReportingSnapshotService !== "undefined") {
+      ReportingSnapshotService.notifyModuleChanged("incidents");
+    }
+    return created;
   }
 
   function update(payload) {
@@ -133,6 +149,9 @@ var IncidentService = (function () {
     if (!payload || !payload.id) throw new Error("Incident id is required.");
     var updated = IncidentRepository.update(payload.id, payload);
     if (!updated) throw new Error("Incident " + payload.id + " not found.");
+    if (typeof ReportingSnapshotService !== "undefined") {
+      ReportingSnapshotService.notifyModuleChanged("incidents");
+    }
     return updated;
   }
 
@@ -140,6 +159,9 @@ var IncidentService = (function () {
     if (!payload || !payload.id) throw new Error("Incident id is required.");
     var updated = IncidentRepository.deactivate(payload.id);
     if (!updated) throw new Error("Incident " + payload.id + " not found.");
+    if (typeof ReportingSnapshotService !== "undefined") {
+      ReportingSnapshotService.notifyModuleChanged("incidents");
+    }
     return updated;
   }
 

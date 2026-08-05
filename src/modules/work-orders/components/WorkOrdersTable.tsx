@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { ClipboardList } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { DataTable, type Column } from "@/components/tables/DataTable";
 import { formatDate } from "@/lib/utils";
@@ -149,6 +150,7 @@ export function WorkOrdersTable({
       totalPages={totalPages}
       total={total}
       onPageChange={onPageChange}
+      emptyIcon={ClipboardList}
       emptyTitle="No work orders match your filters"
       emptyDescription="Clear search or adjust status, priority, facility, and assignee filters."
       className="min-w-0"

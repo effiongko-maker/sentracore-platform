@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Optional local hook: regenerate Apps Script deployment pack when .gs files change.
+# Enable with:
+#   git config core.hooksPath .githooks
+#
+set -euo pipefail
+
+if git diff --cached --name-only --diff-filter=ACMR | grep -E '^apps-script/.*\.gs$' >/dev/null; then
+  echo "[pre-commit] apps-script .gs changes detected — regenerating deployment pack"
+  npm run apps-script:pack
+  git add \
+    apps-script/deployment/DEPLOYMENT_PACK.md \
+    apps-script/deployment/DEPLOYMENT_CHECKLIST.md \
+    apps-script/deployment/VERSION.md
+fi

@@ -13,7 +13,7 @@ interface SearchBoxProps {
 export function SearchBox({
   value,
   onChange,
-  placeholder = "Search...",
+  placeholder = "Search records...",
   className,
 }: SearchBoxProps) {
   return (

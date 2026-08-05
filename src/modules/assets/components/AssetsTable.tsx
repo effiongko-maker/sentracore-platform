@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { Package } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { DataTable, type Column } from "@/components/tables/DataTable";
 import {
@@ -117,8 +118,9 @@ export function AssetsTable({
       totalPages={totalPages}
       total={total}
       onPageChange={onPageChange}
+      emptyIcon={Package}
       emptyTitle="No assets match your filters"
-      emptyDescription="Clear search or adjust category, facility, and status filters."
+      emptyDescription="Clear search or adjust category, facility, and status filters to find equipment."
       className="min-w-0"
     />
   );

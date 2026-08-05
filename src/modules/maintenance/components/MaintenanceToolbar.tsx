@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { SlidersHorizontal } from "lucide-react";
 import { SearchBox } from "@/components/ui/SearchBox";
+import { toolbarSelectClassName } from "@/components/forms/FormField";
 import { FacilityService } from "@/services/facilities/FacilityService";
 import { UserService } from "@/services/users/UserService";
 import type { Facility } from "@/modules/facilities/types";
@@ -36,8 +37,6 @@ interface MaintenanceToolbarProps {
   onRequiresWorkOrderChange: (value: boolean | "all") => void;
 }
 
-const selectClassName =
-  "h-10 rounded-[12px] border border-border bg-card px-3 text-sm outline-none transition-colors focus:border-accent/40 focus:ring-2 focus:ring-accent/15";
 
 export function MaintenanceToolbar({
   search,
@@ -99,7 +98,7 @@ export function MaintenanceToolbar({
           onChange={(event) =>
             onPriorityChange(event.target.value as MaintenancePriority | "all")
           }
-          className={selectClassName}
+          className={toolbarSelectClassName}
           aria-label="Filter by priority"
         >
           <option value="all">All priorities</option>
@@ -115,7 +114,7 @@ export function MaintenanceToolbar({
           onChange={(event) =>
             onStatusChange(event.target.value as MaintenanceStatus | "all")
           }
-          className={selectClassName}
+          className={toolbarSelectClassName}
           aria-label="Filter by status"
         >
           <option value="all">All statuses</option>
@@ -131,7 +130,7 @@ export function MaintenanceToolbar({
           onChange={(event) =>
             onTypeChange(event.target.value as MaintenanceType | "all")
           }
-          className={selectClassName}
+          className={toolbarSelectClassName}
           aria-label="Filter by type"
         >
           <option value="all">All types</option>
@@ -147,7 +146,7 @@ export function MaintenanceToolbar({
           onChange={(event) =>
             onFacilityIdChange(event.target.value as string | "all")
           }
-          className={selectClassName}
+          className={toolbarSelectClassName}
           aria-label="Filter by facility"
         >
           <option value="all">All facilities</option>
@@ -163,7 +162,7 @@ export function MaintenanceToolbar({
           onChange={(event) =>
             onAssignedToUserIdChange(event.target.value as string | "all")
           }
-          className={selectClassName}
+          className={toolbarSelectClassName}
           aria-label="Filter by assigned user"
         >
           <option value="all">All assignees</option>
@@ -188,7 +187,7 @@ export function MaintenanceToolbar({
               value === "all" ? "all" : value === "true"
             );
           }}
-          className={selectClassName}
+          className={toolbarSelectClassName}
           aria-label="Filter by requires work order"
         >
           <option value="all">WO requirement: all</option>

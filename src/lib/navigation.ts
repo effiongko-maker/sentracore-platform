@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard,
+  Home,
   Building2,
   Package,
   Users,
@@ -11,6 +11,8 @@ import {
   BarChart3,
   FileBarChart2,
   Settings2,
+  MessageSquarePlus,
+  Database,
   type LucideIcon,
 } from "lucide-react";
 
@@ -22,13 +24,14 @@ export interface NavItem {
   description: string;
 }
 
+/** Primary sidebar navigation — production-ready modules only. */
 export const NAV_ITEMS: NavItem[] = [
   {
     label: "Home",
     href: "/",
-    icon: LayoutDashboard,
-    title: "Workspace",
-    description: "Your daily launchpad — what to do today",
+    icon: Home,
+    title: "Home",
+    description: "Your work for today — assignments, schedule, and quick actions",
   },
   {
     label: "Facilities",
@@ -49,7 +52,21 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/users",
     icon: Users,
     title: "Users",
-    description: "People, roles, and access control",
+    description: "People, roles, and access",
+  },
+  {
+    label: "Master Data",
+    href: "/master-data",
+    icon: Database,
+    title: "Master Data",
+    description: "Departments, buildings, floors, rooms, and vendors",
+  },
+  {
+    label: "Requests",
+    href: "/occupant-requests",
+    icon: MessageSquarePlus,
+    title: "Requests",
+    description: "Submit maintenance requests and incident reports",
   },
   {
     label: "Maintenance",
@@ -63,7 +80,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/work-orders",
     icon: ClipboardList,
     title: "Work Orders",
-    description: "Requests, assignments, and progress",
+    description: "Assignments, progress, and completion",
   },
   {
     label: "Incidents",
@@ -72,6 +89,27 @@ export const NAV_ITEMS: NavItem[] = [
     title: "Incidents",
     description: "Safety events and critical issues",
   },
+  {
+    label: "Dashboard",
+    href: "/dashboards",
+    icon: BarChart3,
+    title: "Dashboard",
+    description: "Live operational health, KPIs, and attention queues",
+  },
+  {
+    label: "Reports",
+    href: "/reports",
+    icon: FileBarChart2,
+    title: "Reports",
+    description: "Generate client-facing operational reports",
+  },
+];
+
+/**
+ * Modules kept out of the primary sidebar but still routable via deep links.
+ * Used only for TopBar title/description resolution.
+ */
+const SECONDARY_NAV_ITEMS: NavItem[] = [
   {
     label: "Inventory",
     href: "/inventory",
@@ -87,20 +125,6 @@ export const NAV_ITEMS: NavItem[] = [
     description: "Energy, water, and utility metering",
   },
   {
-    label: "Dashboards",
-    href: "/dashboards",
-    icon: BarChart3,
-    title: "Dashboards",
-    description: "Analytics and operational insights",
-  },
-  {
-    label: "Reports",
-    href: "/reports",
-    icon: FileBarChart2,
-    title: "Reports",
-    description: "Historical analysis and exports",
-  },
-  {
     label: "Platform",
     href: "/platform",
     icon: Settings2,
@@ -114,6 +138,10 @@ export function getNavItemByPath(pathname: string): NavItem {
   return (
     NAV_ITEMS.find(
       (item) => item.href !== "/" && pathname.startsWith(item.href)
-    ) ?? NAV_ITEMS[0]
+    ) ??
+    SECONDARY_NAV_ITEMS.find(
+      (item) => item.href !== "/" && pathname.startsWith(item.href)
+    ) ??
+    NAV_ITEMS[0]
   );
 }

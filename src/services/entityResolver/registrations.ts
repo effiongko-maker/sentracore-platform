@@ -3,6 +3,8 @@ import { FacilityService } from "@/services/facilities/FacilityService";
 import { AssetService } from "@/services/assets/AssetService";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
 import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
+import { MasterDataService } from "@/services/masterData/MasterDataService";
+import type { MasterDataEntity } from "@/modules/master-data/types";
 import { loadDirectoryPages } from "./loadDirectoryPages";
 import { registerEntityResolver } from "./registry";
 
@@ -13,7 +15,30 @@ export const EntityKinds = {
   asset: "asset",
   workOrder: "workOrder",
   maintenance: "maintenance",
+  department: "department",
+  building: "building",
+  floor: "floor",
+  room: "room",
+  vendor: "vendor",
 } as const;
+
+function registerMasterDataResolver(
+  kind: string,
+  label: string,
+  entity: MasterDataEntity
+) {
+  registerEntityResolver({
+    kind,
+    label,
+    loadDirectory: () =>
+      loadDirectoryPages({
+        listPage: (page, pageSize) =>
+          MasterDataService.list({ entity, page, pageSize, status: "all" }),
+        getId: (item) => item.id,
+        getName: (item) => item.name,
+      }),
+  });
+}
 
 let defaultsRegistered = false;
 
@@ -81,4 +106,14 @@ export function registerDefaultEntityResolvers(): void {
         getName: (row) => row.title,
       }),
   });
+
+  registerMasterDataResolver(
+    EntityKinds.department,
+    "Department",
+    "departments"
+  );
+  registerMasterDataResolver(EntityKinds.building, "Building", "buildings");
+  registerMasterDataResolver(EntityKinds.floor, "Floor", "floors");
+  registerMasterDataResolver(EntityKinds.room, "Room", "rooms");
+  registerMasterDataResolver(EntityKinds.vendor, "Vendor", "vendors");
 }

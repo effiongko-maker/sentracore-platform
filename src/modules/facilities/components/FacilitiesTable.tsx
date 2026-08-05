@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { Building2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { DataTable, type Column } from "@/components/tables/DataTable";
 import { FACILITY_STATUS_VARIANT } from "../constants";
@@ -112,8 +113,9 @@ export function FacilitiesTable({
       totalPages={totalPages}
       total={total}
       onPageChange={onPageChange}
+      emptyIcon={Building2}
       emptyTitle="No facilities match your filters"
-      emptyDescription="Clear search or adjust type, location, and status filters."
+      emptyDescription="Clear search or adjust type, location, and status filters to find the sites you need."
       className="min-w-0"
     />
   );

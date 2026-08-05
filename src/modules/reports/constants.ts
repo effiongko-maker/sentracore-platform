@@ -1,147 +1,219 @@
-import type { DocumentKind } from "@/services/reporting/documents";
-import type { ReportLibraryItem } from "./types";
+import type {
+  ReportPeriodKind,
+  ReportPeriodSelection,
+  ReportSectionDefinition,
+  ReportSectionId,
+  ReportTypeDefinition,
+  ReportTypeId,
+  ReportWizardStep,
+  ReportWizardState,
+} from "./types";
 
-const ALL_OUTPUTS = ["word", "pdf", "excel"] as const;
+export const REPORT_WIZARD_STEPS: Array<{
+  id: ReportWizardStep;
+  label: string;
+  number: number;
+}> = [
+  { id: "type", label: "Report", number: 1 },
+  { id: "facilities", label: "Scope", number: 2 },
+  { id: "period", label: "Period", number: 3 },
+  { id: "sections", label: "Content", number: 4 },
+  { id: "generate", label: "Generate", number: 5 },
+];
 
-export const REPORT_LIBRARY: ReportLibraryItem[] = [
+export const REPORT_SECTIONS: ReportSectionDefinition[] = [
   {
-    kind: "executive_summary",
+    id: "executive_summary",
     title: "Executive Summary",
-    description: "Concise portfolio brief for leadership and client packs.",
-    highlights: [
-      "Portfolio KPIs",
-      "Cross-module health",
-      "Risk summary",
-      "Recommendations",
-    ],
-    modules: ["KPIs", "Work Orders", "Maintenance", "Incidents", "Assets"],
-    audience: ["Executives", "Client"],
-    outputs: [...ALL_OUTPUTS],
-    icon: "executive",
-    available: true,
+    description: "Narrative overview of performance and posture.",
   },
   {
-    kind: "monthly_facility",
-    title: "Monthly Facility Report",
-    description: "Full monthly facility pack for client submission.",
-    highlights: [
-      "Executive summary",
-      "Contract performance",
-      "Asset health",
-      "Issues & risks",
-      "Recommendations",
-    ],
-    modules: ["Work Orders", "Maintenance", "Assets", "KPIs"],
-    audience: ["Client", "Facility Manager"],
-    outputs: [...ALL_OUTPUTS],
-    icon: "monthly",
-    available: true,
+    id: "kpi_summary",
+    title: "KPI Summary",
+    description: "Key performance indicators for the selected scope.",
   },
   {
-    kind: "quarterly",
-    title: "Quarterly Report",
-    description: "Quarterly performance and major asset overview.",
-    highlights: [
-      "Quarter overview",
-      "KPI trends",
-      "Major assets",
-      "Projects completed",
-      "Recommendations",
-    ],
-    modules: ["Assets", "Work Orders", "KPIs", "Incidents"],
-    audience: ["Client", "Management"],
-    outputs: [...ALL_OUTPUTS],
-    icon: "quarterly",
-    available: true,
+    id: "operational_performance",
+    title: "Operational Performance",
+    description: "Workload balance and operational pressure indicators.",
   },
   {
-    kind: "annual",
-    title: "Annual Status Report",
-    description: "Year-end status, achievements, and lessons learned.",
-    highlights: [
-      "Annual KPIs",
-      "Achievements",
-      "Asset health",
-      "Operational challenges",
-      "Lessons learned",
-    ],
-    modules: ["KPIs", "Assets", "Facilities", "Workforce"],
-    audience: ["Client", "Board", "Management"],
-    outputs: [...ALL_OUTPUTS],
-    icon: "annual",
-    available: true,
+    id: "work_orders",
+    title: "Work Orders",
+    description: "Open, overdue, and recent work order activity.",
   },
   {
-    kind: "maintenance",
-    title: "Maintenance Report",
-    description: "Backlog and maintenance register for operational review.",
-    highlights: [
-      "Backlog summary",
-      "Overdue items",
-      "Attention list",
-      "Maintenance register",
-    ],
-    modules: ["Maintenance", "KPIs"],
-    audience: ["Operations", "Facility Manager"],
-    outputs: [...ALL_OUTPUTS],
-    icon: "maintenance",
-    available: true,
+    id: "maintenance",
+    title: "Maintenance",
+    description: "Backlog, overdue maintenance, and attention items.",
   },
   {
-    kind: "work_order",
-    title: "Work Order Report",
-    description: "Work volume, closure rate, and open work register.",
-    highlights: [
-      "Raised / open / closed",
-      "Closure rate",
-      "Latest open work",
-      "Work order register",
-    ],
-    modules: ["Work Orders", "KPIs"],
-    audience: ["Operations", "Client"],
-    outputs: [...ALL_OUTPUTS],
-    icon: "work_order",
-    available: true,
+    id: "incidents",
+    title: "Incidents",
+    description: "Critical incidents and escalation posture.",
   },
   {
-    kind: "incident",
-    title: "Incident Report",
-    description: "Critical incidents and severity posture for escalation packs.",
-    highlights: [
-      "Critical incidents",
-      "Unassigned items",
-      "Incident register",
-      "Recommendations",
-    ],
-    modules: ["Incidents", "KPIs"],
-    audience: ["Management", "HSE", "Client"],
-    outputs: [...ALL_OUTPUTS],
-    icon: "incident",
-    available: true,
+    id: "assets",
+    title: "Assets",
+    description: "Inventory health and condition summary.",
   },
   {
-    kind: "asset",
-    title: "Asset Report",
-    description: "Asset inventory, availability, and condition register.",
-    highlights: [
-      "Asset counts",
-      "Operational status",
-      "Condition summary",
-      "Asset register",
-    ],
-    modules: ["Assets", "KPIs"],
-    audience: ["Asset Manager", "Client"],
-    outputs: [...ALL_OUTPUTS],
-    icon: "asset",
-    available: true,
+    id: "recommendations",
+    title: "Recommendations",
+    description: "Suggested actions for the next reporting period.",
+  },
+  {
+    id: "appendix",
+    title: "Appendix",
+    description: "Supporting registers and data notes.",
   },
 ];
 
-export const OUTPUT_FORMATS = [
-  { value: "word" as const, label: "Word" },
-  { value: "pdf" as const, label: "PDF" },
-  { value: "excel" as const, label: "Excel" },
+const ALL_SECTIONS: ReportSectionId[] = REPORT_SECTIONS.map((s) => s.id);
+
+export const REPORT_TYPES: ReportTypeDefinition[] = [
+  {
+    id: "monthly_operations",
+    title: "Monthly Operations",
+    description:
+      "Comprehensive monthly operational report covering facility performance, maintenance, assets, and work orders.",
+    includes: [
+      "Executive Summary",
+      "KPI Trends",
+      "Asset Health",
+      "Maintenance",
+      "Work Orders",
+      "Recommendations",
+    ],
+    audience: ["Client", "Facility Manager"],
+    outputs: ["Word", "PDF", "Excel"],
+    defaultPeriodKind: "month",
+    defaultSections: ALL_SECTIONS,
+  },
+  {
+    id: "weekly_operations",
+    title: "Weekly Operations",
+    description:
+      "Concise weekly operating brief for site reviews, account updates, and near-term actions.",
+    includes: [
+      "Executive Summary",
+      "KPI Snapshot",
+      "Work Orders",
+      "Incidents",
+      "Operational Pressure",
+      "Recommendations",
+    ],
+    audience: ["Operations", "Account Manager"],
+    outputs: ["Word", "PDF", "Excel"],
+    defaultPeriodKind: "week",
+    defaultSections: [
+      "executive_summary",
+      "kpi_summary",
+      "operational_performance",
+      "work_orders",
+      "incidents",
+      "recommendations",
+    ],
+  },
+  {
+    id: "quarterly_review",
+    title: "Quarterly Review",
+    description:
+      "Full quarterly performance review for client stewardship meetings and management packs.",
+    includes: [
+      "Executive Summary",
+      "KPI Trends",
+      "Operational Performance",
+      "Asset Health",
+      "Incidents",
+      "Recommendations",
+    ],
+    audience: ["Client", "Management"],
+    outputs: ["Word", "PDF", "Excel"],
+    defaultPeriodKind: "quarter",
+    defaultSections: ALL_SECTIONS,
+  },
+  {
+    id: "incident_report",
+    title: "Incident Report",
+    description:
+      "Operational incident summary with trends, root causes, and recommendations.",
+    includes: [
+      "Incident Register",
+      "Severity Analysis",
+      "Root Causes",
+      "Corrective Actions",
+      "Recommendations",
+    ],
+    audience: ["Management", "HSE", "Client"],
+    outputs: ["Word", "PDF", "Excel"],
+    defaultPeriodKind: "month",
+    defaultSections: [
+      "executive_summary",
+      "kpi_summary",
+      "incidents",
+      "recommendations",
+      "appendix",
+    ],
+  },
+  {
+    id: "maintenance_report",
+    title: "Maintenance Report",
+    description:
+      "Maintenance backlog, overdue work, and asset condition briefing for operational review.",
+    includes: [
+      "Backlog Summary",
+      "Overdue Items",
+      "Asset Condition",
+      "Attention Register",
+      "Recommendations",
+    ],
+    audience: ["Operations", "Facility Manager"],
+    outputs: ["Word", "PDF", "Excel"],
+    defaultPeriodKind: "month",
+    defaultSections: [
+      "executive_summary",
+      "kpi_summary",
+      "maintenance",
+      "assets",
+      "recommendations",
+      "appendix",
+    ],
+  },
+  {
+    id: "executive_summary",
+    title: "Executive Summary",
+    description:
+      "High-level operational overview for executives and client leadership.",
+    includes: [
+      "Portfolio KPIs",
+      "Operational Health",
+      "Key Risks",
+      "Executive Highlights",
+      "Recommendations",
+    ],
+    audience: ["Executives", "Client"],
+    outputs: ["Word", "PDF"],
+    defaultPeriodKind: "month",
+    defaultSections: [
+      "executive_summary",
+      "kpi_summary",
+      "recommendations",
+    ],
+  },
 ];
+
+export function getReportType(
+  id: ReportTypeId
+): ReportTypeDefinition | undefined {
+  return REPORT_TYPES.find((item) => item.id === id);
+}
+
+export function getReportSection(
+  id: ReportSectionId
+): ReportSectionDefinition | undefined {
+  return REPORT_SECTIONS.find((item) => item.id === id);
+}
 
 export function defaultYear() {
   return new Date().getFullYear();
@@ -155,15 +227,61 @@ export function defaultQuarter() {
   return Math.floor(new Date().getMonth() / 3) + 1;
 }
 
-export function periodKindForDocument(
-  kind: DocumentKind
-): "month" | "quarter" | "year" {
-  if (kind === "monthly_facility") return "month";
-  if (kind === "quarterly") return "quarter";
-  if (kind === "annual") return "year";
-  return "month";
+/** Nearest Sunday on or after today (week ending). */
+export function defaultWeekEnding(): string {
+  const d = new Date();
+  const day = d.getDay();
+  const daysUntilSunday = (7 - day) % 7;
+  d.setDate(d.getDate() + daysUntilSunday);
+  return d.toISOString().slice(0, 10);
 }
 
-export function getLibraryItem(kind: DocumentKind): ReportLibraryItem | undefined {
-  return REPORT_LIBRARY.find((item) => item.kind === kind);
+export function buildPeriodLabel(period: Omit<ReportPeriodSelection, "label">): string {
+  if (period.kind === "week" && period.weekEnding) {
+    const end = new Date(`${period.weekEnding}T12:00:00`);
+    return `Week ending ${end.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    })}`;
+  }
+  if (period.kind === "quarter" && period.quarter) {
+    return `Q${period.quarter} ${period.year}`;
+  }
+  if (period.kind === "year") {
+    return `FY ${period.year}`;
+  }
+  const month = period.month ?? 1;
+  return new Date(period.year, month - 1, 1).toLocaleString("en-GB", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+export function buildDefaultPeriod(
+  kind: ReportPeriodKind
+): ReportPeriodSelection {
+  const base = {
+    kind,
+    year: defaultYear(),
+    month: defaultMonth(),
+    quarter: defaultQuarter(),
+    weekEnding: defaultWeekEnding(),
+  };
+  return { ...base, label: buildPeriodLabel(base) };
+}
+
+export function createInitialWizardState(): ReportWizardState {
+  return {
+    step: "type",
+    reportType: null,
+    facilityIds: [],
+    allFacilities: true,
+    period: buildDefaultPeriod("month"),
+    sections: [],
+  };
+}
+
+export function defaultSectionsForType(typeId: ReportTypeId): ReportSectionId[] {
+  return [...(getReportType(typeId)?.defaultSections ?? [])];
 }

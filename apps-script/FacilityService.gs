@@ -83,14 +83,21 @@ var FacilityService = (function () {
 
   function create(payload) {
     if (!payload || !payload.name) throw new Error("Facility name is required.");
-    if (!payload.code) throw new Error("Facility code is required.");
-    return FacilityRepository.create(payload);
+    // Facility code is system-generated when omitted.
+    var created = FacilityRepository.create(payload);
+    if (typeof ReportingSnapshotService !== "undefined") {
+      ReportingSnapshotService.notifyModuleChanged("facilities");
+    }
+    return created;
   }
 
   function update(payload) {
     if (!payload || !payload.id) throw new Error("Facility id is required.");
     var updated = FacilityRepository.update(payload.id, payload);
     if (!updated) throw new Error("Facility " + payload.id + " not found.");
+    if (typeof ReportingSnapshotService !== "undefined") {
+      ReportingSnapshotService.notifyModuleChanged("facilities");
+    }
     return updated;
   }
 
@@ -98,6 +105,9 @@ var FacilityService = (function () {
     if (!payload || !payload.id) throw new Error("Facility id is required.");
     var updated = FacilityRepository.deactivate(payload.id);
     if (!updated) throw new Error("Facility " + payload.id + " not found.");
+    if (typeof ReportingSnapshotService !== "undefined") {
+      ReportingSnapshotService.notifyModuleChanged("facilities");
+    }
     return updated;
   }
 

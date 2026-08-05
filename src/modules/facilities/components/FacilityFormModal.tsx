@@ -62,7 +62,6 @@ export function FacilityFormModal({
   function validate() {
     const next: Partial<Record<keyof CreateFacilityInput, string>> = {};
     if (!form.name.trim()) next.name = "Facility name is required";
-    if (!form.code.trim()) next.code = "Code is required";
     if (!form.location.trim()) next.location = "Location is required";
     if (!form.manager.trim()) next.manager = "Manager is required";
     setErrors(next);
@@ -78,11 +77,12 @@ export function FacilityFormModal({
       const payload: CreateFacilityInput = {
         ...form,
         name: form.name.trim(),
-        code: form.code.trim().toUpperCase(),
+        // Facility code is assigned by the platform on create.
         location: form.location.trim(),
         manager: form.manager.trim(),
         description: form.description?.trim() || undefined,
       };
+      delete payload.code;
 
       if (mode === "edit" && facility) {
         await FacilityService.updateFacility(facility.id, payload);
@@ -164,20 +164,21 @@ export function FacilityFormModal({
           />
         </FormField>
 
-        <FormField
-          label="Code"
-          htmlFor="facility-code"
-          required
-          error={errors.code}
-        >
-          <input
-            id="facility-code"
-            className={inputClassName}
-            placeholder="e.g. LAG-HQ"
-            value={form.code}
-            onChange={(event) => updateField("code", event.target.value)}
-          />
-        </FormField>
+        {isEdit && facility ? (
+          <FormField
+            label="Facility code"
+            htmlFor="facility-code"
+            hint="Assigned automatically. Cannot be changed."
+          >
+            <input
+              id="facility-code"
+              className={inputClassName}
+              value={facility.code || facility.id}
+              disabled
+              readOnly
+            />
+          </FormField>
+        ) : null}
 
         <FormField
           label="Location"

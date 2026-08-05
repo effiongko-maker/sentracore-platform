@@ -209,18 +209,20 @@ var MaintenanceRepository = (function () {
   }
 
   function nextId_() {
+    var year = new Date().getFullYear();
     var all = getAll();
-    var max = 0;
-    for (var i = 0; i < all.length; i++) {
-      var match = String(all[i].id || "").match(/MNT-(\d+)/i);
-      if (match) {
-        var n = parseInt(match[1], 10);
-        if (n > max) max = n;
+    var maxYear = 0;
+    var i;
+    for (i = 0; i < all.length; i++) {
+      var id = String(all[i].id || "");
+      var yearMatch = id.match(/^MNT-(\d{4})-(\d+)$/i);
+      if (yearMatch && parseInt(yearMatch[1], 10) === year) {
+        maxYear = Math.max(maxYear, parseInt(yearMatch[2], 10));
       }
     }
-    var next = max + 1;
-    var padded = ("0000" + next).slice(-4);
-    return "MNT-" + padded;
+    var next = maxYear + 1;
+    var padded = ("000000" + next).slice(-6);
+    return "MNT-" + year + "-" + padded;
   }
 
   function create(payload) {

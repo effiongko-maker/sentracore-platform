@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Activity } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatRelativeTime } from "@/lib/utils";
@@ -26,11 +27,12 @@ export function RecentActivity({ items }: { items: WorkspaceActivityItem[] }) {
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>Feed</CardTitle>
+          <CardTitle>Activity</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           {items.length === 0 ? (
             <EmptyState
+              icon={Activity}
               className="border-0 bg-transparent py-10"
               title="No recent activity"
               description="Newly reported incidents, maintenance requests, and work orders will show up here."

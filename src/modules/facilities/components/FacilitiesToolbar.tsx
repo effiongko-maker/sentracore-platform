@@ -2,6 +2,7 @@
 
 import { SlidersHorizontal } from "lucide-react";
 import { SearchBox } from "@/components/ui/SearchBox";
+import { toolbarSelectClassName } from "@/components/forms/FormField";
 import {
   FACILITY_LOCATIONS,
   FACILITY_STATUSES,
@@ -21,8 +22,6 @@ interface FacilitiesToolbarProps {
   onStatusChange: (value: FacilityStatus | "all") => void;
 }
 
-const selectClassName =
-  "h-10 rounded-[12px] border border-border bg-card px-3 text-sm outline-none transition-colors focus:border-accent/40 focus:ring-2 focus:ring-accent/15";
 
 export function FacilitiesToolbar({
   search,
@@ -54,7 +53,7 @@ export function FacilitiesToolbar({
           onChange={(event) =>
             onTypeChange(event.target.value as FacilityType | "all")
           }
-          className={selectClassName}
+          className={toolbarSelectClassName}
           aria-label="Filter by type"
         >
           <option value="all">All types</option>
@@ -70,7 +69,7 @@ export function FacilitiesToolbar({
           onChange={(event) =>
             onLocationChange(event.target.value as string | "all")
           }
-          className={selectClassName}
+          className={toolbarSelectClassName}
           aria-label="Filter by location"
         >
           <option value="all">All locations</option>
@@ -86,7 +85,7 @@ export function FacilitiesToolbar({
           onChange={(event) =>
             onStatusChange(event.target.value as FacilityStatus | "all")
           }
-          className={selectClassName}
+          className={toolbarSelectClassName}
           aria-label="Filter by status"
         >
           <option value="all">All statuses</option>

@@ -84,7 +84,7 @@ export function ViewAssetModal({
 
       <div className="mt-5 grid gap-5 sm:grid-cols-2">
         <Detail label="Asset ID" value={asset.id} />
-        <Detail label="Asset tag" value={asset.assetTag} />
+        <Detail label="Asset number" value={asset.assetTag || asset.id} />
         <Detail label="Category" value={labelize(asset.category)} />
         <Detail label="Facility" value={asset.facility} />
         <Detail label="Manufacturer" value={asset.manufacturer} />

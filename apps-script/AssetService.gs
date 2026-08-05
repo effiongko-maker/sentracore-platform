@@ -95,14 +95,27 @@ var AssetService = (function () {
 
   function create(payload) {
     if (!payload || !payload.name) throw new Error("Asset name is required.");
-    if (!payload.assetTag) throw new Error("Asset tag is required.");
-    return AssetRepository.create(payload);
+    if (!payload.facility) throw new Error("Facility is required.");
+    // Asset tag / number is system-generated when omitted.
+    var created = AssetRepository.create(payload);
+    if (!created || !created.id) {
+      throw new Error(
+        "Asset create failed: repository returned no record. Check the Assets sheet headers."
+      );
+    }
+    if (typeof ReportingSnapshotService !== "undefined") {
+      ReportingSnapshotService.notifyModuleChanged("assets");
+    }
+    return created;
   }
 
   function update(payload) {
     if (!payload || !payload.id) throw new Error("Asset id is required.");
     var updated = AssetRepository.update(payload.id, payload);
     if (!updated) throw new Error("Asset " + payload.id + " not found.");
+    if (typeof ReportingSnapshotService !== "undefined") {
+      ReportingSnapshotService.notifyModuleChanged("assets");
+    }
     return updated;
   }
 
@@ -110,6 +123,9 @@ var AssetService = (function () {
     if (!payload || !payload.id) throw new Error("Asset id is required.");
     var updated = AssetRepository.deactivate(payload.id);
     if (!updated) throw new Error("Asset " + payload.id + " not found.");
+    if (typeof ReportingSnapshotService !== "undefined") {
+      ReportingSnapshotService.notifyModuleChanged("assets");
+    }
     return updated;
   }
 

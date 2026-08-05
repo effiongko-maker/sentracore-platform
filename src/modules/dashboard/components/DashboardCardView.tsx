@@ -99,7 +99,7 @@ export function DashboardKpiCard({
 
   const body = (
     <Card
-      className="p-5 transition-shadow duration-200 hover:shadow-sc-lg"
+      className="h-full p-5 transition-shadow duration-200 hover:shadow-sc-lg"
       style={{ animationDelay: `${index * 40}ms` }}
     >
       <div className="flex items-start justify-between gap-3">
@@ -124,7 +124,7 @@ export function DashboardKpiCard({
 
   if (!href) return body;
   return (
-    <Link href={href} className="block">
+    <Link href={href} className="block h-full">
       {body}
     </Link>
   );
@@ -154,8 +154,9 @@ export function DashboardListCard({ card }: { card: DashboardCard }) {
       </CardHeader>
       <CardContent className="space-y-3">
         {items.length === 0 ? (
-          <p className="rounded-sc-sm border border-dashed border-border/80 bg-slate-50/60 px-3.5 py-4 text-sm text-muted">
-            {card.emptyMessage ?? "Nothing to show."}
+          <p className="rounded-sc-sm border border-dashed border-border/80 bg-slate-50/60 px-3.5 py-5 text-center text-sm text-muted">
+            {card.emptyMessage ??
+              "No open items in this queue. New work will appear here automatically."}
           </p>
         ) : (
           items.map((item) => (
@@ -170,15 +171,17 @@ export function DashboardListCard({ card }: { card: DashboardCard }) {
 /** Renders `health_summary` cards. */
 export function DashboardHealthCard({ card }: { card: DashboardCard }) {
   return (
-    <Card className="p-5">
+    <Card className="h-full p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-muted">{card.title}</p>
           <p className="mt-2 text-sm text-foreground">
-            {card.description ?? card.secondaryLabel ?? "—"}
+            {card.description ??
+              card.secondaryLabel ??
+              "Operational health summary for the current facility scope."}
           </p>
         </div>
-        <Badge variant={card.tone}>{card.secondaryLabel ?? "health"}</Badge>
+        <Badge variant={card.tone}>{card.secondaryLabel ?? "Health"}</Badge>
       </div>
       {card.primaryValue != null ? (
         <p className="mt-4 text-3xl font-semibold tracking-tight text-primary">
@@ -196,20 +199,22 @@ export function DashboardQuickActionCard({ card }: { card: DashboardCard }) {
   const href = resolveActionPath(card.actionId);
 
   return (
-    <Link href={href}>
-      <Card className="h-full p-4 transition-shadow hover:shadow-sc-lg">
+    <Link href={href} className="block h-full">
+      <Card className="h-full p-4 transition-all duration-200 hover:border-primary/20 hover:shadow-sc-lg">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-soft text-accent">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
             {card.actionId === "view-facilities" ? (
               <Building2 className="h-4 w-4" />
             ) : (
               <Plus className="h-4 w-4" />
             )}
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-medium text-foreground">{card.title}</p>
             {card.description ? (
-              <p className="text-xs text-muted">{card.description}</p>
+              <p className="mt-0.5 text-xs leading-5 text-muted">
+                {card.description}
+              </p>
             ) : null}
           </div>
         </div>
@@ -246,7 +251,7 @@ export function DashboardContextBanner({
       <div className="pointer-events-none absolute -bottom-24 right-20 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
       <div className="relative">
         <p className="mb-2 text-xs font-medium uppercase tracking-wider text-white/70">
-          {title ?? "Operations Command Center"}
+          {title ?? "Dashboard"}
         </p>
         <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
           {greeting}

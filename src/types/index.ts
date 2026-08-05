@@ -17,7 +17,6 @@ export type {
 } from "./user";
 
 export {
-  USER_FACILITIES,
   USER_ROLES,
   USER_SPECIALIZATIONS,
   USER_STATUSES,
@@ -53,7 +52,6 @@ export {
   ASSET_CATEGORIES,
   ASSET_CONDITIONS,
   ASSET_CRITICALITIES,
-  ASSET_FACILITIES,
   ASSET_STATUSES,
 } from "./asset";
 

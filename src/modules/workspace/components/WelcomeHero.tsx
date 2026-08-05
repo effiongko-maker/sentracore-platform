@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatDate } from "@/lib/utils";
-import { firstName, greetingForHour } from "../utils";
+import { greetingForHour } from "../utils";
 
 export function WelcomeHero({
   userName,
@@ -19,7 +19,7 @@ export function WelcomeHero({
   }, []);
 
   const greeting = greetingForHour(now.getHours());
-  const name = firstName(userName);
+  const name = userName?.trim() ?? "";
   const dateLabel = formatDate(now, {
     weekday: "long",
     day: "numeric",
@@ -36,7 +36,7 @@ export function WelcomeHero({
       <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-accent/10 blur-3xl" />
       <div className="relative max-w-2xl">
         <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted">
-          Workspace
+          Home
         </p>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
           {greeting}
@@ -48,7 +48,7 @@ export function WelcomeHero({
           {timeLabel}
         </p>
         <p className="mt-4 max-w-xl text-base leading-7 text-slate-600">
-          Here&apos;s what&apos;s happening across your operations today.
+          Your personal starting point for today&apos;s facility work.
         </p>
       </div>
     </section>

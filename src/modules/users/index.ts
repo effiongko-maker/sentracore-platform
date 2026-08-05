@@ -12,7 +12,6 @@ export type {
   UserStatus,
 } from "./types";
 export {
-  USER_FACILITIES,
   USER_ROLES,
   USER_SPECIALIZATIONS,
   USER_STATUSES,

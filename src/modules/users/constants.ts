@@ -26,15 +26,6 @@ export const USER_SPECIALIZATIONS = [
   "Administration",
 ] as const;
 
-export const USER_FACILITIES = [
-  "Lagos HQ",
-  "Docklands Campus",
-  "Accra Hub",
-  "Plant West",
-  "Nairobi Centre",
-  "All Facilities",
-] as const;
-
 export const USER_STATUS_VARIANT: Record<
   UserStatus,
   "success" | "warning" | "danger" | "neutral"

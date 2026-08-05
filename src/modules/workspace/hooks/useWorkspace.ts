@@ -24,7 +24,7 @@ export function useWorkspace() {
       setError(
         err instanceof Error
           ? err.message
-          : "Unable to load workspace right now."
+          : "Unable to load Home right now."
       );
       setSnapshot(null);
     } finally {
@@ -47,7 +47,7 @@ export function useWorkspace() {
         setError(
           err instanceof Error
             ? err.message
-            : "Unable to load workspace right now."
+            : "Unable to load Home right now."
         );
         setSnapshot(null);
       })

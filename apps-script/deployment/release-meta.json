@@ -1,0 +1,36 @@
+{
+  "release": "v0.3.0",
+  "title": "Master Data Phase 1",
+  "features": [
+    "Master Data module for shared lookup entities: Departments, Buildings, Floors, Rooms, Vendors",
+    "Apps Script MasterDataRepository / MasterDataService / MasterDataController",
+    "ROUTER resource: master-data",
+    "Next.js /api/master-data proxy + MasterDataService + /master-data UI",
+    "Consumers: Maintenance department select; Incident/Occupant location cascading selects",
+    "Core operational modules remain dedicated (Facilities, Users, Assets, Work Orders, Incidents, Maintenance)"
+  ],
+  "performance": [],
+  "deploymentRequired": true,
+  "triggerRequired": false,
+  "appsScriptRedeploy": true,
+  "smokeTests": [
+    {
+      "name": "Master data health (router lists master-data)",
+      "command": "curl -sS \"$APPS_SCRIPT_URL\""
+    },
+    {
+      "name": "Master data list departments",
+      "command": "curl -sS -X POST http://localhost:3000/api/master-data -H 'Content-Type: application/json' -d '{\"resource\":\"master-data\",\"action\":\"getAll\",\"payload\":{\"entity\":\"departments\",\"page\":1,\"pageSize\":10}}'"
+    },
+    {
+      "name": "Master data create department (optional)",
+      "command": "curl -sS -X POST http://localhost:3000/api/master-data -H 'Content-Type: application/json' -d '{\"resource\":\"master-data\",\"action\":\"create\",\"payload\":{\"entity\":\"departments\",\"name\":\"Facilities\",\"code\":\"FAC\",\"status\":\"active\"}}'"
+    }
+  ],
+  "notes": [
+    "Phase 1 scope only: Departments, Buildings, Floors, Rooms, Vendors.",
+    "Minimum new/replaced Apps Script files: MasterDataRepository.gs, MasterDataService.gs, MasterDataController.gs, ROUTER.gs.",
+    "Sheets are auto-created on first access. No seed-row migration.",
+    "Deploy a new Web App version after pasting. Unpublished editor saves do not go live."
+  ]
+}

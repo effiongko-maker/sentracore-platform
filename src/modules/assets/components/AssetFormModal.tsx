@@ -9,11 +9,11 @@ import {
   selectClassName,
 } from "@/components/forms/FormField";
 import { useToast } from "@/components/ui/Toast";
+import { useFacilityOptions } from "@/hooks/useFacilityOptions";
 import {
   ASSET_CATEGORIES,
   ASSET_CONDITIONS,
   ASSET_CRITICALITIES,
-  ASSET_FACILITIES,
   ASSET_STATUSES,
 } from "../constants";
 import { AssetService } from "../services/AssetService";
@@ -43,6 +43,7 @@ export function AssetFormModal({
   onSaved,
 }: AssetFormModalProps) {
   const { toast } = useToast();
+  const { facilities, loading: facilitiesLoading } = useFacilityOptions(open);
   const [form, setForm] = useState<CreateAssetInput>(toCreateFormValues());
   const [errors, setErrors] = useState<
     Partial<Record<keyof CreateAssetInput, string>>
@@ -66,7 +67,6 @@ export function AssetFormModal({
   function validate() {
     const next: Partial<Record<keyof CreateAssetInput, string>> = {};
     if (!form.name.trim()) next.name = "Asset name is required";
-    if (!form.assetTag.trim()) next.assetTag = "Asset tag is required";
     if (!form.facility.trim()) next.facility = "Facility is required";
     if (!form.manufacturer.trim())
       next.manufacturer = "Manufacturer is required";
@@ -83,7 +83,7 @@ export function AssetFormModal({
       const payload: CreateAssetInput = {
         ...form,
         name: form.name.trim(),
-        assetTag: form.assetTag.trim().toUpperCase(),
+        // Asset number is assigned by the platform on create.
         facility: form.facility.trim(),
         manufacturer: form.manufacturer.trim(),
         model: form.model.trim(),
@@ -93,6 +93,7 @@ export function AssetFormModal({
         assignedTo: form.assignedTo.trim(),
         description: form.description?.trim() || undefined,
       };
+      delete payload.assetTag;
 
       if (mode === "edit" && asset) {
         await AssetService.updateAsset(asset.id, payload);
@@ -137,7 +138,7 @@ export function AssetFormModal({
       description={
         isEdit
           ? "Update asset details, assignment, and operational status."
-          : "Register a new asset within the SentraCore portfolio."
+          : "Register a new asset. The asset number is assigned automatically."
       }
       size="lg"
       footer={
@@ -172,20 +173,21 @@ export function AssetFormModal({
           />
         </FormField>
 
-        <FormField
-          label="Asset tag"
-          htmlFor="asset-tag"
-          required
-          error={errors.assetTag}
-        >
-          <input
-            id="asset-tag"
-            className={inputClassName}
-            placeholder="e.g. CHL-002"
-            value={form.assetTag}
-            onChange={(event) => updateField("assetTag", event.target.value)}
-          />
-        </FormField>
+        {isEdit && asset ? (
+          <FormField
+            label="Asset number"
+            htmlFor="asset-tag"
+            hint="Assigned automatically. Cannot be changed."
+          >
+            <input
+              id="asset-tag"
+              className={inputClassName}
+              value={asset.assetTag || asset.id}
+              disabled
+              readOnly
+            />
+          </FormField>
+        ) : null}
 
         <FormField label="Category" htmlFor="asset-category" required>
           <select
@@ -215,10 +217,18 @@ export function AssetFormModal({
             className={selectClassName}
             value={form.facility}
             onChange={(event) => updateField("facility", event.target.value)}
+            disabled={facilitiesLoading}
           >
-            {ASSET_FACILITIES.map((value) => (
-              <option key={value} value={value}>
-                {value}
+            <option value="">
+              {facilitiesLoading ? "Loading facilities…" : "Select facility"}
+            </option>
+            {form.facility &&
+            !facilities.some((item) => item.name === form.facility) ? (
+              <option value={form.facility}>{form.facility}</option>
+            ) : null}
+            {facilities.map((item) => (
+              <option key={item.id} value={item.name}>
+                {item.name}
               </option>
             ))}
           </select>

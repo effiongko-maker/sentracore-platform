@@ -37,14 +37,6 @@ export const ASSET_CRITICALITIES: AssetCriticality[] = [
   "critical",
 ];
 
-export const ASSET_FACILITIES = [
-  "Lagos HQ",
-  "Docklands Campus",
-  "Accra Hub",
-  "Plant West",
-  "Nairobi Centre",
-] as const;
-
 export const ASSET_STATUS_VARIANT: Record<
   AssetStatus,
   "success" | "warning" | "danger" | "neutral"

@@ -96,10 +96,22 @@ var WorkOrderService = (function () {
     };
   }
 
+  function sortNewestFirst_(rows) {
+    return rows.slice().sort(function (a, b) {
+      var aAt = String(a.createdAt || a.reportedAt || a.updatedAt || "");
+      var bAt = String(b.createdAt || b.reportedAt || b.updatedAt || "");
+      if (aAt === bAt) {
+        return String(b.id || "").localeCompare(String(a.id || ""));
+      }
+      return aAt < bAt ? 1 : -1;
+    });
+  }
+
   function getAll(payload) {
     var rows = WorkOrderRepository.getAll();
     var filtered = applyFilters_(rows, payload);
-    return paginate_(filtered, payload);
+    var sorted = sortNewestFirst_(filtered);
+    return paginate_(sorted, payload);
   }
 
   function getById(payload) {
@@ -113,13 +125,20 @@ var WorkOrderService = (function () {
   function create(payload) {
     if (!payload || !payload.title) throw new Error("Work order title is required.");
     if (!payload.facilityId) throw new Error("Facility id is required.");
-    return WorkOrderRepository.create(payload);
+    var created = WorkOrderRepository.create(payload);
+    if (typeof ReportingSnapshotService !== "undefined") {
+      ReportingSnapshotService.notifyModuleChanged("workOrders");
+    }
+    return created;
   }
 
   function update(payload) {
     if (!payload || !payload.id) throw new Error("Work order id is required.");
     var updated = WorkOrderRepository.update(payload.id, payload);
     if (!updated) throw new Error("Work order " + payload.id + " not found.");
+    if (typeof ReportingSnapshotService !== "undefined") {
+      ReportingSnapshotService.notifyModuleChanged("workOrders");
+    }
     return updated;
   }
 
@@ -127,6 +146,9 @@ var WorkOrderService = (function () {
     if (!payload || !payload.id) throw new Error("Work order id is required.");
     var updated = WorkOrderRepository.deactivate(payload.id);
     if (!updated) throw new Error("Work order " + payload.id + " not found.");
+    if (typeof ReportingSnapshotService !== "undefined") {
+      ReportingSnapshotService.notifyModuleChanged("workOrders");
+    }
     return updated;
   }
 

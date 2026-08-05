@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { DataTable, type Column } from "@/components/tables/DataTable";
 import { formatDate } from "@/lib/utils";
@@ -145,6 +146,7 @@ export function IncidentsTable({
       totalPages={totalPages}
       total={total}
       onPageChange={onPageChange}
+      emptyIcon={AlertTriangle}
       emptyTitle="No incidents match your filters"
       emptyDescription="Clear search or adjust severity, status, facility, and assignee filters."
       className="min-w-0"

@@ -9,8 +9,8 @@ import {
   selectClassName,
 } from "@/components/forms/FormField";
 import { useToast } from "@/components/ui/Toast";
+import { useFacilityOptions } from "@/hooks/useFacilityOptions";
 import {
-  USER_FACILITIES,
   USER_ROLES,
   USER_SPECIALIZATIONS,
   USER_STATUSES,
@@ -35,6 +35,7 @@ export function UserFormModal({
   onSaved,
 }: UserFormModalProps) {
   const { toast } = useToast();
+  const { facilities, loading: facilitiesLoading } = useFacilityOptions(open);
   const [form, setForm] = useState<CreateUserInput>(toCreateFormValues());
   const [errors, setErrors] = useState<
     Partial<Record<keyof CreateUserInput, string>>
@@ -238,10 +239,18 @@ export function UserFormModal({
             className={selectClassName}
             value={form.facility}
             onChange={(event) => updateField("facility", event.target.value)}
+            disabled={facilitiesLoading}
           >
-            {USER_FACILITIES.map((value) => (
-              <option key={value} value={value}>
-                {value}
+            <option value="">
+              {facilitiesLoading ? "Loading facilities…" : "Select facility"}
+            </option>
+            {form.facility &&
+            !facilities.some((item) => item.name === form.facility) ? (
+              <option value={form.facility}>{form.facility}</option>
+            ) : null}
+            {facilities.map((item) => (
+              <option key={item.id} value={item.name}>
+                {item.name}
               </option>
             ))}
           </select>

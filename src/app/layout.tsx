@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     template: "%s · SentraCore",
   },
   description:
-    "SentraCore™ — Operations Management Platform by Beacon Africa Technologies Ltd.",
+    "SentraCore™ — Operations Management Platform by Beacon Africa Limited.",
 };
 
 export default function RootLayout({

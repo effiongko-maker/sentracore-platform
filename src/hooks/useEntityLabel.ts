@@ -7,16 +7,22 @@ import {
   type EntityKind,
 } from "@/services/entityResolver";
 
+function initialLabel(kind: EntityKind, id: string | null | undefined) {
+  const normalized = id?.trim() ?? "";
+  if (!normalized) return "";
+  return EntityResolver.getCached(kind, normalized) ?? normalized;
+}
+
 /**
  * Resolve an entity id → display name for tables, modals, forms, dropdowns.
  * Falls back to the raw id while loading / when unknown.
+ * Prefers ReportingSnapshot-primed EntityResolver cache (no network).
  */
 export function useEntityLabel(
   kind: EntityKind,
   id: string | null | undefined
 ) {
-  const fallback = id?.trim() ?? "";
-  const [label, setLabel] = useState(fallback);
+  const [label, setLabel] = useState(() => initialLabel(kind, id));
 
   useEffect(() => {
     const normalized = id?.trim() ?? "";
@@ -64,4 +70,24 @@ export function useWorkOrderTitle(id: string | null | undefined) {
 
 export function useMaintenanceTitle(id: string | null | undefined) {
   return useEntityLabel(EntityKinds.maintenance, id);
+}
+
+export function useDepartmentName(id: string | null | undefined) {
+  return useEntityLabel(EntityKinds.department, id);
+}
+
+export function useBuildingName(id: string | null | undefined) {
+  return useEntityLabel(EntityKinds.building, id);
+}
+
+export function useFloorName(id: string | null | undefined) {
+  return useEntityLabel(EntityKinds.floor, id);
+}
+
+export function useRoomName(id: string | null | undefined) {
+  return useEntityLabel(EntityKinds.room, id);
+}
+
+export function useVendorName(id: string | null | undefined) {
+  return useEntityLabel(EntityKinds.vendor, id);
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Plus, Wrench } from "lucide-react";
 import { useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
@@ -74,7 +74,7 @@ export function MaintenancePage() {
     <div>
       <PageHeader
         title="Maintenance"
-        description="Track maintenance requests and lifecycle across facilities and assets."
+        description="Track maintenance requests and work across facilities and assets."
         actions={
           <Button onClick={() => setModal({ type: "create" })}>
             <Plus className="h-4 w-4" />
@@ -102,6 +102,7 @@ export function MaintenancePage() {
 
       {error ? (
         <EmptyState
+          icon={Wrench}
           title="Couldn’t load maintenance"
           description={error}
           actionLabel="Retry"

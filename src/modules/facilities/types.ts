@@ -23,7 +23,8 @@ export interface Facility {
 
 export interface CreateFacilityInput {
   name: string;
-  code: string;
+  /** System-generated on create when omitted. Immutable after create. */
+  code?: string;
   location: string;
   type: FacilityType;
   manager: string;
@@ -44,7 +45,6 @@ export interface FacilityListParams {
 
 export type FacilityModalState =
   | { type: "closed" }
-  | { type: "create" }
   | { type: "edit"; facility: Facility }
   | { type: "view"; facility: Facility }
   | { type: "deactivate"; facility: Facility };

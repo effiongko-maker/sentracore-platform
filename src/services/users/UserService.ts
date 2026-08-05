@@ -35,41 +35,73 @@ function mapRemoteUser(raw: RemoteUser): User {
   };
 }
 
+/**
+ * Normalize Apps Script /api/users envelopes.
+ *
+ * Correct (Facilities-style):
+ *   { data: User[], page, pageSize, total, totalPages }
+ *
+ * Broken double-wrap still seen on some Web App versions:
+ *   { data: { data: User[], page, pageSize, total, totalPages }, page, totalPages }
+ */
+function unwrapUsersPayload(payload: unknown): {
+  rows: unknown[];
+  page?: unknown;
+  pageSize?: unknown;
+  total?: unknown;
+  totalPages?: unknown;
+} {
+  if (Array.isArray(payload)) {
+    return { rows: payload };
+  }
+
+  if (!payload || typeof payload !== "object") {
+    return { rows: [] };
+  }
+
+  const outer = payload as Record<string, unknown>;
+
+  // Shape B: { data: User[], ... }
+  if (Array.isArray(outer.data)) {
+    return {
+      rows: outer.data,
+      page: outer.page,
+      pageSize: outer.pageSize,
+      total: outer.total,
+      totalPages: outer.totalPages,
+    };
+  }
+
+  // Shape C: { data: { data: User[], ... }, page, totalPages }
+  if (outer.data && typeof outer.data === "object") {
+    const inner = outer.data as Record<string, unknown>;
+    if (Array.isArray(inner.data)) {
+      return {
+        rows: inner.data,
+        page: inner.page ?? outer.page,
+        pageSize: inner.pageSize ?? outer.pageSize,
+        total: inner.total ?? outer.total,
+        totalPages: inner.totalPages ?? outer.totalPages,
+      };
+    }
+  }
+
+  return { rows: [] };
+}
+
 function toPaginatedUsers(
   payload: unknown,
   params: UserListParams
 ): PaginatedResult<User> {
-  // Shape A: User[]
-  if (Array.isArray(payload)) {
-    const data = payload.map((row) => mapRemoteUser(row as RemoteUser));
-    return {
-      data,
-      page: params.page ?? 1,
-      pageSize: params.pageSize ?? data.length,
-      total: data.length,
-      totalPages: 1,
-    };
-  }
-
-  // Shape B: { data: User[], page, pageSize, total, totalPages }
-  if (payload && typeof payload === "object") {
-    const page = payload as Record<string, unknown>;
-    const rows = Array.isArray(page.data) ? page.data : [];
-    return {
-      data: rows.map((row) => mapRemoteUser(row as RemoteUser)),
-      page: Number(page.page ?? params.page ?? 1),
-      pageSize: Number(page.pageSize ?? params.pageSize ?? rows.length),
-      total: Number(page.total ?? rows.length),
-      totalPages: Number(page.totalPages ?? 1),
-    };
-  }
+  const unwrapped = unwrapUsersPayload(payload);
+  const data = unwrapped.rows.map((row) => mapRemoteUser(row as RemoteUser));
 
   return {
-    data: [],
-    page: 1,
-    pageSize: params.pageSize ?? 8,
-    total: 0,
-    totalPages: 1,
+    data,
+    page: Number(unwrapped.page ?? params.page ?? 1),
+    pageSize: Number(unwrapped.pageSize ?? params.pageSize ?? data.length),
+    total: Number(unwrapped.total ?? data.length),
+    totalPages: Number(unwrapped.totalPages ?? 1),
   };
 }
 
@@ -77,7 +109,7 @@ function toPaginatedUsers(
  * Users domain service.
  *
  * Talks only to ApiClient — never to storage backends or UI details.
- * When the remote API goes live, ApiClient changes; this file stays the same.
+ * CRUD uses the live Apps Script envelope: { resource, action, payload }.
  */
 export const UserService = {
   async getCurrentUser(): Promise<CurrentUser> {
@@ -96,8 +128,12 @@ export const UserService = {
   },
   async getUser(id: string): Promise<User | null> {
     try {
-      const response = await apiClient.get<User>(`/users/${id}`);
-      return response.data;
+      const response = await apiClient.post<unknown>("/users", {
+        resource: "users",
+        action: "getById",
+        payload: { id },
+      });
+      return mapRemoteUser(response.data as RemoteUser);
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) return null;
       throw error;
@@ -105,19 +141,31 @@ export const UserService = {
   },
 
   async createUser(input: CreateUserInput): Promise<User> {
-    const response = await apiClient.post<User>("/users", input);
-    return response.data;
+    const response = await apiClient.post<unknown>("/users", {
+      resource: "users",
+      action: "create",
+      payload: input,
+    });
+    return mapRemoteUser(response.data as RemoteUser);
   },
 
   async updateUser(id: string, input: UpdateUserInput): Promise<User> {
-    const response = await apiClient.put<User>(`/users/${id}`, input);
-    return response.data;
+    const response = await apiClient.post<unknown>("/users", {
+      resource: "users",
+      action: "update",
+      payload: { id, ...input },
+    });
+    return mapRemoteUser(response.data as RemoteUser);
   },
 
   /** Soft-deactivate only — users are never deleted. */
   async deactivateUser(id: string): Promise<User> {
-    const response = await apiClient.post<User>(`/users/${id}/deactivate`);
-    return response.data;
+    const response = await apiClient.post<unknown>("/users", {
+      resource: "users",
+      action: "deactivate",
+      payload: { id },
+    });
+    return mapRemoteUser(response.data as RemoteUser);
   },
 };
 

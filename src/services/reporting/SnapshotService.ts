@@ -36,11 +36,6 @@ function isExpired(cached: CachedReportingSnapshot, now = Date.now()): boolean {
   return Date.parse(cached.expiresAt) <= now;
 }
 
-function log(event: string, detail?: string) {
-  const suffix = detail ? ` ${detail}` : "";
-  console.log(`[snapshot] ${event}${suffix}`);
-}
-
 export const SnapshotService = {
   /**
    * Return a valid cached snapshot or rebuild via `build`.
@@ -54,16 +49,12 @@ export const SnapshotService = {
     let entry = entries.get(key);
 
     if (entry?.building) {
-      log("hit-inflight", `key=${key}`);
       return entry.building;
     }
 
     if (entry?.cached && !isExpired(entry.cached)) {
-      log("hit", `key=${key} version=${entry.cached.version}`);
       return entry.cached.snapshot;
     }
-
-    log("miss", `key=${key}${entry?.cached ? " expired" : " empty"}`);
 
     if (!entry) {
       entry = { cached: null, building: null };
@@ -71,9 +62,6 @@ export const SnapshotService = {
     }
 
     const building = (async () => {
-      const started = performance.now();
-      log("rebuild", `key=${key}`);
-
       try {
         const snapshot = await build();
         const generatedAt = new Date().toISOString();
@@ -99,15 +87,14 @@ export const SnapshotService = {
           current.building = null;
         }
 
-        log(
-          "rebuild-done",
-          `key=${key} version=${globalVersion} ${Math.round(performance.now() - started)}ms`
-        );
-
         return snapshot;
       } catch (error) {
         const current = entries.get(key);
         if (current) current.building = null;
+        console.warn(
+          "[snapshot] rebuild failed",
+          error instanceof Error ? error.message : error
+        );
         throw error;
       }
     })();
@@ -120,7 +107,6 @@ export const SnapshotService = {
   invalidate(): void {
     entries.clear();
     lastMetadata = null;
-    log("invalidated");
   },
 
   /** Read-only cache metadata for the last successful rebuild (any key). */

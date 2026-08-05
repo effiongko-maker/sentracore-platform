@@ -36,6 +36,10 @@ export {
   MaintenanceService,
   type IMaintenanceService,
 } from "./maintenance/MaintenanceService";
+export {
+  MasterDataService,
+  type IMasterDataService,
+} from "./masterData/MasterDataService";
 
 // Dashboard / Reporting are intentionally NOT re-exported from this barrel.
 // Import from their own entrypoints so AppShell/TopBar does not eagerly pull

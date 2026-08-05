@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Plus, Users } from "lucide-react";
 import { useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
@@ -68,7 +68,7 @@ export function UsersPage() {
     <div>
       <PageHeader
         title="Users"
-        description="Manage people, roles, and access across the SentraCore platform."
+        description="Manage people, roles, and access."
         actions={
           <Button onClick={() => setModal({ type: "create" })}>
             <Plus className="h-4 w-4" />
@@ -90,6 +90,7 @@ export function UsersPage() {
 
       {error ? (
         <EmptyState
+          icon={Users}
           title="Couldn’t load users"
           description={error}
           actionLabel="Retry"

@@ -1,24 +1,12 @@
 import { FacilityService } from "@/services/facilities/FacilityService";
 import { ReportingService } from "@/services/reporting/ReportingService";
-import {
-  DocumentBuilderService,
-  type DocumentGenerationRequest,
-} from "@/services/reporting/documents";
-import {
-  defaultMonth,
-  defaultQuarter,
-  defaultYear,
-  REPORT_LIBRARY,
-} from "@/modules/reports/constants";
-import { buildPeriodFromParams } from "@/modules/reports/utils";
+import { REPORT_TYPES } from "@/modules/reports/constants";
 import type {
-  GeneratedReportRecord,
-  ReportGenerationParams,
+  ClientReportDocument,
   ReportsHomeSnapshot,
+  ReportWizardState,
 } from "@/modules/reports/types";
-
-/** In-memory report history for the current browser session. */
-const generatedReports: GeneratedReportRecord[] = [];
+import { buildClientReport } from "./buildClientReport";
 
 async function loadFacilityOptions(): Promise<
   Array<{ id: string; name: string }>
@@ -33,23 +21,20 @@ async function loadFacilityOptions(): Promise<
       .filter((f) => f.id && f.name)
       .map((f) => ({ id: f.id, name: f.name }));
   } catch {
-    // Home must still render when Apps Script is unreachable.
     return [];
   }
 }
 
 /**
- * Reports application service — orchestrates generation only.
- * Home/library does not require ReportingService.
- * Generation still consumes ReportingSnapshot via DocumentBuilderService.
+ * Reports application service — client-facing document generation.
+ * Report content is assembled from ReportingSnapshot only.
  */
 export const ReportsService = {
   async getHome(): Promise<ReportsHomeSnapshot> {
     const facilityOptions = await loadFacilityOptions();
     return {
       asOf: new Date().toISOString(),
-      library: REPORT_LIBRARY,
-      generated: [...generatedReports],
+      reportTypes: REPORT_TYPES,
       facilityOptions,
     };
   },
@@ -58,108 +43,33 @@ export const ReportsService = {
     return loadFacilityOptions();
   },
 
-  listGenerated(): GeneratedReportRecord[] {
-    return [...generatedReports];
-  },
+  /**
+   * Load the existing ReportingSnapshot and build a client report preview model.
+   * Uses a single snapshot fetch (portfolio when multi/all facilities).
+   */
+  async generatePreview(
+    wizard: ReportWizardState
+  ): Promise<ClientReportDocument> {
+    if (!wizard.reportType) {
+      throw new Error("Select a report type before generating.");
+    }
+    if (!wizard.allFacilities && wizard.facilityIds.length === 0) {
+      throw new Error("Select at least one facility.");
+    }
+    if (wizard.sections.length === 0) {
+      throw new Error("Select at least one report section.");
+    }
 
-  getGenerated(id: string): GeneratedReportRecord | undefined {
-    return generatedReports.find((row) => row.id === id);
-  },
-
-  async generate(
-    params: ReportGenerationParams
-  ): Promise<GeneratedReportRecord> {
     const facilityId =
-      params.facilityId && params.facilityId !== "all"
-        ? params.facilityId
+      !wizard.allFacilities && wizard.facilityIds.length === 1
+        ? wizard.facilityIds[0]
         : undefined;
 
     const snapshot = await ReportingService.getReportingSnapshot({
       facilityId,
     });
 
-    const request: DocumentGenerationRequest = {
-      kind: params.kind,
-      format: params.format,
-      facilityId: params.facilityId,
-      department: params.department,
-      period: buildPeriodFromParams(params),
-      branding: {
-        clientName: params.clientName,
-        templateVersion: params.templateVersion,
-        logoUrl: params.logoUrl,
-        language: params.language,
-      },
-      generatedBy: "SentraCore",
-      templateVersion: params.templateVersion,
-    };
-
-    try {
-      const { document, exportResult } = await DocumentBuilderService.generate(
-        snapshot,
-        request
-      );
-
-      const record: GeneratedReportRecord = {
-        id: `rpt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        title: document.title,
-        kind: document.kind,
-        generatedBy: document.context.generatedBy ?? "SentraCore",
-        generatedAt: document.context.generatedAt,
-        facilityName: document.context.facilityName ?? "Portfolio",
-        periodLabel: document.context.period.label,
-        format: params.format,
-        status: exportResult.status === "ready" ? "ready" : "failed",
-        filename: exportResult.filename,
-        mimeType: exportResult.mimeType,
-        content: exportResult.content,
-        message: exportResult.message,
-      };
-
-      generatedReports.unshift(record);
-      return record;
-    } catch (err) {
-      const failed: GeneratedReportRecord = {
-        id: `rpt_${Date.now()}_fail`,
-        title: REPORT_LIBRARY.find((r) => r.kind === params.kind)?.title ??
-          params.kind,
-        kind: params.kind,
-        generatedBy: "SentraCore",
-        generatedAt: new Date().toISOString(),
-        facilityName: facilityId ?? "Portfolio",
-        periodLabel: buildPeriodFromParams(params).label,
-        format: params.format,
-        status: "failed",
-        filename: "",
-        mimeType: "",
-        content: "",
-        message:
-          err instanceof Error ? err.message : "Report generation failed.",
-      };
-      generatedReports.unshift(failed);
-      return failed;
-    }
-  },
-
-  defaultParams(
-    kind: ReportGenerationParams["kind"] = "monthly_facility"
-  ): ReportGenerationParams {
-    return {
-      kind,
-      format: "pdf",
-      facilityId: "all",
-      periodKind:
-        kind === "annual"
-          ? "year"
-          : kind === "quarterly"
-            ? "quarter"
-            : "month",
-      month: defaultMonth(),
-      quarter: defaultQuarter(),
-      year: defaultYear(),
-      templateVersion: "v1",
-      language: "en",
-    };
+    return buildClientReport({ snapshot, wizard });
   },
 };
 

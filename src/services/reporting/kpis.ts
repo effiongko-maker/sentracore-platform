@@ -4,21 +4,22 @@ import type { Incident } from "@/modules/incidents/types";
 import type { Maintenance } from "@/modules/maintenance/types";
 import type { User } from "@/modules/users/types";
 import type { WorkOrder } from "@/modules/work-orders/types";
+import {
+  isActiveEntityStatus,
+  isClosedIncidentStatus,
+  isCriticalSeverity,
+  isMaintenanceBacklogStatus,
+  isOnHoldStatus,
+  isOpenWorkOrderStatus,
+  isOperationalAssetStatus,
+  isPoorCondition,
+  normalizeToken,
+  toIsoUtc,
+} from "./normalize";
 import type { ReportingHealth, ReportingKpis } from "./types";
 
-const OPEN_WO = new Set(["open", "assigned", "in_progress", "on_hold"]);
-const BACKLOG_MNT = new Set([
-  "requested",
-  "triaged",
-  "scheduled",
-  "in_progress",
-  "on_hold",
-]);
-const CLOSED_INCIDENT = new Set(["resolved", "closed", "cancelled"]);
-
 function dayKey(iso: string, asOf: string) {
-  const value = iso || asOf;
-  return value.slice(0, 10);
+  return toIsoUtc(iso || asOf).slice(0, 10);
 }
 
 function isBeforeDay(iso: string | undefined, asOf: string) {
@@ -32,19 +33,24 @@ function isSameDay(iso: string | undefined, asOf: string) {
 }
 
 export function isOpenWorkOrder(wo: WorkOrder) {
-  return OPEN_WO.has(wo.status);
+  return isOpenWorkOrderStatus(wo.status);
 }
 
 export function isMaintenanceBacklog(row: Maintenance) {
-  return BACKLOG_MNT.has(row.status);
+  return isMaintenanceBacklogStatus(row.status);
 }
 
 export function isCriticalOpenIncident(incident: Incident) {
   return (
-    incident.severity === "critical" && !CLOSED_INCIDENT.has(incident.status)
+    isCriticalSeverity(incident.severity) &&
+    !isClosedIncidentStatus(incident.status)
   );
 }
 
+/**
+ * Authoritative KPI computation for the platform.
+ * Dashboard, Reports, and snapshot rebuilds must all derive from this.
+ */
 export function computeReportingKpis(input: {
   asOf: string;
   facilities: Facility[];
@@ -54,11 +60,19 @@ export function computeReportingKpis(input: {
   workOrders: WorkOrder[];
   users: User[];
 }): ReportingKpis {
-  const { asOf, facilities, assets, incidents, maintenance, workOrders, users } =
+  const asOf = toIsoUtc(input.asOf);
+  const { facilities, assets, incidents, maintenance, workOrders, users } =
     input;
 
-  const activeFacilities = facilities.filter((f) => f.status === "active").length;
-  const activeAssets = assets.filter((a) => a.status === "active").length;
+  const activeFacilities = facilities.filter((f) =>
+    isActiveEntityStatus(f.status)
+  ).length;
+  const inactiveFacilities = facilities.filter((f) =>
+    !isActiveEntityStatus(f.status)
+  ).length;
+  const activeAssets = assets.filter((a) =>
+    isOperationalAssetStatus(a.status)
+  ).length;
   const openWorkOrders = workOrders.filter(isOpenWorkOrder);
   const backlog = maintenance.filter(isMaintenanceBacklog);
   const criticalOpen = incidents.filter(isCriticalOpenIncident);
@@ -70,13 +84,14 @@ export function computeReportingKpis(input: {
 
   return {
     activeFacilities,
-    inactiveFacilities: Math.max(0, facilities.length - activeFacilities),
+    inactiveFacilities,
     totalFacilities: facilities.length,
     activeAssets,
     totalAssets: assets.length,
     assetsOperationalPercent,
-    assetsInPoorCondition: assets.filter((a) => a.condition === "poor").length,
-    activeWorkforce: users.filter((u) => u.status === "active").length,
+    assetsInPoorCondition: assets.filter((a) => isPoorCondition(a.condition))
+      .length,
+    activeWorkforce: users.filter((u) => isActiveEntityStatus(u.status)).length,
     totalUsers: users.length,
     openWorkOrders: openWorkOrders.length,
     workOrdersCreatedToday: workOrders.filter((wo) =>
@@ -90,20 +105,24 @@ export function computeReportingKpis(input: {
     ).length,
     criticalIncidents: criticalOpen.length,
     criticalIncidentsUnassigned: criticalOpen.filter(
-      (incident) => !incident.assignedToUserId
+      (incident) => !String(incident.assignedToUserId || "").trim()
     ).length,
-    incidentsNeedingWorkOrder: incidents.filter(
-      (incident) =>
-        !CLOSED_INCIDENT.has(incident.status) &&
-        incident.requiresWorkOrder === true &&
-        !incident.workOrderId
-    ).length,
+    incidentsNeedingWorkOrder: incidents.filter((incident) => {
+      const requires =
+        incident.requiresWorkOrder === true ||
+        normalizeToken(incident.requiresWorkOrder) === "true";
+      return (
+        !isClosedIncidentStatus(incident.status) &&
+        requires &&
+        !String(incident.workOrderId || "").trim()
+      );
+    }).length,
     maintenanceBacklog: backlog.length,
     overdueMaintenance: backlog.filter((row) => isBeforeDay(row.dueAt, asOf))
       .length,
-    maintenanceOnHold: maintenance.filter((row) => row.status === "on_hold")
+    maintenanceOnHold: maintenance.filter((row) => isOnHoldStatus(row.status))
       .length,
-    workOrdersOnHold: workOrders.filter((wo) => wo.status === "on_hold")
+    workOrdersOnHold: workOrders.filter((wo) => isOnHoldStatus(wo.status))
       .length,
   };
 }

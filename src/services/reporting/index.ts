@@ -5,6 +5,7 @@ export {
   type ISnapshotService,
   type SnapshotCacheMetadata,
 } from "./SnapshotService";
+export { tryLoadSheetsReportingSnapshot } from "./sheetsSnapshot";
 export type {
   ReportingHealth,
   ReportingHealthBand,
@@ -13,8 +14,16 @@ export type {
   ReportingProjections,
   ReportingQuery,
   ReportingSnapshot,
+  ReportingSnapshotMeta,
 } from "./types";
 export { kpiInsightLabels } from "./kpis";
+export {
+  normalizeToken,
+  isActiveEntityStatus,
+  isOperationalAssetStatus,
+  toIsoUtc,
+  ageInSeconds,
+} from "./normalize";
 
 // Document generation lives under reporting/documents and must stay
 // independent of Dashboard. Prefer importing from

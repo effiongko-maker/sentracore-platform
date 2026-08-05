@@ -20,7 +20,7 @@ export function toCreateFormValues(asset?: Asset | null) {
     assetTag: asset?.assetTag ?? "",
     name: asset?.name ?? "",
     category: asset?.category ?? ("other" as const),
-    facility: asset?.facility ?? "Lagos HQ",
+    facility: asset?.facility ?? "",
     manufacturer: asset?.manufacturer ?? "",
     model: asset?.model ?? "",
     serialNumber: asset?.serialNumber ?? "",

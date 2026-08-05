@@ -80,7 +80,7 @@ export function ViewFacilityModal({
 
       <div className="mt-5 grid gap-5 sm:grid-cols-2">
         <Detail label="Facility ID" value={facility.id} />
-        <Detail label="Code" value={facility.code} />
+        <Detail label="Facility code" value={facility.code || facility.id} />
         <Detail label="Location" value={facility.location} />
         <Detail label="Facility type" value={labelize(facility.type)} />
         <Detail label="Manager" value={facility.manager} />

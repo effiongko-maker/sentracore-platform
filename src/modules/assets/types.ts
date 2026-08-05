@@ -35,7 +35,8 @@ export interface Asset {
 }
 
 export interface CreateAssetInput {
-  assetTag: string;
+  /** System-generated on create when omitted. Immutable after create. */
+  assetTag?: string;
   name: string;
   category: AssetCategory;
   facility: string;

@@ -1,10 +1,14 @@
 export { ReportsPage } from "./components/ReportsPage";
-export { useReportsCentre } from "./hooks/useReportsCentre";
+export { useReportWizard } from "./hooks/useReportWizard";
 export type {
-  DocumentKind,
-  GeneratedReportRecord,
-  ReportGenerationParams,
-  ReportLibraryItem,
+  ClientReportDocument,
+  ReportSectionId,
+  ReportTypeId,
+  ReportWizardState,
   ReportsHomeSnapshot,
 } from "./types";
-export { REPORT_LIBRARY, getLibraryItem } from "./constants";
+export {
+  REPORT_SECTIONS,
+  REPORT_TYPES,
+  getReportType,
+} from "./constants";

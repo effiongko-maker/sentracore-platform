@@ -44,13 +44,6 @@ export async function postToAppsScript(
     payload: body.payload ?? {},
   });
 
-  const started = performance.now();
-  console.log(
-    `[hang] ${logPrefix} AppsScript START resource=${body.resource ?? defaults.resource}`
-  );
-
-  // Match verified curl -L: follow redirects on the original POST.
-  // Do not convert the redirect hop to GET (that drops the JSON body).
   const response = await fetch(APPS_SCRIPT_URL, {
     method: "POST",
     headers: {
@@ -62,12 +55,11 @@ export async function postToAppsScript(
   });
 
   const text = await response.text();
-  const ms = Math.round(performance.now() - started);
-  console.log(
-    `[hang] ${logPrefix} AppsScript FINISH ${response.status} ${ms}ms bytes=${text.length}`
-  );
 
   if (!response.ok) {
+    console.warn(
+      `[${logPrefix}] Apps Script ${response.status} ${response.statusText}`
+    );
     throw new Error(
       `Apps Script request failed: ${response.status} ${response.statusText}`
     );

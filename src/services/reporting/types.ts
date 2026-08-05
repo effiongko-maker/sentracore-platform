@@ -69,6 +69,17 @@ export interface ReportingHealth {
 }
 
 /**
+ * Optional freshness metadata. Not required by Dashboard/Reports consumers.
+ */
+export interface ReportingSnapshotMeta {
+  source: string;
+  generatedAt: string;
+  ageInSeconds: number;
+  snapshotVersion: number | string;
+  scope?: string;
+}
+
+/**
  * Platform-neutral reporting DTO.
  * Consumed by Dashboard, Reports, Exports, Executive views, etc.
  */
@@ -85,4 +96,6 @@ export interface ReportingSnapshot {
   kpis: ReportingKpis;
   projections: ReportingProjections;
   health: ReportingHealth;
+  /** Freshness metadata for staleness checks. Safe for consumers to ignore. */
+  _snapshotMeta?: ReportingSnapshotMeta;
 }

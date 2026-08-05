@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { ClipboardList, Plus } from "lucide-react";
 import { useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
@@ -70,7 +70,7 @@ export function WorkOrdersPage() {
     <div>
       <PageHeader
         title="Work Orders"
-        description="Create, assign, and track operational work requests across the SentraCore platform."
+        description="Create, assign, and track operational work."
         actions={
           <Button onClick={() => setModal({ type: "create" })}>
             <Plus className="h-4 w-4" />
@@ -94,6 +94,7 @@ export function WorkOrdersPage() {
 
       {error ? (
         <EmptyState
+          icon={ClipboardList}
           title="Couldn’t load work orders"
           description={error}
           actionLabel="Retry"

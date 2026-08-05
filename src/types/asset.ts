@@ -17,6 +17,5 @@ export {
   ASSET_CATEGORIES,
   ASSET_CONDITIONS,
   ASSET_CRITICALITIES,
-  ASSET_FACILITIES,
   ASSET_STATUSES,
 } from "@/modules/assets/constants";

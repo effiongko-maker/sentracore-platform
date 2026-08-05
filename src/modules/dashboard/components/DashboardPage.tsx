@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  DASHBOARD_LOADING_MESSAGES,
+  DashboardSkeleton,
+  LoadingGate,
+} from "@/components/loading";
+import { BarChart3 } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useDashboard } from "../hooks/useDashboard";
 import type { DashboardCard, DashboardSection } from "../types";
@@ -54,14 +60,14 @@ function SectionBlock({ section }: { section: DashboardSection }) {
             {section.title}
           </h3>
           {section.description ? (
-            <p className="text-xs text-muted">{section.description}</p>
+            <p className="mt-1 text-xs text-muted">{section.description}</p>
           ) : null}
         </div>
         <div
           className={
             section.id === "estate_baseline"
-              ? "grid gap-4 sm:grid-cols-3"
-              : "grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+              ? "grid auto-rows-fr gap-4 sm:grid-cols-3"
+              : "grid auto-rows-fr gap-4 sm:grid-cols-2 xl:grid-cols-3"
           }
         >
           {section.cards.map((card, index) => renderCard(card, index))}
@@ -79,11 +85,11 @@ function SectionBlock({ section }: { section: DashboardSection }) {
             {section.title}
           </h3>
           {section.description ? (
-            <p className="text-xs text-muted">{section.description}</p>
+            <p className="mt-1 text-xs text-muted">{section.description}</p>
           ) : null}
         </div>
         {hasItems ? (
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="grid auto-rows-fr gap-4 xl:grid-cols-2">
             {section.cards.map((card, index) => renderCard(card, index))}
           </div>
         ) : (
@@ -101,10 +107,10 @@ function SectionBlock({ section }: { section: DashboardSection }) {
             {section.title}
           </h3>
           {section.description ? (
-            <p className="text-xs text-muted">{section.description}</p>
+            <p className="mt-1 text-xs text-muted">{section.description}</p>
           ) : null}
         </div>
-        <div className="grid gap-4 xl:grid-cols-2">
+        <div className="grid auto-rows-fr gap-4 xl:grid-cols-2">
           {section.cards.map((card, index) => renderCard(card, index))}
         </div>
       </section>
@@ -119,10 +125,10 @@ function SectionBlock({ section }: { section: DashboardSection }) {
             {section.title}
           </h3>
           {section.description ? (
-            <p className="text-xs text-muted">{section.description}</p>
+            <p className="mt-1 text-xs text-muted">{section.description}</p>
           ) : null}
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid auto-rows-fr gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {section.cards.map((card, index) => renderCard(card, index))}
         </div>
       </section>
@@ -136,7 +142,7 @@ function SectionBlock({ section }: { section: DashboardSection }) {
           {section.title}
         </h3>
       </div>
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid auto-rows-fr gap-4 xl:grid-cols-2">
         {section.cards.map((card, index) => renderCard(card, index))}
       </div>
     </section>
@@ -150,27 +156,12 @@ function SectionBlock({ section }: { section: DashboardSection }) {
 export function DashboardPage() {
   const { snapshot, loading, error, reload } = useDashboard();
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="h-44 animate-pulse rounded-sc bg-slate-200/70" />
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <div
-              key={index}
-              className="h-32 animate-pulse rounded-sc bg-slate-200/70"
-            />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !snapshot) {
+  if (error && !loading && !snapshot) {
     return (
       <EmptyState
+        icon={BarChart3}
         title="Couldn’t load dashboard"
-        description={error ?? "No snapshot available."}
+        description={error ?? "Operational snapshot is unavailable right now."}
         actionLabel="Retry"
         onAction={reload}
       />
@@ -178,17 +169,26 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <DashboardContextBanner
-        title={snapshot.context.title}
-        subtitle={snapshot.context.subtitle ?? snapshot.health?.summary}
-        currentUserId={snapshot.context.currentUserId}
-        asOf={snapshot.asOf}
-      />
+    <LoadingGate
+      loading={loading || !snapshot}
+      skeleton={<DashboardSkeleton />}
+      messages={DASHBOARD_LOADING_MESSAGES}
+      title="Loading dashboard"
+    >
+      {snapshot ? (
+        <div className="space-y-8">
+          <DashboardContextBanner
+            title={snapshot.context.title}
+            subtitle={snapshot.context.subtitle ?? snapshot.health?.summary}
+            currentUserId={snapshot.context.currentUserId}
+            asOf={snapshot.asOf}
+          />
 
-      {snapshot.sections.map((section) => (
-        <SectionBlock key={section.id} section={section} />
-      ))}
-    </div>
+          {snapshot.sections.map((section) => (
+            <SectionBlock key={section.id} section={section} />
+          ))}
+        </div>
+      ) : null}
+    </LoadingGate>
   );
 }

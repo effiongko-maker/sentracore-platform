@@ -9,6 +9,7 @@ import {
   selectClassName,
 } from "@/components/forms/FormField";
 import { useToast } from "@/components/ui/Toast";
+import { MasterDataSelect } from "@/components/forms/MasterDataSelect";
 import { FacilityService } from "@/services/facilities/FacilityService";
 import { AssetService } from "@/services/assets/AssetService";
 import { UserService } from "@/services/users/UserService";
@@ -406,12 +407,17 @@ export function MaintenanceFormModal({
         </FormField>
 
         <FormField label="Department" htmlFor="mnt-department">
-          <input
+          <MasterDataSelect
             id="mnt-department"
-            className={inputClassName}
-            placeholder="e.g. HVAC"
+            entity="departments"
+            valueMode="name"
             value={form.department ?? ""}
-            onChange={(event) => updateField("department", event.target.value)}
+            onChange={(value) => updateField("department", value)}
+            facilityId={form.facilityId || undefined}
+            enabled={open}
+            emptyOptionLabel="Select department"
+            loadingPlaceholder="Loading departments…"
+            aria-label="Department"
           />
         </FormField>
 
@@ -440,11 +446,15 @@ export function MaintenanceFormModal({
           />
         </FormField>
 
-        <FormField label="Event ID" htmlFor="mnt-event">
+        <FormField
+          label="External reference"
+          htmlFor="mnt-event"
+          hint="Optional. Not a SentraCore system identifier."
+        >
           <input
             id="mnt-event"
             className={inputClassName}
-            placeholder="Optional event reference"
+            placeholder="e.g. ticket or related event"
             value={form.eventId ?? ""}
             onChange={(event) => updateField("eventId", event.target.value)}
           />

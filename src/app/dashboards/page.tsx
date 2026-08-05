@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { DashboardPage } from "@/modules/dashboard";
 
 export const metadata: Metadata = {
-  title: "Dashboards",
+  title: "Dashboard",
 };
 
 export default function DashboardsPage() {

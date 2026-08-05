@@ -92,13 +92,6 @@ function buildMyWork(
       href: "/maintenance",
       emptyLabel: "You're all caught up.",
     },
-    {
-      id: "awaiting-approval",
-      label: "Awaiting Approval",
-      count: 0,
-      href: "/work-orders",
-      emptyLabel: "You're all caught up.",
-    },
   ];
 }
 
@@ -198,8 +191,8 @@ function buildActivity(
 }
 
 /**
- * Workspace Home composition service.
- * Aggregates only data needed for "What should I do today?"
+ * Home composition service.
+ * Aggregates only data needed for personal daily work.
  * Must not call DashboardService / ReportingService.
  */
 export const WorkspaceService = {

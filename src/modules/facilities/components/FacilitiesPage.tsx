@@ -1,9 +1,8 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Building2 } from "lucide-react";
 import { useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
@@ -68,13 +67,7 @@ export function FacilitiesPage() {
     <div>
       <PageHeader
         title="Facilities"
-        description="Manage sites, buildings, and locations across the SentraCore platform."
-        actions={
-          <Button onClick={() => setModal({ type: "create" })}>
-            <Plus className="h-4 w-4" />
-            New Facility
-          </Button>
-        }
+        description="View and update platform facility records. New facilities are provisioned during implementation."
       />
 
       <FacilitiesToolbar
@@ -90,6 +83,7 @@ export function FacilitiesPage() {
 
       {error ? (
         <EmptyState
+          icon={Building2}
           title="Couldn’t load facilities"
           description={error}
           actionLabel="Retry"
@@ -114,8 +108,8 @@ export function FacilitiesPage() {
       )}
 
       <FacilityFormModal
-        open={modal.type === "create" || modal.type === "edit"}
-        mode={modal.type === "edit" ? "edit" : "create"}
+        open={modal.type === "edit"}
+        mode="edit"
         facility={modal.type === "edit" ? modal.facility : null}
         onClose={() => setModal({ type: "closed" })}
         onSaved={reload}
