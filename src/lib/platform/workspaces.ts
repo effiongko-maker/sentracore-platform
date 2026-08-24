@@ -54,9 +54,9 @@ export const PLATFORM_WORKSPACES: PlatformWorkspace[] = [
     statusLabel: "In development",
     statusDetail: "Being built for your organisation",
     description:
-      "Emergency communication, incident coordination and response operations.",
+      "Manage the reporting, monitoring and operational activity of Emergency Communication Centres.",
     previewHref: "/workspaces/ecc-operations",
-    capabilities: ["Calls", "Incidents", "Dispatch"],
+    capabilities: ["Calls", "Events", "Reporting"],
   },
   {
     id: "finance",
