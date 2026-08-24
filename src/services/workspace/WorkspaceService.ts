@@ -6,13 +6,20 @@ import {
   WORKSPACE_QUICK_ACTIONS,
   WORKSPACE_SCHEDULE_LIMIT,
 } from "@/modules/workspace/constants";
+import {
+  buildAttentionModel,
+  countCriticalMatters,
+} from "@/modules/workspace/attention";
 import type {
   WorkspaceActivityItem,
   WorkspaceScheduleItem,
   WorkspaceSnapshot,
   WorkspaceWorkSummary,
+  OperationalState,
+  OrganisationalPulse,
 } from "@/modules/workspace/types";
 import { isSameDay, labelize } from "@/modules/workspace/utils";
+import { FacilityService } from "@/services/facilities/FacilityService";
 import { IncidentService } from "@/services/incidents/IncidentService";
 import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 import { UserService } from "@/services/users/UserService";
@@ -52,8 +59,7 @@ function buildMyWork(
 ): WorkspaceWorkSummary[] {
   const assignedWorkOrders = userId
     ? workOrders.filter(
-        (row) =>
-          row.assignedToUserId === userId && OPEN_WO.has(row.status)
+        (row) => row.assignedToUserId === userId && OPEN_WO.has(row.status)
       )
     : [];
   const assignedIncidents = userId
@@ -65,8 +71,7 @@ function buildMyWork(
   const pendingMaintenance = userId
     ? maintenance.filter(
         (row) =>
-          row.assignedToUserId === userId &&
-          OPEN_MAINTENANCE.has(row.status)
+          row.assignedToUserId === userId && OPEN_MAINTENANCE.has(row.status)
       )
     : [];
 
@@ -103,8 +108,7 @@ function buildSchedule(
 ): WorkspaceScheduleItem[] {
   const dueMaintenance = maintenance
     .filter(
-      (row) =>
-        OPEN_MAINTENANCE.has(row.status) && isSameDay(row.dueAt, asOf)
+      (row) => OPEN_MAINTENANCE.has(row.status) && isSameDay(row.dueAt, asOf)
     )
     .map(
       (row): WorkspaceScheduleItem => ({
@@ -190,6 +194,75 @@ function buildActivity(
   );
 }
 
+function buildPulse(
+  incidents: Incident[],
+  maintenance: Maintenance[],
+  workOrders: WorkOrder[],
+  activity: WorkspaceActivityItem[]
+): OrganisationalPulse {
+  const openIncidents = incidents.filter((r) =>
+    OPEN_INCIDENT.has(r.status)
+  ).length;
+  const criticalIncidents = countCriticalMatters(incidents);
+  const openMaintenance = maintenance.filter((r) =>
+    OPEN_MAINTENANCE.has(r.status)
+  ).length;
+  const openWorkOrders = workOrders.filter((r) => OPEN_WO.has(r.status)).length;
+
+  return {
+    openIncidents,
+    criticalIncidents,
+    openMaintenance,
+    openWorkOrders,
+    recentActivity: activity.length,
+  };
+}
+
+function buildOperationalState(pulse: OrganisationalPulse): OperationalState {
+  if (pulse.criticalIncidents > 0) {
+    const n = pulse.criticalIncidents;
+    return {
+      tone: "critical",
+      statement:
+        n === 1
+          ? "One critical matter requires intervention."
+          : `${n} critical matters require intervention.`,
+      subtext: `${pulse.openIncidents} open incident${pulse.openIncidents === 1 ? "" : "s"} across the operation.`,
+    };
+  }
+
+  const pressure = pulse.openMaintenance + pulse.openWorkOrders;
+  if (pressure >= 12 || pulse.openIncidents >= 5) {
+    return {
+      tone: "attention",
+      statement: "Operational pressure is increasing across the organisation.",
+      subtext: `${pulse.openMaintenance} maintenance and ${pulse.openWorkOrders} work orders in flow.`,
+    };
+  }
+
+  const attentionAreas =
+    (pulse.openIncidents > 0 ? 1 : 0) +
+    (pulse.openMaintenance > 4 ? 1 : 0) +
+    (pulse.openWorkOrders > 4 ? 1 : 0);
+
+  if (attentionAreas > 0) {
+    return {
+      tone: "attention",
+      statement:
+        attentionAreas === 1
+          ? "The operation is mostly stable, with one area requiring attention."
+          : "The operation is stable, with a few areas requiring attention.",
+      subtext: "Review recent activity below to continue work.",
+    };
+  }
+
+  return {
+    tone: "stable",
+    statement: "The operation is stable.",
+    subtext: "No critical matters require intervention.",
+  };
+}
+
 /**
  * Home composition service.
  * Aggregates only data needed for personal daily work.
@@ -199,24 +272,42 @@ export const WorkspaceService = {
   async getWorkspace(): Promise<WorkspaceSnapshot> {
     const asOf = new Date().toISOString();
 
-    const [currentUser, workOrdersPage, incidentsPage, maintenancePage] =
-      await Promise.all([
-        UserService.getCurrentUser().catch(() => null),
-        WorkOrderService.listWorkOrders({ page: 1, pageSize: 50 }).catch(
-          () => ({ data: [] as WorkOrder[] })
-        ),
-        IncidentService.listIncidents({ page: 1, pageSize: 50 }).catch(
-          () => ({ data: [] as Incident[] })
-        ),
-        MaintenanceService.listMaintenance({ page: 1, pageSize: 50 }).catch(
-          () => ({ data: [] as Maintenance[] })
-        ),
-      ]);
+    const [
+      currentUser,
+      workOrdersPage,
+      incidentsPage,
+      maintenancePage,
+      facilitiesPage,
+    ] = await Promise.all([
+      UserService.getCurrentUser().catch(() => null),
+      WorkOrderService.listWorkOrders({ page: 1, pageSize: 50 }).catch(
+        () => ({ data: [] as WorkOrder[] })
+      ),
+      IncidentService.listIncidents({ page: 1, pageSize: 50 }).catch(
+        () => ({ data: [] as Incident[] })
+      ),
+      MaintenanceService.listMaintenance({ page: 1, pageSize: 50 }).catch(
+        () => ({ data: [] as Maintenance[] })
+      ),
+      FacilityService.listFacilities({ page: 1, pageSize: 200 }).catch(
+        () => ({ data: [] as Array<{ id: string; name: string }> })
+      ),
+    ]);
 
     const workOrders = workOrdersPage.data ?? [];
     const incidents = incidentsPage.data ?? [];
     const maintenance = maintenancePage.data ?? [];
     const userId = currentUser?.id;
+    const facilityNameById = new Map(
+      (facilitiesPage.data ?? []).map((facility) => [
+        facility.id,
+        facility.name,
+      ])
+    );
+    const activity = buildActivity(workOrders, incidents, maintenance);
+    const pulse = buildPulse(incidents, maintenance, workOrders, activity);
+    const operationalState = buildOperationalState(pulse);
+    const attention = buildAttentionModel(incidents, facilityNameById);
 
     return {
       asOf,
@@ -224,10 +315,13 @@ export const WorkspaceService = {
         id: currentUser?.id,
         name: currentUser?.name,
       },
+      operationalState,
+      attention,
+      pulse,
       quickActions: WORKSPACE_QUICK_ACTIONS,
       myWork: buildMyWork(userId, workOrders, incidents, maintenance),
       schedule: buildSchedule(asOf, workOrders, incidents, maintenance),
-      activity: buildActivity(workOrders, incidents, maintenance),
+      activity,
     };
   },
 };

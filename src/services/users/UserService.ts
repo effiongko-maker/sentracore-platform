@@ -110,11 +110,42 @@ function toPaginatedUsers(
  *
  * Talks only to ApiClient — never to storage backends or UI details.
  * CRUD uses the live Apps Script envelope: { resource, action, payload }.
+ * Current session identity comes from Supabase via /api/auth/me.
  */
 export const UserService = {
   async getCurrentUser(): Promise<CurrentUser> {
-    const response = await apiClient.get<CurrentUser>("/users/me");
-    return response.data;
+    const response = await fetch("/api/auth/me", {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+    });
+
+    const text = await response.text();
+    let json: {
+      success?: boolean;
+      message?: string;
+      data?: { identity?: CurrentUser };
+    };
+
+    try {
+      json = JSON.parse(text) as typeof json;
+    } catch {
+      throw new ApiError(
+        `Invalid JSON from /api/auth/me (status ${response.status})`,
+        response.status,
+        text.slice(0, 200)
+      );
+    }
+
+    if (!response.ok || json.success === false || !json.data?.identity) {
+      throw new ApiError(
+        json.message ?? "Failed to load current user",
+        response.status || 401,
+        json
+      );
+    }
+
+    return json.data.identity;
   },
 
   async listUsers(params: UserListParams = {}): Promise<PaginatedResult<User>> {

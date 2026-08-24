@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { ClipboardList } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
+import { OperationalTone } from "@/components/operational";
 import { DataTable, type Column } from "@/components/tables/DataTable";
 import { formatDate } from "@/lib/utils";
 import {
@@ -10,10 +11,7 @@ import {
   useFacilityName,
   useUserName,
 } from "@/hooks/useEntityLabel";
-import {
-  WORK_ORDER_PRIORITY_VARIANT,
-  WORK_ORDER_STATUS_VARIANT,
-} from "../constants";
+import { WORK_ORDER_STATUS_VARIANT } from "../constants";
 import { labelize } from "../utils";
 import type { WorkOrder } from "../types";
 import { WorkOrderRowActions } from "./WorkOrderRowActions";
@@ -100,9 +98,10 @@ export function WorkOrdersTable({
         key: "priority",
         header: "Priority",
         render: (workOrder) => (
-          <Badge variant={WORK_ORDER_PRIORITY_VARIANT[workOrder.priority]}>
-            {labelize(workOrder.priority)}
-          </Badge>
+          <OperationalTone
+            value={workOrder.priority}
+            label={labelize(workOrder.priority)}
+          />
         ),
       },
       {

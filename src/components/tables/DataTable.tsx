@@ -42,23 +42,15 @@ export function DataTable<T>({
   className,
 }: DataTableProps<T>) {
   return (
-    <div
-      className={cn(
-        "overflow-hidden rounded-sc border border-border/80 bg-card shadow-sc",
-        className
-      )}
-    >
+    <div className={cn("sc-table-surface", className)}>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] border-collapse text-left">
           <thead>
-            <tr className="border-b border-border/80 bg-slate-50/80">
+            <tr>
               {columns.map((column) => (
                 <th
                   key={column.key}
-                  className={cn(
-                    "px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-muted",
-                    column.className
-                  )}
+                  className={cn("px-4 py-3", column.className)}
                 >
                   {column.header}
                 </th>
@@ -68,10 +60,10 @@ export function DataTable<T>({
           <tbody>
             {loading ? (
               Array.from({ length: 5 }).map((_, index) => (
-                <tr key={`skeleton_${index}`} className="border-b border-border/60">
+                <tr key={`skeleton_${index}`}>
                   {columns.map((column) => (
-                    <td key={column.key} className="px-5 py-4">
-                      <div className="h-4 w-3/4 animate-pulse rounded-md bg-slate-100" />
+                    <td key={column.key} className="px-4 py-3.5">
+                      <div className="h-4 w-3/4 animate-pulse rounded bg-slate-100/90" />
                     </td>
                   ))}
                 </tr>
@@ -89,15 +81,12 @@ export function DataTable<T>({
               </tr>
             ) : (
               data.map((row) => (
-                <tr
-                  key={rowKey(row)}
-                  className="border-b border-border/60 transition-colors duration-150 last:border-0 hover:bg-slate-50/70"
-                >
+                <tr key={rowKey(row)}>
                   {columns.map((column) => (
                     <td
                       key={column.key}
                       className={cn(
-                        "px-5 py-4 text-sm text-foreground",
+                        "px-4 py-3.5 text-sm text-foreground",
                         column.className
                       )}
                     >
@@ -112,7 +101,7 @@ export function DataTable<T>({
       </div>
 
       {onPageChange ? (
-        <div className="flex items-center justify-between gap-3 border-t border-border/80 px-5 py-3.5">
+        <div className="flex items-center justify-between gap-3 border-t border-[var(--sc-rule)] px-4 py-3">
           <p className="text-sm text-muted">
             {total !== undefined
               ? `${total} result${total === 1 ? "" : "s"}`

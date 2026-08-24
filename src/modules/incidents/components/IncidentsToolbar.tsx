@@ -1,14 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { SlidersHorizontal } from "lucide-react";
-import { SearchBox } from "@/components/ui/SearchBox";
-import { toolbarSelectClassName } from "@/components/forms/FormField";
+import { useEffect, useMemo, useState } from "react";
+import {
+  ActiveFilters,
+  FilterField,
+  OperationalListToolbar,
+  ResultContext,
+  buildResultContext,
+  type ActiveFilterChip,
+} from "@/components/operational";
 import { FacilityService } from "@/services/facilities/FacilityService";
 import { UserService } from "@/services/users/UserService";
 import type { Facility } from "@/modules/facilities/types";
 import type { User } from "@/modules/users/types";
-import { INCIDENT_SEVERITIES, INCIDENT_STATUSES } from "../constants";
+import { INCIDENTS_PAGE_SIZE, INCIDENT_SEVERITIES, INCIDENT_STATUSES } from "../constants";
 import { labelize } from "../utils";
 import type { IncidentSeverity, IncidentStatus } from "../types";
 
@@ -25,8 +30,27 @@ interface IncidentsToolbarProps {
   onAssignedToUserIdChange: (value: string | "all") => void;
   requiresWorkOrder: boolean | "all";
   onRequiresWorkOrderChange: (value: boolean | "all") => void;
+  total: number;
+  loading?: boolean;
 }
 
+type DraftFilters = {
+  severity: IncidentSeverity | "all";
+  status: IncidentStatus | "all";
+  facilityId: string | "all";
+  assignedToUserId: string | "all";
+  requiresWorkOrder: boolean | "all";
+};
+
+function countActive(filters: DraftFilters): number {
+  let count = 0;
+  if (filters.severity !== "all") count += 1;
+  if (filters.status !== "all") count += 1;
+  if (filters.facilityId !== "all") count += 1;
+  if (filters.assignedToUserId !== "all") count += 1;
+  if (filters.requiresWorkOrder !== "all") count += 1;
+  return count;
+}
 
 export function IncidentsToolbar({
   search,
@@ -41,9 +65,19 @@ export function IncidentsToolbar({
   onAssignedToUserIdChange,
   requiresWorkOrder,
   onRequiresWorkOrderChange,
+  total,
+  loading,
 }: IncidentsToolbarProps) {
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [draft, setDraft] = useState<DraftFilters>({
+    severity,
+    status,
+    facilityId,
+    assignedToUserId,
+    requiresWorkOrder,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -66,107 +100,245 @@ export function IncidentsToolbar({
     };
   }, []);
 
+  useEffect(() => {
+    if (filterOpen) {
+      setDraft({
+        severity,
+        status,
+        facilityId,
+        assignedToUserId,
+        requiresWorkOrder,
+      });
+    }
+  }, [
+    filterOpen,
+    severity,
+    status,
+    facilityId,
+    assignedToUserId,
+    requiresWorkOrder,
+  ]);
+
+  const applied: DraftFilters = {
+    severity,
+    status,
+    facilityId,
+    assignedToUserId,
+    requiresWorkOrder,
+  };
+  const activeFilterCount = countActive(applied);
+  const filtered = activeFilterCount > 0 || Boolean(search.trim());
+
+  const chips: ActiveFilterChip[] = useMemo(() => {
+    const next: ActiveFilterChip[] = [];
+    if (severity !== "all") {
+      next.push({
+        id: "severity",
+        label: labelize(severity),
+        onRemove: () => onSeverityChange("all"),
+      });
+    }
+    if (status !== "all") {
+      next.push({
+        id: "status",
+        label: labelize(status),
+        onRemove: () => onStatusChange("all"),
+      });
+    }
+    if (facilityId !== "all") {
+      const facility = facilities.find((item) => item.id === facilityId);
+      next.push({
+        id: "facility",
+        label: facility?.name ?? facilityId,
+        onRemove: () => onFacilityIdChange("all"),
+      });
+    }
+    if (assignedToUserId !== "all") {
+      const user = users.find((item) => item.id === assignedToUserId);
+      next.push({
+        id: "assignee",
+        label: user?.name ?? assignedToUserId,
+        onRemove: () => onAssignedToUserIdChange("all"),
+      });
+    }
+    if (requiresWorkOrder !== "all") {
+      next.push({
+        id: "requiresWO",
+        label: requiresWorkOrder
+          ? "Requires work order"
+          : "No work order required",
+        onRemove: () => onRequiresWorkOrderChange("all"),
+      });
+    }
+    return next;
+  }, [
+    severity,
+    status,
+    facilityId,
+    assignedToUserId,
+    requiresWorkOrder,
+    facilities,
+    users,
+    onSeverityChange,
+    onStatusChange,
+    onFacilityIdChange,
+    onAssignedToUserIdChange,
+    onRequiresWorkOrderChange,
+  ]);
+
+  function clearAll() {
+    onSeverityChange("all");
+    onStatusChange("all");
+    onFacilityIdChange("all");
+    onAssignedToUserIdChange("all");
+    onRequiresWorkOrderChange("all");
+    setDraft({
+      severity: "all",
+      status: "all",
+      facilityId: "all",
+      assignedToUserId: "all",
+      requiresWorkOrder: "all",
+    });
+  }
+
+  function applyDraft() {
+    onSeverityChange(draft.severity);
+    onStatusChange(draft.status);
+    onFacilityIdChange(draft.facilityId);
+    onAssignedToUserIdChange(draft.assignedToUserId);
+    onRequiresWorkOrderChange(draft.requiresWorkOrder);
+  }
+
   return (
-    <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-      <SearchBox
-        value={search}
-        onChange={onSearchChange}
-        placeholder="Search by title, id, description..."
-        className="w-full xl:max-w-md"
+    <div className="flex flex-col gap-3">
+      <OperationalListToolbar
+        search={search}
+        onSearchChange={onSearchChange}
+        searchPlaceholder="Search incidents..."
+        filterOpen={filterOpen}
+        onFilterOpenChange={setFilterOpen}
+        activeFilterCount={activeFilterCount}
+        onClearFilters={clearAll}
+        onApplyFilters={applyDraft}
+        sortValue="newest"
+        sortOptions={[{ value: "newest", label: "Newest" }]}
+        filterPanel={
+          <>
+            <FilterField
+              id="inc-filter-severity"
+              label="Severity"
+              value={draft.severity}
+              onChange={(value) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  severity: value as IncidentSeverity | "all",
+                }))
+              }
+            >
+              <option value="all">All severities</option>
+              {INCIDENT_SEVERITIES.map((value) => (
+                <option key={value} value={value}>
+                  {labelize(value)}
+                </option>
+              ))}
+            </FilterField>
+
+            <FilterField
+              id="inc-filter-status"
+              label="Status"
+              value={draft.status}
+              onChange={(value) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  status: value as IncidentStatus | "all",
+                }))
+              }
+            >
+              <option value="all">All statuses</option>
+              {INCIDENT_STATUSES.map((value) => (
+                <option key={value} value={value}>
+                  {labelize(value)}
+                </option>
+              ))}
+            </FilterField>
+
+            <FilterField
+              id="inc-filter-facility"
+              label="Facility"
+              value={draft.facilityId}
+              onChange={(value) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  facilityId: value as string | "all",
+                }))
+              }
+            >
+              <option value="all">All facilities</option>
+              {facilities.map((facility) => (
+                <option key={facility.id} value={facility.id}>
+                  {facility.name}
+                </option>
+              ))}
+            </FilterField>
+
+            <FilterField
+              id="inc-filter-assignee"
+              label="Assigned to"
+              value={draft.assignedToUserId}
+              onChange={(value) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  assignedToUserId: value as string | "all",
+                }))
+              }
+            >
+              <option value="all">All assignees</option>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name}
+                </option>
+              ))}
+            </FilterField>
+
+            <FilterField
+              id="inc-filter-requires-wo"
+              label="Work order"
+              value={
+                draft.requiresWorkOrder === "all"
+                  ? "all"
+                  : draft.requiresWorkOrder
+                    ? "true"
+                    : "false"
+              }
+              onChange={(value) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  requiresWorkOrder:
+                    value === "all" ? "all" : value === "true",
+                }))
+              }
+            >
+              <option value="all">Any</option>
+              <option value="true">Requires work order</option>
+              <option value="false">No work order required</option>
+            </FilterField>
+          </>
+        }
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="inline-flex h-10 items-center gap-2 rounded-[12px] border border-border bg-card px-3 text-sm text-muted">
-          <SlidersHorizontal className="h-3.5 w-3.5" />
-          Filters
-        </div>
+      <ActiveFilters chips={chips} onClearAll={clearAll} />
 
-        <select
-          value={severity}
-          onChange={(event) =>
-            onSeverityChange(event.target.value as IncidentSeverity | "all")
-          }
-          className={toolbarSelectClassName}
-          aria-label="Filter by severity"
-        >
-          <option value="all">All severities</option>
-          {INCIDENT_SEVERITIES.map((value) => (
-            <option key={value} value={value}>
-              {labelize(value)}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={status}
-          onChange={(event) =>
-            onStatusChange(event.target.value as IncidentStatus | "all")
-          }
-          className={toolbarSelectClassName}
-          aria-label="Filter by status"
-        >
-          <option value="all">All statuses</option>
-          {INCIDENT_STATUSES.map((value) => (
-            <option key={value} value={value}>
-              {labelize(value)}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={facilityId}
-          onChange={(event) =>
-            onFacilityIdChange(event.target.value as string | "all")
-          }
-          className={toolbarSelectClassName}
-          aria-label="Filter by facility"
-        >
-          <option value="all">All facilities</option>
-          {facilities.map((facility) => (
-            <option key={facility.id} value={facility.id}>
-              {facility.name}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={assignedToUserId}
-          onChange={(event) =>
-            onAssignedToUserIdChange(event.target.value as string | "all")
-          }
-          className={toolbarSelectClassName}
-          aria-label="Filter by assigned user"
-        >
-          <option value="all">All assignees</option>
-          {users.map((user) => (
-            <option key={user.id} value={user.id}>
-              {user.name}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={
-            requiresWorkOrder === "all"
-              ? "all"
-              : requiresWorkOrder
-                ? "true"
-                : "false"
-          }
-          onChange={(event) => {
-            const value = event.target.value;
-            onRequiresWorkOrderChange(
-              value === "all" ? "all" : value === "true"
-            );
-          }}
-          className={toolbarSelectClassName}
-          aria-label="Filter by requires work order"
-        >
-          <option value="all">WO requirement: all</option>
-          <option value="true">Requires work order</option>
-          <option value="false">No work order required</option>
-        </select>
-      </div>
+      {!loading && filtered ? (
+        <ResultContext
+          text={buildResultContext({
+            noun: "incident",
+            nounPlural: "incidents",
+            total,
+            filtered,
+            pageSize: INCIDENTS_PAGE_SIZE,
+          })}
+        />
+      ) : null}
     </div>
   );
 }

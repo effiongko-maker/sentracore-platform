@@ -2,7 +2,11 @@
 
 import { Plus, Users } from "lucide-react";
 import { useState } from "react";
-import { PageHeader } from "@/components/ui/PageHeader";
+import {
+  ExploreHeader,
+  ModeFrame,
+  StreamSurface,
+} from "@/components/platform";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
@@ -65,14 +69,15 @@ export function UsersPage() {
   }
 
   return (
-    <div>
-      <PageHeader
+    <ModeFrame mode="organise">
+      <ExploreHeader
         title="Users"
-        description="Manage people, roles, and access."
+        description="People across the operation — roles, access, and facility relationships."
+        territoryNote={`${loading ? "—" : total} people in view`}
         actions={
           <Button onClick={() => setModal({ type: "create" })}>
             <Plus className="h-4 w-4" />
-            New User
+            New user
           </Button>
         }
       />
@@ -97,7 +102,7 @@ export function UsersPage() {
           onAction={reload}
         />
       ) : (
-        <div className="overflow-x-auto">
+        <StreamSurface>
           <UsersTable
             users={users}
             loading={loading}
@@ -109,7 +114,7 @@ export function UsersPage() {
             onEdit={(user) => setModal({ type: "edit", user })}
             onDeactivate={(user) => setModal({ type: "deactivate", user })}
           />
-        </div>
+        </StreamSurface>
       )}
 
       <UserFormModal
@@ -141,6 +146,6 @@ export function UsersPage() {
         danger
         loading={deactivating}
       />
-    </div>
+    </ModeFrame>
   );
 }

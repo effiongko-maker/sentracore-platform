@@ -2,7 +2,11 @@
 
 import { Building2 } from "lucide-react";
 import { useState } from "react";
-import { PageHeader } from "@/components/ui/PageHeader";
+import {
+  ExploreHeader,
+  ModeFrame,
+  StreamSurface,
+} from "@/components/platform";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
@@ -64,10 +68,11 @@ export function FacilitiesPage() {
   }
 
   return (
-    <div>
-      <PageHeader
+    <ModeFrame mode="organise">
+      <ExploreHeader
         title="Facilities"
-        description="View and update platform facility records. New facilities are provisioned during implementation."
+        description="The operational geography of your organisation — sites, buildings, and locations where work happens."
+        territoryNote={`${loading ? "—" : total} locations in view`}
       />
 
       <FacilitiesToolbar
@@ -90,7 +95,7 @@ export function FacilitiesPage() {
           onAction={reload}
         />
       ) : (
-        <div className="overflow-x-auto">
+        <StreamSurface>
           <FacilitiesTable
             facilities={facilities}
             loading={loading}
@@ -104,7 +109,7 @@ export function FacilitiesPage() {
               setModal({ type: "deactivate", facility })
             }
           />
-        </div>
+        </StreamSurface>
       )}
 
       <FacilityFormModal
@@ -129,13 +134,13 @@ export function FacilitiesPage() {
         title="Deactivate facility?"
         description={
           modal.type === "deactivate"
-            ? `${modal.facility.name} will be marked inactive. Facilities are never deleted.`
+            ? `${modal.facility.name} will be marked inactive.`
             : undefined
         }
         confirmLabel="Deactivate"
         danger
         loading={deactivating}
       />
-    </div>
+    </ModeFrame>
   );
 }

@@ -13,6 +13,7 @@ import type {
 import { applyWorkOrderRule } from "@/modules/incidents/utils";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
+import { postToAppsScript } from "@/services/api/appsScriptProxy";
 
 type RemoteIncident = Record<string, unknown>;
 
@@ -306,6 +307,37 @@ export const IncidentService = {
 
   async createIncident(input: CreateIncidentInput): Promise<Incident> {
     const payload = applyWorkOrderRule(input);
+
+    // Server Actions / Action Engine: write directly via Apps Script (same path as API route).
+    // Browser: keep using /api/incidents proxy.
+    if (typeof window === "undefined") {
+      const raw = await postToAppsScript(
+        {
+          resource: "incidents",
+          action: "create",
+          payload,
+        },
+        { resource: "incidents", action: "create" },
+        "IncidentService.createIncident"
+      );
+
+      const envelope = raw as { data?: unknown; success?: boolean; message?: string };
+      if (envelope && typeof envelope === "object" && envelope.success === false) {
+        throw new ApiError(
+          envelope.message ?? "Failed to create incident",
+          400,
+          envelope
+        );
+      }
+
+      const row =
+        envelope && typeof envelope === "object" && "data" in envelope
+          ? envelope.data
+          : raw;
+
+      return mapRemoteIncident(row as RemoteIncident);
+    }
+
     const response = await apiClient.post<Incident>("/incidents", {
       resource: "incidents",
       action: "create",

@@ -2,7 +2,11 @@
 
 import { Database, Plus } from "lucide-react";
 import { useState } from "react";
-import { PageHeader } from "@/components/ui/PageHeader";
+import {
+  ExploreHeader,
+  ModeFrame,
+  StreamSurface,
+} from "@/components/platform";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
@@ -67,14 +71,15 @@ export function MasterDataPage() {
   }
 
   return (
-    <div>
-      <PageHeader
-        title="Master Data"
-        description="Manage departments, buildings, floors, rooms, and vendors."
+    <ModeFrame mode="organise">
+      <ExploreHeader
+        title="Master data"
+        description="Reference structure — departments, buildings, floors, rooms, and vendors that define the operation."
+        territoryNote={`${loading ? "—" : total} ${activeMeta?.label.toLowerCase() ?? "records"} in view`}
         actions={
           <Button onClick={() => setModal({ type: "create" })}>
             <Plus className="h-4 w-4" />
-            New {singular}
+            New {singular.toLowerCase()}
           </Button>
         }
       />
@@ -117,7 +122,7 @@ export function MasterDataPage() {
           onAction={reload}
         />
       ) : (
-        <div className="overflow-x-auto">
+        <StreamSurface>
           <MasterDataTable
             entity={entity}
             items={items}
@@ -130,7 +135,7 @@ export function MasterDataPage() {
             onEdit={(item) => setModal({ type: "edit", item })}
             onDeactivate={(item) => setModal({ type: "deactivate", item })}
           />
-        </div>
+        </StreamSurface>
       )}
 
       <MasterDataFormModal
@@ -164,6 +169,6 @@ export function MasterDataPage() {
         danger
         loading={deactivating}
       />
-    </div>
+    </ModeFrame>
   );
 }

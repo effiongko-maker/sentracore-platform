@@ -12,6 +12,7 @@ import type {
 import { applyWorkOrderRule } from "@/modules/maintenance/utils";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
+import { postToAppsScript } from "@/services/api/appsScriptProxy";
 
 type RemoteMaintenance = Record<string, unknown>;
 
@@ -260,6 +261,41 @@ export const MaintenanceService = {
 
   async createMaintenance(input: CreateMaintenanceInput): Promise<Maintenance> {
     const payload = applyWorkOrderRule(input);
+
+    // Server Actions / Action Engine: write directly via Apps Script (same path as API route).
+    // Browser: keep using /api/maintenance proxy.
+    if (typeof window === "undefined") {
+      const raw = await postToAppsScript(
+        {
+          resource: "maintenance",
+          action: "create",
+          payload,
+        },
+        { resource: "maintenance", action: "create" },
+        "MaintenanceService.createMaintenance"
+      );
+
+      const envelope = raw as {
+        data?: unknown;
+        success?: boolean;
+        message?: string;
+      };
+      if (envelope && typeof envelope === "object" && envelope.success === false) {
+        throw new ApiError(
+          envelope.message ?? "Failed to create maintenance",
+          400,
+          envelope
+        );
+      }
+
+      const row =
+        envelope && typeof envelope === "object" && "data" in envelope
+          ? envelope.data
+          : raw;
+
+      return mapRemoteMaintenance(row as RemoteMaintenance);
+    }
+
     const response = await apiClient.post<Maintenance>("/maintenance", {
       resource: "maintenance",
       action: "create",

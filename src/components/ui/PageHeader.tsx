@@ -7,6 +7,9 @@ interface PageHeaderProps {
   className?: string;
 }
 
+/**
+ * Operational page title — primary H1 lives here; shell shows area wayfinding only.
+ */
 export function PageHeader({
   title,
   description,
@@ -14,18 +17,18 @@ export function PageHeader({
   className,
 }: PageHeaderProps) {
   return (
-    <div
+    <header
       className={cn(
-        "mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between",
+        "mb-7 flex flex-col gap-4 border-b border-[var(--sc-rule)] pb-6 sm:flex-row sm:items-end sm:justify-between",
         className
       )}
     >
       <div className="min-w-0">
-        <h1 className="text-2xl font-semibold tracking-tight text-primary">
+        <h1 className="text-[1.625rem] font-semibold tracking-[-0.03em] text-[var(--sc-ink-display)]">
           {title}
         </h1>
         {description ? (
-          <p className="mt-1.5 max-w-3xl text-sm leading-6 text-muted">
+          <p className="mt-2 max-w-2xl text-[0.9375rem] leading-relaxed text-[var(--sc-ink-muted)]">
             {description}
           </p>
         ) : null}
@@ -35,6 +38,6 @@ export function PageHeader({
           {actions}
         </div>
       ) : null}
-    </div>
+    </header>
   );
 }

@@ -127,6 +127,36 @@ export interface CreateIncidentInput {
 
 export type UpdateIncidentInput = Partial<CreateIncidentInput>;
 
+/**
+ * Client-facing intent for reporting an incident.
+ * Quick report fields are required; Additional details are optional overrides.
+ * Server applies defaults when optional fields are omitted.
+ */
+export type ReportIncidentInput = {
+  title: string;
+  facilityId: string;
+  severity?: IncidentSeverity;
+  description?: string;
+  /** Optional master-data cascade ids (presentation); composed into locationDetail. */
+  buildingId?: string;
+  floorId?: string;
+  roomId?: string;
+  /** Free-text / composed location (building · floor · room · detail). */
+  locationDetail?: string;
+
+  /** Additional details — optional overrides of server defaults. */
+  type?: IncidentType;
+  source?: IncidentSource;
+  status?: IncidentStatus;
+  assignedToUserId?: string;
+  reportedByUserId?: string;
+  reportedAt?: string;
+  reportedVia?: IncidentChannel;
+  assetId?: string;
+  requiresWorkOrder?: boolean;
+  workOrderId?: string;
+};
+
 export interface IncidentListParams {
   page?: number;
   pageSize?: number;

@@ -10,11 +10,31 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/Card";
+import {
+  ModeFrame,
+  OperateHeader,
+} from "@/components/platform";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
+const REQUESTS_HEADER = {
+  title: "Requests",
+  description:
+    "Raise maintenance requests and incident reports — work entering the operational flow.",
+};
+
+function RequestsFrame({ children }: { children: React.ReactNode }) {
+  return (
+    <ModeFrame mode="act">
+      <OperateHeader
+        title={REQUESTS_HEADER.title}
+        description={REQUESTS_HEADER.description}
+      />
+      {children}
+    </ModeFrame>
+  );
+}
 import { OCCUPANT_REQUEST_KINDS } from "../constants";
 import { useOccupantFacilities } from "../hooks/useOccupantFacilities";
 import { OccupantRequestService } from "../services/OccupantRequestService";
@@ -94,11 +114,7 @@ export function OccupantRequestPage() {
 
   if (loading) {
     return (
-      <div>
-        <PageHeader
-          title="Requests"
-          description="Raise maintenance requests and incident reports for your facility."
-        />
+      <RequestsFrame>
         <div className="grid gap-4 md:grid-cols-2">
           {Array.from({ length: 2 }).map((_, i) => (
             <div
@@ -107,32 +123,21 @@ export function OccupantRequestPage() {
             />
           ))}
         </div>
-      </div>
+      </RequestsFrame>
     );
   }
 
   if (error && !facilities.length) {
     return (
-      <div>
-        <PageHeader
-          title="Requests"
-          description="Raise maintenance requests and incident reports for your facility."
-        />
-        <EmptyState
-          title="Couldn’t load requests"
-          description={error}
-        />
-      </div>
+      <RequestsFrame>
+        <EmptyState title="Couldn’t load requests" description={error} />
+      </RequestsFrame>
     );
   }
 
   if (result) {
     return (
-      <div>
-        <PageHeader
-          title="Requests"
-          description="Raise maintenance requests and incident reports for your facility."
-        />
+      <RequestsFrame>
         <Card className="max-w-2xl">
           <CardHeader>
             <div className="flex items-start gap-3">
@@ -202,18 +207,12 @@ export function OccupantRequestPage() {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </RequestsFrame>
     );
   }
 
   return (
-    <div className="space-y-10">
-      <PageHeader
-        className="mb-0"
-        title="Requests"
-        description="Raise maintenance requests and incident reports for your facility."
-      />
-
+    <RequestsFrame>
       <section className="space-y-4">
         <div>
           <h2 className="text-lg font-semibold tracking-tight text-foreground">
@@ -296,6 +295,6 @@ export function OccupantRequestPage() {
           </Card>
         </section>
       ) : null}
-    </div>
+    </RequestsFrame>
   );
 }

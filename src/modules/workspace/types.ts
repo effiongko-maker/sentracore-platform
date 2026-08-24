@@ -52,6 +52,43 @@ export interface WorkspaceActivityItem {
   at: string;
 }
 
+export type OperationalStateTone = "stable" | "attention" | "critical";
+
+export interface OperationalState {
+  statement: string;
+  tone: OperationalStateTone;
+  subtext?: string;
+}
+
+/** A concrete matter behind the Home critical / attention headline. */
+export interface AttentionMatter {
+  id: string;
+  severity: "critical" | "high";
+  title: string;
+  location: string;
+  entityLabel: string;
+  reason: string;
+  actionLabel: string;
+  href: string;
+  entityId: string;
+}
+
+/** Shared model: headline count and Requires attention list. */
+export interface AttentionModel {
+  total: number;
+  visible: AttentionMatter[];
+  viewAllHref?: string;
+  viewAllLabel?: string;
+}
+
+export interface OrganisationalPulse {
+  openIncidents: number;
+  criticalIncidents: number;
+  openMaintenance: number;
+  openWorkOrders: number;
+  recentActivity: number;
+}
+
 /** Sole contract between WorkspaceService and Workspace UI. */
 export interface WorkspaceSnapshot {
   asOf: string;
@@ -59,6 +96,10 @@ export interface WorkspaceSnapshot {
     id?: string;
     name?: string;
   };
+  operationalState: OperationalState;
+  /** Matters behind critical headline — same source as pulse.criticalIncidents */
+  attention: AttentionModel;
+  pulse: OrganisationalPulse;
   quickActions: WorkspaceQuickAction[];
   myWork: WorkspaceWorkSummary[];
   schedule: WorkspaceScheduleItem[];

@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { WorkspacePage } from "@/modules/workspace";
 
 export const metadata: Metadata = {
-  title: "Home",
+  title: "Operations",
 };
 
-export default function HomePage() {
+export default function OperationsHomePage() {
   return <WorkspacePage />;
 }

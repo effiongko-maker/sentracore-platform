@@ -16,6 +16,7 @@ import {
 } from "../constants";
 import { labelize } from "../utils";
 import type { Incident } from "../types";
+import { IncidentIntelligencePanel } from "./intelligence/IncidentIntelligencePanel";
 
 interface ViewIncidentModalProps {
   open: boolean;
@@ -55,7 +56,7 @@ export function ViewIncidentModal({
       onClose={onClose}
       title={incident.title}
       description={incident.id}
-      size="lg"
+      size="xl"
       footer={
         <>
           <Button variant="outline" onClick={onClose}>
@@ -140,6 +141,11 @@ export function ViewIncidentModal({
           value={incident.resolutionNotes || "—"}
         />
       </div>
+
+      <IncidentIntelligencePanel
+        incidentId={incident.id}
+        active={open}
+      />
     </Modal>
   );
 }

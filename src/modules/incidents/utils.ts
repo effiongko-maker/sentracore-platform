@@ -28,7 +28,7 @@ export function toCreateFormValues(
   return {
     title: incident?.title ?? "",
     description: incident?.description ?? "",
-    type: incident?.type ?? "equipment_failure",
+    type: incident?.type ?? "other",
     source: incident?.source ?? "manual",
     categoryId: incident?.categoryId ?? "",
     facilityId: incident?.facilityId ?? "",

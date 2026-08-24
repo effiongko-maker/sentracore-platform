@@ -1,9 +1,9 @@
 "use client";
 
-import { AlertTriangle, Plus } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { Button } from "@/components/ui/Button";
+import { ModeFrame, StreamSurface } from "@/components/platform";
+import { OperationalPageHeader } from "@/components/operational";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
@@ -12,6 +12,7 @@ import type { IncidentModalState } from "../types";
 import { IncidentFormModal } from "./IncidentFormModal";
 import { IncidentsTable } from "./IncidentsTable";
 import { IncidentsToolbar } from "./IncidentsToolbar";
+import { ReportIncidentModal } from "./ReportIncidentModal";
 import { ViewIncidentModal } from "./ViewIncidentModal";
 
 export function IncidentsPage() {
@@ -69,62 +70,70 @@ export function IncidentsPage() {
   }
 
   return (
-    <div>
-      <PageHeader
-        title="Incidents"
-        description="Capture, escalate, and resolve safety and operational events."
-        actions={
-          <Button onClick={() => setModal({ type: "create" })}>
-            <Plus className="h-4 w-4" />
-            New Incident
-          </Button>
-        }
-      />
-
-      <IncidentsToolbar
-        search={search}
-        onSearchChange={setSearch}
-        severity={severity}
-        onSeverityChange={setSeverity}
-        status={status}
-        onStatusChange={setStatus}
-        facilityId={facilityId}
-        onFacilityIdChange={setFacilityId}
-        assignedToUserId={assignedToUserId}
-        onAssignedToUserIdChange={setAssignedToUserId}
-        requiresWorkOrder={requiresWorkOrder}
-        onRequiresWorkOrderChange={setRequiresWorkOrder}
-      />
-
-      {error ? (
-        <EmptyState
-          icon={AlertTriangle}
-          title="Couldn’t load incidents"
-          description={error}
-          actionLabel="Retry"
-          onAction={reload}
+    <ModeFrame mode="execute">
+      <div className="op-page">
+        <OperationalPageHeader
+          title="Incidents"
+          description="Reported events and issues requiring review, response, or follow-up."
+          countValue={total}
+          countLabel="Open"
+          actionLabel="Report incident"
+          onAction={() => setModal({ type: "create" })}
+          loading={loading}
         />
-      ) : (
-        <div className="overflow-x-auto">
-          <IncidentsTable
-            incidents={incidents}
-            loading={loading}
-            page={page}
-            totalPages={totalPages}
-            total={total}
-            onPageChange={setPage}
-            onView={(incident) => setModal({ type: "view", incident })}
-            onEdit={(incident) => setModal({ type: "edit", incident })}
-            onDeactivate={(incident) =>
-              setModal({ type: "deactivate", incident })
-            }
+
+        <IncidentsToolbar
+          search={search}
+          onSearchChange={setSearch}
+          severity={severity}
+          onSeverityChange={setSeverity}
+          status={status}
+          onStatusChange={setStatus}
+          facilityId={facilityId}
+          onFacilityIdChange={setFacilityId}
+          assignedToUserId={assignedToUserId}
+          onAssignedToUserIdChange={setAssignedToUserId}
+          requiresWorkOrder={requiresWorkOrder}
+          onRequiresWorkOrderChange={setRequiresWorkOrder}
+          total={total}
+          loading={loading}
+        />
+
+        {error ? (
+          <EmptyState
+            icon={AlertTriangle}
+            title="Couldn’t load incidents"
+            description={error}
+            actionLabel="Retry"
+            onAction={reload}
           />
-        </div>
-      )}
+        ) : (
+          <StreamSurface>
+            <IncidentsTable
+              incidents={incidents}
+              loading={loading}
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              onPageChange={setPage}
+              onView={(incident) => setModal({ type: "view", incident })}
+              onEdit={(incident) => setModal({ type: "edit", incident })}
+              onDeactivate={(incident) =>
+                setModal({ type: "deactivate", incident })
+              }
+            />
+          </StreamSurface>
+        )}
+      </div>
+
+      <ReportIncidentModal
+        open={modal.type === "create"}
+        onClose={() => setModal({ type: "closed" })}
+        onSaved={reload}
+      />
 
       <IncidentFormModal
-        open={modal.type === "create" || modal.type === "edit"}
-        mode={modal.type === "edit" ? "edit" : "create"}
+        open={modal.type === "edit"}
         incident={modal.type === "edit" ? modal.incident : null}
         onClose={() => setModal({ type: "closed" })}
         onSaved={reload}
@@ -151,6 +160,6 @@ export function IncidentsPage() {
         danger
         loading={deactivating}
       />
-    </div>
+    </ModeFrame>
   );
 }

@@ -44,15 +44,14 @@ import type {
 
 interface IncidentFormModalProps {
   open: boolean;
-  mode: "create" | "edit";
   incident?: Incident | null;
   onClose: () => void;
   onSaved?: () => void;
 }
 
+/** Edit / manage incident — classification, assignment, and enrichment. */
 export function IncidentFormModal({
   open,
-  mode,
   incident,
   onClose,
   onSaved,
@@ -70,9 +69,9 @@ export function IncidentFormModal({
 
   useEffect(() => {
     if (!open) return;
-    setForm(toCreateFormValues(mode === "edit" ? incident : null));
+    setForm(toCreateFormValues(incident));
     setErrors({});
-  }, [open, mode, incident]);
+  }, [open, incident]);
 
   useEffect(() => {
     if (!open) return;
@@ -140,7 +139,7 @@ export function IncidentFormModal({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (!validate()) return;
+    if (!validate() || !incident) return;
 
     setSaving(true);
     try {
@@ -174,31 +173,19 @@ export function IncidentFormModal({
         updatedByUserId: optionalString(form.updatedByUserId),
       });
 
-      if (mode === "edit" && incident) {
-        await IncidentService.updateIncident(incident.id, payload);
-        toast({
-          type: "success",
-          title: "Incident updated",
-          description: `${payload.title} has been saved.`,
-        });
-      } else {
-        await IncidentService.createIncident(payload);
-        toast({
-          type: "success",
-          title: "Incident created",
-          description: `${payload.title} has been logged.`,
-        });
-      }
+      await IncidentService.updateIncident(incident.id, payload);
+      toast({
+        type: "success",
+        title: "Incident updated",
+        description: `${payload.title} has been saved.`,
+      });
 
       onSaved?.();
       onClose();
     } catch (err) {
       toast({
         type: "error",
-        title:
-          mode === "edit"
-            ? "Unable to update incident"
-            : "Unable to create incident",
+        title: "Unable to update incident",
         description:
           err instanceof Error ? err.message : "Please try again in a moment.",
       });
@@ -207,7 +194,6 @@ export function IncidentFormModal({
     }
   }
 
-  const isEdit = mode === "edit";
   const requiresWo = Boolean(form.requiresWorkOrder);
 
   return (
@@ -216,26 +202,22 @@ export function IncidentFormModal({
       onClose={() => {
         if (!saving) onClose();
       }}
-      title={isEdit ? "Edit incident" : "New incident"}
-      description={
-        isEdit
-          ? "Update classification, assignment, and resolution."
-          : "Log a new operational or safety event."
-      }
+      title="Edit incident"
+      description="Update classification, assignment, and resolution."
       size="lg"
       footer={
         <>
           <Button variant="outline" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button type="submit" form="incident-form" loading={saving}>
-            {isEdit ? "Save changes" : "Create incident"}
+          <Button type="submit" form="incident-edit-form" loading={saving}>
+            Save changes
           </Button>
         </>
       }
     >
       <form
-        id="incident-form"
+        id="incident-edit-form"
         onSubmit={handleSubmit}
         className="grid gap-4 sm:grid-cols-2"
       >
@@ -249,7 +231,6 @@ export function IncidentFormModal({
           <input
             id="inc-title"
             className={inputClassName}
-            placeholder="e.g. Plant Room 3 water ingress"
             value={form.title}
             onChange={(event) => updateField("title", event.target.value)}
           />
@@ -478,7 +459,7 @@ export function IncidentFormModal({
           onChange={(value) => updateField("locationDetail", value)}
           includeFacility={false}
           label="Location"
-          hint="Building → floor → room from Master Data. Select a facility above first."
+          hint="Building → floor → room from Master Data."
         />
 
         <FormField

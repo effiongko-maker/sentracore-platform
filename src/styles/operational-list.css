@@ -1,0 +1,472 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Operational list workspace (op-) — Incidents, Work Orders, registers
+   See first. Refine when needed.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.op-page {
+  --op-ink: var(--os-ink, #121a24);
+  --op-muted: var(--os-ink-muted, #667085);
+  --op-faint: var(--os-ink-faint, #98a2b3);
+  --op-rule: var(--os-rule, rgba(18, 26, 36, 0.07));
+  --op-rule-strong: var(--os-rule-strong, rgba(18, 26, 36, 0.11));
+  --op-surface: var(--os-surface, #ffffff);
+  --op-accent: var(--os-accent, #2563eb);
+  --op-ease: var(--os-duration-base, 160ms) ease-out;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* ── Header ─────────────────────────────────────────────────────── */
+
+.op-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--op-rule);
+}
+
+.op-header-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.op-header-title {
+  margin: 0;
+  font-size: clamp(1.5rem, 2vw, 1.75rem);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  color: var(--op-ink);
+}
+
+.op-header-desc {
+  margin: 0.5rem 0 0;
+  max-width: 36rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--op-muted);
+}
+
+.op-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.op-count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 0.25rem 0;
+  border-left: 2px solid var(--op-accent);
+  padding-left: 0.75rem;
+}
+
+.op-count-value {
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  color: var(--op-ink);
+  line-height: 1;
+}
+
+.op-count-label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--op-faint);
+}
+
+/* ── Control bar ────────────────────────────────────────────────── */
+
+.op-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.op-search {
+  position: relative;
+  flex: 1 1 14rem;
+  min-width: 12rem;
+}
+
+.op-search input {
+  height: 2.25rem;
+  width: 100%;
+  border: 1px solid var(--op-rule-strong);
+  border-radius: 0.375rem;
+  background: var(--op-surface);
+  padding: 0 2.25rem 0 2.25rem;
+  font-size: 0.875rem;
+  color: var(--op-ink);
+  outline: none;
+  transition: border-color var(--op-ease), box-shadow var(--op-ease);
+}
+
+.op-search input::placeholder {
+  color: var(--op-faint);
+}
+
+.op-search input:focus {
+  border-color: color-mix(in srgb, var(--op-accent) 45%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--op-accent) 12%, transparent);
+}
+
+.op-search-icon {
+  position: absolute;
+  left: 0.7rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--op-faint);
+  pointer-events: none;
+}
+
+.op-search-clear {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  padding: 0.2rem;
+  border: none;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: var(--op-faint);
+  cursor: pointer;
+}
+
+.op-search-clear:hover {
+  color: var(--op-ink);
+}
+
+.op-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.op-util-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--op-rule-strong);
+  border-radius: 0.375rem;
+  background: var(--op-surface);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--op-ink);
+  cursor: pointer;
+  transition: border-color var(--op-ease), background var(--op-ease),
+    color var(--op-ease);
+  white-space: nowrap;
+}
+
+.op-util-btn:hover {
+  border-color: color-mix(in srgb, var(--op-ink) 18%, transparent);
+  background: color-mix(in srgb, var(--op-surface) 92%, #e8ecf0);
+}
+
+.op-util-btn:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--op-accent) 50%, transparent);
+  outline-offset: 1px;
+}
+
+.op-util-btn-active {
+  border-color: color-mix(in srgb, var(--op-accent) 35%, transparent);
+  color: var(--os-accent-ink, #1d4ed8);
+  background: color-mix(in srgb, var(--os-accent-soft, #f0f5ff) 70%, #fff);
+}
+
+.op-util-btn svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  opacity: 0.7;
+}
+
+.op-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 2.25rem;
+  padding: 0 0.65rem 0 0.75rem;
+  border: 1px solid var(--op-rule-strong);
+  border-radius: 0.375rem;
+  background: var(--op-surface);
+  font-size: 0.8125rem;
+  color: var(--op-muted);
+}
+
+.op-sort label {
+  font-weight: 500;
+  color: var(--op-faint);
+}
+
+.op-sort select {
+  border: none;
+  background: transparent;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--op-ink);
+  outline: none;
+  cursor: pointer;
+  padding-right: 0.15rem;
+}
+
+/* ── Filter popover ─────────────────────────────────────────────── */
+
+.op-filter-anchor {
+  position: relative;
+}
+
+.op-filter-panel {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 40;
+  width: min(22rem, calc(100vw - 2rem));
+  padding: 1rem;
+  border: 1px solid var(--op-rule-strong);
+  border-radius: 0.5rem;
+  background: var(--op-surface);
+  box-shadow: 0 12px 32px rgba(18, 26, 36, 0.1);
+}
+
+.op-filter-title {
+  margin: 0 0 0.875rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--op-faint);
+}
+
+.op-filter-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.op-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.op-filter-field label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--op-muted);
+}
+
+.op-filter-field select {
+  height: 2.25rem;
+  width: 100%;
+  border: 1px solid var(--op-rule-strong);
+  border-radius: 0.375rem;
+  background: #fff;
+  padding: 0 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--op-ink);
+  outline: none;
+}
+
+.op-filter-field select:focus {
+  border-color: color-mix(in srgb, var(--op-accent) 45%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--op-accent) 12%, transparent);
+}
+
+.op-filter-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--op-rule);
+}
+
+.op-filter-clear {
+  border: none;
+  background: transparent;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--op-muted);
+  cursor: pointer;
+  padding: 0.35rem 0;
+}
+
+.op-filter-clear:hover {
+  color: var(--op-ink);
+}
+
+.op-filter-apply {
+  height: 2rem;
+  padding: 0 0.875rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: var(--op-ink);
+  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--op-ease);
+}
+
+.op-filter-apply:hover {
+  background: color-mix(in srgb, var(--op-ink) 88%, #fff);
+}
+
+/* ── Active filters ─────────────────────────────────────────────── */
+
+.op-active-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.op-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 1.625rem;
+  padding: 0 0.35rem 0 0.55rem;
+  border: 1px solid var(--op-rule-strong);
+  border-radius: 999px;
+  background: var(--op-surface);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--op-ink);
+}
+
+.op-chip-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--op-faint);
+  cursor: pointer;
+}
+
+.op-chip-remove:hover {
+  background: color-mix(in srgb, var(--op-ink) 6%, transparent);
+  color: var(--op-ink);
+}
+
+.op-chip-clear {
+  border: none;
+  background: transparent;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--op-muted);
+  cursor: pointer;
+  padding: 0.2rem 0.35rem;
+}
+
+.op-chip-clear:hover {
+  color: var(--op-ink);
+}
+
+/* ── Result context ─────────────────────────────────────────────── */
+
+.op-result-context {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--op-muted);
+}
+
+/* ── Severity / priority tones (table) ──────────────────────────── */
+
+.op-tone {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-transform: capitalize;
+  color: var(--op-ink);
+}
+
+.op-tone::before {
+  content: "";
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 999px;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.op-tone-critical {
+  color: var(--os-critical, #8f2d35);
+}
+
+.op-tone-high {
+  color: var(--os-warning, #9a6700);
+}
+
+.op-tone-medium {
+  color: var(--os-ink-secondary, #475467);
+}
+
+.op-tone-low {
+  color: #64748b;
+}
+
+.op-tone-info {
+  color: #5b6b7c;
+}
+
+@media (max-width: 639px) {
+  .op-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .op-search {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  .op-toolbar-actions {
+    width: 100%;
+  }
+
+  .op-toolbar-actions > * {
+    flex: 1;
+  }
+
+  .op-filter-panel {
+    left: 0;
+    right: auto;
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .op-util-btn,
+  .op-search input,
+  .op-filter-apply {
+    transition: none !important;
+  }
+}

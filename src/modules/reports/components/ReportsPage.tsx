@@ -7,11 +7,12 @@ import {
   ReportGeneratingProgress,
   ReportsSkeleton,
 } from "@/components/loading";
+import { ModeFrame } from "@/components/platform";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { defaultSectionsForType, getReportType } from "../constants";
 import { useReportWizard } from "../hooks/useReportWizard";
 import { ReportPreview } from "./ReportPreview";
+import { ReportsIntro } from "./ReportsIntro";
 import { ReportWizard } from "./ReportWizard";
 
 export function ReportsPage() {
@@ -40,19 +41,18 @@ export function ReportsPage() {
 
   if (error && !home && !loading) {
     return (
-      <div>
-        <PageHeader
-          title="Reports"
-          description="Generate operational reports for clients and management."
-        />
-        <EmptyState
-          icon={FileBarChart2}
-          title="Couldn’t load reports"
-          description={error}
-          actionLabel="Retry"
-          onAction={reload}
-        />
-      </div>
+      <ModeFrame mode="understand">
+        <div className="rp-page">
+          <ReportsIntro />
+          <EmptyState
+            icon={FileBarChart2}
+            title="Couldn’t load reports"
+            description={error}
+            actionLabel="Retry"
+            onAction={reload}
+          />
+        </div>
+      </ModeFrame>
     );
   }
 
@@ -75,39 +75,37 @@ export function ReportsPage() {
             onStartOver={startOver}
           />
         ) : (
-          <div className="space-y-8">
-            <PageHeader
-              className="mb-0"
-              title="Reports"
-              description="Generate operational reports for clients and management."
-            />
+          <ModeFrame mode="understand">
+            <div className="rp-page">
+              <ReportsIntro />
 
-            {generating ? (
-              <ReportGeneratingProgress reportTitle={reportTitle} />
-            ) : (
-              <ReportWizard
-                wizard={wizard}
-                facilityOptions={home.facilityOptions}
-                canProceed={canProceed}
-                generating={generating}
-                error={error}
-                onStepClick={setStep}
-                onSelectType={selectReportType}
-                onAllFacilities={setAllFacilities}
-                onToggleFacility={toggleFacility}
-                onPeriodChange={setPeriod}
-                onToggleSection={toggleSection}
-                onResetSections={() => {
-                  if (wizard.reportType) {
-                    setSections(defaultSectionsForType(wizard.reportType));
-                  }
-                }}
-                onBack={goBack}
-                onNext={goNext}
-                onGenerate={() => void generate()}
-              />
-            )}
-          </div>
+              {generating ? (
+                <ReportGeneratingProgress reportTitle={reportTitle} />
+              ) : (
+                <ReportWizard
+                  wizard={wizard}
+                  facilityOptions={home.facilityOptions}
+                  canProceed={canProceed}
+                  generating={generating}
+                  error={error}
+                  onStepClick={setStep}
+                  onSelectType={selectReportType}
+                  onAllFacilities={setAllFacilities}
+                  onToggleFacility={toggleFacility}
+                  onPeriodChange={setPeriod}
+                  onToggleSection={toggleSection}
+                  onResetSections={() => {
+                    if (wizard.reportType) {
+                      setSections(defaultSectionsForType(wizard.reportType));
+                    }
+                  }}
+                  onBack={goBack}
+                  onNext={goNext}
+                  onGenerate={() => void generate()}
+                />
+              )}
+            </div>
+          </ModeFrame>
         )
       ) : null}
     </LoadingGate>

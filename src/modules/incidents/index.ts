@@ -14,6 +14,7 @@ export type {
   IncidentSource,
   IncidentStatus,
   IncidentType,
+  ReportIncidentInput,
   UpdateIncidentInput,
 } from "./types";
 export {

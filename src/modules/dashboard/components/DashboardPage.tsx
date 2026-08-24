@@ -6,11 +6,14 @@ import {
   LoadingGate,
 } from "@/components/loading";
 import { BarChart3 } from "lucide-react";
+import {
+  ModeFrame,
+  UnderstandHeader,
+} from "@/components/platform";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useDashboard } from "../hooks/useDashboard";
 import type { DashboardCard, DashboardSection } from "../types";
 import {
-  DashboardContextBanner,
   DashboardHealthCard,
   DashboardKpiCard,
   DashboardListCard,
@@ -176,18 +179,19 @@ export function DashboardPage() {
       title="Loading dashboard"
     >
       {snapshot ? (
-        <div className="space-y-8">
-          <DashboardContextBanner
-            title={snapshot.context.title}
-            subtitle={snapshot.context.subtitle ?? snapshot.health?.summary}
-            currentUserId={snapshot.context.currentUserId}
+        <ModeFrame mode="understand">
+          <UnderstandHeader
+            title={snapshot.context.title ?? "Operational dashboard"}
+            description={
+              snapshot.context.subtitle ?? snapshot.health?.summary
+            }
             asOf={snapshot.asOf}
           />
 
           {snapshot.sections.map((section) => (
             <SectionBlock key={section.id} section={section} />
           ))}
-        </div>
+        </ModeFrame>
       ) : null}
     </LoadingGate>
   );

@@ -44,12 +44,19 @@ export interface UserListParams {
   facility?: string | "all";
 }
 
+/**
+ * Compact chrome identity for the signed-in platform user.
+ * Role is a display label from platform role assignments (not FM sheet roles).
+ */
 export interface CurrentUser {
   id: string;
   name: string;
   email: string;
-  role: UserRole;
+  role: string;
   avatarInitials: string;
+  organisationId?: string | null;
+  organisationName?: string | null;
+  roleSlugs?: string[];
 }
 
 export type UserModalState =

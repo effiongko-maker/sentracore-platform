@@ -4,6 +4,8 @@ export {
   type IMaintenanceService,
 } from "./services/MaintenanceService";
 export { useMaintenance } from "./hooks/useMaintenance";
+export { requestMaintenance } from "./actions/requestMaintenance";
+export type { RequestMaintenanceOptions } from "./actions/requestMaintenance";
 export type {
   CreateMaintenanceInput,
   Maintenance,

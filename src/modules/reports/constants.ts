@@ -76,7 +76,7 @@ export const REPORT_TYPES: ReportTypeDefinition[] = [
     id: "monthly_operations",
     title: "Monthly Operations",
     description:
-      "Comprehensive monthly operational report covering facility performance, maintenance, assets, and work orders.",
+      "A complete view of facility performance, maintenance activity, assets, and work completed over the month.",
     includes: [
       "Executive Summary",
       "KPI Trends",
@@ -94,7 +94,7 @@ export const REPORT_TYPES: ReportTypeDefinition[] = [
     id: "weekly_operations",
     title: "Weekly Operations",
     description:
-      "Concise weekly operating brief for site reviews, account updates, and near-term actions.",
+      "A focused operational brief for site reviews, account updates, and immediate priorities.",
     includes: [
       "Executive Summary",
       "KPI Snapshot",
@@ -119,7 +119,7 @@ export const REPORT_TYPES: ReportTypeDefinition[] = [
     id: "quarterly_review",
     title: "Quarterly Review",
     description:
-      "Full quarterly performance review for client stewardship meetings and management packs.",
+      "A strategic review of performance, operational trends, and emerging areas of attention.",
     includes: [
       "Executive Summary",
       "KPI Trends",
@@ -137,7 +137,7 @@ export const REPORT_TYPES: ReportTypeDefinition[] = [
     id: "incident_report",
     title: "Incident Report",
     description:
-      "Operational incident summary with trends, root causes, and recommendations.",
+      "A clear record of incidents, severity, contributing factors, and recommended follow-up.",
     includes: [
       "Incident Register",
       "Severity Analysis",
@@ -160,7 +160,7 @@ export const REPORT_TYPES: ReportTypeDefinition[] = [
     id: "maintenance_report",
     title: "Maintenance Report",
     description:
-      "Maintenance backlog, overdue work, and asset condition briefing for operational review.",
+      "A practical view of maintenance activity, backlog, overdue work, and asset condition.",
     includes: [
       "Backlog Summary",
       "Overdue Items",
@@ -184,7 +184,7 @@ export const REPORT_TYPES: ReportTypeDefinition[] = [
     id: "executive_summary",
     title: "Executive Summary",
     description:
-      "High-level operational overview for executives and client leadership.",
+      "A concise management view of performance, risks, key decisions, and what requires attention.",
     includes: [
       "Portfolio KPIs",
       "Operational Health",

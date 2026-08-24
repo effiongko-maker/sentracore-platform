@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { AppShell } from "@/components/layout/AppShell";
 import "@/styles/globals.css";
 
 const inter = Inter({
@@ -16,6 +15,10 @@ export const metadata: Metadata = {
   },
   description:
     "SentraCore™ — Operations Management Platform by Beacon Africa Limited.",
+  icons: {
+    icon: "/brand/sentracore-logo.png",
+    apple: "/brand/sentracore-logo.png",
+  },
 };
 
 export default function RootLayout({
@@ -25,9 +28,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} h-full`}>
-      <body className="min-h-full font-sans antialiased">
-        <AppShell>{children}</AppShell>
-      </body>
+      <body className="min-h-full font-sans antialiased">{children}</body>
     </html>
   );
 }

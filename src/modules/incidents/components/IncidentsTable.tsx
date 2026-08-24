@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
+import { OperationalTone } from "@/components/operational";
 import { DataTable, type Column } from "@/components/tables/DataTable";
 import { formatDate } from "@/lib/utils";
 import {
@@ -10,10 +11,7 @@ import {
   useFacilityName,
   useUserName,
 } from "@/hooks/useEntityLabel";
-import {
-  INCIDENT_SEVERITY_VARIANT,
-  INCIDENT_STATUS_VARIANT,
-} from "../constants";
+import { INCIDENT_STATUS_VARIANT } from "../constants";
 import { labelize } from "../utils";
 import type { Incident } from "../types";
 import { IncidentRowActions } from "./IncidentRowActions";
@@ -89,9 +87,10 @@ export function IncidentsTable({
         key: "severity",
         header: "Severity",
         render: (incident) => (
-          <Badge variant={INCIDENT_SEVERITY_VARIANT[incident.severity]}>
-            {labelize(incident.severity)}
-          </Badge>
+          <OperationalTone
+            value={incident.severity}
+            label={labelize(incident.severity)}
+          />
         ),
       },
       {

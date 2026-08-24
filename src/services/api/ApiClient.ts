@@ -1,9 +1,7 @@
-import type { CurrentUser } from "@/types";
 import { traceRequest } from "@/services/debug/requestTrace";
 import {
   ApiError,
   fail,
-  ok,
   type ApiRequestOptions,
   type ApiResponse,
 } from "./ApiResponse";
@@ -13,7 +11,7 @@ import {
  *
  * Domain services must call only this client.
  * Module CRUD (users, facilities, assets, …) uses live POST proxies to
- * Next.js → Apps Script. Remaining mocks are session-only (e.g. /users/me).
+ * Next.js → Apps Script. Platform identity uses /api/auth/me (Supabase Auth).
  *
  * The frontend never references Spreadsheets or other storage backends.
  */
@@ -24,15 +22,6 @@ function delay(ms = LATENCY_MS) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Session stub only — Users CRUD is live via POST /api/users. */
-const currentUser: CurrentUser = {
-  id: "usr_001",
-  name: "Mr. Bode",
-  email: "bode@sentracore.com",
-  role: "admin",
-  avatarInitials: "MB",
-};
-
 async function mockRequest(
   method: string,
   path: string,
@@ -40,12 +29,6 @@ async function mockRequest(
   _options?: ApiRequestOptions
 ): Promise<ApiResponse<unknown>> {
   const normalized = path.startsWith("/") ? path : `/${path}`;
-
-  if (method === "GET" && normalized === "/users/me") {
-    await delay();
-    return ok({ ...currentUser });
-  }
-
   await delay();
   fail(`No mock handler for ${method} ${normalized}`, 404);
 }

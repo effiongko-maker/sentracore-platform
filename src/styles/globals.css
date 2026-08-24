@@ -1,25 +1,53 @@
 @import "tailwindcss";
+@import "./sentracore-os.css";
+@import "./intelligence-experience.css";
+@import "./reports-experience.css";
+@import "./operational-list.css";
 
+/* Product aliases → OS foundation (do not fork values here) */
 :root {
-  --sc-primary: #13293d;
-  --sc-primary-soft: #1a3a52;
-  --sc-accent: #1d4ed8;
-  --sc-accent-soft: #eff6ff;
-  --sc-background: #f8fafc;
-  --sc-card: #ffffff;
-  --sc-success: #16a34a;
-  --sc-warning: #f59e0b;
-  --sc-danger: #dc2626;
-  --sc-border: #e2e8f0;
-  --sc-muted: #64748b;
-  --sc-foreground: #0f172a;
-  --sc-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.04);
-  --sc-shadow-lg: 0 4px 6px rgba(15, 23, 42, 0.03), 0 20px 40px rgba(15, 23, 42, 0.06);
-  --sc-radius: 16px;
-  --sc-radius-sm: 10px;
-  --sc-sidebar-width: 260px;
-  --sc-sidebar-collapsed: 80px;
-  --sc-header-height: 68px;
+  --sc-primary: var(--os-ink-900);
+  --sc-primary-soft: var(--os-ink-800);
+  --sc-accent: var(--os-accent);
+  --sc-accent-soft: var(--os-accent-soft);
+  --sc-background: var(--os-canvas);
+  --sc-canvas: var(--os-canvas);
+  --sc-surface: var(--os-surface);
+  --sc-surface-raised: var(--os-surface-elevated);
+  --sc-card: var(--os-surface);
+  --sc-success: var(--os-success);
+  --sc-warning: var(--os-warning);
+  --sc-danger: var(--os-critical);
+  --sc-info: var(--os-info);
+  --sc-border: var(--os-rule-strong);
+  --sc-muted: var(--os-ink-muted);
+  --sc-foreground: var(--os-ink);
+  --sc-ink: var(--os-ink);
+  --sc-text: var(--os-text);
+  --sc-text-muted: var(--os-text-muted);
+  --sc-text-faint: var(--os-text-faint);
+  --sc-shadow: var(--os-shadow-raised);
+  --sc-shadow-lg: var(--os-shadow-focused);
+  --sc-radius: var(--os-radius-lg);
+  --sc-radius-sm: var(--os-radius-md);
+  --sc-radius-control: var(--os-radius-md);
+  --sc-sidebar-width: var(--os-compass-width);
+  --sc-sidebar-width-intelligence: 200px;
+  --sc-sidebar-collapsed: 72px;
+  --sc-header-height: var(--os-command-height);
+  --sc-canvas-operational: var(--os-canvas-operational);
+  --sc-ink-display: var(--os-ink);
+  --sc-ink-muted: var(--os-ink-muted);
+  --sc-rule: var(--os-rule);
+  --sc-rule-strong: var(--os-rule-strong);
+  --sc-env-sidebar: var(--os-nav-bg);
+  --sc-env-sidebar-border: var(--os-rule-on-dark);
+  --sc-nav-bg: var(--os-nav-bg);
+  --sc-nav-active: var(--os-nav-active);
+  --sc-critical: var(--os-critical);
+  --duration-fast: var(--os-duration-fast);
+  --duration-base: var(--os-duration-base);
+  --duration-slow: var(--os-duration-slow);
 }
 
 @theme inline {
@@ -35,6 +63,7 @@
   --color-danger: var(--sc-danger);
   --color-border: var(--sc-border);
   --color-muted: var(--sc-muted);
+  --font-display: var(--font-inter);
   --font-sans: var(--font-inter);
   --radius-sc: var(--sc-radius);
   --radius-sc-sm: var(--sc-radius-sm);
@@ -53,11 +82,46 @@ body {
 
 body {
   margin: 0;
-  background: var(--sc-background);
+  background: var(--sc-canvas-operational);
   color: var(--sc-foreground);
   font-family: var(--font-inter), Inter, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.sc-canvas-operational {
+  background: var(--sc-canvas-operational);
+}
+
+.sc-table-surface {
+  border: 1px solid color-mix(in srgb, var(--os-rule) 80%, transparent);
+  border-radius: var(--os-radius-md);
+  background: var(--os-canvas-focused);
+  overflow: hidden;
+  box-shadow: var(--os-shadow-raised);
+}
+
+.sc-table-surface thead th {
+  font-size: var(--os-type-micro);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--os-ink-muted);
+  background: var(--os-canvas-raised);
+  border-bottom: 1px solid color-mix(in srgb, var(--os-rule) 80%, transparent);
+}
+
+.sc-table-surface tbody tr {
+  border-bottom: 1px solid color-mix(in srgb, var(--sc-rule) 65%, transparent);
+  transition: background-color 0.15s ease;
+}
+
+.sc-table-surface tbody tr:hover {
+  background: color-mix(in srgb, var(--sc-accent-soft) 35%, white);
+}
+
+.sc-table-surface tbody tr:last-child {
+  border-bottom: none;
 }
 
 ::-webkit-scrollbar {

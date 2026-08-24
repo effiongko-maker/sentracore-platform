@@ -2,7 +2,11 @@
 
 import { Package, Plus } from "lucide-react";
 import { useState } from "react";
-import { PageHeader } from "@/components/ui/PageHeader";
+import {
+  ExploreHeader,
+  ModeFrame,
+  StreamSurface,
+} from "@/components/platform";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
@@ -65,14 +69,15 @@ export function AssetsPage() {
   }
 
   return (
-    <div>
-      <PageHeader
+    <ModeFrame mode="organise">
+      <ExploreHeader
         title="Assets"
-        description="Track equipment, systems, and critical infrastructure."
+        description="Operational objects — equipment, systems, and infrastructure with identity, status, and history."
+        territoryNote={`${loading ? "—" : total} objects in view`}
         actions={
           <Button onClick={() => setModal({ type: "create" })}>
             <Plus className="h-4 w-4" />
-            New Asset
+            New asset
           </Button>
         }
       />
@@ -97,7 +102,7 @@ export function AssetsPage() {
           onAction={reload}
         />
       ) : (
-        <div className="overflow-x-auto">
+        <StreamSurface>
           <AssetsTable
             assets={assets}
             loading={loading}
@@ -109,7 +114,7 @@ export function AssetsPage() {
             onEdit={(asset) => setModal({ type: "edit", asset })}
             onDeactivate={(asset) => setModal({ type: "deactivate", asset })}
           />
-        </div>
+        </StreamSurface>
       )}
 
       <AssetFormModal
@@ -141,6 +146,6 @@ export function AssetsPage() {
         danger
         loading={deactivating}
       />
-    </div>
+    </ModeFrame>
   );
 }

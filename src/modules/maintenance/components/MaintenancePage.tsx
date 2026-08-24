@@ -2,7 +2,11 @@
 
 import { Plus, Wrench } from "lucide-react";
 import { useState } from "react";
-import { PageHeader } from "@/components/ui/PageHeader";
+import {
+  ModeFrame,
+  OperateHeader,
+  StreamSurface,
+} from "@/components/platform";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
@@ -71,14 +75,16 @@ export function MaintenancePage() {
   }
 
   return (
-    <div>
-      <PageHeader
+    <ModeFrame mode="execute">
+      <OperateHeader
         title="Maintenance"
-        description="Track maintenance requests and work across facilities and assets."
+        description="Operational flow — requests, assignments, and work moving through your facilities."
+        signalValue={loading ? "—" : total}
+        signalLabel="In flow"
         actions={
           <Button onClick={() => setModal({ type: "create" })}>
             <Plus className="h-4 w-4" />
-            New Maintenance
+            New maintenance
           </Button>
         }
       />
@@ -109,7 +115,7 @@ export function MaintenancePage() {
           onAction={reload}
         />
       ) : (
-        <div className="overflow-x-auto">
+        <StreamSurface>
           <MaintenanceTable
             items={items}
             loading={loading}
@@ -123,7 +129,7 @@ export function MaintenancePage() {
               setModal({ type: "deactivate", maintenance: row })
             }
           />
-        </div>
+        </StreamSurface>
       )}
 
       <MaintenanceFormModal
@@ -155,6 +161,6 @@ export function MaintenancePage() {
         danger
         loading={deactivating}
       />
-    </div>
+    </ModeFrame>
   );
 }

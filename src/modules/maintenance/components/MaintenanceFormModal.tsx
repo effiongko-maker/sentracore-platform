@@ -25,6 +25,7 @@ import {
   MAINTENANCE_TYPES,
 } from "../constants";
 import { MaintenanceService } from "../services/MaintenanceService";
+import { requestMaintenance } from "../actions/requestMaintenance";
 import {
   applyWorkOrderRule,
   labelize,
@@ -186,11 +187,14 @@ export function MaintenanceFormModal({
           description: `${payload.title} has been saved.`,
         });
       } else {
-        await MaintenanceService.createMaintenance(payload);
+        const result = await requestMaintenance(payload);
+        if (!result.success) {
+          throw new Error(result.error.message);
+        }
         toast({
           type: "success",
           title: "Maintenance created",
-          description: `${payload.title} has been logged.`,
+          description: `${result.data.title} has been logged.`,
         });
       }
 

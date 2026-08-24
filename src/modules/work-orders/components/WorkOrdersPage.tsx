@@ -1,9 +1,9 @@
 "use client";
 
-import { ClipboardList, Plus } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 import { useState } from "react";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { Button } from "@/components/ui/Button";
+import { ModeFrame, StreamSurface } from "@/components/platform";
+import { OperationalPageHeader } from "@/components/operational";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
@@ -67,56 +67,59 @@ export function WorkOrdersPage() {
   }
 
   return (
-    <div>
-      <PageHeader
-        title="Work Orders"
-        description="Create, assign, and track operational work."
-        actions={
-          <Button onClick={() => setModal({ type: "create" })}>
-            <Plus className="h-4 w-4" />
-            New Work Order
-          </Button>
-        }
-      />
-
-      <WorkOrdersToolbar
-        search={search}
-        onSearchChange={setSearch}
-        status={status}
-        onStatusChange={setStatus}
-        priority={priority}
-        onPriorityChange={setPriority}
-        facilityId={facilityId}
-        onFacilityIdChange={setFacilityId}
-        assignedToUserId={assignedToUserId}
-        onAssignedToUserIdChange={setAssignedToUserId}
-      />
-
-      {error ? (
-        <EmptyState
-          icon={ClipboardList}
-          title="Couldn’t load work orders"
-          description={error}
-          actionLabel="Retry"
-          onAction={reload}
+    <ModeFrame mode="execute">
+      <div className="op-page">
+        <OperationalPageHeader
+          title="Work Orders"
+          description="Plan, assign, and track work moving through the organisation."
+          countValue={total}
+          countLabel="Active"
+          actionLabel="New work order"
+          onAction={() => setModal({ type: "create" })}
+          loading={loading}
         />
-      ) : (
-        <div className="overflow-x-auto">
-          <WorkOrdersTable
-            workOrders={workOrders}
-            loading={loading}
-            page={page}
-            totalPages={totalPages}
-            total={total}
-            onPageChange={setPage}
-            onView={(workOrder) => setModal({ type: "view", workOrder })}
-            onEdit={(workOrder) => setModal({ type: "edit", workOrder })}
-            onDeactivate={(workOrder) =>
-              setModal({ type: "deactivate", workOrder })
-            }
+
+        <WorkOrdersToolbar
+          search={search}
+          onSearchChange={setSearch}
+          status={status}
+          onStatusChange={setStatus}
+          priority={priority}
+          onPriorityChange={setPriority}
+          facilityId={facilityId}
+          onFacilityIdChange={setFacilityId}
+          assignedToUserId={assignedToUserId}
+          onAssignedToUserIdChange={setAssignedToUserId}
+          total={total}
+          loading={loading}
+        />
+
+        {error ? (
+          <EmptyState
+            icon={ClipboardList}
+            title="Couldn’t load work orders"
+            description={error}
+            actionLabel="Retry"
+            onAction={reload}
           />
-        </div>
-      )}
+        ) : (
+          <StreamSurface>
+            <WorkOrdersTable
+              workOrders={workOrders}
+              loading={loading}
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              onPageChange={setPage}
+              onView={(workOrder) => setModal({ type: "view", workOrder })}
+              onEdit={(workOrder) => setModal({ type: "edit", workOrder })}
+              onDeactivate={(workOrder) =>
+                setModal({ type: "deactivate", workOrder })
+              }
+            />
+          </StreamSurface>
+        )}
+      </div>
 
       <WorkOrderFormModal
         open={modal.type === "create" || modal.type === "edit"}
@@ -147,6 +150,6 @@ export function WorkOrdersPage() {
         danger
         loading={deactivating}
       />
-    </div>
+    </ModeFrame>
   );
 }
