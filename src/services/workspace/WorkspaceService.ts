@@ -272,42 +272,53 @@ export const WorkspaceService = {
   async getWorkspace(): Promise<WorkspaceSnapshot> {
     const asOf = new Date().toISOString();
 
-    const [
-      currentUser,
-      workOrdersPage,
-      incidentsPage,
-      maintenancePage,
-      facilitiesPage,
-    ] = await Promise.all([
-      UserService.getCurrentUser().catch(() => null),
-      WorkOrderService.listWorkOrders({ page: 1, pageSize: 50 }).catch(
-        () => ({ data: [] as WorkOrder[] })
-      ),
-      IncidentService.listIncidents({ page: 1, pageSize: 50 }).catch(
-        () => ({ data: [] as Incident[] })
-      ),
-      MaintenanceService.listMaintenance({ page: 1, pageSize: 50 }).catch(
-        () => ({ data: [] as Maintenance[] })
-      ),
-      FacilityService.listFacilities({ page: 1, pageSize: 200 }).catch(
-        () => ({ data: [] as Array<{ id: string; name: string }> })
-      ),
-    ]);
+    const [currentUser, workOrdersResult, incidentsResult, maintenanceResult, facilitiesResult] =
+      await Promise.all([
+        UserService.getCurrentUser().catch(() => null),
+        WorkOrderService.listWorkOrders({ page: 1, pageSize: 25 })
+          .then((page) => ({ ok: true as const, data: page.data ?? [] }))
+          .catch(() => ({ ok: false as const, data: [] as WorkOrder[] })),
+        IncidentService.listIncidents({ page: 1, pageSize: 25 })
+          .then((page) => ({ ok: true as const, data: page.data ?? [] }))
+          .catch(() => ({ ok: false as const, data: [] as Incident[] })),
+        MaintenanceService.listMaintenance({ page: 1, pageSize: 25 })
+          .then((page) => ({ ok: true as const, data: page.data ?? [] }))
+          .catch(() => ({ ok: false as const, data: [] as Maintenance[] })),
+        FacilityService.listFacilities({ page: 1, pageSize: 50 })
+          .then((page) => ({
+            ok: true as const,
+            data: page.data ?? ([] as Array<{ id: string; name: string }>),
+          }))
+          .catch(() => ({
+            ok: false as const,
+            data: [] as Array<{ id: string; name: string }>,
+          })),
+      ]);
 
-    const workOrders = workOrdersPage.data ?? [];
-    const incidents = incidentsPage.data ?? [];
-    const maintenance = maintenancePage.data ?? [];
+    const workOrders = workOrdersResult.data;
+    const incidents = incidentsResult.data;
+    const maintenance = maintenanceResult.data;
+    const coreFailed =
+      !workOrdersResult.ok ||
+      !incidentsResult.ok ||
+      !maintenanceResult.ok;
+
     const userId = currentUser?.id;
     const facilityNameById = new Map(
-      (facilitiesPage.data ?? []).map((facility) => [
-        facility.id,
-        facility.name,
-      ])
+      facilitiesResult.data.map((facility) => [facility.id, facility.name])
     );
     const activity = buildActivity(workOrders, incidents, maintenance);
     const pulse = buildPulse(incidents, maintenance, workOrders, activity);
-    const operationalState = buildOperationalState(pulse);
     const attention = buildAttentionModel(incidents, facilityNameById);
+
+    const operationalState: OperationalState = coreFailed
+      ? {
+          tone: "degraded",
+          statement: "Operational overview could not be fully loaded.",
+          subtext:
+            "Some live operational data is temporarily unavailable. Retry this page or open a module directly.",
+        }
+      : buildOperationalState(pulse);
 
     return {
       asOf,

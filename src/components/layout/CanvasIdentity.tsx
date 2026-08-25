@@ -17,10 +17,10 @@ export function CanvasIdentity() {
   const inOperations = isOperationsPath(pathname);
 
   const line = onPlatform
-    ? "SentraCore · Enterprise Operating Platform"
+    ? "SentraCore · Operating System"
     : inOperations
       ? "SentraCore · Operations Management Platform"
-      : "SentraCore · Enterprise Operating Platform";
+      : "SentraCore · Operating System";
 
   return (
     <footer className="os-canvas-identity print:hidden">

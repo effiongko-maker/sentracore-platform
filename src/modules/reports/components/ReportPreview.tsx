@@ -455,7 +455,7 @@ export function ReportPreview({
             <MetricGrid metrics={report.assets.metrics} />
             <div className="mt-6">
               <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">
-                Asset register (sample)
+                Asset register
               </h3>
               <DataTable table={report.assets.table} />
             </div>

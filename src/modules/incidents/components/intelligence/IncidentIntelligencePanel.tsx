@@ -18,7 +18,7 @@ type PanelState =
   | { phase: "error"; message: string };
 
 const UNAVAILABLE_MESSAGE =
-  "Intelligence is not available for this incident.";
+  "SentraCore Intelligence is still preparing analysis for this incident.";
 
 function messageForFailure(code: string, message: string): {
   phase: "unavailable" | "error";

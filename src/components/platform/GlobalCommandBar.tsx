@@ -55,6 +55,11 @@ export function GlobalCommandBar() {
               <span className="text-[var(--os-ink-faint)]">/</span>
               <span className="os-command-module truncate">{module.label}</span>
             </>
+          ) : layer === "platform" ? (
+            <>
+              <span className="text-[var(--os-ink-faint)]">/</span>
+              <span className="os-command-module truncate">Platform Home</span>
+            </>
           ) : null}
         </div>
       </div>
@@ -86,7 +91,7 @@ export function GlobalCommandBar() {
           type="button"
           disabled={pending}
           onClick={() => startTransition(() => signOut())}
-          className="hidden text-xs font-medium text-[var(--os-ink-faint)] hover:text-[var(--os-ink-soft)] lg:inline"
+          className="text-xs font-medium text-[var(--os-ink-faint)] hover:text-[var(--os-ink-soft)]"
         >
           Sign out
         </button>

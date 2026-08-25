@@ -96,7 +96,7 @@ export const OPERATING_LAYERS: OperatingLayer[] = [
         label: "People",
         href: "/users",
         icon: Users,
-        title: "Users",
+        title: "People",
         description: "Roles and access",
       }),
       fm({

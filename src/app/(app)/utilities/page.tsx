@@ -1,18 +1,6 @@
-import type { Metadata } from "next";
-import { Zap } from "lucide-react";
-import { ModulePlaceholder } from "@/components/layout/ModulePlaceholder";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Utilities",
-};
-
+/** Not in the active product surface for demo — keep route from dead-ending. */
 export default function UtilitiesPage() {
-  return (
-    <ModulePlaceholder
-      title="Utilities"
-      description="Monitor energy, water, and utility consumption."
-      icon={Zap}
-      moduleName="Utilities"
-    />
-  );
+  redirect("/operations");
 }

@@ -31,7 +31,7 @@ export default async function LoginPage({
             </span>
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Sign in to your organisation&apos;s operating environment
+            Sign in to SentraCore
           </p>
         </div>
 

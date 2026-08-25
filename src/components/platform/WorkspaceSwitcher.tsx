@@ -7,6 +7,8 @@ import { Check, ChevronDown } from "lucide-react";
 import {
   PLATFORM_WORKSPACES,
   getActiveWorkspace,
+  isPlatformHomePath,
+  isWorkspacePreviewPath,
   type PlatformWorkspace,
 } from "@/lib/platform/workspaces";
 import { cn } from "@/lib/utils";
@@ -27,6 +29,8 @@ export function WorkspaceSwitcher({
   const rootRef = useRef<HTMLDivElement>(null);
   const listId = useId();
   const active = getActiveWorkspace();
+  const onPlatformLevel =
+    isPlatformHomePath(pathname) || isWorkspacePreviewPath(pathname);
 
   useEffect(() => {
     if (!open) return;
@@ -56,8 +60,12 @@ export function WorkspaceSwitcher({
         onClick={() => setOpen((value) => !value)}
       >
         <span className="sc-ws-switcher-copy">
-          <span className="sc-ws-switcher-label">{active.label}</span>
-          <span className="sc-ws-switcher-meta">Active workspace</span>
+          <span className="sc-ws-switcher-label">
+            {onPlatformLevel ? "Platform" : active.label}
+          </span>
+          <span className="sc-ws-switcher-meta">
+            {onPlatformLevel ? "Select workspace" : "Active workspace"}
+          </span>
         </span>
         <ChevronDown
           className={cn("sc-ws-switcher-chevron", open && "sc-ws-switcher-chevron-open")}

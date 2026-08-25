@@ -55,7 +55,7 @@ export function ViewIncidentModal({
       open={open}
       onClose={onClose}
       title={incident.title}
-      description={incident.id}
+      description={`${labelize(incident.severity)} · ${labelize(incident.status)}`}
       size="xl"
       footer={
         <>

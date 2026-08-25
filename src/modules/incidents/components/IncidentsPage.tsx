@@ -76,7 +76,7 @@ export function IncidentsPage() {
           title="Incidents"
           description="Reported events and issues requiring review, response, or follow-up."
           countValue={total}
-          countLabel="Open"
+          countLabel="In view"
           actionLabel="Report incident"
           onAction={() => setModal({ type: "create" })}
           loading={loading}

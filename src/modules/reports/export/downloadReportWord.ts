@@ -228,7 +228,7 @@ export async function downloadReportWord(
     children.push(heading(sectionTitle(report, "assets", "Asset Summary")));
     children.push(body(report.assets.narrative));
     children.push(...metricLines(report.assets.metrics));
-    children.push(label("Asset register (sample)"));
+    children.push(label("Asset register"));
     children.push(...dataTable(report.assets.table));
   }
 

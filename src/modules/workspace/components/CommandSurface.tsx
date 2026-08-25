@@ -247,7 +247,11 @@ export function CommandSurface({ snapshot }: { snapshot: WorkspaceSnapshot }) {
     <ModeFrame mode="command">
       <CommandStatement
         headline={operationalState.statement}
-        tone={operationalState.tone}
+        tone={
+          operationalState.tone === "degraded"
+            ? "attention"
+            : operationalState.tone
+        }
         signalValue={signal.value}
         signalPhrase={signal.phrase}
         meta={metaParts.join(" · ")}

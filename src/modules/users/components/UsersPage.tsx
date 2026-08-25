@@ -71,7 +71,7 @@ export function UsersPage() {
   return (
     <ModeFrame mode="organise">
       <ExploreHeader
-        title="Users"
+        title="People"
         description="People across the operation — roles, access, and facility relationships."
         territoryNote={`${loading ? "—" : total} people in view`}
         actions={

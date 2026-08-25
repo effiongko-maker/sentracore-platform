@@ -73,7 +73,7 @@ export function WorkOrdersPage() {
           title="Work Orders"
           description="Plan, assign, and track work moving through the organisation."
           countValue={total}
-          countLabel="Active"
+          countLabel="In view"
           actionLabel="New work order"
           onAction={() => setModal({ type: "create" })}
           loading={loading}

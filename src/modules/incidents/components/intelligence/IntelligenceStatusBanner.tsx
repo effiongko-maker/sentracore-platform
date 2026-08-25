@@ -26,8 +26,9 @@ const STATUS_COPY: Record<
     variant: "info",
   },
   unavailable: {
-    title: "Intelligence unavailable",
-    description: "Intelligence is not available for this incident.",
+    title: "Still analysing",
+    description:
+      "SentraCore Intelligence has not finished assessing this incident yet.",
     variant: "neutral",
   },
 };

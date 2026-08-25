@@ -29,13 +29,13 @@ export const OPERATIONAL_EVENT_CATALOG: OperationalEventTypeDefinition[] = [
   {
     eventType: OperationalEventTypes.FACILITY_INCIDENT_REPORTED,
     domain: "facility",
-    description: "An incident was reported in Facility Management.",
+    description: "An incident was reported in Operations Management.",
     defaultEntityType: "incident",
   },
   {
     eventType: OperationalEventTypes.FACILITY_MAINTENANCE_REQUESTED,
     domain: "facility",
-    description: "A maintenance request was created in Facility Management.",
+    description: "A maintenance request was created in Operations Management.",
     defaultEntityType: "maintenance_request",
   },
   {

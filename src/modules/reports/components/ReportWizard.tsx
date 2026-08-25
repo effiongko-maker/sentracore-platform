@@ -315,7 +315,7 @@ function StepGenerate({
       <div className="rp-panel">
         <p className="rp-micro">Generation summary</p>
         <p className="mt-2 text-sm text-[var(--rp-muted)]">
-          Content will be assembled from the existing Reporting Snapshot only.
+          Content will be assembled from current operational records.
         </p>
 
         <dl className="rp-summary-grid mt-5">

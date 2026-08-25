@@ -940,7 +940,7 @@ export function assembleOrganisationIntelligence(input: {
       state: "unavailable",
       supported: false,
       notes: [
-        "Facility management is not enabled for this organisation.",
+        "Operations Management is not enabled for this organisation.",
       ],
     });
   }
@@ -1485,7 +1485,7 @@ export async function loadOrganisationIntelligence(options: {
       state: "unavailable",
       supported: false,
       notes: [
-        "Facility management is not enabled for this organisation.",
+        "Operations Management is not enabled for this organisation.",
       ],
     });
   }

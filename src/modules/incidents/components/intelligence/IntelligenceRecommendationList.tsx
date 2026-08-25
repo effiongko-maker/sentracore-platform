@@ -168,7 +168,7 @@ export function IntelligenceRecommendationList({
           </div>
         ) : (
           <p className="text-sm text-muted">
-            No recommendations have been generated.
+            No recommended actions yet for this incident.
           </p>
         )
       ) : (

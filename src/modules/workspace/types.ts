@@ -52,7 +52,7 @@ export interface WorkspaceActivityItem {
   at: string;
 }
 
-export type OperationalStateTone = "stable" | "attention" | "critical";
+export type OperationalStateTone = "stable" | "attention" | "critical" | "degraded";
 
 export interface OperationalState {
   statement: string;

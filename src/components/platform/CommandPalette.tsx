@@ -35,10 +35,10 @@ const CREATE_ACTIONS: PaletteAction[] = [
   },
   {
     id: "create-work-order",
-    label: "New work order",
-    description: "Execute",
+    label: "Go to Work Orders",
+    description: "Work",
     href: "/work-orders",
-    group: "Create",
+    group: "Navigate",
   },
 ];
 

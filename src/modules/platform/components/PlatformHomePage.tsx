@@ -48,6 +48,7 @@ function FutureEnvironment({ workspace }: { workspace: PlatformWorkspace }) {
 
 export function PlatformHomePage() {
   const [pulse, setPulse] = useState<Pulse | null>(null);
+  const [pulseReady, setPulseReady] = useState(false);
   const active = getActiveWorkspace();
   const others = PLATFORM_WORKSPACES.filter((w) => w.status !== "active");
 
@@ -55,15 +56,23 @@ export function PlatformHomePage() {
     let cancelled = false;
     WorkspaceService.getWorkspace()
       .then((snapshot) => {
-        if (cancelled || !snapshot?.pulse) return;
-        setPulse({
-          openIncidents: snapshot.pulse.openIncidents,
-          openMaintenance: snapshot.pulse.openMaintenance,
-          openWorkOrders: snapshot.pulse.openWorkOrders,
-        });
+        if (cancelled) return;
+        if (snapshot.operationalState.tone === "degraded") {
+          setPulse(null);
+        } else if (snapshot?.pulse) {
+          setPulse({
+            openIncidents: snapshot.pulse.openIncidents,
+            openMaintenance: snapshot.pulse.openMaintenance,
+            openWorkOrders: snapshot.pulse.openWorkOrders,
+          });
+        }
+        setPulseReady(true);
       })
       .catch(() => {
-        /* keep quiet defaults */
+        if (!cancelled) {
+          setPulse(null);
+          setPulseReady(true);
+        }
       });
     return () => {
       cancelled = true;
@@ -95,26 +104,22 @@ export function PlatformHomePage() {
           </h2>
           <p className="sc-ph-primary-desc">{active.description}</p>
 
-          <div className="sc-ph-metrics" aria-label="Operational summary">
-            <div className="sc-ph-metric">
-              <p className="sc-ph-metric-value">
-                {pulse?.openIncidents ?? "—"}
-              </p>
-              <p className="sc-ph-metric-label">Open incidents</p>
+          {pulseReady && pulse ? (
+            <div className="sc-ph-metrics" aria-label="Operational summary">
+              <div className="sc-ph-metric">
+                <p className="sc-ph-metric-value">{pulse.openIncidents}</p>
+                <p className="sc-ph-metric-label">Open incidents</p>
+              </div>
+              <div className="sc-ph-metric">
+                <p className="sc-ph-metric-value">{pulse.openMaintenance}</p>
+                <p className="sc-ph-metric-label">Maintenance</p>
+              </div>
+              <div className="sc-ph-metric">
+                <p className="sc-ph-metric-value">{pulse.openWorkOrders}</p>
+                <p className="sc-ph-metric-label">Work orders</p>
+              </div>
             </div>
-            <div className="sc-ph-metric">
-              <p className="sc-ph-metric-value">
-                {pulse?.openMaintenance ?? "—"}
-              </p>
-              <p className="sc-ph-metric-label">Maintenance</p>
-            </div>
-            <div className="sc-ph-metric">
-              <p className="sc-ph-metric-value">
-                {pulse?.openWorkOrders ?? "—"}
-              </p>
-              <p className="sc-ph-metric-label">Work orders</p>
-            </div>
-          </div>
+          ) : null}
         </div>
 
         <div className="sc-ph-primary-action">

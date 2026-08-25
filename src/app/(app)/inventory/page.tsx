@@ -1,18 +1,6 @@
-import type { Metadata } from "next";
-import { Boxes } from "lucide-react";
-import { ModulePlaceholder } from "@/components/layout/ModulePlaceholder";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Inventory",
-};
-
+/** Not in the active product surface for demo — keep route from dead-ending. */
 export default function InventoryPage() {
-  return (
-    <ModulePlaceholder
-      title="Inventory"
-      description="Stock levels, parts, and consumable tracking."
-      icon={Boxes}
-      moduleName="Inventory"
-    />
-  );
+  redirect("/operations");
 }
