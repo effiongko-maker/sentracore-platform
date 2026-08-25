@@ -1,13 +1,12 @@
 "use client";
 
-import { Database, Plus } from "lucide-react";
+import { Database } from "lucide-react";
 import { useState } from "react";
 import {
   ExploreHeader,
   ModeFrame,
   StreamSurface,
 } from "@/components/platform";
-import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
@@ -32,11 +31,20 @@ export function MasterDataPage() {
     setSearch,
     status,
     setStatus,
+    facilityId,
+    setFacilityId,
+    buildingId,
+    setBuildingId,
+    floorId,
+    setFloorId,
+    category,
+    setCategory,
     page,
     setPage,
     totalPages,
     total,
     reload,
+    clearAll,
     deactivateItem,
   } = useMasterData(entity);
 
@@ -76,12 +84,6 @@ export function MasterDataPage() {
         title="Master data"
         description="Reference structure — departments, buildings, floors, rooms, and vendors that define the operation."
         territoryNote={`${loading ? "—" : total} ${activeMeta?.label.toLowerCase() ?? "records"} in view`}
-        actions={
-          <Button onClick={() => setModal({ type: "create" })}>
-            <Plus className="h-4 w-4" />
-            New {singular.toLowerCase()}
-          </Button>
-        }
       />
 
       <div className="mb-5 flex flex-wrap gap-2">
@@ -107,10 +109,24 @@ export function MasterDataPage() {
       ) : null}
 
       <MasterDataToolbar
+        entity={entity}
         search={search}
         onSearchChange={setSearch}
         status={status}
         onStatusChange={setStatus}
+        facilityId={facilityId}
+        onFacilityIdChange={setFacilityId}
+        buildingId={buildingId}
+        onBuildingIdChange={setBuildingId}
+        floorId={floorId}
+        onFloorIdChange={setFloorId}
+        category={category}
+        onCategoryChange={setCategory}
+        total={total}
+        loading={loading}
+        onClearAll={clearAll}
+        onCreate={() => setModal({ type: "create" })}
+        createLabel={`New ${singular.toLowerCase()}`}
       />
 
       {error ? (

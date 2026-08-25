@@ -17,7 +17,7 @@ import {
   ASSET_STATUSES,
 } from "../constants";
 import { AssetService } from "../services/AssetService";
-import { labelize, toCreateFormValues } from "../utils";
+import { labelize, resolveFacilityDisplayName, toCreateFormValues } from "../utils";
 import type {
   Asset,
   AssetCategory,
@@ -33,18 +33,6 @@ interface AssetFormModalProps {
   asset?: Asset | null;
   onClose: () => void;
   onSaved?: () => void | Promise<void>;
-}
-
-function resolveFacilityId(
-  value: string,
-  facilities: Array<{ id: string; name: string }>
-): string {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  const match = facilities.find(
-    (item) => item.id === trimmed || item.name === trimmed
-  );
-  return match?.id ?? trimmed;
 }
 
 export function AssetFormModal({
@@ -68,11 +56,11 @@ export function AssetFormModal({
     setErrors({});
   }, [open, mode, asset]);
 
-  // Canonicalise legacy name-stored facility values to facility ids once options load.
+  // Sheet stores facility display names; normalise legacy id-stored values once options load.
   useEffect(() => {
     if (!open || facilities.length === 0) return;
     setForm((current) => {
-      const resolved = resolveFacilityId(current.facility, facilities);
+      const resolved = resolveFacilityDisplayName(current.facility, facilities);
       if (!resolved || resolved === current.facility) return current;
       return { ...current, facility: resolved };
     });
@@ -102,8 +90,8 @@ export function AssetFormModal({
 
     setSaving(true);
     try {
-      const facilityId = resolveFacilityId(form.facility, facilities);
-      if (!facilityId) {
+      const facilityName = resolveFacilityDisplayName(form.facility, facilities);
+      if (!facilityName) {
         setErrors((current) => ({
           ...current,
           facility: "Facility is required",
@@ -114,62 +102,28 @@ export function AssetFormModal({
       const payload: CreateAssetInput = {
         ...form,
         name: form.name.trim(),
-        facility: facilityId,
+        facility: facilityName,
         manufacturer: form.manufacturer.trim(),
         model: form.model.trim(),
         serialNumber: form.serialNumber.trim(),
-        purchaseDate: form.purchaseDate.trim(),
+        installDate: form.installDate.trim(),
         warrantyExpiry: form.warrantyExpiry.trim(),
+        oemId: form.oemId.trim(),
         assignedTo: form.assignedTo.trim(),
-        description: form.description?.trim() || undefined,
-        // Criticality is assessed after registration, not during create.
         criticality:
           mode === "edit" ? form.criticality : ("unassessed" as const),
       };
-      delete payload.assetTag;
 
       if (mode === "edit" && asset) {
         if (!asset.id?.trim()) {
           throw new Error("Cannot update asset: missing asset id.");
         }
-
-        const selectedFacility = facilities.find(
-          (item) => item.id === facilityId || item.name === facilityId
-        );
-
-        // TEMP DIAG — facility persistence investigation
-        console.info("[asset-diag][ui] submit edit", {
-          assetId: asset.id,
-          assetName: asset.name,
-          previousFacility: asset.facility,
-          selectedFacilityId: facilityId,
-          selectedFacilityName: selectedFacility?.name ?? "(unresolved)",
-          clientExecHint: process.env.NEXT_PUBLIC_API_URL ?? "(unset)",
-        });
-
-        const result = await AssetService.updateAssetWithDiagnostics(
-          asset.id,
-          payload
-        );
-
-        console.info("[asset-diag][ui] update evidence", result);
-
-        if (result.path !== "persisted") {
-          throw new Error(
-            `Update not confirmed (${result.path}). ${result.evidence.join(" · ")}`
-          );
-        }
-
+        await AssetService.updateAsset(asset.id, payload);
         await onSaved?.();
-
-        const listedMatch =
-          result.evidence.find((line) => line.startsWith("list.facility=")) ??
-          "";
-
         toast({
           type: "success",
           title: "Asset updated",
-          description: `${payload.name} saved. Facility ${result.asset.facility}. ${listedMatch}`,
+          description: `${payload.name} has been saved.`,
         });
       } else {
         await AssetService.createAsset(payload);
@@ -196,10 +150,12 @@ export function AssetFormModal({
   }
 
   const isEdit = mode === "edit";
-  const facilitySelectValue = resolveFacilityId(form.facility, facilities);
+  const facilitySelectValue = resolveFacilityDisplayName(
+    form.facility,
+    facilities
+  );
   const facilityKnown = facilities.some(
-    (item) =>
-      item.id === facilitySelectValue || item.name === facilitySelectValue
+    (item) => item.name === facilitySelectValue
   );
 
   return (
@@ -212,7 +168,7 @@ export function AssetFormModal({
       description={
         isEdit
           ? "Update asset details, assignment, and operational status."
-          : "Register a new asset. The asset number is assigned automatically."
+          : "Register a new asset. The asset ID is assigned automatically."
       }
       size="lg"
       footer={
@@ -249,14 +205,14 @@ export function AssetFormModal({
 
         {isEdit && asset ? (
           <FormField
-            label="Asset number"
-            htmlFor="asset-tag"
+            label="Asset ID"
+            htmlFor="asset-id"
             hint="Assigned automatically. Cannot be changed."
           >
             <input
-              id="asset-tag"
+              id="asset-id"
               className={inputClassName}
-              value={asset.assetTag || asset.id}
+              value={asset.id}
               disabled
               readOnly
             />
@@ -293,7 +249,7 @@ export function AssetFormModal({
             onChange={(event) =>
               updateField(
                 "facility",
-                resolveFacilityId(event.target.value, facilities)
+                resolveFacilityDisplayName(event.target.value, facilities)
               )
             }
             disabled={facilitiesLoading}
@@ -305,7 +261,7 @@ export function AssetFormModal({
               <option value={facilitySelectValue}>{facilitySelectValue}</option>
             ) : null}
             {facilities.map((item) => (
-              <option key={item.id} value={item.id}>
+              <option key={item.id} value={item.name}>
                 {item.name}
               </option>
             ))}
@@ -351,6 +307,16 @@ export function AssetFormModal({
           />
         </FormField>
 
+        <FormField label="OEM ID" htmlFor="asset-oem">
+          <input
+            id="asset-oem"
+            className={inputClassName}
+            placeholder="OEM reference"
+            value={form.oemId}
+            onChange={(event) => updateField("oemId", event.target.value)}
+          />
+        </FormField>
+
         <FormField label="Assigned to" htmlFor="asset-assigned">
           <input
             id="asset-assigned"
@@ -361,14 +327,14 @@ export function AssetFormModal({
           />
         </FormField>
 
-        <FormField label="Purchase date" htmlFor="asset-purchase">
+        <FormField label="Install date" htmlFor="asset-install">
           <input
-            id="asset-purchase"
+            id="asset-install"
             type="date"
             className={inputClassName}
-            value={form.purchaseDate}
+            value={form.installDate}
             onChange={(event) =>
-              updateField("purchaseDate", event.target.value)
+              updateField("installDate", event.target.value)
             }
           />
         </FormField>
@@ -440,26 +406,7 @@ export function AssetFormModal({
             </select>
           </FormField>
         ) : null}
-
-        <FormField
-          label="Description"
-          htmlFor="asset-description"
-          className="sm:col-span-2"
-        >
-          <textarea
-            id="asset-description"
-            className={cnTextarea()}
-            rows={3}
-            placeholder="Optional asset notes"
-            value={form.description ?? ""}
-            onChange={(event) => updateField("description", event.target.value)}
-          />
-        </FormField>
       </form>
     </Modal>
   );
-}
-
-function cnTextarea() {
-  return `${inputClassName} h-auto min-h-[88px] py-2.5`;
 }

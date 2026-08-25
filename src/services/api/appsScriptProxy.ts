@@ -76,6 +76,21 @@ export async function postToAppsScript(
         : body.payload,
   });
 
+  // TEMP DIAG — user create / deployment tracing
+  if ((body.action ?? defaults.action) === "create" && (body.resource ?? defaults.resource) === "users") {
+    console.info(`[${logPrefix}] users-create-request`, {
+      url: summarizeAppsScriptUrl(APPS_SCRIPT_URL),
+      clientRequestId:
+        body.payload && typeof body.payload === "object"
+          ? (body.payload as Record<string, unknown>)._clientRequestId
+          : undefined,
+      email:
+        body.payload && typeof body.payload === "object"
+          ? (body.payload as Record<string, unknown>).email
+          : undefined,
+    });
+  }
+
   const response = await fetch(APPS_SCRIPT_URL, {
     method: "POST",
     headers: {

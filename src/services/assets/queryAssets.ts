@@ -7,11 +7,16 @@ function normalize(value: unknown): string {
     .toLowerCase();
 }
 
-function compareCreatedAt(a: Asset, b: Asset): number {
-  const aAt = a.createdAt || a.updatedAt || "";
-  const bAt = b.createdAt || b.updatedAt || "";
-  if (aAt === bAt) return b.id.localeCompare(a.id);
-  return aAt < bAt ? -1 : 1;
+function parseAssetSeq(id: string): number {
+  const match = id.match(/AST-(\d+)/i);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+function compareAssetId(a: Asset, b: Asset): number {
+  const aSeq = parseAssetSeq(a.id);
+  const bSeq = parseAssetSeq(b.id);
+  if (aSeq === bSeq) return a.id.localeCompare(b.id);
+  return aSeq - bSeq;
 }
 
 function compareName(a: Asset, b: Asset): number {
@@ -22,7 +27,7 @@ function compareName(a: Asset, b: Asset): number {
   return a.id.localeCompare(b.id);
 }
 
-/** Newest created first; id descending as stable tie-breaker. */
+/** Highest Asset ID first; id descending as stable tie-breaker. */
 export function sortAssetsNewestFirst(assets: Asset[]): Asset[] {
   return sortAssets(assets, "newest");
 }
@@ -34,20 +39,20 @@ export function sortAssets(
   const next = [...assets];
   switch (sort) {
     case "oldest":
-      return next.sort((a, b) => compareCreatedAt(a, b));
+      return next.sort((a, b) => compareAssetId(a, b));
     case "name_asc":
       return next.sort((a, b) => compareName(a, b));
     case "name_desc":
       return next.sort((a, b) => compareName(b, a));
     case "newest":
     default:
-      return next.sort((a, b) => compareCreatedAt(b, a));
+      return next.sort((a, b) => compareAssetId(b, a));
   }
 }
 
 /**
- * Facility values on assets may be an id or a display name.
- * Match the active filter against either form.
+ * Facility values on assets are stored as display names.
+ * Match the active filter against the stored name or a facility id alias.
  */
 export function assetMatchesFacility(
   assetFacility: string,
@@ -83,13 +88,14 @@ export function assetMatchesSearch(
 
   const haystack = [
     asset.name,
-    asset.assetTag,
     asset.id,
     asset.facility,
     facilityLabel,
     asset.serialNumber,
     asset.manufacturer,
     asset.model,
+    asset.oemId,
+    asset.assignedTo,
   ]
     .map(normalize)
     .join(" ");

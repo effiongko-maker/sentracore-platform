@@ -3,9 +3,6 @@
  *
  * Business rules for Users.
  * Never talks to the spreadsheet directly — only UserRepository.
- *
- * Soft-deactivate only — never delete rows.
- * After create / update / deactivate, refreshes REPORTING_SNAPSHOT users section.
  */
 
 var UserService = (function () {
@@ -30,29 +27,69 @@ var UserService = (function () {
         String(row.phone || "")
           .toLowerCase()
           .indexOf(search) !== -1 ||
+        String(row.role || "")
+          .toLowerCase()
+          .indexOf(search) !== -1 ||
         String(row.specialization || "")
           .toLowerCase()
           .indexOf(search) !== -1 ||
         String(row.facility || "")
+          .toLowerCase()
+          .indexOf(search) !== -1 ||
+        String(row.id || "")
           .toLowerCase()
           .indexOf(search) !== -1;
 
       var matchesStatus =
         !status ||
         status === "all" ||
-        String(row.status).toLowerCase() === String(status).toLowerCase();
+        String(row.status || "")
+          .toLowerCase() === String(status).toLowerCase();
 
       var matchesRole =
         !role ||
         role === "all" ||
-        String(row.role).toLowerCase() === String(role).toLowerCase();
+        String(row.role || "")
+          .toLowerCase() === String(role).toLowerCase();
 
+      var rowFacility = String(row.facility || "");
       var matchesFacility =
         !facility ||
         facility === "all" ||
-        String(row.facility) === String(facility);
+        rowFacility === String(facility) ||
+        (rowFacility && rowFacility !== "-" &&
+          String(rowFacility).toLowerCase() === String(facility).toLowerCase());
 
-      return matchesSearch && matchesStatus && matchesRole && matchesFacility;
+      if (
+        !matchesFacility &&
+        facility &&
+        facility !== "all" &&
+        typeof FacilityRepository !== "undefined"
+      ) {
+        try {
+          var facilities = FacilityRepository.getAll() || [];
+          var i;
+          for (i = 0; i < facilities.length; i++) {
+            var f = facilities[i];
+            var fid = String(f.id || "");
+            var fname = String(f.name || "");
+            if (
+              (fid === String(facility) || fname === String(facility)) &&
+              (rowFacility === fid ||
+                rowFacility === fname ||
+                String(rowFacility).toLowerCase() ===
+                  String(fname).toLowerCase())
+            ) {
+              matchesFacility = true;
+              break;
+            }
+          }
+        } catch (ignore) {}
+      }
+
+      return (
+        matchesSearch && matchesStatus && matchesRole && matchesFacility
+      );
     });
   }
 
@@ -65,6 +102,7 @@ var UserService = (function () {
 
     var total = rows.length;
     var totalPages = Math.max(1, Math.ceil(total / pageSize));
+    if (page > totalPages) page = totalPages;
     var start = (page - 1) * pageSize;
     var data = rows.slice(start, start + pageSize);
 
@@ -95,6 +133,11 @@ var UserService = (function () {
     if (!payload || !payload.name) throw new Error("User name is required.");
     if (!payload.email) throw new Error("User email is required.");
     var created = UserRepository.create(payload);
+    if (!created || !created.id) {
+      throw new Error(
+        "User create failed: repository returned no record. Check USERS sheet headers."
+      );
+    }
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("users");
     }

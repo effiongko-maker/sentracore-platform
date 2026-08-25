@@ -23,7 +23,7 @@ export function buildQuarterlyReportDocument(
     .filter((a) => a.criticality === "critical" || a.criticality === "high")
     .slice(0, 25)
     .map((a) => ({
-      tag: a.assetTag,
+      id: a.id,
       name: a.name,
       facility: a.facility,
       condition: a.condition,
@@ -125,7 +125,7 @@ export function buildQuarterlyReportDocument(
             ? ["No high/critical assets in scope."]
             : majorAssets
                 .slice(0, 10)
-                .map((a) => `${a.tag} — ${a.name} (${a.condition})`),
+                .map((a) => `${a.id} — ${a.name} (${a.condition})`),
       },
       {
         id: "projects_completed",

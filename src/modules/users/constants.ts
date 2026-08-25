@@ -1,12 +1,18 @@
-import type { UserRole, UserStatus } from "./types";
+import type { UserStatus } from "./types";
+import type { UserSort } from "./types";
 
-export const USER_ROLES: UserRole[] = [
-  "admin",
-  "manager",
-  "supervisor",
-  "technician",
-  "viewer",
-];
+/** Default suggestions for new users — sheet roles are free-form. */
+export const USER_ROLE_SUGGESTIONS = [
+  "CEO",
+  "Facility Manager",
+  "Liaison Officer",
+  "Technical",
+  "Cleaning Supervisor",
+  "Admin",
+  "Manager",
+  "Supervisor",
+  "Technician",
+] as const;
 
 export const USER_STATUSES: UserStatus[] = [
   "active",
@@ -16,11 +22,14 @@ export const USER_STATUSES: UserStatus[] = [
 ];
 
 export const USER_SPECIALIZATIONS = [
+  "Executive",
+  "Admin",
   "Electrical",
   "Mechanical",
   "HVAC",
   "Plumbing",
   "Fire & Safety",
+  "Cleaning",
   "Building Management",
   "General Operations",
   "Administration",
@@ -37,3 +46,9 @@ export const USER_STATUS_VARIANT: Record<
 };
 
 export const USERS_PAGE_SIZE = 8;
+
+export const USER_SORT_OPTIONS: Array<{ value: UserSort; label: string }> = [
+  { value: "newest", label: "Newest" },
+];
+
+export const DEFAULT_USER_SORT: UserSort = "newest";

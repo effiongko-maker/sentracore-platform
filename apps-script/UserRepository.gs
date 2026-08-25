@@ -1,19 +1,36 @@
 /**
  * UserRepository.gs
  *
- * Sheet: existing Users sheet (source of truth — do not recreate).
- * Live headers (row 1), observed from production getAll:
+ * Sheet: USERS (legacy tab alias: Users)
+ *
+ * Canonical header row — map by exact header name ONLY:
  *   User ID | Full Name | Email | Role | Specialization |
  *   Facility Assigned | Current Workload | Phone | Status | Date Added
  *
- * Maps spreadsheet fields → canonical camelCase User model for the API.
- * Soft-deactivate maps to Status=Inactive. Never delete rows.
+ * NEVER write positional arrays. All creates/updates overlay fields by header map.
+ * BUILD: 2026-08-25-users-header-v3
  */
 
 var UserRepository = (function () {
-  var SHEET_CANDIDATES = ["Users", "USERS"];
+  var BUILD_MARKER = "2026-08-25-users-header-v3";
+  var CREATE_COUNT_KEY = "USER_REPO_CREATE_INVOCATIONS";
+  var SHEET_CANDIDATES = ["USERS", "Users"];
 
-  var SHEET_HEADERS = [
+  /** Canonical API field → exact sheet header. */
+  var FIELD_TO_HEADER = {
+    id: "User ID",
+    name: "Full Name",
+    email: "Email",
+    role: "Role",
+    specialization: "Specialization",
+    facility: "Facility Assigned",
+    activeWorkOrders: "Current Workload",
+    phone: "Phone",
+    status: "Status",
+    createdAt: "Date Added",
+  };
+
+  var REQUIRED_HEADERS = [
     "User ID",
     "Full Name",
     "Email",
@@ -26,12 +43,18 @@ var UserRepository = (function () {
     "Date Added",
   ];
 
+  var UPDATEABLE_FIELDS = [
+    "name",
+    "email",
+    "phone",
+    "role",
+    "specialization",
+    "facility",
+    "status",
+  ];
+
   function cellText_(value) {
-    if (value == null || value === "") return "";
-    if (Object.prototype.toString.call(value) === "[object Date]") {
-      return value.toISOString();
-    }
-    return String(value).trim();
+    return SheetFieldUtils.cellText(value);
   }
 
   function cellDateIso_(value) {
@@ -46,7 +69,7 @@ var UserRepository = (function () {
     var value = String(raw || "")
       .toLowerCase()
       .replace(/\s+/g, "_");
-    if (!value) return "pending";
+    if (!value) return "";
     if (value === "active") return "active";
     if (value === "inactive" || value === "deactivated") return "inactive";
     if (value === "suspended") return "suspended";
@@ -55,12 +78,44 @@ var UserRepository = (function () {
   }
 
   function statusToSheet_(status) {
-    var value = String(status || "pending").toLowerCase();
+    var value = String(status || "").toLowerCase();
+    if (!value) return "";
     if (value === "active") return "Active";
     if (value === "inactive") return "Inactive";
     if (value === "suspended") return "Suspended";
     if (value === "pending") return "Pending";
-    return status || "Pending";
+    return status;
+  }
+
+  function parseWorkload_(raw) {
+    var text = cellText_(raw);
+    if (!text || text === "-") return 0;
+    var n = Number(text);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function workloadToSheet_(value) {
+    var n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return "-";
+    return n;
+  }
+
+  /** Preserve leading zeros — store phone as plain text. */
+  function phoneToSheet_(value) {
+    if (value == null || value === "") return "";
+    return String(value).trim();
+  }
+
+  function stripMeta_(payload) {
+    var clean = {};
+    var key;
+    payload = payload || {};
+    for (key in payload) {
+      if (!payload.hasOwnProperty(key)) continue;
+      if (key === "_clientRequestId") continue;
+      clean[key] = payload[key];
+    }
+    return clean;
   }
 
   function getSheet_() {
@@ -73,71 +128,230 @@ var UserRepository = (function () {
       if (sheet) return sheet;
     }
 
-    // Discover by header: first sheet whose row 1 includes "User ID".
     var sheets = ss.getSheets();
     for (i = 0; i < sheets.length; i++) {
       var candidate = sheets[i];
-      var lastCol = candidate.getLastColumn();
-      if (lastCol < 1) continue;
-      var headers = candidate.getRange(1, 1, 1, lastCol).getValues()[0];
-      for (var h = 0; h < headers.length; h++) {
-        if (String(headers[h]).trim() === "User ID") {
-          return candidate;
-        }
+      var headerMap = SheetFieldUtils.getHeaderMap(candidate);
+      if (headerMap[FIELD_TO_HEADER.id] !== undefined) {
+        return candidate;
       }
     }
 
     throw new Error(
-      'Users sheet not found. Expected a sheet with header "User ID".'
+      'USERS sheet not found. Expected tab "USERS" with header "User ID".'
     );
   }
 
-  function rowToSheetObject_(headers, row) {
-    var obj = {};
-    for (var i = 0; i < headers.length; i++) {
-      obj[String(headers[i]).trim()] = row[i];
-    }
-    return obj;
+  function headerMap_(sheet) {
+    return SheetFieldUtils.getHeaderMap(sheet);
   }
 
-  /**
-   * Map live sheet row → canonical User fields used by UserService / frontend.
-   */
+  function assertRequiredHeaders_(headerMap) {
+    var missing = [];
+    var i;
+    for (i = 0; i < REQUIRED_HEADERS.length; i++) {
+      if (headerMap[REQUIRED_HEADERS[i]] === undefined) {
+        missing.push(REQUIRED_HEADERS[i]);
+      }
+    }
+    if (missing.length) {
+      throw new Error(
+        "USERS sheet missing required headers: " + missing.join(", ")
+      );
+    }
+  }
+
+  function readHeader_(sheetRow, header) {
+    return cellText_(sheetRow[header]);
+  }
+
   function toCanonical_(sheetRow) {
-    var dateAdded = cellDateIso_(sheetRow["Date Added"]);
-    var workloadRaw = sheetRow["Current Workload"];
-    var workload = Number(workloadRaw);
-    if (!Number.isFinite(workload)) workload = 0;
+    var dateAdded = cellDateIso_(sheetRow[FIELD_TO_HEADER.createdAt]);
 
     return {
-      id: cellText_(sheetRow["User ID"]),
-      name: cellText_(sheetRow["Full Name"]),
-      email: cellText_(sheetRow["Email"]),
-      phone: cellText_(sheetRow["Phone"]) || undefined,
-      role: cellText_(sheetRow["Role"]) || "viewer",
-      specialization: cellText_(sheetRow["Specialization"]) || "",
-      facility: cellText_(sheetRow["Facility Assigned"]) || "",
-      activeWorkOrders: workload,
-      status: normalizeStatus_(sheetRow["Status"]),
-      lastActive: dateAdded || new Date().toISOString(),
-      createdAt: dateAdded || new Date().toISOString(),
-      updatedAt: dateAdded || new Date().toISOString(),
+      id: readHeader_(sheetRow, FIELD_TO_HEADER.id),
+      name: readHeader_(sheetRow, FIELD_TO_HEADER.name),
+      email: readHeader_(sheetRow, FIELD_TO_HEADER.email),
+      phone: readHeader_(sheetRow, FIELD_TO_HEADER.phone) || undefined,
+      role: readHeader_(sheetRow, FIELD_TO_HEADER.role),
+      specialization: readHeader_(sheetRow, FIELD_TO_HEADER.specialization),
+      facility: readHeader_(sheetRow, FIELD_TO_HEADER.facility),
+      activeWorkOrders: parseWorkload_(
+        sheetRow[FIELD_TO_HEADER.activeWorkOrders]
+      ),
+      status: normalizeStatus_(sheetRow[FIELD_TO_HEADER.status]),
+      lastActive: dateAdded || "",
+      createdAt: dateAdded || "",
     };
   }
 
-  function canonicalToSheetRow_(canonical) {
-    return [
-      canonical.id || "",
-      canonical.name || "",
-      canonical.email || "",
-      canonical.role || "",
-      canonical.specialization || "",
-      canonical.facility || "",
-      canonical.activeWorkOrders != null ? canonical.activeWorkOrders : "",
-      canonical.phone || "",
-      statusToSheet_(canonical.status),
-      canonical.createdAt || canonical.lastActive || "",
+  function canonicalToSheetFields_(canonical, headerMap) {
+    var fields = {};
+    var fieldKey;
+
+    for (fieldKey in FIELD_TO_HEADER) {
+      if (!FIELD_TO_HEADER.hasOwnProperty(fieldKey)) continue;
+      var header = FIELD_TO_HEADER[fieldKey];
+      if (headerMap[header] === undefined) continue;
+
+      var value = canonical[fieldKey];
+      if (fieldKey === "status") {
+        fields[header] = statusToSheet_(value);
+      } else if (fieldKey === "activeWorkOrders") {
+        fields[header] = workloadToSheet_(value);
+      } else if (fieldKey === "phone") {
+        fields[header] = phoneToSheet_(value);
+      } else if (fieldKey === "createdAt") {
+        fields[header] = value == null ? "" : value;
+      } else {
+        fields[header] = value == null ? "" : value;
+      }
+    }
+    return fields;
+  }
+
+  function bumpCreateInvocationCount_() {
+    var props = PropertiesService.getScriptProperties();
+    var current = Number(props.getProperty(CREATE_COUNT_KEY) || "0");
+    if (!Number.isFinite(current)) current = 0;
+    var next = current + 1;
+    props.setProperty(CREATE_COUNT_KEY, String(next));
+    return next;
+  }
+
+  function logCreate_(details) {
+    try {
+      Logger.log("[UserRepository.create] " + JSON.stringify(details));
+    } catch (ignore) {}
+  }
+
+  /**
+   * Write only mapped headers onto an existing row. Never shifts columns.
+   */
+  function writeRowByHeaders_(sheet, rowIndex, fields, headerMap, lastCol) {
+    var existing = sheet.getRange(rowIndex, 1, 1, lastCol).getValues()[0];
+    var row = existing.slice();
+    var header;
+    for (header in fields) {
+      if (!fields.hasOwnProperty(header)) continue;
+      if (headerMap[header] === undefined) continue;
+      row[headerMap[header]] = fields[header];
+    }
+    sheet.getRange(rowIndex, 1, 1, lastCol).setValues([row]);
+
+    if (
+      headerMap[FIELD_TO_HEADER.phone] !== undefined &&
+      fields[FIELD_TO_HEADER.phone] != null &&
+      fields[FIELD_TO_HEADER.phone] !== ""
+    ) {
+      var phoneCol = headerMap[FIELD_TO_HEADER.phone] + 1;
+      sheet.getRange(rowIndex, phoneCol).setNumberFormat("@");
+    }
+
+    return row;
+  }
+
+  function buildCanonicalForCreate_(id, payload) {
+    payload = stripMeta_(payload);
+    var now = new Date().toISOString();
+
+    return {
+      id: id,
+      name: payload.name || "",
+      email: payload.email || "",
+      phone: payload.phone || undefined,
+      role: payload.role || "",
+      specialization: payload.specialization || "",
+      facility: payload.facility || "",
+      activeWorkOrders: 0,
+      status: payload.status != null ? payload.status : "",
+      lastActive: now,
+      createdAt: now,
+    };
+  }
+
+  function buildCanonicalForUpdate_(id, payload, current) {
+    payload = stripMeta_(payload);
+    current = current || {};
+    var merged = {
+      id: id,
+      name: current.name || "",
+      email: current.email || "",
+      phone: current.phone,
+      role: current.role || "",
+      specialization: current.specialization || "",
+      facility: current.facility || "",
+      activeWorkOrders:
+        current.activeWorkOrders != null ? current.activeWorkOrders : 0,
+      status: current.status != null ? current.status : "",
+      lastActive: current.lastActive || current.createdAt || "",
+      createdAt: current.createdAt || "",
+    };
+
+    var i;
+    for (i = 0; i < UPDATEABLE_FIELDS.length; i++) {
+      var key = UPDATEABLE_FIELDS[i];
+      if (payload.hasOwnProperty(key) && payload[key] !== undefined) {
+        merged[key] = payload[key];
+      }
+    }
+
+    if (payload.hasOwnProperty("activeWorkOrders")) {
+      merged.activeWorkOrders = payload.activeWorkOrders;
+    }
+
+    return merged;
+  }
+
+  function verifyCanonicalAgainstRow_(sheetRow, expected) {
+    var checks = [
+      ["name", FIELD_TO_HEADER.name],
+      ["email", FIELD_TO_HEADER.email],
+      ["role", FIELD_TO_HEADER.role],
+      ["specialization", FIELD_TO_HEADER.specialization],
+      ["facility", FIELD_TO_HEADER.facility],
+      ["status", FIELD_TO_HEADER.status],
     ];
+    var i;
+    for (i = 0; i < checks.length; i++) {
+      var key = checks[i][0];
+      var header = checks[i][1];
+      var got = readHeader_(sheetRow, header);
+      var want = String(expected[key] == null ? "" : expected[key]);
+      if (header === FIELD_TO_HEADER.status) {
+        got = normalizeStatus_(got);
+        want = normalizeStatus_(want);
+      }
+      if (String(got) !== String(want)) {
+        throw new Error(
+          "USERS write verification failed for " +
+            header +
+            ' (expected "' +
+            want +
+            '", got "' +
+            got +
+            '"). Redeploy UserRepository.gs build ' +
+            BUILD_MARKER +
+            "."
+        );
+      }
+    }
+    if (expected.phone) {
+      var gotPhone = readHeader_(sheetRow, FIELD_TO_HEADER.phone);
+      var wantPhone = phoneToSheet_(expected.phone);
+      if (
+        String(gotPhone).replace(/^0+/, "") !==
+        String(wantPhone).replace(/^0+/, "")
+      ) {
+        throw new Error(
+          'USERS write verification failed for Phone (expected "' +
+            wantPhone +
+            '", got "' +
+            gotPhone +
+            '").'
+        );
+      }
+    }
   }
 
   function getAll() {
@@ -147,137 +361,249 @@ var UserRepository = (function () {
 
     var headers = values[0];
     var rows = [];
-    for (var r = 1; r < values.length; r++) {
-      var sheetRow = rowToSheetObject_(headers, values[r]);
-      var id = cellText_(sheetRow["User ID"]);
-      if (!id) continue;
-      rows.push(toCanonical_(sheetRow));
+    var r;
+    for (r = 1; r < values.length; r++) {
+      var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[r]);
+      var canonical = toCanonical_(sheetRow);
+      if (!canonical.id) continue;
+      rows.push(canonical);
     }
     return rows;
   }
 
   function getById(id) {
-    var all = getAll();
-    for (var i = 0; i < all.length; i++) {
-      if (String(all[i].id) === String(id)) return all[i];
+    var sheet = getSheet_();
+    var values = sheet.getDataRange().getValues();
+    if (values.length <= 1) return null;
+
+    var headers = values[0];
+    var headerMap = headerMap_(sheet);
+    var idHeader = FIELD_TO_HEADER.id;
+    if (headerMap[idHeader] === undefined) return null;
+    var idCol = headerMap[idHeader];
+
+    var r;
+    for (r = 1; r < values.length; r++) {
+      if (String(values[r][idCol]) !== String(id)) continue;
+      var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[r]);
+      return toCanonical_(sheetRow);
     }
     return null;
   }
 
-  function findRowIndex_(id) {
-    var sheet = getSheet_();
+  function idExistsOnSheet_(sheet, headerMap, id) {
+    var idHeader = FIELD_TO_HEADER.id;
+    var idCol = headerMap[idHeader];
+    if (idCol === undefined) return false;
+
     var values = sheet.getDataRange().getValues();
-    if (values.length <= 1) return -1;
-
-    var headers = values[0];
-    var idCol = -1;
-    for (var c = 0; c < headers.length; c++) {
-      if (String(headers[c]).trim() === "User ID") {
-        idCol = c;
-        break;
-      }
+    var r;
+    for (r = 1; r < values.length; r++) {
+      if (String(values[r][idCol]) === String(id)) return true;
     }
-    if (idCol === -1) return -1;
-
-    for (var r = 1; r < values.length; r++) {
-      if (String(values[r][idCol]) === String(id)) {
-        return r + 1; // 1-based
-      }
-    }
-    return -1;
+    return false;
   }
 
-  function nextId_() {
-    var all = getAll();
+  /** Highest numeric USR suffix on the sheet — ignores malformed IDs. */
+  function maxExistingIdSuffix_(sheet, headerMap) {
+    var idHeader = FIELD_TO_HEADER.id;
+    var idCol = headerMap[idHeader];
+    if (idCol === undefined) {
+      throw new Error('USERS sheet missing "User ID" header.');
+    }
+
+    var values = sheet.getDataRange().getValues();
     var max = 0;
-    for (var i = 0; i < all.length; i++) {
-      var match = String(all[i].id || "").match(/^USR-(\d+)$/i);
+    var r;
+    for (r = 1; r < values.length; r++) {
+      var match = String(values[r][idCol] || "").match(/^USR-(\d+)$/i);
       if (match) {
         var n = parseInt(match[1], 10);
         if (n > max) max = n;
       }
     }
-    var next = max + 1;
-    var padded = ("0000" + next).slice(-4);
-    return "USR-" + padded;
+    return max;
+  }
+
+  /**
+   * Increment from the highest USR suffix and verify the candidate is unused.
+   * Duplicate/malformed rows cannot reset the counter below the true max suffix.
+   */
+  function allocateUniqueId_(sheet, headerMap) {
+    var suffix = maxExistingIdSuffix_(sheet, headerMap);
+    var attempt;
+    for (attempt = 0; attempt < 100; attempt++) {
+      suffix = suffix + 1;
+      var candidate = "USR-" + ("0000" + suffix).slice(-4);
+      if (!idExistsOnSheet_(sheet, headerMap, candidate)) {
+        return candidate;
+      }
+    }
+    throw new Error(
+      "Could not allocate a unique User ID after 100 attempts. Check for duplicate USR rows."
+    );
   }
 
   function create(payload) {
-    var sheet = getSheet_();
-    var now = new Date().toISOString();
-    var id = nextId_();
-
-    var canonical = {
-      id: id,
-      name: (payload && payload.name) || "",
-      email: (payload && payload.email) || "",
-      phone: (payload && payload.phone) || "",
-      role: (payload && payload.role) || "viewer",
-      specialization: (payload && payload.specialization) || "",
-      facility: (payload && payload.facility) || "",
-      activeWorkOrders: 0,
-      status: (payload && payload.status) || "pending",
-      lastActive: now,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    sheet.appendRow(canonicalToSheetRow_(canonical));
-
-    var found = getById(id);
-    if (!found) {
-      throw new Error(
-        "User create wrote row " +
-          id +
-          " but getById could not re-read it. Check Users sheet headers."
-      );
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(30000)) {
+      throw new Error("USERS create busy — another write is in progress.");
     }
-    return found;
+
+    var clientRequestId =
+      payload && payload._clientRequestId
+        ? String(payload._clientRequestId)
+        : "";
+    var startedAt = new Date().toISOString();
+    var createInvocationCount = bumpCreateInvocationCount_();
+
+    try {
+      var sheet = getSheet_();
+      var headerMap = headerMap_(sheet);
+      assertRequiredHeaders_(headerMap);
+
+      var id = allocateUniqueId_(sheet, headerMap);
+      if (idExistsOnSheet_(sheet, headerMap, id)) {
+        throw new Error(
+          "Refusing to create duplicate User ID " +
+            id +
+            ". Delete or repair conflicting rows first."
+        );
+      }
+
+      var record = buildCanonicalForCreate_(id, payload);
+      var lastCol = Math.max(sheet.getLastColumn(), REQUIRED_HEADERS.length);
+      var fields = canonicalToSheetFields_(record, headerMap);
+      var row = SheetFieldUtils.buildRowFromFields(headerMap, lastCol, fields);
+
+      logCreate_({
+        buildMarker: BUILD_MARKER,
+        clientRequestId: clientRequestId,
+        startedAt: startedAt,
+        createInvocationCount: createInvocationCount,
+        generatedId: id,
+        fieldsWritten: fields,
+      });
+
+      sheet.appendRow(new Array(lastCol).fill(""));
+      var rowIndex = sheet.getLastRow();
+      sheet.getRange(rowIndex, 1, 1, lastCol).setValues([row]);
+
+      if (
+        headerMap[FIELD_TO_HEADER.phone] !== undefined &&
+        fields[FIELD_TO_HEADER.phone] != null &&
+        fields[FIELD_TO_HEADER.phone] !== ""
+      ) {
+        var phoneCol = headerMap[FIELD_TO_HEADER.phone] + 1;
+        sheet.getRange(rowIndex, phoneCol).setNumberFormat("@");
+      }
+
+      SpreadsheetApp.flush();
+
+      var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+      var writtenRow = SheetFieldUtils.rowToSheetObject(
+        headers,
+        sheet.getRange(rowIndex, 1, 1, lastCol).getValues()[0]
+      );
+      verifyCanonicalAgainstRow_(writtenRow, record);
+
+      var found = getById(id);
+      if (!found) {
+        throw new Error(
+          "User create wrote row " +
+            id +
+            " but getById could not re-read it."
+        );
+      }
+
+      found._write = {
+        buildMarker: BUILD_MARKER,
+        createPath: "UserRepository.create",
+        sheetName: sheet.getName(),
+        rowIndex: rowIndex,
+        clientRequestId: clientRequestId,
+        startedAt: startedAt,
+        createInvocationCount: createInvocationCount,
+        generatedId: id,
+        fieldsWritten: fields,
+      };
+      return found;
+    } finally {
+      lock.releaseLock();
+    }
   }
 
   function update(id, payload) {
-    var sheet = getSheet_();
-    var rowIndex = findRowIndex_(id);
-    if (rowIndex === -1) return null;
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(30000)) {
+      throw new Error("USERS update busy — another write is in progress.");
+    }
 
-    var current = getById(id);
-    if (!current) return null;
+    try {
+      var sheet = getSheet_();
+      var values = sheet.getDataRange().getValues();
+      if (values.length <= 1) return null;
 
-    var updated = {
-      id: id,
-      name: payload.name != null ? payload.name : current.name,
-      email: payload.email != null ? payload.email : current.email,
-      phone: payload.phone != null ? payload.phone : current.phone || "",
-      role: payload.role != null ? payload.role : current.role,
-      specialization:
-        payload.specialization != null
-          ? payload.specialization
-          : current.specialization,
-      facility: payload.facility != null ? payload.facility : current.facility,
-      activeWorkOrders:
-        current.activeWorkOrders != null ? current.activeWorkOrders : 0,
-      status: payload.status != null ? payload.status : current.status,
-      lastActive: current.lastActive || current.createdAt || new Date().toISOString(),
-      createdAt: current.createdAt,
-      updatedAt: new Date().toISOString(),
-    };
+      var headers = values[0];
+      var headerMap = headerMap_(sheet);
+      assertRequiredHeaders_(headerMap);
+      var idHeader = FIELD_TO_HEADER.id;
+      if (headerMap[idHeader] === undefined) return null;
+      var idCol = headerMap[idHeader];
 
-    sheet
-      .getRange(rowIndex, 1, 1, SHEET_HEADERS.length)
-      .setValues([canonicalToSheetRow_(updated)]);
+      var rowIndex = -1;
+      var r;
+      for (r = 1; r < values.length; r++) {
+        if (String(values[r][idCol]) === String(id)) {
+          rowIndex = r + 1;
+          break;
+        }
+      }
+      if (rowIndex === -1) return null;
 
-    return getById(id);
+      var current = getById(id);
+      if (!current) return null;
+
+      var merged = buildCanonicalForUpdate_(id, payload || {}, current);
+      var lastCol = Math.max(sheet.getLastColumn(), REQUIRED_HEADERS.length);
+      var fields = canonicalToSheetFields_(merged, headerMap);
+      writeRowByHeaders_(sheet, rowIndex, fields, headerMap, lastCol);
+      SpreadsheetApp.flush();
+
+      var writtenRow = SheetFieldUtils.rowToSheetObject(
+        headers,
+        sheet.getRange(rowIndex, 1, 1, lastCol).getValues()[0]
+      );
+      verifyCanonicalAgainstRow_(writtenRow, merged);
+      return getById(id);
+    } finally {
+      lock.releaseLock();
+    }
   }
 
   function deactivate(id) {
     return update(id, { status: "inactive" });
   }
 
+  function getBuildInfo() {
+    return {
+      buildMarker: BUILD_MARKER,
+      createPath: "UserRepository.create",
+      fieldToHeader: FIELD_TO_HEADER,
+      createInvocationCount: Number(
+        PropertiesService.getScriptProperties().getProperty(CREATE_COUNT_KEY) ||
+          "0"
+      ),
+    };
+  }
+
   return {
+    BUILD_MARKER: BUILD_MARKER,
     getAll: getAll,
     getById: getById,
     create: create,
     update: update,
     deactivate: deactivate,
+    getBuildInfo: getBuildInfo,
   };
 })();

@@ -4,10 +4,15 @@
  * Business rules for Assets. Mirrors FacilityService.gs / WorkOrderService.gs.
  * Never talks to the spreadsheet directly — only AssetRepository.
  *
- * List pipeline: all → sort newest first → search/filters → paginate
+ * List pipeline: all → sort by id → search/filters → paginate
  */
 
 var AssetService = (function () {
+  function parseAssetSeq_(id) {
+    var match = String(id || "").match(/AST-(\d+)/i);
+    return match ? parseInt(match[1], 10) : 0;
+  }
+
   function applyFilters_(rows, payload) {
     payload = payload || {};
     var search = String(payload.search || "")
@@ -23,16 +28,10 @@ var AssetService = (function () {
         String(row.name || "")
           .toLowerCase()
           .indexOf(search) !== -1 ||
-        String(row.assetTag || "")
-          .toLowerCase()
-          .indexOf(search) !== -1 ||
         String(row.id || "")
           .toLowerCase()
           .indexOf(search) !== -1 ||
         String(row.facility || "")
-          .toLowerCase()
-          .indexOf(search) !== -1 ||
-        String(row.facilityId || "")
           .toLowerCase()
           .indexOf(search) !== -1 ||
         String(row.serialNumber || "")
@@ -46,6 +45,9 @@ var AssetService = (function () {
           .indexOf(search) !== -1 ||
         String(row.assignedTo || "")
           .toLowerCase()
+          .indexOf(search) !== -1 ||
+        String(row.oemId || "")
+          .toLowerCase()
           .indexOf(search) !== -1;
 
       var matchesStatus =
@@ -58,8 +60,7 @@ var AssetService = (function () {
         category === "all" ||
         String(row.category).toLowerCase() === String(category).toLowerCase();
 
-      var rowFacility = String(row.facilityId || row.facility || "");
-      // Facility values may be an id or a display name depending on row age.
+      var rowFacility = String(row.facility || "");
       var matchesFacility =
         !facility ||
         facility === "all" ||
@@ -97,12 +98,12 @@ var AssetService = (function () {
 
   function sortNewestFirst_(rows) {
     return rows.slice().sort(function (a, b) {
-      var aAt = String(a.createdAt || a.updatedAt || "");
-      var bAt = String(b.createdAt || b.updatedAt || "");
-      if (aAt === bAt) {
+      var aSeq = parseAssetSeq_(a.id);
+      var bSeq = parseAssetSeq_(b.id);
+      if (aSeq === bSeq) {
         return String(b.id || "").localeCompare(String(a.id || ""));
       }
-      return aAt < bAt ? 1 : -1;
+      return bSeq - aSeq;
     });
   }
 
@@ -146,7 +147,6 @@ var AssetService = (function () {
   function create(payload) {
     if (!payload || !payload.name) throw new Error("Asset name is required.");
     if (!payload.facility) throw new Error("Facility is required.");
-    // Asset tag / number is system-generated when omitted.
     var created = AssetRepository.create(payload);
     if (!created || !created.id) {
       throw new Error(

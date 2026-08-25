@@ -6,7 +6,7 @@
  * Expected request body:
  * {
  *   resource: "users",
- *   action: "getAll" | "getById" | "create" | "update" | "deactivate",
+ *   action: "getAll" | "getById" | "create" | "update" | "deactivate" | "buildInfo",
  *   payload: { ... }
  * }
  *
@@ -52,6 +52,13 @@ var UsersController = (function () {
             true,
             "User deactivated.",
             UserService.deactivate(payload)
+          );
+
+        case "buildInfo":
+          return jsonResponse_(
+            true,
+            "Users module build info.",
+            UserRepository.getBuildInfo()
           );
 
         default:

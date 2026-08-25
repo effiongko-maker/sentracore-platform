@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/modals/Modal";
 import { Button } from "@/components/ui/Button";
 import {
@@ -11,20 +11,24 @@ import {
 import { useToast } from "@/components/ui/Toast";
 import { useFacilityOptions } from "@/hooks/useFacilityOptions";
 import {
-  USER_ROLES,
+  USER_ROLE_SUGGESTIONS,
   USER_SPECIALIZATIONS,
   USER_STATUSES,
 } from "../constants";
 import { UserService } from "../services/UserService";
-import { labelize, toCreateFormValues } from "../utils";
-import type { CreateUserInput, User, UserRole, UserStatus } from "../types";
+import {
+  labelize,
+  resolveFacilityDisplayName,
+  toCreateFormValues,
+} from "../utils";
+import type { CreateUserInput, User, UserStatus } from "../types";
 
 interface UserFormModalProps {
   open: boolean;
   mode: "create" | "edit";
   user?: User | null;
   onClose: () => void;
-  onSaved?: () => void;
+  onSaved?: () => void | Promise<void>;
 }
 
 export function UserFormModal({
@@ -41,12 +45,22 @@ export function UserFormModal({
     Partial<Record<keyof CreateUserInput, string>>
   >({});
   const [saving, setSaving] = useState(false);
+  const submitLock = useRef(false);
 
   useEffect(() => {
     if (!open) return;
     setForm(toCreateFormValues(mode === "edit" ? user : null));
     setErrors({});
   }, [open, mode, user]);
+
+  useEffect(() => {
+    if (!open || facilities.length === 0) return;
+    setForm((current) => {
+      const resolved = resolveFacilityDisplayName(current.facility, facilities);
+      if (!resolved || resolved === current.facility) return current;
+      return { ...current, facility: resolved === "-" ? "" : resolved };
+    });
+  }, [open, facilities]);
 
   function updateField<K extends keyof CreateUserInput>(
     key: K,
@@ -63,31 +77,39 @@ export function UserFormModal({
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
       next.email = "Enter a valid email address";
     }
+    if (!form.role.trim()) next.role = "Role is required";
     if (!form.specialization.trim()) {
       next.specialization = "Specialization is required";
     }
-    if (!form.facility.trim()) next.facility = "Facility is required";
     setErrors(next);
     return Object.keys(next).length === 0;
   }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (submitLock.current || saving) return;
     if (!validate()) return;
 
+    submitLock.current = true;
     setSaving(true);
     try {
+      const facilityName = form.facility.trim()
+        ? resolveFacilityDisplayName(form.facility, facilities)
+        : "-";
+
       const payload: CreateUserInput = {
         ...form,
         name: form.name.trim(),
         email: form.email.trim(),
         phone: form.phone?.trim() || undefined,
+        role: form.role.trim(),
         specialization: form.specialization.trim(),
-        facility: form.facility.trim(),
+        facility: facilityName,
       };
 
       if (mode === "edit" && user) {
         await UserService.updateUser(user.id, payload);
+        await onSaved?.();
         toast({
           type: "success",
           title: "User updated",
@@ -95,6 +117,7 @@ export function UserFormModal({
         });
       } else {
         await UserService.createUser(payload);
+        await onSaved?.();
         toast({
           type: "success",
           title: "User created",
@@ -102,7 +125,6 @@ export function UserFormModal({
         });
       }
 
-      onSaved?.();
       onClose();
     } catch (err) {
       toast({
@@ -113,10 +135,12 @@ export function UserFormModal({
       });
     } finally {
       setSaving(false);
+      submitLock.current = false;
     }
   }
 
   const isEdit = mode === "edit";
+  const facilitySelectValue = form.facility.trim();
 
   return (
     <Modal
@@ -128,7 +152,7 @@ export function UserFormModal({
       description={
         isEdit
           ? "Update profile details, assignment, and access status."
-          : "Invite a colleague and assign their role within SentraCore."
+          : "Add a person to the People register with their role and facility assignment."
       }
       size="lg"
       footer={
@@ -136,7 +160,7 @@ export function UserFormModal({
           <Button variant="outline" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button type="submit" form="user-form" loading={saving}>
+          <Button type="submit" form="user-form" loading={saving} disabled={saving}>
             {isEdit ? "Save changes" : "Create user"}
           </Button>
         </>
@@ -182,28 +206,35 @@ export function UserFormModal({
         <FormField label="Phone" htmlFor="user-phone">
           <input
             id="user-phone"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
             className={inputClassName}
-            placeholder="+44 7700 900000"
+            placeholder="e.g. 08077960315"
             value={form.phone ?? ""}
             onChange={(event) => updateField("phone", event.target.value)}
           />
         </FormField>
 
-        <FormField label="Role" htmlFor="user-role" required>
-          <select
+        <FormField
+          label="Role"
+          htmlFor="user-role"
+          required
+          error={errors.role}
+        >
+          <input
             id="user-role"
-            className={selectClassName}
+            list="user-role-suggestions"
+            className={inputClassName}
+            placeholder="e.g. Facility Manager"
             value={form.role}
-            onChange={(event) =>
-              updateField("role", event.target.value as UserRole)
-            }
-          >
-            {USER_ROLES.map((value) => (
-              <option key={value} value={value}>
-                {labelize(value)}
-              </option>
+            onChange={(event) => updateField("role", event.target.value)}
+          />
+          <datalist id="user-role-suggestions">
+            {USER_ROLE_SUGGESTIONS.map((value) => (
+              <option key={value} value={value} />
             ))}
-          </select>
+          </datalist>
         </FormField>
 
         <FormField
@@ -212,41 +243,39 @@ export function UserFormModal({
           required
           error={errors.specialization}
         >
-          <select
+          <input
             id="user-specialization"
-            className={selectClassName}
+            list="user-specialization-suggestions"
+            className={inputClassName}
+            placeholder="e.g. HVAC"
             value={form.specialization}
             onChange={(event) =>
               updateField("specialization", event.target.value)
             }
-          >
+          />
+          <datalist id="user-specialization-suggestions">
             {USER_SPECIALIZATIONS.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
+              <option key={value} value={value} />
             ))}
-          </select>
+          </datalist>
         </FormField>
 
-        <FormField
-          label="Facility"
-          htmlFor="user-facility"
-          required
-          error={errors.facility}
-        >
+        <FormField label="Facility" htmlFor="user-facility">
           <select
             id="user-facility"
             className={selectClassName}
-            value={form.facility}
-            onChange={(event) => updateField("facility", event.target.value)}
+            value={facilitySelectValue}
+            onChange={(event) =>
+              updateField("facility", event.target.value)
+            }
             disabled={facilitiesLoading}
           >
             <option value="">
-              {facilitiesLoading ? "Loading facilities…" : "Select facility"}
+              {facilitiesLoading ? "Loading facilities…" : "None / organisation-wide"}
             </option>
-            {form.facility &&
-            !facilities.some((item) => item.name === form.facility) ? (
-              <option value={form.facility}>{form.facility}</option>
+            {facilitySelectValue &&
+            !facilities.some((item) => item.name === facilitySelectValue) ? (
+              <option value={facilitySelectValue}>{facilitySelectValue}</option>
             ) : null}
             {facilities.map((item) => (
               <option key={item.id} value={item.name}>

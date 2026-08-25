@@ -50,8 +50,8 @@ function normalizeAsset(row: Asset): Asset {
     condition: normalizeToken(row.condition) as Asset["condition"],
     criticality: normalizeToken(row.criticality) as Asset["criticality"],
     category: normalizeToken(row.category) as Asset["category"],
-    createdAt: toIsoUtc(row.createdAt),
-    updatedAt: toIsoUtc(row.updatedAt, toIsoUtc(row.createdAt)),
+    installDate: toIsoUtc(row.installDate),
+    warrantyExpiry: toIsoUtc(row.warrantyExpiry),
   };
 }
 

@@ -98,6 +98,14 @@ function doPost(e) {
  * GET returns a small JSON payload confirming the script is reachable.
  */
 function doGet() {
+  var builds = {};
+  if (typeof UserRepository !== "undefined" && UserRepository.BUILD_MARKER) {
+    builds.users = UserRepository.BUILD_MARKER;
+  }
+  if (typeof AssetRepository !== "undefined" && AssetRepository.BUILD_MARKER) {
+    builds.assets = AssetRepository.BUILD_MARKER;
+  }
+
   return jsonResponse_(true, "SentraCore Apps Script is online.", {
     service: "sentracore",
     resources: [
@@ -110,5 +118,6 @@ function doGet() {
       "master-data",
       "reporting-snapshot",
     ],
+    builds: builds,
   });
 }

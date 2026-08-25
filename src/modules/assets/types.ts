@@ -21,40 +21,36 @@ export type AssetCategory =
 
 export interface Asset {
   id: string;
-  assetTag: string;
+  facility: string;
   name: string;
   category: AssetCategory;
-  facility: string;
   manufacturer: string;
   model: string;
   serialNumber: string;
-  purchaseDate: string;
+  installDate: string;
   warrantyExpiry: string;
+  oemId: string;
   condition: AssetCondition;
   status: AssetStatus;
   assignedTo: string;
   criticality: AssetCriticality;
-  description?: string;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface CreateAssetInput {
-  /** System-generated on create when omitted. Immutable after create. */
-  assetTag?: string;
   name: string;
   category: AssetCategory;
+  /** Facility display name as stored on the sheet (e.g. "NCC Annex"). */
   facility: string;
   manufacturer: string;
   model: string;
   serialNumber: string;
-  purchaseDate: string;
+  installDate: string;
   warrantyExpiry: string;
+  oemId: string;
   condition: AssetCondition;
   status: AssetStatus;
   assignedTo: string;
   criticality: AssetCriticality;
-  description?: string;
 }
 
 export type UpdateAssetInput = Partial<CreateAssetInput>;

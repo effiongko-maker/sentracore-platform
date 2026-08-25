@@ -9,20 +9,18 @@ import { queryAssetsPage } from "../src/services/assets/queryAssets";
 
 function asset(partial: Partial<Asset> & Pick<Asset, "id" | "name">): Asset {
   return {
-    assetTag: partial.assetTag ?? partial.id,
     category: "other",
     facility: "FAC-1",
     manufacturer: "Acme",
     model: "X1",
     serialNumber: `SN-${partial.id}`,
-    purchaseDate: "",
+    installDate: "",
     warrantyExpiry: "",
+    oemId: "",
     condition: "good",
     status: "active",
     assignedTo: "",
     criticality: "unassessed",
-    createdAt: "2026-01-01T00:00:00.000Z",
-    updatedAt: "2026-01-01T00:00:00.000Z",
     ...partial,
   };
 }
@@ -40,7 +38,6 @@ const dataset: Asset[] = [
     category: "hvac",
     facility: "FAC-1",
     status: "active",
-    createdAt: "2026-08-20T10:00:00.000Z",
   }),
   asset({
     id: "AST-02",
@@ -48,7 +45,6 @@ const dataset: Asset[] = [
     category: "power",
     facility: "Lagos HQ", // stored as name
     status: "active",
-    createdAt: "2026-08-19T10:00:00.000Z",
   }),
   asset({
     id: "AST-03",
@@ -56,7 +52,6 @@ const dataset: Asset[] = [
     category: "vertical_transport",
     facility: "FAC-2",
     status: "pending",
-    createdAt: "2026-08-18T10:00:00.000Z",
   }),
   asset({
     id: "AST-04",
@@ -64,7 +59,6 @@ const dataset: Asset[] = [
     category: "power",
     facility: "FAC-2",
     status: "inactive",
-    createdAt: "2026-08-17T10:00:00.000Z",
   }),
   asset({
     id: "AST-05",
@@ -72,7 +66,6 @@ const dataset: Asset[] = [
     category: "it",
     facility: "FAC-3",
     status: "inactive",
-    createdAt: "2026-08-16T10:00:00.000Z",
   }),
   asset({
     id: "AST-06",
@@ -80,7 +73,6 @@ const dataset: Asset[] = [
     category: "fire_safety",
     facility: "FAC-1",
     status: "pending",
-    createdAt: "2026-08-15T10:00:00.000Z",
   }),
   asset({
     id: "AST-07",
@@ -88,7 +80,6 @@ const dataset: Asset[] = [
     category: "hvac",
     facility: "FAC-3",
     status: "active",
-    createdAt: "2026-08-14T10:00:00.000Z",
   }),
   asset({
     id: "AST-08",
@@ -96,7 +87,6 @@ const dataset: Asset[] = [
     category: "mechanical",
     facility: "FAC-1",
     status: "active",
-    createdAt: "2026-08-13T10:00:00.000Z",
   }),
   asset({
     id: "AST-09",
@@ -104,7 +94,6 @@ const dataset: Asset[] = [
     category: "electrical",
     facility: "FAC-2",
     status: "active",
-    createdAt: "2026-08-12T10:00:00.000Z",
   }),
   asset({
     id: "AST-10",
@@ -112,7 +101,6 @@ const dataset: Asset[] = [
     category: "hvac",
     facility: "FAC-1",
     status: "inactive",
-    createdAt: "2026-08-11T10:00:00.000Z",
   }),
 ];
 
@@ -130,39 +118,39 @@ const cases: Case[] = [
   {
     name: "unfiltered newest-first",
     params: { page: 1, pageSize: 8 },
-    expectFirstId: "AST-01",
+    expectFirstId: "AST-10",
     expectTotal: 10,
     expectTotalPages: 2,
   },
   {
     name: "status active",
     params: { page: 1, pageSize: 20, status: "active" },
-    expectIds: ["AST-01", "AST-02", "AST-07", "AST-08", "AST-09"],
+    expectIds: ["AST-09", "AST-08", "AST-07", "AST-02", "AST-01"],
   },
   {
     name: "status inactive",
     params: { page: 1, pageSize: 20, status: "inactive" },
-    expectIds: ["AST-04", "AST-05", "AST-10"],
+    expectIds: ["AST-10", "AST-05", "AST-04"],
   },
   {
     name: "status pending",
     params: { page: 1, pageSize: 20, status: "pending" },
-    expectIds: ["AST-03", "AST-06"],
+    expectIds: ["AST-06", "AST-03"],
   },
   {
     name: "category hvac",
     params: { page: 1, pageSize: 20, category: "hvac" },
-    expectIds: ["AST-01", "AST-07", "AST-10"],
+    expectIds: ["AST-10", "AST-07", "AST-01"],
   },
   {
     name: "facility by id FAC-1 (includes name-stored Lagos HQ)",
     params: { page: 1, pageSize: 20, facility: "FAC-1" },
-    expectIds: ["AST-01", "AST-02", "AST-06", "AST-08", "AST-10"],
+    expectIds: ["AST-10", "AST-08", "AST-06", "AST-02", "AST-01"],
   },
   {
     name: "facility FAC-2",
     params: { page: 1, pageSize: 20, facility: "FAC-2" },
-    expectIds: ["AST-03", "AST-04", "AST-09"],
+    expectIds: ["AST-09", "AST-04", "AST-03"],
   },
   {
     name: "category power + status active",
@@ -182,7 +170,7 @@ const cases: Case[] = [
       category: "hvac",
       facility: "FAC-1",
     },
-    expectIds: ["AST-01", "AST-10"],
+    expectIds: ["AST-10", "AST-01"],
   },
   {
     name: "facility FAC-1 + status inactive",
@@ -266,7 +254,7 @@ const cases: Case[] = [
   {
     name: "pagination page 2 of unfiltered",
     params: { page: 2, pageSize: 8 },
-    expectIds: ["AST-09", "AST-10"],
+    expectIds: ["AST-02", "AST-01"],
     expectTotal: 10,
     expectPage: 2,
     expectTotalPages: 2,
@@ -278,7 +266,7 @@ const cases: Case[] = [
       pageSize: 8,
       status: "pending",
     },
-    expectIds: ["AST-03", "AST-06"],
+    expectIds: ["AST-06", "AST-03"],
     expectPage: 1,
     expectTotalPages: 1,
     expectTotal: 2,
@@ -297,8 +285,8 @@ const cases: Case[] = [
   {
     name: "sort oldest",
     params: { page: 1, pageSize: 3, sort: "oldest" },
-    expectIds: ["AST-10", "AST-09", "AST-08"],
-    expectFirstId: "AST-10",
+    expectIds: ["AST-01", "AST-02", "AST-03"],
+    expectFirstId: "AST-01",
   },
   {
     name: "sort name A–Z",
@@ -328,7 +316,7 @@ const cases: Case[] = [
       category: "hvac",
       sort: "newest",
     },
-    expectIds: ["AST-01", "AST-07", "AST-10"],
+    expectIds: ["AST-10", "AST-07", "AST-01"],
   },
   {
     name: "search + sort oldest",
@@ -338,7 +326,7 @@ const cases: Case[] = [
       search: "chiller",
       sort: "oldest",
     },
-    expectIds: ["AST-10", "AST-01"],
+    expectIds: ["AST-01", "AST-10"],
   },
 ];
 
@@ -417,7 +405,13 @@ for (const category of categories) {
         return catOk && statusOk && facilityOk;
       });
       const expectedIds = [...manual]
-        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+        .sort((a, b) => {
+          const seq = (id: string) => {
+            const m = id.match(/AST-(\d+)/i);
+            return m ? parseInt(m[1], 10) : 0;
+          };
+          return seq(b.id) - seq(a.id);
+        })
         .map((row) => row.id);
       const gotIds = result.data.map((row) => row.id);
       if (

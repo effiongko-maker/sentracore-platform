@@ -13,7 +13,7 @@ export type {
 } from "@/modules/users/types";
 
 export {
-  USER_ROLES,
+  USER_ROLE_SUGGESTIONS,
   USER_SPECIALIZATIONS,
   USER_STATUSES,
 } from "@/modules/users/constants";

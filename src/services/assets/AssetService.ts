@@ -9,15 +9,11 @@ import type {
   CreateAssetInput,
   UpdateAssetInput,
 } from "@/modules/assets/types";
+import { normalizeAssetToken } from "@/modules/assets/utils";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
 import { FacilityService } from "@/services/facilities/FacilityService";
 import { queryAssetsPage } from "./queryAssets";
-import {
-  ASSET_FACILITY_DIAG_BUILD,
-  type AssetUpdateDiag,
-  type AssetUpdateResult,
-} from "./assetUpdateDiag";
 
 /** Raw row shape from the Apps Script assets API. */
 type RemoteAsset = Record<string, unknown>;
@@ -39,64 +35,42 @@ function normalizeText(value: unknown): string {
 function mapRemoteAsset(raw: RemoteAsset): Asset {
   const id = String(pickField(raw, "id", "Asset ID") ?? "");
 
-  // Explicit field keys only — never borrow adjacent columns.
-  // facilityId is canonical; `facility` is a mirror for older payloads.
-  const facilityId = String(
-    pickField(raw, "facilityId", "facility", "Facility ID") ?? ""
-  );
-
-  const category = String(pickField(raw, "category", "Category") ?? "other")
-    .toLowerCase()
-    .replace(/\s+/g, "_") as AssetCategory;
-  const status = String(pickField(raw, "status", "Status") ?? "pending")
-    .toLowerCase()
-    .replace(/\s+/g, "_") as AssetStatus;
-  const condition = String(pickField(raw, "condition", "Condition") ?? "good")
-    .toLowerCase()
-    .replace(/\s+/g, "_") as AssetCondition;
-  const criticality = String(
+  const category = normalizeAssetToken(
+    pickField(raw, "category", "Category") ?? "other"
+  ) as AssetCategory;
+  const status = normalizeAssetToken(
+    pickField(raw, "status", "Status") ?? "pending"
+  ) as AssetStatus;
+  const condition = normalizeAssetToken(
+    pickField(raw, "condition", "Condition") ?? "good"
+  ) as AssetCondition;
+  const criticality = normalizeAssetToken(
     pickField(raw, "criticality", "Criticality") ?? "unassessed"
-  )
-    .toLowerCase()
-    .replace(/\s+/g, "_") as AssetCriticality;
-
-  const assetTag = String(
-    pickField(raw, "assetTag", "Asset Number", "Asset Tag") ?? ""
-  );
+  ) as AssetCriticality;
 
   return {
     id,
-    assetTag: assetTag || id,
+    facility: String(pickField(raw, "facility", "Facility") ?? ""),
     name: String(pickField(raw, "name", "Asset Name") ?? ""),
     category,
-    facility: facilityId,
     manufacturer: String(pickField(raw, "manufacturer", "Manufacturer") ?? ""),
     model: String(pickField(raw, "model", "Model") ?? ""),
     serialNumber: String(
       pickField(raw, "serialNumber", "Serial Number") ?? ""
     ),
-    purchaseDate: String(
-      pickField(raw, "purchaseDate", "Install Date", "Purchase Date") ?? ""
+    installDate: String(
+      pickField(raw, "installDate", "Install Date") ?? ""
     ),
     warrantyExpiry: String(
       pickField(raw, "warrantyExpiry", "Warranty Expiry") ?? ""
     ),
+    oemId: String(pickField(raw, "oemId", "OEM ID") ?? ""),
     condition,
     status,
     assignedTo: String(
-      pickField(raw, "assignedTo", "Assigned To", "OEM ID") ?? ""
+      pickField(raw, "assignedTo", "Assigned To") ?? ""
     ),
     criticality,
-    description: (() => {
-      const value = pickField(raw, "description", "Description");
-      return value != null ? String(value) : undefined;
-    })(),
-    createdAt: String(
-      pickField(raw, "createdAt", "Created At") ?? new Date().toISOString()
-    ),
-    updatedAt: String(
-      pickField(raw, "updatedAt", "Updated At") ?? new Date().toISOString()
-    ),
   };
 }
 
@@ -125,8 +99,6 @@ async function loadAllAssets(): Promise<Asset[]> {
       payload: {
         page,
         pageSize,
-        // Fetch the unfiltered set — search/filter/sort/paginate run locally
-        // so the UI pipeline stays correct even if Apps Script is stale.
         search: "",
         status: "all",
         category: "all",
@@ -151,7 +123,6 @@ async function loadAllAssets(): Promise<Asset[]> {
     if (page > 100) break;
   }
 
-  // Deduplicate by id in case of overlapping pages.
   const byId = new Map<string, Asset>();
   for (const asset of all) {
     if (asset.id) byId.set(asset.id, asset);
@@ -171,10 +142,6 @@ async function loadFacilityNameById(): Promise<Map<string, string>> {
   }
 }
 
-/**
- * Facility values may historically be stored as id or display name.
- * Treat them as equal when they refer to the same facility.
- */
 function facilitiesEquivalent(
   expected: string,
   actual: string,
@@ -212,10 +179,6 @@ function fieldMismatch(
   );
 }
 
-/**
- * Confirm the authoritative sheet row matches the values we intended to save.
- * Prevents false “Updated” toasts when the write did not stick.
- */
 async function assertAssetPersisted(
   expectedId: string,
   intended: UpdateAssetInput,
@@ -231,13 +194,13 @@ async function assertAssetPersisted(
     ["manufacturer", intended.manufacturer],
     ["model", intended.model],
     ["serialNumber", intended.serialNumber],
-    ["purchaseDate", intended.purchaseDate],
+    ["installDate", intended.installDate],
     ["warrantyExpiry", intended.warrantyExpiry],
+    ["oemId", intended.oemId],
     ["condition", intended.condition],
     ["status", intended.status],
     ["assignedTo", intended.assignedTo],
     ["criticality", intended.criticality],
-    ["description", intended.description],
   ];
 
   for (const [field, expected] of checks) {
@@ -305,7 +268,7 @@ export const AssetService = {
     });
     if (response.data == null) {
       throw new ApiError(
-        "Asset create returned no record. Redeploy AssetRepository.gs if the Assets sheet uses legacy headers.",
+        "Asset create returned no record. Redeploy AssetRepository.gs if the Assets sheet headers differ.",
         502
       );
     }
@@ -326,42 +289,11 @@ export const AssetService = {
   },
 
   async updateAsset(id: string, input: UpdateAssetInput): Promise<Asset> {
-    const result = await AssetService.updateAssetWithDiagnostics(id, input);
-    if (result.path !== "persisted") {
-      throw new ApiError(
-        `Asset update not confirmed (${result.path}): ${result.evidence.join(" | ")}`,
-        502
-      );
-    }
-    return result.asset;
-  },
-
-  /**
-   * TEMP DIAG — full facility-update evidence path.
-   * Does not toast; callers must inspect `path` / `evidence` before claiming success.
-   */
-  async updateAssetWithDiagnostics(
-    id: string,
-    input: UpdateAssetInput
-  ): Promise<AssetUpdateResult> {
     if (!id.trim()) {
       throw new ApiError("Asset id is required for update.", 400);
     }
 
-    const evidence: string[] = [];
-    const execHint =
-      process.env.NEXT_PUBLIC_API_URL ??
-      "(browser → /api/assets → server APPS_SCRIPT_URL)";
-    evidence.push(`clientExecHint=${execHint}`);
-
-    console.info("[asset-diag][client] outbound update", {
-      assetId: id,
-      facility: input.facility,
-      name: input.name,
-      clientExecHint: execHint,
-    });
-
-    const response = await apiClient.post<RemoteAsset>("/assets", {
+    const response = await apiClient.post<Asset>("/assets", {
       resource: "assets",
       action: "update",
       payload: { id, ...input },
@@ -370,95 +302,6 @@ export const AssetService = {
       throw new ApiError("Asset update returned no record.", 502);
     }
 
-    const raw = response.data as RemoteAsset;
-    const diag = (raw._diag as AssetUpdateDiag | undefined) ?? null;
-    const returned = mapRemoteAsset(raw);
-
-    console.info("[asset-diag][client] update response", {
-      returnedFacility: returned.facility,
-      diag,
-    });
-
-    if (!diag || diag.buildMarker !== ASSET_FACILITY_DIAG_BUILD) {
-      evidence.push(
-        `missing build marker (got ${diag?.buildMarker ?? "none"}; expected ${ASSET_FACILITY_DIAG_BUILD}) — Apps Script /exec is stale or wrong deployment`
-      );
-      return {
-        asset: returned,
-        diag,
-        path: "old_deployment",
-        evidence,
-      };
-    }
-
-    evidence.push(
-      `spreadsheet=${diag.spreadsheetName ?? "?"} (${diag.spreadsheetId ?? "?"})`
-    );
-    evidence.push(`sheet=${diag.sheetName ?? "?"}`);
-    evidence.push(
-      `facilityCols=${JSON.stringify(diag.facilityCols ?? [])}`
-    );
-    evidence.push(
-      `before=${diag.facilityBeforeObject ?? ""} cells=${JSON.stringify(diag.facilityBeforeCells ?? [])}`
-    );
-    evidence.push(
-      `requested=${diag.requestedFacility ?? ""} written=${diag.resolvedFacilityWritten ?? ""}`
-    );
-    evidence.push(`cellAfterFlush=${diag.cellAfterFlush ?? ""}`);
-    evidence.push(`verifiedFacility=${diag.verifiedFacility ?? ""}`);
-    evidence.push(
-      `verifiedManufacturer=${(diag as { verifiedManufacturer?: string }).verifiedManufacturer ?? ""}`
-    );
-    evidence.push(
-      `verifiedModel=${(diag as { verifiedModel?: string }).verifiedModel ?? ""}`
-    );
-    evidence.push(`apiReturnedFacility=${returned.facility}`);
-    evidence.push(`apiReturnedManufacturer=${returned.manufacturer}`);
-    evidence.push(`apiReturnedModel=${returned.model}`);
-
-    if (!diag.facilityCols || diag.facilityCols.length === 0) {
-      evidence.push("no facility column mapped on Assets sheet headers");
-      return {
-        asset: returned,
-        diag,
-        path: "no_facility_column",
-        evidence,
-      };
-    }
-
-    const intended = String(input.facility ?? "").trim();
-    const cell = String(diag.cellAfterFlush ?? "").trim();
-    const before = String(diag.facilityBeforeObject ?? "").trim();
-
-    if (cell === before && intended && cell !== intended) {
-      evidence.push(
-        "sheet cell unchanged after write — persistence failed at spreadsheet layer"
-      );
-      return {
-        asset: returned,
-        diag,
-        path: "sheet_unchanged",
-        evidence,
-      };
-    }
-
-    if (intended && cell && cell !== intended) {
-      // Allow id/name equivalence only when diagnosing write target.
-      const facilityNameById = await loadFacilityNameById();
-      if (!facilitiesEquivalent(intended, cell, facilityNameById)) {
-        evidence.push(
-          `sheet cell (${cell}) does not match intended facility (${intended})`
-        );
-        return {
-          asset: returned,
-          diag,
-          path: "sheet_unchanged",
-          evidence,
-        };
-      }
-    }
-
-    // Authoritative re-read via getById
     const verified = await AssetService.getAsset(id);
     if (!verified) {
       throw new ApiError(
@@ -466,67 +309,8 @@ export const AssetService = {
         502
       );
     }
-    evidence.push(`getById.facility=${verified.facility}`);
-
-    if (intended) {
-      const facilityNameById = await loadFacilityNameById();
-      if (
-        !facilitiesEquivalent(intended, verified.facility, facilityNameById)
-      ) {
-        evidence.push(
-          "getById returned old/mismatched facility after sheet write"
-        );
-        return {
-          asset: verified,
-          diag,
-          path: "sheet_changed_api_stale",
-          evidence,
-        };
-      }
-    }
-
-    // List path re-read (same pipeline the table uses)
-    const listed = await AssetService.listAssets({
-      page: 1,
-      pageSize: 500,
-      search: id,
-    });
-    const listedAsset =
-      listed.data.find((row) => row.id === id) ??
-      (await loadAllAssets()).find((row) => row.id === id) ??
-      null;
-    evidence.push(
-      `list.facility=${listedAsset?.facility ?? "(not in list page)"}`
-    );
-
-    if (listedAsset && intended) {
-      const facilityNameById = await loadFacilityNameById();
-      if (
-        !facilitiesEquivalent(
-          intended,
-          listedAsset.facility,
-          facilityNameById
-        )
-      ) {
-        evidence.push(
-          "list/query pipeline still shows old facility after confirmed sheet write"
-        );
-        return {
-          asset: verified,
-          diag,
-          path: "api_ok_list_stale",
-          evidence,
-        };
-      }
-    }
-
-    evidence.push("sheet cell + getById + list agree with intended facility");
-    return {
-      asset: verified,
-      diag,
-      path: "persisted",
-      evidence,
-    };
+    await assertAssetPersisted(id, input, verified);
+    return verified;
   },
 
   /** Soft-deactivate only — assets are never deleted. */

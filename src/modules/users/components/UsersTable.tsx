@@ -5,8 +5,17 @@ import { Users } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { DataTable, type Column } from "@/components/tables/DataTable";
 import { USER_STATUS_VARIANT } from "../constants";
-import { formatWorkload, getUserInitials, labelize } from "../utils";
+import { formatFacilityDisplay, formatWorkload, getUserInitials, labelize } from "../utils";
 import type { User } from "../types";
+
+function statusBadgeVariant(user: User) {
+  if (!user.status) return "neutral" as const;
+  return USER_STATUS_VARIANT[user.status];
+}
+
+function statusLabel(user: User) {
+  return user.status ? labelize(user.status) : "Unset";
+}
 import { UserRowActions } from "./UserRowActions";
 
 interface UsersTableProps {
@@ -64,7 +73,7 @@ export function UsersTable({
         key: "role",
         header: "Role",
         render: (user) => (
-          <span className="text-foreground">{labelize(user.role)}</span>
+          <span className="text-foreground">{user.role || "—"}</span>
         ),
       },
       {
@@ -78,7 +87,7 @@ export function UsersTable({
         key: "facility",
         header: "Facility",
         render: (user) => (
-          <span className="text-muted">{user.facility}</span>
+          <span className="text-muted">{formatFacilityDisplay(user.facility)}</span>
         ),
       },
       {
@@ -94,8 +103,8 @@ export function UsersTable({
         key: "status",
         header: "Status",
         render: (user) => (
-          <Badge variant={USER_STATUS_VARIANT[user.status]}>
-            {labelize(user.status)}
+          <Badge variant={statusBadgeVariant(user)}>
+            {statusLabel(user)}
           </Badge>
         ),
       },

@@ -1,16 +1,16 @@
 "use client";
 
-import { Plus, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import { useState } from "react";
 import {
   ExploreHeader,
   ModeFrame,
   StreamSurface,
 } from "@/components/platform";
-import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
+import { DEFAULT_USER_SORT } from "../constants";
 import { useUsers } from "../hooks/useUsers";
 import type { UserModalState } from "../types";
 import { UserFormModal } from "./UserFormModal";
@@ -32,6 +32,8 @@ export function UsersPage() {
     setRole,
     facility,
     setFacility,
+    roleOptions,
+    clearFilters,
     page,
     setPage,
     totalPages,
@@ -74,12 +76,6 @@ export function UsersPage() {
         title="People"
         description="People across the operation — roles, access, and facility relationships."
         territoryNote={`${loading ? "—" : total} people in view`}
-        actions={
-          <Button onClick={() => setModal({ type: "create" })}>
-            <Plus className="h-4 w-4" />
-            New user
-          </Button>
-        }
       />
 
       <UsersToolbar
@@ -87,10 +83,17 @@ export function UsersPage() {
         onSearchChange={setSearch}
         role={role}
         onRoleChange={setRole}
+        roleOptions={roleOptions}
         facility={facility}
         onFacilityChange={setFacility}
         status={status}
         onStatusChange={setStatus}
+        sort={DEFAULT_USER_SORT}
+        onSortChange={() => {}}
+        total={total}
+        loading={loading}
+        onClearAll={clearFilters}
+        onCreate={() => setModal({ type: "create" })}
       />
 
       {error ? (

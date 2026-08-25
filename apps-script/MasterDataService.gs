@@ -28,6 +28,7 @@ var MasterDataService = (function () {
     var facilityId = payload.facilityId;
     var buildingId = payload.buildingId;
     var floorId = payload.floorId;
+    var category = payload.category;
 
     return rows.filter(function (row) {
       var matchesSearch =
@@ -68,12 +69,19 @@ var MasterDataService = (function () {
         floorId === "all" ||
         String(row.floorId || "") === String(floorId);
 
+      var matchesCategory =
+        !category ||
+        category === "all" ||
+        String(row.category || "")
+          .toLowerCase() === String(category).toLowerCase();
+
       return (
         matchesSearch &&
         matchesStatus &&
         matchesFacility &&
         matchesBuilding &&
-        matchesFloor
+        matchesFloor &&
+        matchesCategory
       );
     });
   }

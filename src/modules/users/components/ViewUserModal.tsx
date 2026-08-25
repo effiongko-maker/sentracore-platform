@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { formatDate, formatRelativeTime } from "@/lib/utils";
 import { USER_STATUS_VARIANT } from "../constants";
-import { formatWorkload, getUserInitials, labelize } from "../utils";
+import { formatFacilityDisplay, formatWorkload, getUserInitials, labelize } from "../utils";
 import type { User } from "../types";
 
 interface ViewUserModalProps {
@@ -66,12 +66,12 @@ export function ViewUserModal({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-base font-semibold text-primary">{user.name}</p>
-            <Badge variant={USER_STATUS_VARIANT[user.status]}>
-              {labelize(user.status)}
+            <Badge variant={user.status ? USER_STATUS_VARIANT[user.status] : "neutral"}>
+              {user.status ? labelize(user.status) : "Unset"}
             </Badge>
           </div>
           <p className="mt-1 text-sm text-muted">
-            {labelize(user.role)} · {user.specialization}
+            {user.role || "—"} · {user.specialization || "—"}
           </p>
         </div>
       </div>
@@ -79,9 +79,9 @@ export function ViewUserModal({
       <div className="mt-5 grid gap-5 sm:grid-cols-2">
         <Detail label="Email" value={user.email} />
         <Detail label="Phone" value={user.phone} />
-        <Detail label="Role" value={labelize(user.role)} />
+        <Detail label="Role" value={user.role} />
         <Detail label="Specialization" value={user.specialization} />
-        <Detail label="Facility" value={user.facility} />
+        <Detail label="Facility" value={formatFacilityDisplay(user.facility)} />
         <Detail
           label="Current Workload"
           value={formatWorkload(user.activeWorkOrders)}
@@ -89,8 +89,8 @@ export function ViewUserModal({
         <Detail
           label="Status"
           value={
-            <Badge variant={USER_STATUS_VARIANT[user.status]}>
-              {labelize(user.status)}
+            <Badge variant={user.status ? USER_STATUS_VARIANT[user.status] : "neutral"}>
+              {user.status ? labelize(user.status) : "Unset"}
             </Badge>
           }
         />

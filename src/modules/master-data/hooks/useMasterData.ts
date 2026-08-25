@@ -16,6 +16,10 @@ export function useMasterData(entity: MasterDataEntity) {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatusState] = useState<MasterDataStatus | "all">("all");
+  const [facilityId, setFacilityIdState] = useState<string | "all">("all");
+  const [buildingId, setBuildingIdState] = useState<string | "all">("all");
+  const [floorId, setFloorIdState] = useState<string | "all">("all");
+  const [category, setCategoryState] = useState<string | "all">("all");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -29,11 +33,48 @@ export function useMasterData(entity: MasterDataEntity) {
     setPage(1);
   }, []);
 
+  const setFacilityId = useCallback((value: string | "all") => {
+    setFacilityIdState(value);
+    setBuildingIdState("all");
+    setFloorIdState("all");
+    setPage(1);
+  }, []);
+
+  const setBuildingId = useCallback((value: string | "all") => {
+    setBuildingIdState(value);
+    setFloorIdState("all");
+    setPage(1);
+  }, []);
+
+  const setFloorId = useCallback((value: string | "all") => {
+    setFloorIdState(value);
+    setPage(1);
+  }, []);
+
+  const setCategory = useCallback((value: string | "all") => {
+    setCategoryState(value);
+    setPage(1);
+  }, []);
+
+  const clearAll = useCallback(() => {
+    setSearch("");
+    setStatusState("all");
+    setFacilityIdState("all");
+    setBuildingIdState("all");
+    setFloorIdState("all");
+    setCategoryState("all");
+    setPage(1);
+  }, []);
+
   useEffect(() => {
     if (previousEntity.current !== entity) {
       previousEntity.current = entity;
       setSearch("");
       setStatusState("all");
+      setFacilityIdState("all");
+      setBuildingIdState("all");
+      setFloorIdState("all");
+      setCategoryState("all");
       setPage(1);
     }
   }, [entity]);
@@ -58,6 +99,10 @@ export function useMasterData(entity: MasterDataEntity) {
           pageSize: MASTER_DATA_PAGE_SIZE,
           search: debouncedSearch,
           status,
+          facilityId,
+          buildingId,
+          floorId,
+          category,
         });
 
         if (id !== requestId.current) return;
@@ -79,7 +124,16 @@ export function useMasterData(entity: MasterDataEntity) {
         if (id === requestId.current) setLoading(false);
       }
     },
-    [entity, page, debouncedSearch, status]
+    [
+      entity,
+      page,
+      debouncedSearch,
+      status,
+      facilityId,
+      buildingId,
+      floorId,
+      category,
+    ]
   );
 
   useEffect(() => {
@@ -99,11 +153,20 @@ export function useMasterData(entity: MasterDataEntity) {
     setSearch,
     status,
     setStatus,
+    facilityId,
+    setFacilityId,
+    buildingId,
+    setBuildingId,
+    floorId,
+    setFloorId,
+    category,
+    setCategory,
     page,
     setPage,
     totalPages,
     total,
     reload: () => fetchItems(page),
+    clearAll,
     deactivateItem,
   };
 }

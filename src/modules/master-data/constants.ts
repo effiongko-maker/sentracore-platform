@@ -1,4 +1,4 @@
-import type { MasterDataEntity, MasterDataStatus } from "./types";
+import type { MasterDataEntity, MasterDataSort, MasterDataStatus } from "./types";
 
 export const MASTER_DATA_ENTITIES: Array<{
   id: MasterDataEntity;
@@ -59,3 +59,28 @@ export const VENDOR_CATEGORIES = [
   "IT",
   "General",
 ] as const;
+
+export const MASTER_DATA_SORT_OPTIONS: Array<{
+  value: MasterDataSort;
+  label: string;
+}> = [{ value: "newest", label: "Newest" }];
+
+export const DEFAULT_MASTER_DATA_SORT: MasterDataSort = "newest";
+
+export function entityNoun(entity: MasterDataEntity): {
+  singular: string;
+  plural: string;
+} {
+  switch (entity) {
+    case "departments":
+      return { singular: "department", plural: "departments" };
+    case "buildings":
+      return { singular: "building", plural: "buildings" };
+    case "floors":
+      return { singular: "floor", plural: "floors" };
+    case "rooms":
+      return { singular: "room", plural: "rooms" };
+    case "vendors":
+      return { singular: "vendor", plural: "vendors" };
+  }
+}

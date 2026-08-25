@@ -1,11 +1,7 @@
 export type UserStatus = "active" | "inactive" | "pending" | "suspended";
 
-export type UserRole =
-  | "admin"
-  | "manager"
-  | "technician"
-  | "viewer"
-  | "supervisor";
+/** Sheet role labels are free-form (e.g. CEO, Facility Manager). */
+export type UserRole = string;
 
 export interface User {
   id: string;
@@ -15,9 +11,10 @@ export interface User {
   role: UserRole;
   specialization: string;
   facility: string;
-  /** Derived later from open work orders — never entered in forms. */
+  /** Derived from Current Workload column — never entered in forms. */
   activeWorkOrders: number;
-  status: UserStatus;
+  /** Empty when the sheet Status cell is blank. */
+  status: UserStatus | "";
   avatarUrl?: string;
   lastActive: string;
   createdAt: string;
@@ -43,6 +40,9 @@ export interface UserListParams {
   role?: UserRole | "all";
   facility?: string | "all";
 }
+
+/** Client-side list sort — matches Assets toolbar pattern. */
+export type UserSort = "newest";
 
 /**
  * Compact chrome identity for the signed-in platform user.

@@ -12,7 +12,7 @@ export type {
   UserStatus,
 } from "./types";
 export {
-  USER_ROLES,
+  USER_ROLE_SUGGESTIONS,
   USER_SPECIALIZATIONS,
   USER_STATUSES,
 } from "./constants";

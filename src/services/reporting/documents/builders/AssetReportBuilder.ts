@@ -13,7 +13,7 @@ export function buildAssetReportDocument(
   const { kpis, assets } = snapshot;
 
   const rows = assets.slice(0, 100).map((a) => ({
-    assetTag: a.assetTag,
+    id: a.id,
     name: a.name,
     facility: a.facility,
     category: a.category,

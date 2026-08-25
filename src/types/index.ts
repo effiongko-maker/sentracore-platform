@@ -17,7 +17,7 @@ export type {
 } from "./user";
 
 export {
-  USER_ROLES,
+  USER_ROLE_SUGGESTIONS,
   USER_SPECIALIZATIONS,
   USER_STATUSES,
 } from "./user";

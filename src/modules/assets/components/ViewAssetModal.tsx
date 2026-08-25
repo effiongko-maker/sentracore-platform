@@ -3,8 +3,7 @@
 import { Modal } from "@/components/modals/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { useFacilityName } from "@/hooks/useEntityLabel";
-import { formatDate } from "@/lib/utils";
+import { toDateInputValue } from "../utils";
 import {
   ASSET_CRITICALITY_VARIANT,
   ASSET_STATUS_VARIANT,
@@ -30,11 +29,6 @@ function Detail({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function FacilityDetail({ value }: { value: string }) {
-  const name = useFacilityName(value);
-  return <>{name || value || "—"}</>;
-}
-
 export function ViewAssetModal({
   open,
   asset,
@@ -48,7 +42,7 @@ export function ViewAssetModal({
       open={open}
       onClose={onClose}
       title={asset.name}
-      description={asset.assetTag}
+      description={asset.id}
       size="lg"
       footer={
         <>
@@ -83,19 +77,19 @@ export function ViewAssetModal({
             </Badge>
           </div>
           <p className="mt-1 text-sm text-muted">
-            {labelize(asset.category)} · <FacilityDetail value={asset.facility} />
+            {labelize(asset.category)} · {asset.facility || "—"}
           </p>
         </div>
       </div>
 
       <div className="mt-5 grid gap-5 sm:grid-cols-2">
         <Detail label="Asset ID" value={asset.id} />
-        <Detail label="Asset number" value={asset.assetTag || asset.id} />
         <Detail label="Category" value={labelize(asset.category)} />
-        <Detail label="Facility" value={<FacilityDetail value={asset.facility} />} />
+        <Detail label="Facility" value={asset.facility} />
         <Detail label="Manufacturer" value={asset.manufacturer} />
         <Detail label="Model" value={asset.model} />
         <Detail label="Serial number" value={asset.serialNumber} />
+        <Detail label="OEM ID" value={asset.oemId} />
         <Detail label="Condition" value={labelize(asset.condition)} />
         <Detail label="Assigned to" value={asset.assignedTo} />
         <Detail
@@ -106,14 +100,15 @@ export function ViewAssetModal({
             </Badge>
           }
         />
-        <Detail label="Purchase date" value={asset.purchaseDate || "—"} />
-        <Detail label="Warranty expiry" value={asset.warrantyExpiry || "—"} />
-        <Detail label="Created at" value={formatDate(asset.createdAt)} />
-        <Detail label="Updated at" value={formatDate(asset.updatedAt)} />
         <Detail
-          label="Description"
-          value={asset.description || "—"}
+          label="Install date"
+          value={toDateInputValue(asset.installDate) || "—"}
         />
+        <Detail
+          label="Warranty expiry"
+          value={toDateInputValue(asset.warrantyExpiry) || "—"}
+        />
+        <Detail label="Criticality" value={labelize(asset.criticality)} />
       </div>
     </Modal>
   );

@@ -2,35 +2,30 @@
 
 **Sheet name:** `Assets`
 
-## Preferred header row (display names)
+## Header row (columns A:N — exact order)
 
-| Asset ID | Asset Number | Asset Name | Category | Facility ID | Manufacturer | Model | Serial Number | Install Date | Warranty Expiry | Condition | Status | Assigned To | Criticality | Description | Created At | Updated At |
-
-CamelCase headers (`id`, `assetTag`, `name`, `facility`, …) are also accepted.
+| Asset ID | Facility | Asset Name | Category | Manufacturer | Model | Serial Number | Install Date | Warranty Expiry | OEM ID | Condition | Status | Assigned To | Criticality |
 
 ## Canonical API fields
 
 | Sheet header | API field |
 |---|---|
-| Asset ID / id | `id` |
-| Asset Number / Asset Tag | `assetTag` |
-| Asset Name / name | `name` |
+| Asset ID | `id` |
+| Facility | `facility` (display name as stored — not resolved to an ID) |
+| Asset Name | `name` |
 | Category | `category` |
-| Facility ID | `facilityId` (+ mirrored as `facility`) |
 | Manufacturer | `manufacturer` |
 | Model | `model` |
 | Serial Number | `serialNumber` |
-| Install Date / Purchase Date | `purchaseDate` |
+| Install Date | `installDate` |
 | Warranty Expiry | `warrantyExpiry` |
+| OEM ID | `oemId` |
 | Condition | `condition` |
 | Status | `status` |
-| Assigned To / OEM ID | `assignedTo` |
+| Assigned To | `assignedTo` |
 | Criticality | `criticality` |
-| Description | `description` |
-| Created At | `createdAt` |
-| Updated At | `updatedAt` |
 
-**Important:** Facility ID resolution must never write into Manufacturer / Model / Serial Number. Reads and writes are by header name only.
+Reads and writes use **exact header names only** — never column position.
 
 ## Status values
 `active` · `pending` · `inactive` · `suspended`
@@ -44,4 +39,4 @@ CamelCase headers (`id`, `assetTag`, `name`, `facility`, …) are also accepted.
 ## Criticality values
 `unassessed` · `low` · `medium` · `high` · `critical`
 
-New assets default to `unassessed` until criticality is set in edit.
+New assets default to `unassessed` criticality until assessed in edit.

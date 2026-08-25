@@ -560,7 +560,7 @@ export function buildClientReport(input: {
         scoped.assets.slice(0, 12).map((asset) => ({
           id: asset.id,
           cells: [
-            asset.name || asset.assetTag || asset.id,
+            asset.name || asset.id,
             asset.status || "—",
             asset.condition || "—",
             assetFacilityName(scoped, asset),
@@ -623,7 +623,7 @@ export function buildClientReport(input: {
               .map((asset) => ({
                 id: asset.id,
                 cells: [
-                  asset.name || asset.assetTag || asset.id,
+                  asset.name || asset.id,
                   asset.status || "—",
                   asset.condition || "—",
                   assetFacilityName(scoped, asset),

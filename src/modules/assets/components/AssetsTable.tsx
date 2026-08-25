@@ -53,7 +53,7 @@ export function AssetsTable({
             </div>
             <div>
               <span className="font-medium text-foreground">{asset.name}</span>
-              <p className="text-xs text-muted">{asset.assetTag}</p>
+              <p className="text-xs text-muted">{asset.id}</p>
             </div>
           </div>
         ),

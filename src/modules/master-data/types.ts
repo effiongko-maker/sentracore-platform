@@ -57,7 +57,11 @@ export interface MasterDataListParams {
   facilityId?: string | "all";
   buildingId?: string | "all";
   floorId?: string | "all";
+  category?: string | "all";
 }
+
+/** Client-side list sort — matches Assets/People toolbar pattern. */
+export type MasterDataSort = "newest";
 
 export type MasterDataModalState =
   | { type: "closed" }

@@ -5,112 +5,199 @@ import type {
   UpdateUserInput,
   User,
   UserListParams,
-  UserRole,
   UserStatus,
 } from "@/modules/users/types";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
+import { FacilityService } from "@/services/facilities/FacilityService";
+import { queryUsersPage } from "./queryUsers";
 
-/** Raw row shape from the Apps Script users API (may differ from domain User). */
+export const USER_REPOSITORY_BUILD = "2026-08-25-users-header-v3";
+
+/** Raw row shape from the Apps Script users API. */
 type RemoteUser = Record<string, unknown>;
 
+function pickField(raw: RemoteUser, ...keys: string[]): unknown {
+  for (const key of keys) {
+    const value = raw[key];
+    if (value != null && String(value).trim() !== "") return value;
+  }
+  return undefined;
+}
+
+function normalizeText(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeUserStatus(raw: unknown): UserStatus | "" {
+  const token = normalizeText(raw).replace(/\s+/g, "_");
+  if (!token) return "";
+  if (token === "active") return "active";
+  if (token === "inactive" || token === "deactivated") return "inactive";
+  if (token === "suspended") return "suspended";
+  if (token === "pending") return "pending";
+  return token as UserStatus;
+}
+
+function parseWorkload(raw: unknown): number {
+  const text = String(raw ?? "").trim();
+  if (!text || text === "-") return 0;
+  const n = Number(text);
+  return Number.isFinite(n) ? n : 0;
+}
+
 function mapRemoteUser(raw: RemoteUser): User {
-  const role = String(raw.role ?? "viewer").toLowerCase() as UserRole;
-  const status = String(raw.status ?? "pending").toLowerCase() as UserStatus;
-  const workload = Number(raw.activeWorkOrders ?? raw.workload ?? 0);
+  const id = String(pickField(raw, "id", "User ID") ?? "");
+  const dateAdded = String(
+    pickField(raw, "createdAt", "lastActive", "Date Added") ?? ""
+  );
 
   return {
-    id: String(raw.id ?? ""),
-    name: String(raw.name ?? ""),
-    email: String(raw.email ?? ""),
-    phone: raw.phone ? String(raw.phone) : undefined,
-    role,
-    specialization: String(raw.specialization ?? ""),
-    facility: String(raw.facility ?? ""),
-    activeWorkOrders: Number.isFinite(workload) ? workload : 0,
-    status,
+    id,
+    name: String(pickField(raw, "name", "Full Name") ?? ""),
+    email: String(pickField(raw, "email", "Email") ?? ""),
+    phone: (() => {
+      const value = pickField(raw, "phone", "Phone");
+      return value != null ? String(value) : undefined;
+    })(),
+    role: String(pickField(raw, "role", "Role") ?? ""),
+    specialization: String(
+      pickField(raw, "specialization", "Specialization") ?? ""
+    ),
+    facility: String(
+      pickField(raw, "facility", "Facility Assigned") ?? ""
+    ),
+    activeWorkOrders: parseWorkload(
+      pickField(raw, "activeWorkOrders", "Current Workload")
+    ),
+    status: normalizeUserStatus(pickField(raw, "status", "Status")),
     avatarUrl: raw.avatarUrl ? String(raw.avatarUrl) : undefined,
-    lastActive: String(raw.lastActive ?? new Date().toISOString()),
-    createdAt: String(raw.createdAt ?? new Date().toISOString()),
+    lastActive: dateAdded,
+    createdAt: dateAdded,
   };
 }
 
-/**
- * Normalize Apps Script /api/users envelopes.
- *
- * Correct (Facilities-style):
- *   { data: User[], page, pageSize, total, totalPages }
- *
- * Broken double-wrap still seen on some Web App versions:
- *   { data: { data: User[], page, pageSize, total, totalPages }, page, totalPages }
- */
-function unwrapUsersPayload(payload: unknown): {
-  rows: unknown[];
-  page?: unknown;
-  pageSize?: unknown;
-  total?: unknown;
-  totalPages?: unknown;
-} {
+function extractUserRows(payload: unknown): User[] {
   if (Array.isArray(payload)) {
-    return { rows: payload };
+    return payload.map((row) => mapRemoteUser(row as RemoteUser));
   }
-
-  if (!payload || typeof payload !== "object") {
-    return { rows: [] };
-  }
-
-  const outer = payload as Record<string, unknown>;
-
-  // Shape B: { data: User[], ... }
-  if (Array.isArray(outer.data)) {
-    return {
-      rows: outer.data,
-      page: outer.page,
-      pageSize: outer.pageSize,
-      total: outer.total,
-      totalPages: outer.totalPages,
-    };
-  }
-
-  // Shape C: { data: { data: User[], ... }, page, totalPages }
-  if (outer.data && typeof outer.data === "object") {
-    const inner = outer.data as Record<string, unknown>;
-    if (Array.isArray(inner.data)) {
-      return {
-        rows: inner.data,
-        page: inner.page ?? outer.page,
-        pageSize: inner.pageSize ?? outer.pageSize,
-        total: inner.total ?? outer.total,
-        totalPages: inner.totalPages ?? outer.totalPages,
-      };
+  if (payload && typeof payload === "object") {
+    const page = payload as Record<string, unknown>;
+    if (Array.isArray(page.data)) {
+      return page.data.map((row) => mapRemoteUser(row as RemoteUser));
+    }
+    if (page.data && typeof page.data === "object") {
+      const inner = page.data as Record<string, unknown>;
+      if (Array.isArray(inner.data)) {
+        return inner.data.map((row) => mapRemoteUser(row as RemoteUser));
+      }
     }
   }
-
-  return { rows: [] };
+  return [];
 }
 
-function toPaginatedUsers(
-  payload: unknown,
-  params: UserListParams
-): PaginatedResult<User> {
-  const unwrapped = unwrapUsersPayload(payload);
-  const data = unwrapped.rows.map((row) => mapRemoteUser(row as RemoteUser));
+async function loadAllUsers(): Promise<User[]> {
+  const pageSize = 500;
+  let page = 1;
+  let totalPages = 1;
+  const all: User[] = [];
 
-  return {
-    data,
-    page: Number(unwrapped.page ?? params.page ?? 1),
-    pageSize: Number(unwrapped.pageSize ?? params.pageSize ?? data.length),
-    total: Number(unwrapped.total ?? data.length),
-    totalPages: Number(unwrapped.totalPages ?? 1),
-  };
+  while (page <= totalPages) {
+    const response = await apiClient.post<unknown>("/users", {
+      resource: "users",
+      action: "getAll",
+      payload: {
+        page,
+        pageSize,
+        search: "",
+        status: "all",
+        role: "all",
+        facility: "all",
+      },
+    });
+
+    const payload = response.data;
+    const rows = extractUserRows(payload);
+    all.push(...rows);
+
+    if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+      const meta = payload as Record<string, unknown>;
+      if (meta.data && typeof meta.data === "object") {
+        const inner = meta.data as Record<string, unknown>;
+        totalPages = Math.max(1, Number(inner.totalPages ?? 1));
+        const total = Number(inner.total ?? all.length);
+        if (all.length >= total || rows.length === 0) break;
+      } else {
+        totalPages = Math.max(1, Number(meta.totalPages ?? 1));
+        if (rows.length === 0) break;
+      }
+    } else {
+      break;
+    }
+
+    page += 1;
+    if (page > 100) break;
+  }
+
+  const byId = new Map<string, User>();
+  for (const user of all) {
+    if (user.id) byId.set(user.id, user);
+  }
+  return Array.from(byId.values());
+}
+
+async function loadFacilityNameById(): Promise<Map<string, string>> {
+  try {
+    const result = await FacilityService.listFacilities({
+      page: 1,
+      pageSize: 500,
+    });
+    return new Map(result.data.map((facility) => [facility.id, facility.name]));
+  } catch {
+    return new Map();
+  }
+}
+
+function fieldMismatch(
+  field: string,
+  expected: string,
+  actual: string
+): ApiError {
+  return new ApiError(
+    `User ${field} did not persist (expected "${expected}", got "${actual || "(empty)"}"). Redeploy Apps Script if this continues.`,
+    502
+  );
+}
+
+async function assertUserPersisted(
+  intended: CreateUserInput | UpdateUserInput,
+  actual: User
+): Promise<void> {
+  const checks: Array<[keyof CreateUserInput, string | undefined]> = [
+    ["name", intended.name],
+    ["email", intended.email],
+    ["phone", intended.phone],
+    ["role", intended.role],
+    ["specialization", intended.specialization],
+    ["facility", intended.facility],
+    ["status", intended.status],
+  ];
+
+  for (const [field, expected] of checks) {
+    if (expected == null) continue;
+    const actualValue = String(actual[field as keyof User] ?? "");
+    if (normalizeText(expected) !== normalizeText(actualValue)) {
+      throw fieldMismatch(field, String(expected), actualValue);
+    }
+  }
 }
 
 /**
  * Users domain service.
  *
- * Talks only to ApiClient — never to storage backends or UI details.
- * CRUD uses the live Apps Script envelope: { resource, action, payload }.
- * Current session identity comes from Supabase via /api/auth/me.
+ * List pipeline (authoritative in TS): all → search/filters → sort → paginate
  */
 export const UserService = {
   async getCurrentUser(): Promise<CurrentUser> {
@@ -149,14 +236,28 @@ export const UserService = {
   },
 
   async listUsers(params: UserListParams = {}): Promise<PaginatedResult<User>> {
-    const response = await apiClient.post<unknown>("/users", {
-      resource: "users",
-      action: "getAll",
-      payload: params,
-    });
-
-    return toPaginatedUsers(response.data, params);
+    const { page } = await this.listUsersWithCatalog(params);
+    return page;
   },
+
+  async listUsersWithCatalog(
+    params: UserListParams = {}
+  ): Promise<{ catalog: User[]; page: PaginatedResult<User> }> {
+    const [users, facilityNameById] = await Promise.all([
+      loadAllUsers(),
+      loadFacilityNameById(),
+    ]);
+    return {
+      catalog: users,
+      page: queryUsersPage(users, params, facilityNameById),
+    };
+  },
+
+  /** Unfiltered user catalog for filter option discovery. */
+  async fetchAllUsers(): Promise<User[]> {
+    return loadAllUsers();
+  },
+
   async getUser(id: string): Promise<User | null> {
     try {
       const response = await apiClient.post<unknown>("/users", {
@@ -164,6 +265,7 @@ export const UserService = {
         action: "getById",
         payload: { id },
       });
+      if (response.data == null) return null;
       return mapRemoteUser(response.data as RemoteUser);
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) return null;
@@ -172,12 +274,59 @@ export const UserService = {
   },
 
   async createUser(input: CreateUserInput): Promise<User> {
+    const clientRequestId = `usr-create-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    console.info("[UserService.createUser] dispatch", {
+      clientRequestId,
+      email: input.email,
+      name: input.name,
+    });
+
     const response = await apiClient.post<unknown>("/users", {
       resource: "users",
       action: "create",
-      payload: input,
+      payload: { ...input, _clientRequestId: clientRequestId },
     });
-    return mapRemoteUser(response.data as RemoteUser);
+    if (response.data == null) {
+      throw new ApiError("User create returned no record.", 502);
+    }
+
+    const raw = response.data as RemoteUser;
+    const writeMeta = raw._write as
+      | {
+          buildMarker?: string;
+          clientRequestId?: string;
+          createInvocationCount?: number;
+          generatedId?: string;
+        }
+      | undefined;
+    if (!writeMeta || writeMeta.buildMarker !== USER_REPOSITORY_BUILD) {
+      throw new ApiError(
+        `User create used stale Apps Script (build ${writeMeta?.buildMarker ?? "missing"}; need ${USER_REPOSITORY_BUILD}). Redeploy UserRepository.gs before creating users.`,
+        502
+      );
+    }
+
+    console.info("[UserService.createUser] confirmed", {
+      clientRequestId,
+      responseClientRequestId: writeMeta.clientRequestId,
+      generatedId: writeMeta.generatedId,
+      createInvocationCount: writeMeta.createInvocationCount,
+    });
+
+    const created = mapRemoteUser(raw);
+    if (!created.id) {
+      throw new ApiError("User create returned a record without an id.", 502);
+    }
+
+    const verified = await UserService.getUser(created.id);
+    if (!verified) {
+      throw new ApiError(
+        "User was created but could not be re-read from storage.",
+        502
+      );
+    }
+    await assertUserPersisted(input, verified);
+    return verified;
   },
 
   async updateUser(id: string, input: UpdateUserInput): Promise<User> {
@@ -186,17 +335,40 @@ export const UserService = {
       action: "update",
       payload: { id, ...input },
     });
-    return mapRemoteUser(response.data as RemoteUser);
+    if (response.data == null) {
+      throw new ApiError("User update returned no record.", 502);
+    }
+
+    const verified = await UserService.getUser(id);
+    if (!verified) {
+      throw new ApiError(
+        `User ${id} update could not be confirmed — record missing after save.`,
+        502
+      );
+    }
+    await assertUserPersisted(input, verified);
+    return verified;
   },
 
   /** Soft-deactivate only — users are never deleted. */
   async deactivateUser(id: string): Promise<User> {
-    const response = await apiClient.post<unknown>("/users", {
+    await apiClient.post<unknown>("/users", {
       resource: "users",
       action: "deactivate",
       payload: { id },
     });
-    return mapRemoteUser(response.data as RemoteUser);
+
+    const verified = await UserService.getUser(id);
+    if (!verified) {
+      throw new ApiError(
+        `User ${id} deactivate could not be confirmed.`,
+        502
+      );
+    }
+    if (normalizeText(verified.status) !== "inactive") {
+      throw fieldMismatch("status", "inactive", verified.status);
+    }
+    return verified;
   },
 };
 

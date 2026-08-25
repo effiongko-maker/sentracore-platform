@@ -1,4 +1,4 @@
-import type { User } from "./types";
+import type { User, UserStatus } from "./types";
 
 export function getUserInitials(name: string) {
   return name
@@ -14,7 +14,26 @@ export function formatWorkload(activeWorkOrders: number) {
 }
 
 export function labelize(value: string) {
+  if (!value) return "—";
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+export function formatFacilityDisplay(facility: string) {
+  const trimmed = String(facility ?? "").trim();
+  if (!trimmed || trimmed === "-") return "—";
+  return trimmed;
+}
+
+export function resolveFacilityDisplayName(
+  value: string,
+  facilities: Array<{ id: string; name: string }>
+): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "-") return "-";
+  const match = facilities.find(
+    (item) => item.id === trimmed || item.name === trimmed
+  );
+  return match?.name ?? trimmed;
 }
 
 export function toCreateFormValues(user?: User | null) {
@@ -22,9 +41,12 @@ export function toCreateFormValues(user?: User | null) {
     name: user?.name ?? "",
     email: user?.email ?? "",
     phone: user?.phone ?? "",
-    role: user?.role ?? ("technician" as const),
-    specialization: user?.specialization ?? "General Operations",
-    facility: user?.facility ?? "",
-    status: user?.status ?? ("pending" as const),
+    role: user?.role ?? "",
+    specialization: user?.specialization ?? "",
+    facility:
+      user?.facility && user.facility !== "-"
+        ? user.facility
+        : "",
+    status: (user?.status || "active") as UserStatus,
   };
 }

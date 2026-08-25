@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { distinctUserRoles } from "@/services/users/queryUsers";
 import { USERS_PAGE_SIZE } from "../constants";
 import { UserService } from "../services/UserService";
 import type { User, UserRole, UserStatus } from "../types";
 
 export function useUsers() {
   const [users, setUsers] = useState<User[]>([]);
+  const [catalog, setCatalog] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -21,6 +23,8 @@ export function useUsers() {
   const debouncedSearch = useDebouncedValue(search, 250);
   const previousSearch = useRef(debouncedSearch);
 
+  const roleOptions = useMemo(() => distinctUserRoles(catalog), [catalog]);
+
   const setStatus = useCallback((value: UserStatus | "all") => {
     setStatusState(value);
     setPage(1);
@@ -33,6 +37,14 @@ export function useUsers() {
 
   const setFacility = useCallback((value: string | "all") => {
     setFacilityState(value);
+    setPage(1);
+  }, []);
+
+  const clearFilters = useCallback(() => {
+    setSearch("");
+    setStatusState("all");
+    setRoleState("all");
+    setFacilityState("all");
     setPage(1);
   }, []);
 
@@ -50,21 +62,20 @@ export function useUsers() {
       setError(null);
 
       try {
-        const result = await UserService.listUsers({
-          page: nextPage,
-          pageSize: USERS_PAGE_SIZE,
-          search: debouncedSearch,
-          status,
-          role,
-          facility,
-        });
+        const { page: result, catalog: all } =
+          await UserService.listUsersWithCatalog({
+            page: nextPage,
+            pageSize: USERS_PAGE_SIZE,
+            search: debouncedSearch,
+            status,
+            role,
+            facility,
+          });
 
         if (id !== requestId.current) return;
 
-        console.log("RESULT FROM API:", result);
-console.log("USERS ARRAY:", result.data);
-
-setUsers(result.data);
+        setCatalog(all);
+        setUsers(result.data);
         setTotalPages(result.totalPages);
         setTotal(result.total);
       } catch (err) {
@@ -73,6 +84,7 @@ setUsers(result.data);
           err instanceof Error ? err.message : "Unable to load users right now."
         );
         setUsers([]);
+        setCatalog([]);
         setTotal(0);
         setTotalPages(1);
       } finally {
@@ -86,8 +98,8 @@ setUsers(result.data);
     fetchUsers(page);
   }, [fetchUsers, page]);
 
-  const deactivateUser = useCallback(async (id: string) => {
-    return UserService.deactivateUser(id);
+  const deactivateUser = useCallback(async (userId: string) => {
+    return UserService.deactivateUser(userId);
   }, []);
 
   return {
@@ -102,11 +114,13 @@ setUsers(result.data);
     setRole,
     facility,
     setFacility,
+    roleOptions,
     page,
     setPage,
     totalPages,
     total,
     reload: () => fetchUsers(page),
+    clearFilters,
     deactivateUser,
   };
 }

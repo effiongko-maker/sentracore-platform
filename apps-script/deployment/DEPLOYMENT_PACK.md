@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Generated: 2026-08-25T19:35:50.249Z
+Generated: 2026-08-25T23:47:02.598Z
 
 This document is the **single source of truth** for copying Apps Script
 source into the Google Apps Script project.
@@ -151,6 +151,14 @@ function doPost(e) {
  * GET returns a small JSON payload confirming the script is reachable.
  */
 function doGet() {
+  var builds = {};
+  if (typeof UserRepository !== "undefined" && UserRepository.BUILD_MARKER) {
+    builds.users = UserRepository.BUILD_MARKER;
+  }
+  if (typeof AssetRepository !== "undefined" && AssetRepository.BUILD_MARKER) {
+    builds.assets = AssetRepository.BUILD_MARKER;
+  }
+
   return jsonResponse_(true, "SentraCore Apps Script is online.", {
     service: "sentracore",
     resources: [
@@ -163,6 +171,7 @@ function doGet() {
       "master-data",
       "reporting-snapshot",
     ],
+    builds: builds,
   });
 }
 ```
@@ -178,74 +187,61 @@ AssetRepository.gs
  *
  * Sheet: Assets
  *
- * Reads/writes by HEADER NAME only (never positional indexes).
- * Live sheets may use display headers ("Asset ID", "Facility ID", …) or
- * camelCase. Unknown columns are preserved on update.
+ * Canonical header row (columns A:N — exact order, do not reorder):
+ *   Asset ID | Facility | Asset Name | Category | Manufacturer | Model |
+ *   Serial Number | Install Date | Warranty Expiry | OEM ID | Condition |
+ *   Status | Assigned To | Criticality
  *
- * Canonical API record fields:
- *   id, assetTag, name, category, facilityId, manufacturer, model,
- *   serialNumber, assignedTo, purchaseDate, warrantyExpiry, condition,
- *   status, criticality, description, createdAt, updatedAt
- *
- * `facility` is included as a mirror of facilityId for older clients.
+ * Reads and writes by exact header name only — never by column index.
+ * Facility stores the display value exactly as written (e.g. "NCC Annex").
  */
 
 var AssetRepository = (function () {
   var SHEET_NAME = "Assets";
 
-  /**
-   * Preferred sheet header → canonical field.
-   * First match wins for READ. For WRITE we prefer the first header that
-   * already exists on the sheet.
-   */
-  var FIELD_HEADERS = {
-    id: ["Asset ID", "id", "ID", "Id"],
-    assetTag: ["Asset Number", "Asset Tag", "assetTag", "Tag"],
-    name: ["Asset Name", "name", "Name"],
-    category: ["Category", "category"],
-    facilityId: ["Facility ID", "facilityId", "facility", "Facility"],
-    // Read-only fallback when Facility ID is blank (never a write target).
-    facilityNameLegacy: ["Facility Name"],
-    manufacturer: ["Manufacturer", "manufacturer"],
-    model: ["Model", "model"],
-    serialNumber: ["Serial Number", "serialNumber"],
-    purchaseDate: ["Install Date", "Purchase Date", "purchaseDate"],
-    warrantyExpiry: ["Warranty Expiry", "warrantyExpiry"],
-    condition: ["Condition", "condition"],
-    status: ["Status", "status"],
-    assignedTo: ["Assigned To", "assignedTo", "OEM ID"],
-    criticality: ["Criticality", "criticality"],
-    description: ["Description", "description"],
-    createdAt: ["Created At", "createdAt"],
-    updatedAt: ["Updated At", "updatedAt"],
-  };
-
-  var CREATE_HEADERS = [
+  var CANONICAL_HEADERS = [
     "Asset ID",
-    "Asset Number",
+    "Facility",
     "Asset Name",
     "Category",
-    "Facility ID",
     "Manufacturer",
     "Model",
     "Serial Number",
     "Install Date",
     "Warranty Expiry",
+    "OEM ID",
     "Condition",
     "Status",
     "Assigned To",
     "Criticality",
-    "Description",
-    "Created At",
-    "Updated At",
   ];
+
+  /** Canonical API field → exact sheet header. */
+  var FIELD_TO_HEADER = {
+    id: "Asset ID",
+    facility: "Facility",
+    name: "Asset Name",
+    category: "Category",
+    manufacturer: "Manufacturer",
+    model: "Model",
+    serialNumber: "Serial Number",
+    installDate: "Install Date",
+    warrantyExpiry: "Warranty Expiry",
+    oemId: "OEM ID",
+    condition: "Condition",
+    status: "Status",
+    assignedTo: "Assigned To",
+    criticality: "Criticality",
+  };
 
   function getSheet_() {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName(SHEET_NAME);
     if (!sheet) {
       sheet = ss.insertSheet(SHEET_NAME);
-      sheet.getRange(1, 1, 1, CREATE_HEADERS.length).setValues([CREATE_HEADERS]);
+      sheet
+        .getRange(1, 1, 1, CANONICAL_HEADERS.length)
+        .setValues([CANONICAL_HEADERS]);
     }
     return sheet;
   }
@@ -254,171 +250,45 @@ var AssetRepository = (function () {
     return SheetFieldUtils.getHeaderMap(sheet);
   }
 
-  function firstExistingHeader_(headerMap, candidates) {
-    var i;
-    for (i = 0; i < candidates.length; i++) {
-      if (SheetFieldUtils.hasHeader(headerMap, candidates[i])) {
-        return candidates[i];
-      }
-    }
-    return "";
+  function readHeader_(sheetRow, header) {
+    return SheetFieldUtils.cellText(sheetRow[header]);
   }
 
-  function readField_(sheetRow, headerMap, candidates) {
-    var i;
-    for (i = 0; i < candidates.length; i++) {
-      var header = candidates[i];
-      if (!SheetFieldUtils.hasHeader(headerMap, header)) continue;
-      var value = SheetFieldUtils.cellText(sheetRow[header]);
-      if (value) return value;
-    }
-    // Return empty string if header exists but blank; else "".
-    var existing = firstExistingHeader_(headerMap, candidates);
-    if (existing) return SheetFieldUtils.cellText(sheetRow[existing]);
-    return "";
-  }
-
-  /**
-   * Persist facility as Facility ID. Accepts id, name, or code.
-   * Resolution is a separate step — never writes into manufacturer/model.
-   */
-  function resolveFacilityId_(value) {
-    var key = String(value == null ? "" : value).trim();
-    if (!key) return "";
-    if (typeof FacilityRepository === "undefined") return key;
-    try {
-      var facilities = FacilityRepository.getAll();
-      var i;
-      for (i = 0; i < facilities.length; i++) {
-        var f = facilities[i];
-        if (
-          String(f.id) === key ||
-          String(f.name) === key ||
-          String(f.code) === key
-        ) {
-          return String(f.id);
-        }
-      }
-    } catch (ignore) {}
-    return key;
-  }
-
-  function toCanonical_(sheetRow, headerMap, rawCells, headers) {
-    var facilityId = readField_(sheetRow, headerMap, FIELD_HEADERS.facilityId);
-    // Legacy sheets sometimes store the name under "Facility" / "Facility Name"
-    // when Facility ID is empty — keep that in facilityId only if no id column value.
-    if (!facilityId) {
-      facilityId = readField_(
-        sheetRow,
-        headerMap,
-        FIELD_HEADERS.facilityNameLegacy
-      );
-    }
-
-    var record = {
-      id: readField_(sheetRow, headerMap, FIELD_HEADERS.id),
-      assetTag: readField_(sheetRow, headerMap, FIELD_HEADERS.assetTag),
-      name: readField_(sheetRow, headerMap, FIELD_HEADERS.name),
-      category: readField_(sheetRow, headerMap, FIELD_HEADERS.category) || "other",
-      facilityId: facilityId,
-      // Mirror for older clients / TS mapper.
-      facility: facilityId,
-      manufacturer: readField_(
-        sheetRow,
-        headerMap,
-        FIELD_HEADERS.manufacturer
-      ),
-      model: readField_(sheetRow, headerMap, FIELD_HEADERS.model),
-      serialNumber: readField_(
-        sheetRow,
-        headerMap,
-        FIELD_HEADERS.serialNumber
-      ),
-      purchaseDate: readField_(
-        sheetRow,
-        headerMap,
-        FIELD_HEADERS.purchaseDate
-      ),
-      warrantyExpiry: readField_(
-        sheetRow,
-        headerMap,
-        FIELD_HEADERS.warrantyExpiry
-      ),
-      condition:
-        readField_(sheetRow, headerMap, FIELD_HEADERS.condition) || "good",
-      status: readField_(sheetRow, headerMap, FIELD_HEADERS.status) || "pending",
-      assignedTo: readField_(sheetRow, headerMap, FIELD_HEADERS.assignedTo),
+  function toCanonical_(sheetRow) {
+    return {
+      id: readHeader_(sheetRow, FIELD_TO_HEADER.id),
+      facility: readHeader_(sheetRow, FIELD_TO_HEADER.facility),
+      name: readHeader_(sheetRow, FIELD_TO_HEADER.name),
+      category: readHeader_(sheetRow, FIELD_TO_HEADER.category) || "other",
+      manufacturer: readHeader_(sheetRow, FIELD_TO_HEADER.manufacturer),
+      model: readHeader_(sheetRow, FIELD_TO_HEADER.model),
+      serialNumber: readHeader_(sheetRow, FIELD_TO_HEADER.serialNumber),
+      installDate: readHeader_(sheetRow, FIELD_TO_HEADER.installDate),
+      warrantyExpiry: readHeader_(sheetRow, FIELD_TO_HEADER.warrantyExpiry),
+      oemId: readHeader_(sheetRow, FIELD_TO_HEADER.oemId),
+      condition: readHeader_(sheetRow, FIELD_TO_HEADER.condition) || "good",
+      status: readHeader_(sheetRow, FIELD_TO_HEADER.status) || "pending",
+      assignedTo: readHeader_(sheetRow, FIELD_TO_HEADER.assignedTo),
       criticality:
-        readField_(sheetRow, headerMap, FIELD_HEADERS.criticality) ||
-        "unassessed",
-      description: readField_(sheetRow, headerMap, FIELD_HEADERS.description),
-      createdAt: readField_(sheetRow, headerMap, FIELD_HEADERS.createdAt),
-      updatedAt: readField_(sheetRow, headerMap, FIELD_HEADERS.updatedAt),
+        readHeader_(sheetRow, FIELD_TO_HEADER.criticality) || "unassessed",
     };
-
-    if (!record.assetTag) record.assetTag = record.id;
-    if (!record.createdAt) record.createdAt = new Date().toISOString();
-    if (!record.updatedAt) record.updatedAt = record.createdAt;
-
-    if (rawCells && headers) {
-      var byHeader = {};
-      var i;
-      for (i = 0; i < headers.length; i++) {
-        var h = String(headers[i] == null ? "" : headers[i]).trim();
-        if (!h) continue;
-        byHeader[h] = rawCells[i];
-      }
-      record._raw = {
-        headers: headers.map(function (h) {
-          return String(h == null ? "" : h);
-        }),
-        cells: rawCells.map(function (c) {
-          return c;
-        }),
-        byHeader: byHeader,
-      };
-    }
-
-    return record;
   }
 
   function canonicalToSheetFields_(canonical, headerMap) {
-    var facilityId = resolveFacilityId_(
-      canonical.facilityId != null ? canonical.facilityId : canonical.facility
-    );
     var fields = {};
-
-    function setField(fieldKey, value) {
-      var header = firstExistingHeader_(headerMap, FIELD_HEADERS[fieldKey]);
-      if (!header) return;
+    var fieldKey;
+    for (fieldKey in FIELD_TO_HEADER) {
+      if (!FIELD_TO_HEADER.hasOwnProperty(fieldKey)) continue;
+      var header = FIELD_TO_HEADER[fieldKey];
+      if (headerMap[header] === undefined) continue;
+      var value = canonical[fieldKey];
       fields[header] = value == null ? "" : value;
     }
-
-    setField("id", canonical.id || "");
-    setField("assetTag", canonical.assetTag || canonical.id || "");
-    setField("name", canonical.name || "");
-    setField("category", canonical.category || "other");
-    // Facility ID only — do not write facility name into adjacent columns.
-    setField("facilityId", facilityId);
-    setField("manufacturer", canonical.manufacturer || "");
-    setField("model", canonical.model || "");
-    setField("serialNumber", canonical.serialNumber || "");
-    setField("purchaseDate", canonical.purchaseDate || "");
-    setField("warrantyExpiry", canonical.warrantyExpiry || "");
-    setField("condition", canonical.condition || "good");
-    setField("status", canonical.status || "pending");
-    setField("assignedTo", canonical.assignedTo || "");
-    setField("criticality", canonical.criticality || "unassessed");
-    setField("description", canonical.description || "");
-    setField("createdAt", canonical.createdAt || "");
-    setField("updatedAt", canonical.updatedAt || "");
-
     return fields;
   }
 
   /**
-   * Overlay known fields onto the existing row so unknown columns are preserved.
-   * Never shifts values by inventing missing headers mid-row.
+   * Overlay known fields onto the existing row so values never shift columns.
    */
   function writeCanonical_(sheet, rowIndex, canonical) {
     var headerMap = headerMap_(sheet);
@@ -433,11 +303,17 @@ var AssetRepository = (function () {
       row[headerMap[header]] = fields[header];
     }
     sheet.getRange(rowIndex, 1, 1, lastCol).setValues([row]);
-    return {
-      headerMap: headerMap,
-      fieldsWritten: fields,
-      rowAfter: row,
-    };
+    return fields;
+  }
+
+  function ensureHeaders_(sheet) {
+    var headerMap = headerMap_(sheet);
+    if (headerMap[FIELD_TO_HEADER.id] !== undefined) return headerMap;
+    sheet.clear();
+    sheet
+      .getRange(1, 1, 1, CANONICAL_HEADERS.length)
+      .setValues([CANONICAL_HEADERS]);
+    return headerMap_(sheet);
   }
 
   function nextId_() {
@@ -452,90 +328,50 @@ var AssetRepository = (function () {
       }
     }
     var next = max + 1;
-    var padded = ("0000" + next).slice(-4);
-    return "AST-" + padded;
+    return "AST-" + ("0000" + next).slice(-4);
   }
 
-  function nextAssetTag_(id, facilityId) {
-    var seqMatch = String(id || "").match(/AST-(\d+)/i);
-    var seq = seqMatch
-      ? seqMatch[1]
-      : ("0000" + String(Date.now()).slice(-4)).slice(-4);
-    var facilityKey = String(facilityId || "").trim();
-    var facilityCode = "";
-
-    if (facilityKey && typeof FacilityRepository !== "undefined") {
-      try {
-        var facilities = FacilityRepository.getAll();
-        var i;
-        for (i = 0; i < facilities.length; i++) {
-          var f = facilities[i];
-          if (
-            String(f.id) === facilityKey ||
-            String(f.name) === facilityKey ||
-            String(f.code) === facilityKey
-          ) {
-            facilityCode = String(f.code || f.id || "")
-              .trim()
-              .toUpperCase()
-              .replace(/[^A-Z0-9]+/g, "");
-            break;
-          }
-        }
-      } catch (ignore) {}
-    }
-
-    if (!facilityCode && facilityKey) {
-      facilityCode = facilityKey
-        .toUpperCase()
-        .replace(/[^A-Z0-9]+/g, "")
-        .slice(0, 8);
-    }
-
-    if (facilityCode) {
-      return "AST-" + facilityCode.slice(0, 8) + "-" + seq;
-    }
-    return id;
-  }
-
-  function buildCanonical_(id, payload, createdAt, updatedAt) {
+  function buildCanonical_(id, payload, current) {
     payload = payload || {};
-    var facilityId = resolveFacilityId_(
-      payload.facilityId != null ? payload.facilityId : payload.facility
-    );
-    var suppliedTag = String(payload.assetTag || "").trim();
+    current = current || {};
     return {
       id: id,
-      assetTag: suppliedTag || nextAssetTag_(id, facilityId),
-      name: payload.name || "",
-      category: payload.category || "other",
-      facilityId: facilityId,
-      facility: facilityId,
-      manufacturer: payload.manufacturer || "",
-      model: payload.model || "",
-      serialNumber: payload.serialNumber || "",
-      purchaseDate: payload.purchaseDate || "",
-      warrantyExpiry: payload.warrantyExpiry || "",
-      condition: payload.condition || "good",
-      status: payload.status || "pending",
-      assignedTo: payload.assignedTo || "",
-      criticality: payload.criticality || "unassessed",
-      description: payload.description || "",
-      createdAt: createdAt,
-      updatedAt: updatedAt,
+      facility:
+        payload.facility != null ? payload.facility : current.facility || "",
+      name: payload.name != null ? payload.name : current.name || "",
+      category:
+        payload.category != null ? payload.category : current.category || "other",
+      manufacturer:
+        payload.manufacturer != null
+          ? payload.manufacturer
+          : current.manufacturer || "",
+      model: payload.model != null ? payload.model : current.model || "",
+      serialNumber:
+        payload.serialNumber != null
+          ? payload.serialNumber
+          : current.serialNumber || "",
+      installDate:
+        payload.installDate != null
+          ? payload.installDate
+          : current.installDate || "",
+      warrantyExpiry:
+        payload.warrantyExpiry != null
+          ? payload.warrantyExpiry
+          : current.warrantyExpiry || "",
+      oemId: payload.oemId != null ? payload.oemId : current.oemId || "",
+      condition:
+        payload.condition != null ? payload.condition : current.condition || "good",
+      status:
+        payload.status != null ? payload.status : current.status || "pending",
+      assignedTo:
+        payload.assignedTo != null
+          ? payload.assignedTo
+          : current.assignedTo || "",
+      criticality:
+        payload.criticality != null
+          ? payload.criticality
+          : current.criticality || "unassessed",
     };
-  }
-
-  function stripRaw_(record) {
-    if (!record) return record;
-    var copy = {};
-    var key;
-    for (key in record) {
-      if (!record.hasOwnProperty(key)) continue;
-      if (key === "_raw" || key === "_diag" || key === "_write") continue;
-      copy[key] = record[key];
-    }
-    return copy;
   }
 
   function getAll() {
@@ -544,15 +380,13 @@ var AssetRepository = (function () {
     if (values.length <= 1) return [];
 
     var headers = values[0];
-    var headerMap = headerMap_(sheet);
     var rows = [];
     var r;
     for (r = 1; r < values.length; r++) {
       var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[r]);
-      var canonical = toCanonical_(sheetRow, headerMap, values[r], headers);
+      var canonical = toCanonical_(sheetRow);
       if (!canonical.id) continue;
-      // List responses stay lean — drop raw cells.
-      rows.push(stripRaw_(canonical));
+      rows.push(canonical);
     }
     return rows;
   }
@@ -564,41 +398,24 @@ var AssetRepository = (function () {
 
     var headers = values[0];
     var headerMap = headerMap_(sheet);
-    var idHeader = firstExistingHeader_(headerMap, FIELD_HEADERS.id);
-    if (!idHeader) return null;
+    var idHeader = FIELD_TO_HEADER.id;
+    if (headerMap[idHeader] === undefined) return null;
     var idCol = headerMap[idHeader];
 
     var r;
     for (r = 1; r < values.length; r++) {
       if (String(values[r][idCol]) !== String(id)) continue;
       var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[r]);
-      var canonical = toCanonical_(sheetRow, headerMap, values[r], headers);
-      Logger.log(
-        "[asset-map] getById " +
-          id +
-          " headers=" +
-          JSON.stringify(headers) +
-          " parsed=" +
-          JSON.stringify(stripRaw_(canonical)) +
-          " rawByHeader=" +
-          JSON.stringify(canonical._raw && canonical._raw.byHeader)
-      );
-      return canonical;
+      return toCanonical_(sheetRow);
     }
     return null;
   }
 
   function create(payload) {
     var sheet = getSheet_();
-    var now = new Date().toISOString();
+    ensureHeaders_(sheet);
     var id = nextId_();
-    var record = buildCanonical_(id, payload || {}, now, now);
-    // Ensure create headers exist for a brand-new sheet; existing sheets keep theirs.
-    var headerMap = headerMap_(sheet);
-    if (!firstExistingHeader_(headerMap, FIELD_HEADERS.id)) {
-      sheet.clear();
-      sheet.getRange(1, 1, 1, CREATE_HEADERS.length).setValues([CREATE_HEADERS]);
-    }
+    var record = buildCanonical_(id, payload || {}, null);
     var lastCol = Math.max(sheet.getLastColumn(), 1);
     var blank = [];
     var b;
@@ -607,20 +424,18 @@ var AssetRepository = (function () {
     var rowIndex = sheet.getLastRow();
     writeCanonical_(sheet, rowIndex, record);
     SpreadsheetApp.flush();
-    return getById(id) || stripRaw_(record);
+    return getById(id) || record;
   }
 
   function update(id, payload) {
-    var BUILD_MARKER = "2026-08-25-facility-diag-v1";
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = getSheet_();
     var values = sheet.getDataRange().getValues();
     if (values.length <= 1) return null;
 
     var headers = values[0];
     var headerMap = headerMap_(sheet);
-    var idHeader = firstExistingHeader_(headerMap, FIELD_HEADERS.id);
-    if (!idHeader) return null;
+    var idHeader = FIELD_TO_HEADER.id;
+    if (headerMap[idHeader] === undefined) return null;
     var idCol = headerMap[idHeader];
 
     var rowIndex = -1;
@@ -636,125 +451,10 @@ var AssetRepository = (function () {
     var current = getById(id);
     if (!current) return null;
 
-    var facilityHeader = firstExistingHeader_(
-      headerMap,
-      FIELD_HEADERS.facilityId
-    );
-    var facilityCol1 = facilityHeader ? headerMap[facilityHeader] + 1 : -1;
-    var facilityBefore = facilityCol1 > 0
-      ? String(sheet.getRange(rowIndex, facilityCol1).getValue())
-      : String(current.facilityId || "");
-
-    var merged = buildCanonical_(
-      id,
-      {
-        assetTag: current.assetTag || id,
-        name: payload.name != null ? payload.name : current.name,
-        category: payload.category != null ? payload.category : current.category,
-        facilityId:
-          payload.facilityId != null
-            ? payload.facilityId
-            : payload.facility != null
-              ? payload.facility
-              : current.facilityId,
-        manufacturer:
-          payload.manufacturer != null
-            ? payload.manufacturer
-            : current.manufacturer,
-        model: payload.model != null ? payload.model : current.model,
-        serialNumber:
-          payload.serialNumber != null
-            ? payload.serialNumber
-            : current.serialNumber,
-        purchaseDate:
-          payload.purchaseDate != null
-            ? payload.purchaseDate
-            : current.purchaseDate,
-        warrantyExpiry:
-          payload.warrantyExpiry != null
-            ? payload.warrantyExpiry
-            : current.warrantyExpiry,
-        condition:
-          payload.condition != null ? payload.condition : current.condition,
-        status: payload.status != null ? payload.status : current.status,
-        assignedTo:
-          payload.assignedTo != null ? payload.assignedTo : current.assignedTo,
-        criticality:
-          payload.criticality != null
-            ? payload.criticality
-            : current.criticality,
-        description:
-          payload.description != null
-            ? payload.description
-            : current.description,
-      },
-      current.createdAt || new Date().toISOString(),
-      new Date().toISOString()
-    );
-
-    // Preserve immutable asset number.
-    merged.assetTag = current.assetTag || merged.assetTag || id;
-
-    var writeInfo = writeCanonical_(sheet, rowIndex, merged);
+    var merged = buildCanonical_(id, payload || {}, current);
+    writeCanonical_(sheet, rowIndex, merged);
     SpreadsheetApp.flush();
-
-    var cellAfterFlush =
-      facilityCol1 > 0
-        ? String(sheet.getRange(rowIndex, facilityCol1).getValue())
-        : "";
-
-    var verified = getById(id);
-    var diag = {
-      buildMarker: BUILD_MARKER,
-      spreadsheetId: ss.getId(),
-      spreadsheetName: ss.getName(),
-      sheetName: sheet.getName(),
-      headers: headers.map(function (h) {
-        return String(h);
-      }),
-      idHeader: idHeader,
-      idCol1: idCol + 1,
-      rowIndex1: rowIndex,
-      facilityHeader: facilityHeader || "",
-      facilityCol1: facilityCol1,
-      facilityBeforeObject: String(current.facilityId || current.facility || ""),
-      facilityBeforeCells: [
-        {
-          header: facilityHeader || "",
-          col1: facilityCol1,
-          value: facilityBefore,
-        },
-      ],
-      requestedFacility: String(
-        payload.facilityId != null
-          ? payload.facilityId
-          : payload.facility != null
-            ? payload.facility
-            : ""
-      ),
-      resolvedFacilityWritten: String(merged.facilityId || ""),
-      fieldsWritten: writeInfo.fieldsWritten,
-      cellAfterFlush: cellAfterFlush,
-      facilityAfterCells: [
-        {
-          header: facilityHeader || "",
-          col1: facilityCol1,
-          value: cellAfterFlush,
-        },
-      ],
-      verifiedFacility: verified
-        ? String(verified.facilityId || verified.facility || "")
-        : null,
-      verifiedManufacturer: verified ? String(verified.manufacturer || "") : null,
-      verifiedModel: verified ? String(verified.model || "") : null,
-      sheetChanged: facilityBefore !== cellAfterFlush,
-    };
-
-    Logger.log("[asset-diag] result=" + JSON.stringify(diag));
-
-    if (!verified) verified = stripRaw_(merged);
-    verified._diag = diag;
-    return verified;
+    return getById(id) || merged;
   }
 
   function deactivate(id) {
@@ -866,10 +566,15 @@ AssetService.gs
  * Business rules for Assets. Mirrors FacilityService.gs / WorkOrderService.gs.
  * Never talks to the spreadsheet directly — only AssetRepository.
  *
- * List pipeline: all → sort newest first → search/filters → paginate
+ * List pipeline: all → sort by id → search/filters → paginate
  */
 
 var AssetService = (function () {
+  function parseAssetSeq_(id) {
+    var match = String(id || "").match(/AST-(\d+)/i);
+    return match ? parseInt(match[1], 10) : 0;
+  }
+
   function applyFilters_(rows, payload) {
     payload = payload || {};
     var search = String(payload.search || "")
@@ -885,16 +590,10 @@ var AssetService = (function () {
         String(row.name || "")
           .toLowerCase()
           .indexOf(search) !== -1 ||
-        String(row.assetTag || "")
-          .toLowerCase()
-          .indexOf(search) !== -1 ||
         String(row.id || "")
           .toLowerCase()
           .indexOf(search) !== -1 ||
         String(row.facility || "")
-          .toLowerCase()
-          .indexOf(search) !== -1 ||
-        String(row.facilityId || "")
           .toLowerCase()
           .indexOf(search) !== -1 ||
         String(row.serialNumber || "")
@@ -908,6 +607,9 @@ var AssetService = (function () {
           .indexOf(search) !== -1 ||
         String(row.assignedTo || "")
           .toLowerCase()
+          .indexOf(search) !== -1 ||
+        String(row.oemId || "")
+          .toLowerCase()
           .indexOf(search) !== -1;
 
       var matchesStatus =
@@ -920,8 +622,7 @@ var AssetService = (function () {
         category === "all" ||
         String(row.category).toLowerCase() === String(category).toLowerCase();
 
-      var rowFacility = String(row.facilityId || row.facility || "");
-      // Facility values may be an id or a display name depending on row age.
+      var rowFacility = String(row.facility || "");
       var matchesFacility =
         !facility ||
         facility === "all" ||
@@ -959,12 +660,12 @@ var AssetService = (function () {
 
   function sortNewestFirst_(rows) {
     return rows.slice().sort(function (a, b) {
-      var aAt = String(a.createdAt || a.updatedAt || "");
-      var bAt = String(b.createdAt || b.updatedAt || "");
-      if (aAt === bAt) {
+      var aSeq = parseAssetSeq_(a.id);
+      var bSeq = parseAssetSeq_(b.id);
+      if (aSeq === bSeq) {
         return String(b.id || "").localeCompare(String(a.id || ""));
       }
-      return aAt < bAt ? 1 : -1;
+      return bSeq - aSeq;
     });
   }
 
@@ -1008,7 +709,6 @@ var AssetService = (function () {
   function create(payload) {
     if (!payload || !payload.name) throw new Error("Asset name is required.");
     if (!payload.facility) throw new Error("Facility is required.");
-    // Asset tag / number is system-generated when omitted.
     var created = AssetRepository.create(payload);
     if (!created || !created.id) {
       throw new Error(
@@ -3129,6 +2829,7 @@ var MasterDataService = (function () {
     var facilityId = payload.facilityId;
     var buildingId = payload.buildingId;
     var floorId = payload.floorId;
+    var category = payload.category;
 
     return rows.filter(function (row) {
       var matchesSearch =
@@ -3169,12 +2870,19 @@ var MasterDataService = (function () {
         floorId === "all" ||
         String(row.floorId || "") === String(floorId);
 
+      var matchesCategory =
+        !category ||
+        category === "all" ||
+        String(row.category || "")
+          .toLowerCase() === String(category).toLowerCase();
+
       return (
         matchesSearch &&
         matchesStatus &&
         matchesFacility &&
         matchesBuilding &&
-        matchesFloor
+        matchesFloor &&
+        matchesCategory
       );
     });
   }
@@ -4839,19 +4547,36 @@ UserRepository.gs
 /**
  * UserRepository.gs
  *
- * Sheet: existing Users sheet (source of truth — do not recreate).
- * Live headers (row 1), observed from production getAll:
+ * Sheet: USERS (legacy tab alias: Users)
+ *
+ * Canonical header row — map by exact header name ONLY:
  *   User ID | Full Name | Email | Role | Specialization |
  *   Facility Assigned | Current Workload | Phone | Status | Date Added
  *
- * Maps spreadsheet fields → canonical camelCase User model for the API.
- * Soft-deactivate maps to Status=Inactive. Never delete rows.
+ * NEVER write positional arrays. All creates/updates overlay fields by header map.
+ * BUILD: 2026-08-25-users-header-v3
  */
 
 var UserRepository = (function () {
-  var SHEET_CANDIDATES = ["Users", "USERS"];
+  var BUILD_MARKER = "2026-08-25-users-header-v3";
+  var CREATE_COUNT_KEY = "USER_REPO_CREATE_INVOCATIONS";
+  var SHEET_CANDIDATES = ["USERS", "Users"];
 
-  var SHEET_HEADERS = [
+  /** Canonical API field → exact sheet header. */
+  var FIELD_TO_HEADER = {
+    id: "User ID",
+    name: "Full Name",
+    email: "Email",
+    role: "Role",
+    specialization: "Specialization",
+    facility: "Facility Assigned",
+    activeWorkOrders: "Current Workload",
+    phone: "Phone",
+    status: "Status",
+    createdAt: "Date Added",
+  };
+
+  var REQUIRED_HEADERS = [
     "User ID",
     "Full Name",
     "Email",
@@ -4864,12 +4589,18 @@ var UserRepository = (function () {
     "Date Added",
   ];
 
+  var UPDATEABLE_FIELDS = [
+    "name",
+    "email",
+    "phone",
+    "role",
+    "specialization",
+    "facility",
+    "status",
+  ];
+
   function cellText_(value) {
-    if (value == null || value === "") return "";
-    if (Object.prototype.toString.call(value) === "[object Date]") {
-      return value.toISOString();
-    }
-    return String(value).trim();
+    return SheetFieldUtils.cellText(value);
   }
 
   function cellDateIso_(value) {
@@ -4884,7 +4615,7 @@ var UserRepository = (function () {
     var value = String(raw || "")
       .toLowerCase()
       .replace(/\s+/g, "_");
-    if (!value) return "pending";
+    if (!value) return "";
     if (value === "active") return "active";
     if (value === "inactive" || value === "deactivated") return "inactive";
     if (value === "suspended") return "suspended";
@@ -4893,12 +4624,44 @@ var UserRepository = (function () {
   }
 
   function statusToSheet_(status) {
-    var value = String(status || "pending").toLowerCase();
+    var value = String(status || "").toLowerCase();
+    if (!value) return "";
     if (value === "active") return "Active";
     if (value === "inactive") return "Inactive";
     if (value === "suspended") return "Suspended";
     if (value === "pending") return "Pending";
-    return status || "Pending";
+    return status;
+  }
+
+  function parseWorkload_(raw) {
+    var text = cellText_(raw);
+    if (!text || text === "-") return 0;
+    var n = Number(text);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function workloadToSheet_(value) {
+    var n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return "-";
+    return n;
+  }
+
+  /** Preserve leading zeros — store phone as plain text. */
+  function phoneToSheet_(value) {
+    if (value == null || value === "") return "";
+    return String(value).trim();
+  }
+
+  function stripMeta_(payload) {
+    var clean = {};
+    var key;
+    payload = payload || {};
+    for (key in payload) {
+      if (!payload.hasOwnProperty(key)) continue;
+      if (key === "_clientRequestId") continue;
+      clean[key] = payload[key];
+    }
+    return clean;
   }
 
   function getSheet_() {
@@ -4911,71 +4674,230 @@ var UserRepository = (function () {
       if (sheet) return sheet;
     }
 
-    // Discover by header: first sheet whose row 1 includes "User ID".
     var sheets = ss.getSheets();
     for (i = 0; i < sheets.length; i++) {
       var candidate = sheets[i];
-      var lastCol = candidate.getLastColumn();
-      if (lastCol < 1) continue;
-      var headers = candidate.getRange(1, 1, 1, lastCol).getValues()[0];
-      for (var h = 0; h < headers.length; h++) {
-        if (String(headers[h]).trim() === "User ID") {
-          return candidate;
-        }
+      var headerMap = SheetFieldUtils.getHeaderMap(candidate);
+      if (headerMap[FIELD_TO_HEADER.id] !== undefined) {
+        return candidate;
       }
     }
 
     throw new Error(
-      'Users sheet not found. Expected a sheet with header "User ID".'
+      'USERS sheet not found. Expected tab "USERS" with header "User ID".'
     );
   }
 
-  function rowToSheetObject_(headers, row) {
-    var obj = {};
-    for (var i = 0; i < headers.length; i++) {
-      obj[String(headers[i]).trim()] = row[i];
-    }
-    return obj;
+  function headerMap_(sheet) {
+    return SheetFieldUtils.getHeaderMap(sheet);
   }
 
-  /**
-   * Map live sheet row → canonical User fields used by UserService / frontend.
-   */
+  function assertRequiredHeaders_(headerMap) {
+    var missing = [];
+    var i;
+    for (i = 0; i < REQUIRED_HEADERS.length; i++) {
+      if (headerMap[REQUIRED_HEADERS[i]] === undefined) {
+        missing.push(REQUIRED_HEADERS[i]);
+      }
+    }
+    if (missing.length) {
+      throw new Error(
+        "USERS sheet missing required headers: " + missing.join(", ")
+      );
+    }
+  }
+
+  function readHeader_(sheetRow, header) {
+    return cellText_(sheetRow[header]);
+  }
+
   function toCanonical_(sheetRow) {
-    var dateAdded = cellDateIso_(sheetRow["Date Added"]);
-    var workloadRaw = sheetRow["Current Workload"];
-    var workload = Number(workloadRaw);
-    if (!Number.isFinite(workload)) workload = 0;
+    var dateAdded = cellDateIso_(sheetRow[FIELD_TO_HEADER.createdAt]);
 
     return {
-      id: cellText_(sheetRow["User ID"]),
-      name: cellText_(sheetRow["Full Name"]),
-      email: cellText_(sheetRow["Email"]),
-      phone: cellText_(sheetRow["Phone"]) || undefined,
-      role: cellText_(sheetRow["Role"]) || "viewer",
-      specialization: cellText_(sheetRow["Specialization"]) || "",
-      facility: cellText_(sheetRow["Facility Assigned"]) || "",
-      activeWorkOrders: workload,
-      status: normalizeStatus_(sheetRow["Status"]),
-      lastActive: dateAdded || new Date().toISOString(),
-      createdAt: dateAdded || new Date().toISOString(),
-      updatedAt: dateAdded || new Date().toISOString(),
+      id: readHeader_(sheetRow, FIELD_TO_HEADER.id),
+      name: readHeader_(sheetRow, FIELD_TO_HEADER.name),
+      email: readHeader_(sheetRow, FIELD_TO_HEADER.email),
+      phone: readHeader_(sheetRow, FIELD_TO_HEADER.phone) || undefined,
+      role: readHeader_(sheetRow, FIELD_TO_HEADER.role),
+      specialization: readHeader_(sheetRow, FIELD_TO_HEADER.specialization),
+      facility: readHeader_(sheetRow, FIELD_TO_HEADER.facility),
+      activeWorkOrders: parseWorkload_(
+        sheetRow[FIELD_TO_HEADER.activeWorkOrders]
+      ),
+      status: normalizeStatus_(sheetRow[FIELD_TO_HEADER.status]),
+      lastActive: dateAdded || "",
+      createdAt: dateAdded || "",
     };
   }
 
-  function canonicalToSheetRow_(canonical) {
-    return [
-      canonical.id || "",
-      canonical.name || "",
-      canonical.email || "",
-      canonical.role || "",
-      canonical.specialization || "",
-      canonical.facility || "",
-      canonical.activeWorkOrders != null ? canonical.activeWorkOrders : "",
-      canonical.phone || "",
-      statusToSheet_(canonical.status),
-      canonical.createdAt || canonical.lastActive || "",
+  function canonicalToSheetFields_(canonical, headerMap) {
+    var fields = {};
+    var fieldKey;
+
+    for (fieldKey in FIELD_TO_HEADER) {
+      if (!FIELD_TO_HEADER.hasOwnProperty(fieldKey)) continue;
+      var header = FIELD_TO_HEADER[fieldKey];
+      if (headerMap[header] === undefined) continue;
+
+      var value = canonical[fieldKey];
+      if (fieldKey === "status") {
+        fields[header] = statusToSheet_(value);
+      } else if (fieldKey === "activeWorkOrders") {
+        fields[header] = workloadToSheet_(value);
+      } else if (fieldKey === "phone") {
+        fields[header] = phoneToSheet_(value);
+      } else if (fieldKey === "createdAt") {
+        fields[header] = value == null ? "" : value;
+      } else {
+        fields[header] = value == null ? "" : value;
+      }
+    }
+    return fields;
+  }
+
+  function bumpCreateInvocationCount_() {
+    var props = PropertiesService.getScriptProperties();
+    var current = Number(props.getProperty(CREATE_COUNT_KEY) || "0");
+    if (!Number.isFinite(current)) current = 0;
+    var next = current + 1;
+    props.setProperty(CREATE_COUNT_KEY, String(next));
+    return next;
+  }
+
+  function logCreate_(details) {
+    try {
+      Logger.log("[UserRepository.create] " + JSON.stringify(details));
+    } catch (ignore) {}
+  }
+
+  /**
+   * Write only mapped headers onto an existing row. Never shifts columns.
+   */
+  function writeRowByHeaders_(sheet, rowIndex, fields, headerMap, lastCol) {
+    var existing = sheet.getRange(rowIndex, 1, 1, lastCol).getValues()[0];
+    var row = existing.slice();
+    var header;
+    for (header in fields) {
+      if (!fields.hasOwnProperty(header)) continue;
+      if (headerMap[header] === undefined) continue;
+      row[headerMap[header]] = fields[header];
+    }
+    sheet.getRange(rowIndex, 1, 1, lastCol).setValues([row]);
+
+    if (
+      headerMap[FIELD_TO_HEADER.phone] !== undefined &&
+      fields[FIELD_TO_HEADER.phone] != null &&
+      fields[FIELD_TO_HEADER.phone] !== ""
+    ) {
+      var phoneCol = headerMap[FIELD_TO_HEADER.phone] + 1;
+      sheet.getRange(rowIndex, phoneCol).setNumberFormat("@");
+    }
+
+    return row;
+  }
+
+  function buildCanonicalForCreate_(id, payload) {
+    payload = stripMeta_(payload);
+    var now = new Date().toISOString();
+
+    return {
+      id: id,
+      name: payload.name || "",
+      email: payload.email || "",
+      phone: payload.phone || undefined,
+      role: payload.role || "",
+      specialization: payload.specialization || "",
+      facility: payload.facility || "",
+      activeWorkOrders: 0,
+      status: payload.status != null ? payload.status : "",
+      lastActive: now,
+      createdAt: now,
+    };
+  }
+
+  function buildCanonicalForUpdate_(id, payload, current) {
+    payload = stripMeta_(payload);
+    current = current || {};
+    var merged = {
+      id: id,
+      name: current.name || "",
+      email: current.email || "",
+      phone: current.phone,
+      role: current.role || "",
+      specialization: current.specialization || "",
+      facility: current.facility || "",
+      activeWorkOrders:
+        current.activeWorkOrders != null ? current.activeWorkOrders : 0,
+      status: current.status != null ? current.status : "",
+      lastActive: current.lastActive || current.createdAt || "",
+      createdAt: current.createdAt || "",
+    };
+
+    var i;
+    for (i = 0; i < UPDATEABLE_FIELDS.length; i++) {
+      var key = UPDATEABLE_FIELDS[i];
+      if (payload.hasOwnProperty(key) && payload[key] !== undefined) {
+        merged[key] = payload[key];
+      }
+    }
+
+    if (payload.hasOwnProperty("activeWorkOrders")) {
+      merged.activeWorkOrders = payload.activeWorkOrders;
+    }
+
+    return merged;
+  }
+
+  function verifyCanonicalAgainstRow_(sheetRow, expected) {
+    var checks = [
+      ["name", FIELD_TO_HEADER.name],
+      ["email", FIELD_TO_HEADER.email],
+      ["role", FIELD_TO_HEADER.role],
+      ["specialization", FIELD_TO_HEADER.specialization],
+      ["facility", FIELD_TO_HEADER.facility],
+      ["status", FIELD_TO_HEADER.status],
     ];
+    var i;
+    for (i = 0; i < checks.length; i++) {
+      var key = checks[i][0];
+      var header = checks[i][1];
+      var got = readHeader_(sheetRow, header);
+      var want = String(expected[key] == null ? "" : expected[key]);
+      if (header === FIELD_TO_HEADER.status) {
+        got = normalizeStatus_(got);
+        want = normalizeStatus_(want);
+      }
+      if (String(got) !== String(want)) {
+        throw new Error(
+          "USERS write verification failed for " +
+            header +
+            ' (expected "' +
+            want +
+            '", got "' +
+            got +
+            '"). Redeploy UserRepository.gs build ' +
+            BUILD_MARKER +
+            "."
+        );
+      }
+    }
+    if (expected.phone) {
+      var gotPhone = readHeader_(sheetRow, FIELD_TO_HEADER.phone);
+      var wantPhone = phoneToSheet_(expected.phone);
+      if (
+        String(gotPhone).replace(/^0+/, "") !==
+        String(wantPhone).replace(/^0+/, "")
+      ) {
+        throw new Error(
+          'USERS write verification failed for Phone (expected "' +
+            wantPhone +
+            '", got "' +
+            gotPhone +
+            '").'
+        );
+      }
+    }
   }
 
   function getAll() {
@@ -4985,138 +4907,250 @@ var UserRepository = (function () {
 
     var headers = values[0];
     var rows = [];
-    for (var r = 1; r < values.length; r++) {
-      var sheetRow = rowToSheetObject_(headers, values[r]);
-      var id = cellText_(sheetRow["User ID"]);
-      if (!id) continue;
-      rows.push(toCanonical_(sheetRow));
+    var r;
+    for (r = 1; r < values.length; r++) {
+      var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[r]);
+      var canonical = toCanonical_(sheetRow);
+      if (!canonical.id) continue;
+      rows.push(canonical);
     }
     return rows;
   }
 
   function getById(id) {
-    var all = getAll();
-    for (var i = 0; i < all.length; i++) {
-      if (String(all[i].id) === String(id)) return all[i];
+    var sheet = getSheet_();
+    var values = sheet.getDataRange().getValues();
+    if (values.length <= 1) return null;
+
+    var headers = values[0];
+    var headerMap = headerMap_(sheet);
+    var idHeader = FIELD_TO_HEADER.id;
+    if (headerMap[idHeader] === undefined) return null;
+    var idCol = headerMap[idHeader];
+
+    var r;
+    for (r = 1; r < values.length; r++) {
+      if (String(values[r][idCol]) !== String(id)) continue;
+      var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[r]);
+      return toCanonical_(sheetRow);
     }
     return null;
   }
 
-  function findRowIndex_(id) {
-    var sheet = getSheet_();
+  function idExistsOnSheet_(sheet, headerMap, id) {
+    var idHeader = FIELD_TO_HEADER.id;
+    var idCol = headerMap[idHeader];
+    if (idCol === undefined) return false;
+
     var values = sheet.getDataRange().getValues();
-    if (values.length <= 1) return -1;
-
-    var headers = values[0];
-    var idCol = -1;
-    for (var c = 0; c < headers.length; c++) {
-      if (String(headers[c]).trim() === "User ID") {
-        idCol = c;
-        break;
-      }
+    var r;
+    for (r = 1; r < values.length; r++) {
+      if (String(values[r][idCol]) === String(id)) return true;
     }
-    if (idCol === -1) return -1;
-
-    for (var r = 1; r < values.length; r++) {
-      if (String(values[r][idCol]) === String(id)) {
-        return r + 1; // 1-based
-      }
-    }
-    return -1;
+    return false;
   }
 
-  function nextId_() {
-    var all = getAll();
+  /** Highest numeric USR suffix on the sheet — ignores malformed IDs. */
+  function maxExistingIdSuffix_(sheet, headerMap) {
+    var idHeader = FIELD_TO_HEADER.id;
+    var idCol = headerMap[idHeader];
+    if (idCol === undefined) {
+      throw new Error('USERS sheet missing "User ID" header.');
+    }
+
+    var values = sheet.getDataRange().getValues();
     var max = 0;
-    for (var i = 0; i < all.length; i++) {
-      var match = String(all[i].id || "").match(/^USR-(\d+)$/i);
+    var r;
+    for (r = 1; r < values.length; r++) {
+      var match = String(values[r][idCol] || "").match(/^USR-(\d+)$/i);
       if (match) {
         var n = parseInt(match[1], 10);
         if (n > max) max = n;
       }
     }
-    var next = max + 1;
-    var padded = ("0000" + next).slice(-4);
-    return "USR-" + padded;
+    return max;
+  }
+
+  /**
+   * Increment from the highest USR suffix and verify the candidate is unused.
+   * Duplicate/malformed rows cannot reset the counter below the true max suffix.
+   */
+  function allocateUniqueId_(sheet, headerMap) {
+    var suffix = maxExistingIdSuffix_(sheet, headerMap);
+    var attempt;
+    for (attempt = 0; attempt < 100; attempt++) {
+      suffix = suffix + 1;
+      var candidate = "USR-" + ("0000" + suffix).slice(-4);
+      if (!idExistsOnSheet_(sheet, headerMap, candidate)) {
+        return candidate;
+      }
+    }
+    throw new Error(
+      "Could not allocate a unique User ID after 100 attempts. Check for duplicate USR rows."
+    );
   }
 
   function create(payload) {
-    var sheet = getSheet_();
-    var now = new Date().toISOString();
-    var id = nextId_();
-
-    var canonical = {
-      id: id,
-      name: (payload && payload.name) || "",
-      email: (payload && payload.email) || "",
-      phone: (payload && payload.phone) || "",
-      role: (payload && payload.role) || "viewer",
-      specialization: (payload && payload.specialization) || "",
-      facility: (payload && payload.facility) || "",
-      activeWorkOrders: 0,
-      status: (payload && payload.status) || "pending",
-      lastActive: now,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    sheet.appendRow(canonicalToSheetRow_(canonical));
-
-    var found = getById(id);
-    if (!found) {
-      throw new Error(
-        "User create wrote row " +
-          id +
-          " but getById could not re-read it. Check Users sheet headers."
-      );
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(30000)) {
+      throw new Error("USERS create busy — another write is in progress.");
     }
-    return found;
+
+    var clientRequestId =
+      payload && payload._clientRequestId
+        ? String(payload._clientRequestId)
+        : "";
+    var startedAt = new Date().toISOString();
+    var createInvocationCount = bumpCreateInvocationCount_();
+
+    try {
+      var sheet = getSheet_();
+      var headerMap = headerMap_(sheet);
+      assertRequiredHeaders_(headerMap);
+
+      var id = allocateUniqueId_(sheet, headerMap);
+      if (idExistsOnSheet_(sheet, headerMap, id)) {
+        throw new Error(
+          "Refusing to create duplicate User ID " +
+            id +
+            ". Delete or repair conflicting rows first."
+        );
+      }
+
+      var record = buildCanonicalForCreate_(id, payload);
+      var lastCol = Math.max(sheet.getLastColumn(), REQUIRED_HEADERS.length);
+      var fields = canonicalToSheetFields_(record, headerMap);
+      var row = SheetFieldUtils.buildRowFromFields(headerMap, lastCol, fields);
+
+      logCreate_({
+        buildMarker: BUILD_MARKER,
+        clientRequestId: clientRequestId,
+        startedAt: startedAt,
+        createInvocationCount: createInvocationCount,
+        generatedId: id,
+        fieldsWritten: fields,
+      });
+
+      sheet.appendRow(new Array(lastCol).fill(""));
+      var rowIndex = sheet.getLastRow();
+      sheet.getRange(rowIndex, 1, 1, lastCol).setValues([row]);
+
+      if (
+        headerMap[FIELD_TO_HEADER.phone] !== undefined &&
+        fields[FIELD_TO_HEADER.phone] != null &&
+        fields[FIELD_TO_HEADER.phone] !== ""
+      ) {
+        var phoneCol = headerMap[FIELD_TO_HEADER.phone] + 1;
+        sheet.getRange(rowIndex, phoneCol).setNumberFormat("@");
+      }
+
+      SpreadsheetApp.flush();
+
+      var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+      var writtenRow = SheetFieldUtils.rowToSheetObject(
+        headers,
+        sheet.getRange(rowIndex, 1, 1, lastCol).getValues()[0]
+      );
+      verifyCanonicalAgainstRow_(writtenRow, record);
+
+      var found = getById(id);
+      if (!found) {
+        throw new Error(
+          "User create wrote row " +
+            id +
+            " but getById could not re-read it."
+        );
+      }
+
+      found._write = {
+        buildMarker: BUILD_MARKER,
+        createPath: "UserRepository.create",
+        sheetName: sheet.getName(),
+        rowIndex: rowIndex,
+        clientRequestId: clientRequestId,
+        startedAt: startedAt,
+        createInvocationCount: createInvocationCount,
+        generatedId: id,
+        fieldsWritten: fields,
+      };
+      return found;
+    } finally {
+      lock.releaseLock();
+    }
   }
 
   function update(id, payload) {
-    var sheet = getSheet_();
-    var rowIndex = findRowIndex_(id);
-    if (rowIndex === -1) return null;
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(30000)) {
+      throw new Error("USERS update busy — another write is in progress.");
+    }
 
-    var current = getById(id);
-    if (!current) return null;
+    try {
+      var sheet = getSheet_();
+      var values = sheet.getDataRange().getValues();
+      if (values.length <= 1) return null;
 
-    var updated = {
-      id: id,
-      name: payload.name != null ? payload.name : current.name,
-      email: payload.email != null ? payload.email : current.email,
-      phone: payload.phone != null ? payload.phone : current.phone || "",
-      role: payload.role != null ? payload.role : current.role,
-      specialization:
-        payload.specialization != null
-          ? payload.specialization
-          : current.specialization,
-      facility: payload.facility != null ? payload.facility : current.facility,
-      activeWorkOrders:
-        current.activeWorkOrders != null ? current.activeWorkOrders : 0,
-      status: payload.status != null ? payload.status : current.status,
-      lastActive: current.lastActive || current.createdAt || new Date().toISOString(),
-      createdAt: current.createdAt,
-      updatedAt: new Date().toISOString(),
-    };
+      var headers = values[0];
+      var headerMap = headerMap_(sheet);
+      assertRequiredHeaders_(headerMap);
+      var idHeader = FIELD_TO_HEADER.id;
+      if (headerMap[idHeader] === undefined) return null;
+      var idCol = headerMap[idHeader];
 
-    sheet
-      .getRange(rowIndex, 1, 1, SHEET_HEADERS.length)
-      .setValues([canonicalToSheetRow_(updated)]);
+      var rowIndex = -1;
+      var r;
+      for (r = 1; r < values.length; r++) {
+        if (String(values[r][idCol]) === String(id)) {
+          rowIndex = r + 1;
+          break;
+        }
+      }
+      if (rowIndex === -1) return null;
 
-    return getById(id);
+      var current = getById(id);
+      if (!current) return null;
+
+      var merged = buildCanonicalForUpdate_(id, payload || {}, current);
+      var lastCol = Math.max(sheet.getLastColumn(), REQUIRED_HEADERS.length);
+      var fields = canonicalToSheetFields_(merged, headerMap);
+      writeRowByHeaders_(sheet, rowIndex, fields, headerMap, lastCol);
+      SpreadsheetApp.flush();
+
+      var writtenRow = SheetFieldUtils.rowToSheetObject(
+        headers,
+        sheet.getRange(rowIndex, 1, 1, lastCol).getValues()[0]
+      );
+      verifyCanonicalAgainstRow_(writtenRow, merged);
+      return getById(id);
+    } finally {
+      lock.releaseLock();
+    }
   }
 
   function deactivate(id) {
     return update(id, { status: "inactive" });
   }
 
+  function getBuildInfo() {
+    return {
+      buildMarker: BUILD_MARKER,
+      createPath: "UserRepository.create",
+      fieldToHeader: FIELD_TO_HEADER,
+      createInvocationCount: Number(
+        PropertiesService.getScriptProperties().getProperty(CREATE_COUNT_KEY) ||
+          "0"
+      ),
+    };
+  }
+
   return {
+    BUILD_MARKER: BUILD_MARKER,
     getAll: getAll,
     getById: getById,
     create: create,
     update: update,
     deactivate: deactivate,
+    getBuildInfo: getBuildInfo,
   };
 })();
 ```
@@ -5135,7 +5169,7 @@ UsersController.gs
  * Expected request body:
  * {
  *   resource: "users",
- *   action: "getAll" | "getById" | "create" | "update" | "deactivate",
+ *   action: "getAll" | "getById" | "create" | "update" | "deactivate" | "buildInfo",
  *   payload: { ... }
  * }
  *
@@ -5183,6 +5217,13 @@ var UsersController = (function () {
             UserService.deactivate(payload)
           );
 
+        case "buildInfo":
+          return jsonResponse_(
+            true,
+            "Users module build info.",
+            UserRepository.getBuildInfo()
+          );
+
         default:
           return jsonResponse_(
             false,
@@ -5216,9 +5257,6 @@ UserService.gs
  *
  * Business rules for Users.
  * Never talks to the spreadsheet directly — only UserRepository.
- *
- * Soft-deactivate only — never delete rows.
- * After create / update / deactivate, refreshes REPORTING_SNAPSHOT users section.
  */
 
 var UserService = (function () {
@@ -5243,29 +5281,69 @@ var UserService = (function () {
         String(row.phone || "")
           .toLowerCase()
           .indexOf(search) !== -1 ||
+        String(row.role || "")
+          .toLowerCase()
+          .indexOf(search) !== -1 ||
         String(row.specialization || "")
           .toLowerCase()
           .indexOf(search) !== -1 ||
         String(row.facility || "")
+          .toLowerCase()
+          .indexOf(search) !== -1 ||
+        String(row.id || "")
           .toLowerCase()
           .indexOf(search) !== -1;
 
       var matchesStatus =
         !status ||
         status === "all" ||
-        String(row.status).toLowerCase() === String(status).toLowerCase();
+        String(row.status || "")
+          .toLowerCase() === String(status).toLowerCase();
 
       var matchesRole =
         !role ||
         role === "all" ||
-        String(row.role).toLowerCase() === String(role).toLowerCase();
+        String(row.role || "")
+          .toLowerCase() === String(role).toLowerCase();
 
+      var rowFacility = String(row.facility || "");
       var matchesFacility =
         !facility ||
         facility === "all" ||
-        String(row.facility) === String(facility);
+        rowFacility === String(facility) ||
+        (rowFacility && rowFacility !== "-" &&
+          String(rowFacility).toLowerCase() === String(facility).toLowerCase());
 
-      return matchesSearch && matchesStatus && matchesRole && matchesFacility;
+      if (
+        !matchesFacility &&
+        facility &&
+        facility !== "all" &&
+        typeof FacilityRepository !== "undefined"
+      ) {
+        try {
+          var facilities = FacilityRepository.getAll() || [];
+          var i;
+          for (i = 0; i < facilities.length; i++) {
+            var f = facilities[i];
+            var fid = String(f.id || "");
+            var fname = String(f.name || "");
+            if (
+              (fid === String(facility) || fname === String(facility)) &&
+              (rowFacility === fid ||
+                rowFacility === fname ||
+                String(rowFacility).toLowerCase() ===
+                  String(fname).toLowerCase())
+            ) {
+              matchesFacility = true;
+              break;
+            }
+          }
+        } catch (ignore) {}
+      }
+
+      return (
+        matchesSearch && matchesStatus && matchesRole && matchesFacility
+      );
     });
   }
 
@@ -5278,6 +5356,7 @@ var UserService = (function () {
 
     var total = rows.length;
     var totalPages = Math.max(1, Math.ceil(total / pageSize));
+    if (page > totalPages) page = totalPages;
     var start = (page - 1) * pageSize;
     var data = rows.slice(start, start + pageSize);
 
@@ -5308,6 +5387,11 @@ var UserService = (function () {
     if (!payload || !payload.name) throw new Error("User name is required.");
     if (!payload.email) throw new Error("User email is required.");
     var created = UserRepository.create(payload);
+    if (!created || !created.id) {
+      throw new Error(
+        "User create failed: repository returned no record. Check USERS sheet headers."
+      );
+    }
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("users");
     }
