@@ -36,7 +36,7 @@ export function WorkspacePreviewPage({
 
       <div className="sc-workspace-preview-actions">
         <Link href="/operations" className="sc-ph-enter">
-          Enter Operations
+          Enter Facility Management
         </Link>
         <Link href="/" className="sc-workspace-preview-secondary">
           Return to Platform Home

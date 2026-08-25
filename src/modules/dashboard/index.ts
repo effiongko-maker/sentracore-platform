@@ -4,6 +4,7 @@ export type {
   DashboardCard,
   DashboardCardItem,
   DashboardModuleRef,
+  DashboardPulse,
   DashboardQuery,
   DashboardSection,
   DashboardSnapshot,

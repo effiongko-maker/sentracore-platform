@@ -3,14 +3,22 @@
  *
  * ACTION NAMES (present-tense intent):  incident.report, maintenance.request
  * EVENT TYPES (past-tense facts):       <domain>.<past_tense_action>
- *
- * This catalog documents known types. Recording still accepts any valid text
- * event_type — do not hardcode module logic into the insert path.
  */
 
 export const OperationalEventTypes = {
   FACILITY_INCIDENT_REPORTED: "facility.incident_reported",
+  FACILITY_INCIDENT_TRIAGED: "facility.incident_triaged",
+  FACILITY_INCIDENT_ESCALATED: "facility.incident_escalated",
+  FACILITY_INCIDENT_RESOLVED: "facility.incident_resolved",
   FACILITY_MAINTENANCE_REQUESTED: "facility.maintenance_requested",
+  FACILITY_MAINTENANCE_SCHEDULED: "facility.maintenance_scheduled",
+  FACILITY_MAINTENANCE_STARTED: "facility.maintenance_started",
+  FACILITY_MAINTENANCE_COMPLETED: "facility.maintenance_completed",
+  FACILITY_WORK_ORDER_CREATED: "facility.work_order_created",
+  FACILITY_WORK_ORDER_ASSIGNED: "facility.work_order_assigned",
+  FACILITY_WORK_ORDER_STARTED: "facility.work_order_started",
+  FACILITY_WORK_ORDER_COMPLETED: "facility.work_order_completed",
+  FACILITY_WORK_ORDER_CANCELLED: "facility.work_order_cancelled",
   SYSTEM_RECOMMENDATION_DECIDED: "system.recommendation_decided",
 } as const;
 
@@ -21,7 +29,6 @@ export type OperationalEventTypeDefinition = {
   eventType: string;
   domain: string;
   description: string;
-  /** Suggested polymorphic entity_type when emitting. */
   defaultEntityType?: string;
 };
 
@@ -29,14 +36,80 @@ export const OPERATIONAL_EVENT_CATALOG: OperationalEventTypeDefinition[] = [
   {
     eventType: OperationalEventTypes.FACILITY_INCIDENT_REPORTED,
     domain: "facility",
-    description: "An incident was reported in Operations Management.",
+    description: "An incident was reported.",
+    defaultEntityType: "incident",
+  },
+  {
+    eventType: OperationalEventTypes.FACILITY_INCIDENT_TRIAGED,
+    domain: "facility",
+    description: "An incident was triaged.",
+    defaultEntityType: "incident",
+  },
+  {
+    eventType: OperationalEventTypes.FACILITY_INCIDENT_ESCALATED,
+    domain: "facility",
+    description: "An incident was escalated.",
+    defaultEntityType: "incident",
+  },
+  {
+    eventType: OperationalEventTypes.FACILITY_INCIDENT_RESOLVED,
+    domain: "facility",
+    description: "An incident was resolved.",
     defaultEntityType: "incident",
   },
   {
     eventType: OperationalEventTypes.FACILITY_MAINTENANCE_REQUESTED,
     domain: "facility",
-    description: "A maintenance request was created in Operations Management.",
+    description: "A maintenance activity was requested.",
     defaultEntityType: "maintenance_request",
+  },
+  {
+    eventType: OperationalEventTypes.FACILITY_MAINTENANCE_SCHEDULED,
+    domain: "facility",
+    description: "Maintenance was scheduled.",
+    defaultEntityType: "maintenance_request",
+  },
+  {
+    eventType: OperationalEventTypes.FACILITY_MAINTENANCE_STARTED,
+    domain: "facility",
+    description: "Maintenance work started.",
+    defaultEntityType: "maintenance_request",
+  },
+  {
+    eventType: OperationalEventTypes.FACILITY_MAINTENANCE_COMPLETED,
+    domain: "facility",
+    description: "Maintenance was completed.",
+    defaultEntityType: "maintenance_request",
+  },
+  {
+    eventType: OperationalEventTypes.FACILITY_WORK_ORDER_CREATED,
+    domain: "facility",
+    description: "A work order was created.",
+    defaultEntityType: "work_order",
+  },
+  {
+    eventType: OperationalEventTypes.FACILITY_WORK_ORDER_ASSIGNED,
+    domain: "facility",
+    description: "A work order was assigned.",
+    defaultEntityType: "work_order",
+  },
+  {
+    eventType: OperationalEventTypes.FACILITY_WORK_ORDER_STARTED,
+    domain: "facility",
+    description: "Work order execution started.",
+    defaultEntityType: "work_order",
+  },
+  {
+    eventType: OperationalEventTypes.FACILITY_WORK_ORDER_COMPLETED,
+    domain: "facility",
+    description: "A work order was completed.",
+    defaultEntityType: "work_order",
+  },
+  {
+    eventType: OperationalEventTypes.FACILITY_WORK_ORDER_CANCELLED,
+    domain: "facility",
+    description: "A work order was cancelled.",
+    defaultEntityType: "work_order",
   },
   {
     eventType: OperationalEventTypes.SYSTEM_RECOMMENDATION_DECIDED,
@@ -56,3 +129,20 @@ export function getEventTypeDefinition(
 export function isKnownEventType(eventType: string): boolean {
   return OPERATIONAL_EVENT_CATALOG.some((entry) => entry.eventType === eventType);
 }
+
+/** Operational lifecycle events Intelligence should observe. */
+export const OPERATIONAL_LIFECYCLE_EVENT_TYPES = [
+  OperationalEventTypes.FACILITY_INCIDENT_REPORTED,
+  OperationalEventTypes.FACILITY_INCIDENT_TRIAGED,
+  OperationalEventTypes.FACILITY_INCIDENT_ESCALATED,
+  OperationalEventTypes.FACILITY_INCIDENT_RESOLVED,
+  OperationalEventTypes.FACILITY_MAINTENANCE_REQUESTED,
+  OperationalEventTypes.FACILITY_MAINTENANCE_SCHEDULED,
+  OperationalEventTypes.FACILITY_MAINTENANCE_STARTED,
+  OperationalEventTypes.FACILITY_MAINTENANCE_COMPLETED,
+  OperationalEventTypes.FACILITY_WORK_ORDER_CREATED,
+  OperationalEventTypes.FACILITY_WORK_ORDER_ASSIGNED,
+  OperationalEventTypes.FACILITY_WORK_ORDER_STARTED,
+  OperationalEventTypes.FACILITY_WORK_ORDER_COMPLETED,
+  OperationalEventTypes.FACILITY_WORK_ORDER_CANCELLED,
+] as const;

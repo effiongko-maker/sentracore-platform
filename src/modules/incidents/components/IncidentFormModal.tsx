@@ -25,7 +25,7 @@ import {
   INCIDENT_STATUSES,
   INCIDENT_TYPES,
 } from "../constants";
-import { IncidentService } from "../services/IncidentService";
+import { updateIncidentOperational } from "@/lib/operational/lifecycle/updateActions";
 import {
   applyWorkOrderRule,
   labelize,
@@ -173,7 +173,10 @@ export function IncidentFormModal({
         updatedByUserId: optionalString(form.updatedByUserId),
       });
 
-      await IncidentService.updateIncident(incident.id, payload);
+      const result = await updateIncidentOperational(incident.id, payload);
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
       toast({
         type: "success",
         title: "Incident updated",

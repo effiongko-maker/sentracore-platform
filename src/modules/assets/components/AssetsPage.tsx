@@ -1,13 +1,12 @@
 "use client";
 
-import { Package, Plus } from "lucide-react";
+import { Package } from "lucide-react";
 import { useState } from "react";
 import {
   ExploreHeader,
   ModeFrame,
   StreamSurface,
 } from "@/components/platform";
-import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
@@ -32,11 +31,13 @@ export function AssetsPage() {
     setCategory,
     facility,
     setFacility,
+    clearAll,
     page,
     setPage,
     totalPages,
     total,
     reload,
+    reloadFirstPage,
     deactivateAsset,
   } = useAssets();
 
@@ -55,7 +56,7 @@ export function AssetsPage() {
         description: `${modal.asset.name} is now inactive.`,
       });
       setModal({ type: "closed" });
-      reload();
+      await reload();
     } catch (err) {
       toast({
         type: "error",
@@ -74,12 +75,6 @@ export function AssetsPage() {
         title="Assets"
         description="Operational objects — equipment, systems, and infrastructure with identity, status, and history."
         territoryNote={`${loading ? "—" : total} objects in view`}
-        actions={
-          <Button onClick={() => setModal({ type: "create" })}>
-            <Plus className="h-4 w-4" />
-            New asset
-          </Button>
-        }
       />
 
       <AssetsToolbar
@@ -91,6 +86,10 @@ export function AssetsPage() {
         onFacilityChange={setFacility}
         status={status}
         onStatusChange={setStatus}
+        total={total}
+        loading={loading}
+        onClearAll={clearAll}
+        onCreate={() => setModal({ type: "create" })}
       />
 
       {error ? (
@@ -99,7 +98,7 @@ export function AssetsPage() {
           title="Couldn’t load assets"
           description={error}
           actionLabel="Retry"
-          onAction={reload}
+          onAction={() => void reload()}
         />
       ) : (
         <StreamSurface>
@@ -122,7 +121,7 @@ export function AssetsPage() {
         mode={modal.type === "edit" ? "edit" : "create"}
         asset={modal.type === "edit" ? modal.asset : null}
         onClose={() => setModal({ type: "closed" })}
-        onSaved={reload}
+        onSaved={() => void reloadFirstPage()}
       />
 
       <ViewAssetModal

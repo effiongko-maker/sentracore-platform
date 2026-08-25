@@ -14,13 +14,13 @@ export function CanvasIdentity() {
   const pathname = usePathname();
   const onPlatform =
     isPlatformHomePath(pathname) || isWorkspacePreviewPath(pathname);
-  const inOperations = isOperationsPath(pathname);
+  const inFacilityManagement = isOperationsPath(pathname);
 
   const line = onPlatform
-    ? "SentraCore · Operating System"
-    : inOperations
-      ? "SentraCore · Operations Management Platform"
-      : "SentraCore · Operating System";
+    ? "SentraCore · Enterprise Operating Platform"
+    : inFacilityManagement
+      ? "SentraCore · Facility Management Platform"
+      : "SentraCore · Enterprise Operating Platform";
 
   return (
     <footer className="os-canvas-identity print:hidden">

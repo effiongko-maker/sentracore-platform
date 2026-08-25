@@ -5,23 +5,23 @@ export const DASHBOARD_SECTION_META: Record<
   { title: string; description?: string; order: number }
 > = {
   context: {
-    title: "Today",
-    description: "Operational context for this session",
+    title: "Operational health",
+    description: "How the operation is performing overall",
     order: 1,
   },
-  health_strip: {
-    title: "Operational health",
-    description: "Live pulse across the estate",
+  needs_attention: {
+    title: "What needs attention now?",
+    description: "Top issues based on urgency and impact",
     order: 2,
   },
-  needs_attention: {
-    title: "Needs attention",
-    description: "Critical, overdue, or blocked items",
+  health_strip: {
+    title: "Operational health metrics",
+    description: "Live pulse across the estate",
     order: 3,
   },
   work_in_motion: {
     title: "Work in motion",
-    description: "Latest open work and active maintenance",
+    description: "Active work across your operations",
     order: 4,
   },
   estate_baseline: {

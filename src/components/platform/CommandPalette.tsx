@@ -61,8 +61,8 @@ export function CommandPalette() {
       },
       {
         id: "nav-operations",
-        label: "Enter Operations",
-        description: "Operations Management",
+        label: "Enter Facility Management",
+        description: "Facility Management",
         href: "/operations",
         group: "Navigate",
       },

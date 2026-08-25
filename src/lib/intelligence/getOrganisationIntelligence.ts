@@ -6,7 +6,7 @@ import {
   type ActionOutcome,
   type ActionSignal,
 } from "@/lib/events/consumers/outcome";
-import { OperationalEventTypes } from "@/lib/events/taxonomy";
+import { OperationalEventTypes, OPERATIONAL_LIFECYCLE_EVENT_TYPES } from "@/lib/events/taxonomy";
 import {
   isRecommendationDecisionValue,
   type RecommendationDecisionValue,
@@ -21,6 +21,9 @@ import type {
   OrganisationIntelligence,
 } from "./types";
 import { detectOrganisationIntelligenceChanges } from "./detectOrganisationIntelligenceChanges";
+import { detectOperationalLifecyclePatterns } from "./patterns/detectOperationalLifecyclePatterns";
+import { synthesiseOperationalStories } from "./synthesis/synthesiseOperationalStories";
+import type { OperationalStorySummary } from "./types";
 
 const PRIMARY_WINDOW_DAYS = 30;
 const RECENT_WINDOW_DAYS = 7;
@@ -88,6 +91,36 @@ function chunkIds(ids: string[]): string[][] {
     chunks.push(ids.slice(i, i + IN_CHUNK));
   }
   return chunks;
+}
+
+async function loadLifecycleEventsInWindow(options: {
+  supabase: SupabaseClient;
+  organisationId: string;
+  fromIso: string;
+  toIso: string;
+}): Promise<EventRow[]> {
+  const { data, error } = await options.supabase
+    .from("operational_events")
+    .select(
+      "id, organisation_id, event_type, entity_type, entity_id, occurred_at, created_at, data"
+    )
+    .eq("organisation_id", options.organisationId)
+    .in("event_type", [...OPERATIONAL_LIFECYCLE_EVENT_TYPES])
+    .gte("occurred_at", options.fromIso)
+    .lte("occurred_at", options.toIso)
+    .order("occurred_at", { ascending: false });
+
+  if (error) {
+    throw new ActionError(
+      "INTERNAL_ERROR",
+      "Failed to load operational lifecycle events.",
+      { cause: error }
+    );
+  }
+
+  return ((data ?? []) as EventRow[]).filter(
+    (row) => row.organisation_id === options.organisationId
+  );
 }
 
 async function loadEventsInWindow(options: {
@@ -351,6 +384,12 @@ function briefingIdentityForPriority(p: PriorityDraft): string {
     const patternKey = p.evidence?.find((e) => e.type === "pattern_key")?.value;
     return `briefing:response:${String(patternKey ?? p.findingKey)}`;
   }
+  if (p.category === "operational_lifecycle") {
+    return `briefing:${p.findingKey}`;
+  }
+  if (p.category === "operational_story") {
+    return `briefing:${p.findingKey}`;
+  }
   if (p.category === "incident_pattern") {
     const signalKey = String(
       p.evidence?.find((e) => e.type === "signal_key")?.value ??
@@ -365,6 +404,14 @@ function briefingIdentityForPriority(p: PriorityDraft): string {
 function briefingIdentityForPattern(p: IntelligencePattern): string {
   const findingKey = p.id.replace(/^pattern:/, "");
   if (findingKey.startsWith("response:")) {
+    return `briefing:${findingKey}`;
+  }
+  if (
+    p.category === "operational_lifecycle" ||
+    p.category === "operational_story" ||
+    findingKey.startsWith("operational:") ||
+    findingKey.startsWith("story:")
+  ) {
     return `briefing:${findingKey}`;
   }
   const { signalKey, rawSubject } = parseStoredFindingKey(findingKey);
@@ -512,6 +559,15 @@ function refreshPatternCopy(p: IntelligencePattern): IntelligencePattern {
   const findingKey = p.id.replace(/^pattern:/, "");
   const eventCount = p.relatedEventIds?.length ?? 0;
 
+  if (
+    p.category === "operational_lifecycle" ||
+    p.category === "operational_story" ||
+    findingKey.startsWith("operational:") ||
+    findingKey.startsWith("story:")
+  ) {
+    return p;
+  }
+
   if (p.category === "recommendation_response") {
     const patternKey = findingKey.replace(/^response:/, "");
     const copy = recommendationResponsePatternCopy(
@@ -622,26 +678,26 @@ function recommendationResponsePriorityCopy(
   switch (patternKey) {
     case "recommendation.repeated_critical_dismissal":
       return {
-        title: "Critical guidance is being dismissed repeatedly",
+        title: "Important recommendations are being ignored",
         summary:
           count <= 1
-            ? "Some critical recommendations have been dismissed more than once recently."
-            : `Critical recommendations have been dismissed ${count} times recently.`,
+            ? "Some important recommendations have been dismissed more than once recently."
+            : `Important recommendations have been dismissed ${count} times recently.`,
       };
     case "recommendation.repeated_critical_deferral":
       return {
-        title: "Critical guidance is being deferred repeatedly",
+        title: "Important recommendations keep being put off",
         summary:
           count <= 1
-            ? "Some critical recommendations have been deferred more than once recently."
-            : `Critical recommendations have been deferred ${count} times recently.`,
+            ? "Some important recommendations have been deferred more than once recently."
+            : `Important recommendations have been deferred ${count} times recently.`,
       };
     default:
       return {
         title:
           severity === "critical"
-            ? "Recommendations are being handled repeatedly"
-            : "Recommendations are being handled repeatedly",
+            ? "Recommendations are being handled the same way repeatedly"
+            : "Recommendations are being handled the same way repeatedly",
         summary: timesRecently(count),
       };
   }
@@ -655,19 +711,19 @@ function recommendationResponsePatternCopy(
   switch (patternKey) {
     case "recommendation.repeated_critical_dismissal":
       return {
-        title: "Critical recommendations are being dismissed repeatedly",
+        title: "Important recommendations are being ignored",
         summary:
           count <= 1
-            ? "Some critical recommendations have been dismissed more than once recently."
-            : `Critical recommendations have been dismissed ${count} times recently.`,
+            ? "Some important recommendations have been dismissed more than once recently."
+            : `Important recommendations have been dismissed ${count} times recently.`,
       };
     case "recommendation.repeated_critical_deferral":
       return {
-        title: "Critical recommendations are being deferred repeatedly",
+        title: "Important recommendations keep being put off",
         summary:
           count <= 1
-            ? "Some critical recommendations have been deferred more than once recently."
-            : `Critical recommendations have been deferred ${count} times recently.`,
+            ? "Some important recommendations have been deferred more than once recently."
+            : `Important recommendations have been deferred ${count} times recently.`,
       };
     case "recommendation.repeated_dismissal":
       return {
@@ -687,7 +743,7 @@ function recommendationResponsePatternCopy(
       };
     default:
       return {
-        title: "Recommendations are being handled in a repeating way",
+        title: "Recommendations are being handled the same way repeatedly",
         summary:
           count <= 1
             ? "This has happened recently."
@@ -869,18 +925,18 @@ function riskCopy(
 
   const title =
     count === 1
-      ? "An incident carries elevated risk"
-      : "Several incidents carry elevated risk";
+      ? "A recent incident needs closer attention"
+      : "Several recent incidents need closer attention";
   let summary: string;
   if (count === 1) {
     summary =
       facilityCount <= 1
-        ? "A high-risk incident has been assessed recently at one location."
-        : "A high-risk incident has been assessed recently.";
+        ? "A higher-risk incident has been flagged recently at one location."
+        : "A higher-risk incident has been flagged recently.";
   } else if (facilityCount <= 1) {
-    summary = `${count} incidents have been assessed as high risk recently at one location.`;
+    summary = `${count} incidents have been flagged as higher risk recently at one location.`;
   } else {
-    summary = `${count} incidents have been assessed as high risk recently.`;
+    summary = `${count} incidents have been flagged as higher risk recently.`;
   }
   return { title, summary };
 }
@@ -919,6 +975,7 @@ export function assembleOrganisationIntelligence(input: {
   windowTo: string;
   facilityManagementEnabled: boolean;
   incidentEvents: EventRow[];
+  lifecycleEvents?: EventRow[];
   signalRunsByEventId: Map<string, ActionRunRow>;
   riskRunsByEventId: Map<string, ActionRunRow>;
   patternRuns: ActionRunRow[];
@@ -929,6 +986,7 @@ export function assembleOrganisationIntelligence(input: {
     windowTo,
     facilityManagementEnabled,
     incidentEvents,
+    lifecycleEvents = [],
     signalRunsByEventId,
     riskRunsByEventId,
     patternRuns,
@@ -940,7 +998,7 @@ export function assembleOrganisationIntelligence(input: {
       state: "unavailable",
       supported: false,
       notes: [
-        "Operations Management is not enabled for this organisation.",
+        "Facility Management is not enabled for this organisation.",
       ],
     });
   }
@@ -1260,6 +1318,186 @@ export function assembleOrganisationIntelligence(input: {
     }
   }
 
+  const operationalFindings = detectOperationalLifecyclePatterns({
+    events: lifecycleEvents,
+    windowFrom,
+    windowTo,
+  });
+
+  const synthesis = synthesiseOperationalStories({
+    findings: operationalFindings,
+    events: lifecycleEvents,
+    windowFrom,
+    windowTo,
+  });
+
+  const eventTimeById = new Map<string, number>();
+  for (const event of lifecycleEvents) {
+    eventTimeById.set(event.id, timestampMs(event.occurred_at));
+  }
+
+  const storySummaries: OperationalStorySummary[] = synthesis.stories.map(
+    (story) => ({
+      id: story.id,
+      title: story.title,
+      summary: story.summary,
+      status: story.status,
+      severity: story.severity,
+      score: story.score,
+      confidence: story.confidence,
+      facilityId:
+        story.facilityIds.length === 1 ? story.facilityIds[0] : undefined,
+      assetIds: story.assetIds,
+      findingIds: story.evidence.findingIds,
+      relatedEventIds: story.evidence.eventIds,
+      sequence: story.sequence.map((step) => ({
+        occurredAt: step.occurredAt,
+        label: step.label,
+        eventType: step.eventType,
+        eventId: step.eventId,
+        entityId: step.entityId,
+      })),
+      whyItMatters: story.whyItMatters,
+      whatToInvestigate: story.whatToInvestigate,
+      whatItSaw: story.whatItSaw,
+    })
+  );
+
+  for (const story of synthesis.stories) {
+    const latestMs = timestampMs(story.lastObservedAt);
+    const prioritySeverity: IntelligencePrioritySeverity =
+      story.severity === "critical"
+        ? "critical"
+        : story.severity === "high"
+          ? "high"
+          : "normal";
+
+    const storyEvidence: Array<{ type: string; value?: unknown }> = [
+      { type: "story_id", value: story.id },
+      { type: "story_status", value: story.status },
+      { type: "sequence_kind", value: story.sequenceKind },
+      { type: "event_count", value: story.evidence.eventCount },
+      { type: "finding_count", value: story.evidence.findingCount },
+      { type: "facility_count", value: story.facilityIds.length },
+      { type: "asset_count", value: story.assetIds.length },
+      { type: "facility_ids", value: story.facilityIds },
+      { type: "asset_ids", value: story.assetIds },
+      { type: "incident_ids", value: story.incidentIds },
+      { type: "maintenance_ids", value: story.maintenanceIds },
+      { type: "work_order_ids", value: story.workOrderIds },
+      { type: "event_ids", value: story.evidence.eventIds },
+      { type: "entity_ids", value: story.evidence.entityIds },
+      { type: "finding_ids", value: story.evidence.findingIds },
+      { type: "finding_keys", value: story.evidence.findingKeys },
+      { type: "what_it_saw", value: story.whatItSaw },
+      {
+        type: "sequence",
+        value: story.sequence.map(
+          (step) => `${step.occurredAt.slice(0, 10)} — ${step.label}${
+            step.entityId ? ` (${step.entityId})` : ""
+          }`
+        ),
+      },
+      { type: "why_it_matters", value: story.whyItMatters },
+      { type: "what_to_investigate", value: story.whatToInvestigate },
+      { type: "score", value: story.score },
+      { type: "score_breakdown", value: story.evidence.scoreBreakdown },
+      { type: "confidence", value: story.confidence },
+      ...(story.assetIds[0]
+        ? [{ type: "subject", value: story.assetIds[0] }]
+        : []),
+    ];
+
+    if (story.elevateToPriority) {
+      priorities.push({
+        id: `priority:${story.id}`,
+        findingKey: story.id,
+        severity: prioritySeverity,
+        category: "operational_story",
+        title: story.title,
+        summary: story.summary,
+        facilityId:
+          story.facilityIds.length === 1 ? story.facilityIds[0] : undefined,
+        relatedEventIds: story.evidence.eventIds,
+        evidence: storyEvidence,
+        createdAt: new Date(latestMs).toISOString(),
+        rank: story.rank,
+        recencyMs: latestMs,
+      });
+    } else {
+      patterns.push({
+        id: `pattern:${story.id}`,
+        category: "operational_story",
+        severity:
+          story.severity === "critical"
+            ? "critical"
+            : story.severity === "high" || story.severity === "medium"
+              ? "warning"
+              : "info",
+        title: story.title,
+        summary: story.summary,
+        facilityId:
+          story.facilityIds.length === 1 ? story.facilityIds[0] : undefined,
+        relatedEventIds: story.evidence.eventIds,
+        evidence: storyEvidence,
+        whatItSaw: story.whatItSaw,
+        sequence: story.sequence.map(
+          (step) => `${step.occurredAt.slice(0, 10)} — ${step.label}`
+        ),
+        score: story.score,
+      });
+    }
+  }
+
+  // Standalone findings only — absorbed findings remain as story evidence.
+  for (const finding of synthesis.standaloneFindings) {
+    const relatedTimes = finding.relatedEventIds
+      .map((id) => eventTimeById.get(id))
+      .filter((value): value is number => value != null && Number.isFinite(value));
+    const latestMs =
+      relatedTimes.length > 0
+        ? Math.max(...relatedTimes)
+        : timestampMs(windowTo);
+    const pattern: IntelligencePattern = {
+      id: finding.id,
+      category: "operational_lifecycle",
+      severity: finding.severity,
+      title: finding.title,
+      summary: finding.summary,
+      facilityId: finding.facilityId,
+      relatedEventIds: finding.relatedEventIds,
+      evidence: finding.evidence,
+      whatItSaw: finding.whatItSaw,
+      sequence: finding.sequence,
+      score: finding.score,
+    };
+
+    if (finding.elevateToPriority) {
+      const prioritySeverity: IntelligencePrioritySeverity =
+        finding.severity === "critical"
+          ? "critical"
+          : finding.severity === "warning"
+            ? "high"
+            : "normal";
+      priorities.push({
+        id: `priority:${finding.findingKey}`,
+        findingKey: finding.findingKey,
+        severity: prioritySeverity,
+        category: "operational_lifecycle",
+        title: finding.title,
+        summary: finding.summary,
+        facilityId: finding.facilityId,
+        relatedEventIds: finding.relatedEventIds,
+        evidence: finding.evidence,
+        createdAt: new Date(latestMs).toISOString(),
+        rank: Math.min(92, 35 + Math.round(finding.score / 2)),
+        recencyMs: latestMs,
+      });
+    } else {
+      patterns.push(pattern);
+    }
+  }
+
   const dedupedPriorityMap = new Map<string, PriorityDraft>();
   for (const priority of priorities) {
     const existing = dedupedPriorityMap.get(priority.findingKey);
@@ -1415,7 +1653,21 @@ export function assembleOrganisationIntelligence(input: {
       highOrCriticalRiskCount,
       criticalRiskCount,
       facilitiesWithRecentActivity: facilities.size,
+      maintenanceRequestedCount30d: lifecycleEvents.filter(
+        (event) =>
+          event.event_type === OperationalEventTypes.FACILITY_MAINTENANCE_REQUESTED
+      ).length,
+      workOrdersCreatedCount30d: lifecycleEvents.filter(
+        (event) =>
+          event.event_type === OperationalEventTypes.FACILITY_WORK_ORDER_CREATED
+      ).length,
+      workOrdersCompletedCount30d: lifecycleEvents.filter(
+        (event) =>
+          event.event_type === OperationalEventTypes.FACILITY_WORK_ORDER_COMPLETED
+      ).length,
+      lifecycleEventCount30d: lifecycleEvents.length,
     },
+    stories: storySummaries,
     status: {
       state,
       supported: true,
@@ -1461,7 +1713,12 @@ function emptyOrganisationIntelligence(
       highOrCriticalRiskCount: 0,
       criticalRiskCount: 0,
       facilitiesWithRecentActivity: 0,
+      maintenanceRequestedCount30d: 0,
+      workOrdersCreatedCount30d: 0,
+      workOrdersCompletedCount30d: 0,
+      lifecycleEventCount30d: 0,
     },
+    stories: [],
     status,
   };
 }
@@ -1485,7 +1742,7 @@ export async function loadOrganisationIntelligence(options: {
       state: "unavailable",
       supported: false,
       notes: [
-        "Operations Management is not enabled for this organisation.",
+        "Facility Management is not enabled for this organisation.",
       ],
     });
   }
@@ -1494,6 +1751,13 @@ export async function loadOrganisationIntelligence(options: {
     supabase: options.supabase,
     organisationId: options.organisationId,
     eventType: OperationalEventTypes.FACILITY_INCIDENT_REPORTED,
+    fromIso,
+    toIso,
+  });
+
+  const lifecycleEvents = await loadLifecycleEventsInWindow({
+    supabase: options.supabase,
+    organisationId: options.organisationId,
     fromIso,
     toIso,
   });
@@ -1535,6 +1799,7 @@ export async function loadOrganisationIntelligence(options: {
     windowTo: toIso,
     facilityManagementEnabled: true,
     incidentEvents,
+    lifecycleEvents,
     signalRunsByEventId: pickLatestSucceededByEvent(
       incidentRuns,
       SIGNAL_ACTION_KEY

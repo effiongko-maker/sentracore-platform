@@ -2,17 +2,16 @@
 
 import {
   ActionError,
-  emitActionEvent,
   executeAction,
   type ActionResult,
 } from "@/lib/actions";
+import { orchestrateRequestMaintenance } from "@/lib/operational/orchestration";
 import {
   MAINTENANCE_PRIORITIES,
   MAINTENANCE_SOURCES,
   MAINTENANCE_STATUSES,
   MAINTENANCE_TYPES,
 } from "@/modules/maintenance/constants";
-import { MaintenanceService } from "@/modules/maintenance/services/MaintenanceService";
 import type {
   CreateMaintenanceInput,
   Maintenance,
@@ -150,47 +149,11 @@ export async function requestMaintenance(
         reportedByUserId: validated.reportedByUserId || context.userId,
       };
 
-      const maintenance =
-        await MaintenanceService.createMaintenance(writeInput);
-
-      try {
-        await emitActionEvent(context, {
-          eventType: "facility.maintenance_requested",
-          entityType: "maintenance_request",
-          entityId: String(maintenance.id),
-          data: {
-            maintenanceId: maintenance.id,
-            title: maintenance.title,
-            facilityId: maintenance.facilityId,
-            department: maintenance.department ?? null,
-            type: maintenance.type,
-            source: maintenance.source,
-            priority: maintenance.priority,
-            status: maintenance.status,
-            requiresWorkOrder: maintenance.requiresWorkOrder ?? false,
-            assetId: maintenance.assetId ?? null,
-            categoryId: maintenance.categoryId ?? null,
-            dueAt: maintenance.dueAt ?? null,
-          },
-        });
-      } catch (eventError) {
-        console.error("[maintenance.request] operational event failed", {
-          action: "maintenance.request",
-          maintenanceId: maintenance.id,
-          organisationId: context.organisation.id,
-          moduleId: context.module.moduleId,
-          actorProfileId: context.userId,
-          eventType: "facility.maintenance_requested",
-          entityType: "maintenance_request",
-          entityId: maintenance.id,
-          source: "user",
-          error:
-            eventError instanceof Error
-              ? eventError.message
-              : "unknown event error",
-          stack: eventError instanceof Error ? eventError.stack : undefined,
-        });
-      }
+      const maintenance = await orchestrateRequestMaintenance({
+        input: writeInput,
+        intake: "staff",
+        context,
+      });
 
       return maintenance;
     },

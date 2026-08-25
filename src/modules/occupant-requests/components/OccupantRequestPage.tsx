@@ -36,8 +36,11 @@ function RequestsFrame({ children }: { children: React.ReactNode }) {
   );
 }
 import { OCCUPANT_REQUEST_KINDS } from "../constants";
+import {
+  submitOccupantIncidentReport,
+  submitOccupantMaintenanceRequest,
+} from "../actions/submitOccupantRequest";
 import { useOccupantFacilities } from "../hooks/useOccupantFacilities";
-import { OccupantRequestService } from "../services/OccupantRequestService";
 import type {
   IncidentRequestFormValues,
   MaintenanceRequestFormValues,
@@ -71,8 +74,11 @@ export function OccupantRequestPage() {
   async function submitMaintenance(values: MaintenanceRequestFormValues) {
     setSubmitting(true);
     try {
-      const next = await OccupantRequestService.submitMaintenanceRequest(values);
-      setResult(next);
+      const result = await submitOccupantMaintenanceRequest(values);
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
+      setResult(result.data);
       toast({
         title: "Maintenance request submitted",
         description: "Your request is now with the facilities team.",
@@ -93,8 +99,11 @@ export function OccupantRequestPage() {
   async function submitIncident(values: IncidentRequestFormValues) {
     setSubmitting(true);
     try {
-      const next = await OccupantRequestService.submitIncidentReport(values);
-      setResult(next);
+      const result = await submitOccupantIncidentReport(values);
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
+      setResult(result.data);
       toast({
         title: "Incident report submitted",
         description: "Your report is now with the operations team.",

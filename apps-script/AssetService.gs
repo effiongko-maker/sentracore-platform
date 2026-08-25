@@ -1,8 +1,10 @@
 /**
  * AssetService.gs
  *
- * Business rules for Assets. Mirrors FacilityService.gs pattern.
+ * Business rules for Assets. Mirrors FacilityService.gs / WorkOrderService.gs.
  * Never talks to the spreadsheet directly — only AssetRepository.
+ *
+ * List pipeline: all → sort newest first → search/filters → paginate
  */
 
 var AssetService = (function () {
@@ -24,6 +26,9 @@ var AssetService = (function () {
         String(row.assetTag || "")
           .toLowerCase()
           .indexOf(search) !== -1 ||
+        String(row.id || "")
+          .toLowerCase()
+          .indexOf(search) !== -1 ||
         String(row.facility || "")
           .toLowerCase()
           .indexOf(search) !== -1 ||
@@ -31,6 +36,9 @@ var AssetService = (function () {
           .toLowerCase()
           .indexOf(search) !== -1 ||
         String(row.manufacturer || "")
+          .toLowerCase()
+          .indexOf(search) !== -1 ||
+        String(row.model || "")
           .toLowerCase()
           .indexOf(search) !== -1 ||
         String(row.assignedTo || "")
@@ -47,14 +55,50 @@ var AssetService = (function () {
         category === "all" ||
         String(row.category).toLowerCase() === String(category).toLowerCase();
 
+      // Facility values may be an id or a display name depending on row age.
       var matchesFacility =
         !facility ||
         facility === "all" ||
         String(row.facility) === String(facility);
 
+      if (
+        !matchesFacility &&
+        facility &&
+        facility !== "all" &&
+        typeof FacilityRepository !== "undefined"
+      ) {
+        try {
+          var facilities = FacilityRepository.getAll() || [];
+          var i;
+          for (i = 0; i < facilities.length; i++) {
+            var f = facilities[i];
+            var fid = String(f.id || "");
+            var fname = String(f.name || "");
+            if (
+              (fid === String(facility) || fname === String(facility)) &&
+              (String(row.facility) === fid || String(row.facility) === fname)
+            ) {
+              matchesFacility = true;
+              break;
+            }
+          }
+        } catch (ignore) {}
+      }
+
       return (
         matchesSearch && matchesStatus && matchesCategory && matchesFacility
       );
+    });
+  }
+
+  function sortNewestFirst_(rows) {
+    return rows.slice().sort(function (a, b) {
+      var aAt = String(a.createdAt || a.updatedAt || "");
+      var bAt = String(b.createdAt || b.updatedAt || "");
+      if (aAt === bAt) {
+        return String(b.id || "").localeCompare(String(a.id || ""));
+      }
+      return aAt < bAt ? 1 : -1;
     });
   }
 
@@ -67,6 +111,7 @@ var AssetService = (function () {
 
     var total = rows.length;
     var totalPages = Math.max(1, Math.ceil(total / pageSize));
+    if (page > totalPages) page = totalPages;
     var start = (page - 1) * pageSize;
     var data = rows.slice(start, start + pageSize);
 
@@ -82,7 +127,8 @@ var AssetService = (function () {
   function getAll(payload) {
     var rows = AssetRepository.getAll();
     var filtered = applyFilters_(rows, payload);
-    return paginate_(filtered, payload);
+    var sorted = sortNewestFirst_(filtered);
+    return paginate_(sorted, payload);
   }
 
   function getById(payload) {

@@ -2,7 +2,10 @@
 
 import type { ReactNode } from "react";
 import { ContentFade } from "./ContentFade";
-import { PageLoadingState } from "./PageLoadingState";
+import {
+  PageLoadingState,
+  type PageLoadingTone,
+} from "./PageLoadingState";
 import { useDeferredLoading } from "./useDeferredLoading";
 
 /**
@@ -12,16 +15,21 @@ import { useDeferredLoading } from "./useDeferredLoading";
 export function LoadingGate({
   loading,
   skeleton,
+  status,
   messages,
   title,
+  tone = "light",
   children,
   /** Keep rendering children under the loader once first paint happened. */
   retainContent = false,
 }: {
   loading: boolean;
   skeleton: ReactNode;
+  /** Primary branded status line. */
+  status?: string;
   messages?: readonly string[];
   title?: string;
+  tone?: PageLoadingTone;
   children: ReactNode;
   retainContent?: boolean;
 }) {
@@ -32,9 +40,11 @@ export function LoadingGate({
     return (
       <PageLoadingState
         skeleton={skeleton}
+        status={status}
         messages={messages}
         isExiting={isExiting}
         title={title}
+        tone={tone}
       />
     );
   }

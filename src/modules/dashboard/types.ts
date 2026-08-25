@@ -37,6 +37,33 @@ export interface DashboardQuery {
   facilityId?: string;
 }
 
+/**
+ * Live KPI pulse mirrored from ReportingSnapshot.kpis.
+ * Presentation-only enrichment — calculations stay in ReportingService.
+ */
+export interface DashboardPulse {
+  activeFacilities: number;
+  inactiveFacilities: number;
+  totalFacilities: number;
+  activeAssets: number;
+  totalAssets: number;
+  assetsOperationalPercent: number | null;
+  assetsInPoorCondition: number;
+  activeWorkforce: number;
+  totalUsers: number;
+  openWorkOrders: number;
+  workOrdersCreatedToday: number;
+  workOrdersDueToday: number;
+  overdueWorkOrders: number;
+  criticalIncidents: number;
+  criticalIncidentsUnassigned: number;
+  incidentsNeedingWorkOrder: number;
+  maintenanceBacklog: number;
+  overdueMaintenance: number;
+  maintenanceOnHold: number;
+  workOrdersOnHold: number;
+}
+
 /** Frozen — DashboardService returns only this. UI renders only this. */
 export interface DashboardSnapshot {
   asOf: string;
@@ -51,6 +78,8 @@ export interface DashboardSnapshot {
     score?: number;
     summary?: string;
   };
+  /** Authoritative KPI counts for overview composition. */
+  pulse?: DashboardPulse;
   sections: DashboardSection[];
 }
 

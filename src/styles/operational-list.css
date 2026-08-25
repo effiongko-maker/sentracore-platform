@@ -155,6 +155,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
+  margin-left: auto;
 }
 
 .op-util-btn {
@@ -230,26 +231,27 @@
 
 .op-filter-anchor {
   position: relative;
+  flex: 0 0 auto;
 }
 
 .op-filter-panel {
-  position: absolute;
-  top: calc(100% + 0.4rem);
-  right: 0;
-  z-index: 40;
-  width: min(22rem, calc(100vw - 2rem));
-  padding: 1rem;
+  position: fixed;
+  z-index: 80;
+  box-sizing: border-box;
+  padding: 0.875rem 0.875rem 0.75rem;
   border: 1px solid var(--op-rule-strong);
   border-radius: 0.5rem;
   background: var(--op-surface);
-  box-shadow: 0 12px 32px rgba(18, 26, 36, 0.1);
+  box-shadow:
+    0 4px 6px rgba(18, 26, 36, 0.04),
+    0 16px 40px rgba(18, 26, 36, 0.12);
 }
 
 .op-filter-title {
-  margin: 0 0 0.875rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  margin: 0 0 0.75rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--op-faint);
 }
@@ -257,13 +259,13 @@
 .op-filter-fields {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.625rem;
 }
 
 .op-filter-field {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.3rem;
 }
 
 .op-filter-field label {
@@ -296,8 +298,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-top: 1rem;
-  padding-top: 0.875rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
   border-top: 1px solid var(--op-rule);
 }
 
@@ -311,8 +313,15 @@
   padding: 0.35rem 0;
 }
 
-.op-filter-clear:hover {
+.op-filter-clear:hover:not(:disabled) {
   color: var(--op-ink);
+}
+
+.op-filter-clear-muted,
+.op-filter-clear:disabled {
+  color: var(--op-faint);
+  cursor: default;
+  opacity: 0.65;
 }
 
 .op-filter-apply {
@@ -456,10 +465,8 @@
     flex: 1;
   }
 
-  .op-filter-panel {
-    left: 0;
-    right: auto;
-    width: 100%;
+  .op-filter-anchor {
+    flex: 1 1 auto;
   }
 }
 

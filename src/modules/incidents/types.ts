@@ -55,8 +55,14 @@ export interface Incident {
   reportedByUserId?: string;
   assignedToUserId?: string;
   assignedGroupId?: string;
+  /** Primary linked work order (first of workOrderIds). */
   workOrderId?: string;
+  /** Durable cross-entity links persisted on sheet. */
+  workOrderIds?: string[];
+  maintenanceIds?: string[];
   parentIncidentId?: string;
+  /** Supabase operational_events.id when recorded. */
+  operationalEventId?: string;
 
   reportedAt: string;
   discoveredAt?: string;
@@ -101,7 +107,10 @@ export interface CreateIncidentInput {
   assignedToUserId?: string;
   assignedGroupId?: string;
   workOrderId?: string;
+  workOrderIds?: string[];
+  maintenanceIds?: string[];
   parentIncidentId?: string;
+  operationalEventId?: string;
   reportedAt: string;
   discoveredAt?: string;
   reportedVia?: IncidentChannel;

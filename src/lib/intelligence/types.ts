@@ -148,7 +148,9 @@ export type IntelligencePriorityCategory =
   | "risk"
   | "incident_pattern"
   | "recommendation_response"
-  | "recommendation_attention";
+  | "recommendation_attention"
+  | "operational_lifecycle"
+  | "operational_story";
 
 export type IntelligencePriority = {
   /** Stable deterministic id for the grouped finding. */
@@ -173,6 +175,10 @@ export type IntelligencePattern = {
   facilityId?: string;
   /** Internal traceability — not for UI display. */
   relatedEventIds?: string[];
+  evidence?: Array<{ type: string; value?: unknown }>;
+  whatItSaw?: string;
+  sequence?: string[];
+  score?: number;
 };
 
 export type OrganisationRecommendationHealth = {
@@ -195,6 +201,10 @@ export type OrganisationOperationalContext = {
   highOrCriticalRiskCount: number;
   criticalRiskCount: number;
   facilitiesWithRecentActivity: number;
+  maintenanceRequestedCount30d: number;
+  workOrdersCreatedCount30d: number;
+  workOrdersCompletedCount30d: number;
+  lifecycleEventCount30d: number;
 };
 
 export type OrganisationIntelligenceStatus = {
@@ -258,6 +268,7 @@ export type IntelligenceChange = {
 /**
  * Organisation-level intelligence read model.
  * Aggregates existing Action Engine outcomes — does not recalculate consumers.
+ * Operational stories are synthesised from lifecycle pattern findings.
  */
 export type OrganisationIntelligence = {
   window: {
@@ -272,5 +283,38 @@ export type OrganisationIntelligence = {
   comparisonWindow: IntelligenceChangeComparisonWindow;
   recommendationHealth: OrganisationRecommendationHealth;
   operationalContext: OrganisationOperationalContext;
+  /**
+   * Synthesised operational stories (deterministic clusters of related findings).
+   * Empty when evidence is insufficient to connect findings.
+   */
+  stories: OperationalStorySummary[];
   status: OrganisationIntelligenceStatus;
+};
+
+/**
+ * Briefing-facing story summary — full evidence remains on priority/pattern
+ * investigation payloads via evidence fields.
+ */
+export type OperationalStorySummary = {
+  id: string;
+  title: string;
+  summary: string;
+  status: "emerging" | "active" | "deteriorating" | "stabilising" | "resolved";
+  severity: "info" | "low" | "medium" | "high" | "critical";
+  score: number;
+  confidence: "low" | "medium" | "high";
+  facilityId?: string;
+  assetIds: string[];
+  findingIds: string[];
+  relatedEventIds: string[];
+  sequence: Array<{
+    occurredAt: string;
+    label: string;
+    eventType: string;
+    eventId: string;
+    entityId?: string;
+  }>;
+  whyItMatters: string;
+  whatToInvestigate: string[];
+  whatItSaw: string;
 };

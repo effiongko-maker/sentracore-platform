@@ -70,7 +70,9 @@ export function OrganisationalCompass() {
             </span>
             <div className="min-w-0">
               <p className="os-compass-brand-name truncate">SentraCore</p>
-              <p className="os-compass-brand-sub truncate">Operating System</p>
+              <p className="os-compass-brand-sub truncate">
+                Enterprise Operating Platform
+              </p>
             </div>
           </Link>
 
@@ -79,7 +81,7 @@ export function OrganisationalCompass() {
 
         {inOperations ? (
           <div className="os-compass-scroll">
-            <p className="os-compass-workspace-caption">Operations</p>
+            <p className="os-compass-workspace-caption">Facility Management</p>
             <Link
               href={COMMAND_HOME.href}
               onClick={closeMobileNav}

@@ -2,7 +2,10 @@ import type {
   RecordOperationalEventInput,
   RecordedOperationalEvent,
 } from "@/lib/events";
-import { recordOperationalEvent } from "@/lib/events";
+import {
+  recordOperationalEvent,
+  recordSystemOperationalEvent,
+} from "@/lib/events";
 import {
   bootstrapOperationalEventConsumers,
   runOperationalEventConsumers,
@@ -46,19 +49,42 @@ export function buildEventFromContext(
   };
 }
 
+function isOutsideNextRequestScope(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes("cookies") &&
+    (message.includes("outside a request scope") ||
+      message.includes("next-dynamic-api-wrong-context"))
+  );
+}
+
 /**
  * Record an operational event, then dispatch registered consumers.
  *
  * - Event insert failure → throws (domain action may catch and keep domain success).
  * - Consumer failure → logged / action_runs failed row; does not throw.
+ * - Outside a Next.js request scope (scripts / background), falls back to the
+ *   service-role writer while still attributing actor_profile_id from context.
  */
 export async function emitActionEvent(
   context: ActionContext,
   input: ActionEventInput
 ): Promise<RecordedOperationalEvent> {
-  const event = await recordOperationalEvent(
-    buildEventFromContext(context, input)
-  );
+  const payload = buildEventFromContext(context, input);
+  let event: RecordedOperationalEvent;
+
+  try {
+    event = await recordOperationalEvent(payload);
+  } catch (error) {
+    if (!isOutsideNextRequestScope(error)) {
+      throw error;
+    }
+    event = await recordSystemOperationalEvent({
+      ...payload,
+      actorProfileId: context.profile.id,
+      source: "user",
+    });
+  }
 
   try {
     bootstrapOperationalEventConsumers();

@@ -2,10 +2,12 @@
 
 import {
   ActionError,
-  emitActionEvent,
   executeAction,
   type ActionResult,
 } from "@/lib/actions";
+import {
+  orchestrateReportIncident,
+} from "@/lib/operational/orchestration";
 import {
   INCIDENT_CHANNELS,
   INCIDENT_SEVERITIES,
@@ -13,7 +15,6 @@ import {
   INCIDENT_STATUSES,
   INCIDENT_TYPES,
 } from "@/modules/incidents/constants";
-import { IncidentService } from "@/modules/incidents/services/IncidentService";
 import type {
   CreateIncidentInput,
   Incident,
@@ -157,50 +158,11 @@ export async function reportIncident(
         context.now
       );
 
-      const incident = await IncidentService.createIncident(writeInput);
-
-      try {
-        await emitActionEvent(context, {
-          eventType: "facility.incident_reported",
-          entityType: "incident",
-          entityId: incident.id,
-          data: {
-            incidentId: incident.id,
-            title: incident.title,
-            facilityId: incident.facilityId,
-            locationDetail: incident.locationDetail ?? null,
-            severity: incident.severity,
-            type: incident.type,
-            source: incident.source,
-            status: incident.status,
-            isEmergency: incident.isEmergency ?? false,
-            requiresWorkOrder: incident.requiresWorkOrder ?? false,
-            reportedVia: incident.reportedVia ?? null,
-            assetId: incident.assetId ?? null,
-          },
-        });
-      } catch (eventError) {
-        console.error("[incident.report] operational event failed", {
-          action: "incident.report",
-          incidentId: incident.id,
-          incidentIdLooksLikeUuid:
-            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-              String(incident.id)
-            ),
-          organisationId: context.organisation.id,
-          moduleId: context.module.moduleId,
-          actorProfileId: context.userId,
-          eventType: "facility.incident_reported",
-          entityType: "incident",
-          entityId: incident.id,
-          source: "user",
-          error:
-            eventError instanceof Error
-              ? eventError.message
-              : "unknown event error",
-          stack: eventError instanceof Error ? eventError.stack : undefined,
-        });
-      }
+      const incident = await orchestrateReportIncident({
+        input: writeInput,
+        intake: "staff",
+        context,
+      });
 
       return incident;
     },

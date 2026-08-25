@@ -30,6 +30,7 @@ export const PLATFORM_HOME = {
   href: "/",
 } as const;
 
+/** Facility Management workspace home (route unchanged for compatibility). */
 export const OPERATIONS_HOME = {
   label: "Home",
   href: "/operations",
@@ -38,13 +39,20 @@ export const OPERATIONS_HOME = {
 export const PLATFORM_WORKSPACES: PlatformWorkspace[] = [
   {
     id: "operations",
-    label: "Operations Management",
-    title: "Operations Management",
+    label: "Facility Management",
+    title: "Facility Management",
     status: "active",
     statusLabel: "Active",
     description:
-      "Manage the organisation's physical environment, operational activity, maintenance, incidents and work.",
+      "Manage facilities, assets, maintenance, incidents and operational work from one connected environment.",
     href: OPERATIONS_HOME.href,
+    capabilities: [
+      "Facilities",
+      "Assets",
+      "Maintenance",
+      "Work Orders",
+      "Incidents",
+    ],
   },
   {
     id: "ecc-operations",
@@ -54,9 +62,9 @@ export const PLATFORM_WORKSPACES: PlatformWorkspace[] = [
     statusLabel: "In development",
     statusDetail: "Being built for your organisation",
     description:
-      "Manage the reporting, monitoring and operational activity of Emergency Communication Centres.",
+      "Support the reporting, monitoring and operational activity of Emergency Communication Centres.",
     previewHref: "/workspaces/ecc-operations",
-    capabilities: ["Calls", "Events", "Reporting"],
+    capabilities: ["Reporting", "Monitoring", "Centre Operations"],
   },
   {
     id: "finance",
@@ -66,7 +74,7 @@ export const PLATFORM_WORKSPACES: PlatformWorkspace[] = [
     statusLabel: "In development",
     statusDetail: "Being built for your organisation",
     description:
-      "Financial operations, planning, treasury and expenditure management.",
+      "Manage financial operations, planning, treasury and expenditure with greater visibility and control.",
     previewHref: "/workspaces/finance",
     capabilities: ["Treasury", "Planning", "Expenditure"],
   },
@@ -78,7 +86,7 @@ export const PLATFORM_WORKSPACES: PlatformWorkspace[] = [
     statusLabel: "Planned",
     statusDetail: "Coming to SentraCore",
     description:
-      "Project execution, site activity, progress and construction operations.",
+      "Manage construction activity, site operations, progress and project delivery.",
     previewHref: "/workspaces/construction",
     capabilities: ["Sites", "Progress", "Cost"],
   },
@@ -90,7 +98,7 @@ export const PLATFORM_WORKSPACES: PlatformWorkspace[] = [
     statusLabel: "Planned",
     statusDetail: "Coming to SentraCore",
     description:
-      "Planning and coordinating projects, programmes and organisational events.",
+      "Plan, coordinate and manage projects, programmes and events across the organisation.",
     previewHref: "/workspaces/projects-events",
     capabilities: ["Projects", "Tasks", "Events"],
   },

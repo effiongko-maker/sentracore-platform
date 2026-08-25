@@ -1,3 +1,4 @@
+import { parseIdList, primaryId } from "@/lib/operational/idLists";
 import type { PaginatedResult } from "@/types";
 import type {
   CreateWorkOrderInput,
@@ -12,6 +13,10 @@ import type {
 } from "@/modules/work-orders/types";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
+import {
+  postToAppsScript,
+  postToAppsScriptData,
+} from "@/services/api/appsScriptProxy";
 type RemoteWorkOrder = Record<string, unknown>;
 
 function pickField(raw: RemoteWorkOrder, ...keys: string[]): unknown {
@@ -53,6 +58,49 @@ function optionalBoolean(
   if (text === "true" || text === "yes" || text === "1") return true;
   if (text === "false" || text === "no" || text === "0") return false;
   return undefined;
+}
+
+function readWorkOrderIncidentId(raw: RemoteWorkOrder): string | undefined {
+  const explicit = optionalMappedString(raw, "incidentId", "Incident ID");
+  if (explicit) return explicit;
+  const legacy = optionalMappedString(raw, "eventId", "Event ID");
+  if (legacy && /^INC-/i.test(legacy)) return legacy;
+  return undefined;
+}
+
+function readWorkOrderMaintenanceId(raw: RemoteWorkOrder): string | undefined {
+  const rawMaint = optionalMappedString(raw, "maintenanceId", "Maintenance ID");
+  if (!rawMaint) return undefined;
+  if (/^MNT-/i.test(rawMaint)) return rawMaint;
+  const hasParentCol = pickField(raw, "parentWorkOrderId", "Parent Work Order ID");
+  if (hasParentCol != null && String(hasParentCol).trim() !== "") {
+    return /^MNT-/i.test(rawMaint) ? rawMaint : undefined;
+  }
+  return /^WO-/i.test(rawMaint) ? undefined : rawMaint;
+}
+
+function readParentWorkOrderId(raw: RemoteWorkOrder): string | undefined {
+  const explicit = optionalMappedString(
+    raw,
+    "parentWorkOrderId",
+    "Parent Work Order ID"
+  );
+  if (explicit) return explicit;
+  const legacy = optionalMappedString(raw, "maintenanceId", "Maintenance ID");
+  if (legacy && /^WO-/i.test(legacy)) return legacy;
+  return undefined;
+}
+
+function readOperationalEventId(raw: RemoteWorkOrder): string | undefined {
+  const value = optionalMappedString(
+    raw,
+    "operationalEventId",
+    "Event ID",
+    "Event Id"
+  );
+  if (!value) return undefined;
+  if (/^INC-/i.test(value)) return undefined;
+  return value;
 }
 
 function mapRemoteWorkOrder(raw: RemoteWorkOrder): WorkOrder {
@@ -97,12 +145,10 @@ function mapRemoteWorkOrder(raw: RemoteWorkOrder): WorkOrder {
       "reportedByUserId",
       "Reported By User ID"
     ),
-    incidentId: optionalMappedString(raw, "incidentId", "Incident ID"),
-    parentWorkOrderId: optionalMappedString(
-      raw,
-      "parentWorkOrderId",
-      "Parent Work Order ID"
-    ),
+    incidentId: readWorkOrderIncidentId(raw),
+    maintenanceId: readWorkOrderMaintenanceId(raw),
+    parentWorkOrderId: readParentWorkOrderId(raw),
+    operationalEventId: readOperationalEventId(raw),
     assignedToUserId: optionalMappedString(
       raw,
       "assignedToUserId",
@@ -223,6 +269,19 @@ export const WorkOrderService = {
 
   async getWorkOrder(id: string): Promise<WorkOrder | null> {
     try {
+      if (typeof window === "undefined") {
+        const row = await postToAppsScriptData(
+          {
+            resource: "work-orders",
+            action: "getById",
+            payload: { id },
+          },
+          { resource: "work-orders", action: "getById" },
+          "WorkOrderService.getWorkOrder"
+        );
+        return mapRemoteWorkOrder(row as RemoteWorkOrder);
+      }
+
       const response = await apiClient.post<WorkOrder>("/work-orders", {
         resource: "work-orders",
         action: "getById",
@@ -231,11 +290,49 @@ export const WorkOrderService = {
       return mapRemoteWorkOrder(response.data as unknown as RemoteWorkOrder);
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) return null;
+      if (
+        error instanceof Error &&
+        (error as Error & { status?: number }).status === 404
+      ) {
+        return null;
+      }
       throw error;
     }
   },
 
   async createWorkOrder(input: CreateWorkOrderInput): Promise<WorkOrder> {
+    if (typeof window === "undefined") {
+      const raw = await postToAppsScript(
+        {
+          resource: "work-orders",
+          action: "create",
+          payload: input,
+        },
+        { resource: "work-orders", action: "create" },
+        "WorkOrderService.createWorkOrder"
+      );
+
+      const envelope = raw as {
+        data?: unknown;
+        success?: boolean;
+        message?: string;
+      };
+      if (envelope && typeof envelope === "object" && envelope.success === false) {
+        throw new ApiError(
+          envelope.message ?? "Failed to create work order",
+          400,
+          envelope
+        );
+      }
+
+      const row =
+        envelope && typeof envelope === "object" && "data" in envelope
+          ? envelope.data
+          : raw;
+
+      return mapRemoteWorkOrder(row as RemoteWorkOrder);
+    }
+
     const response = await apiClient.post<WorkOrder>("/work-orders", {
       resource: "work-orders",
       action: "create",
@@ -248,6 +345,19 @@ export const WorkOrderService = {
     id: string,
     input: UpdateWorkOrderInput
   ): Promise<WorkOrder> {
+    if (typeof window === "undefined") {
+      const row = await postToAppsScriptData(
+        {
+          resource: "work-orders",
+          action: "update",
+          payload: { id, ...input },
+        },
+        { resource: "work-orders", action: "update" },
+        "WorkOrderService.updateWorkOrder"
+      );
+      return mapRemoteWorkOrder(row as RemoteWorkOrder);
+    }
+
     const response = await apiClient.post<WorkOrder>("/work-orders", {
       resource: "work-orders",
       action: "update",

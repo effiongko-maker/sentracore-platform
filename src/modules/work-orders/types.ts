@@ -44,7 +44,9 @@ export interface WorkOrder {
   assetId?: string;
   reportedByUserId?: string;
   incidentId?: string;
+  maintenanceId?: string;
   parentWorkOrderId?: string;
+  operationalEventId?: string;
 
   assignedToUserId?: string;
   assignedGroupId?: string;
@@ -91,7 +93,9 @@ export interface CreateWorkOrderInput {
   assetId?: string;
   reportedByUserId?: string;
   incidentId?: string;
+  maintenanceId?: string;
   parentWorkOrderId?: string;
+  operationalEventId?: string;
   assignedToUserId?: string;
   assignedGroupId?: string;
   requestedAt?: string;

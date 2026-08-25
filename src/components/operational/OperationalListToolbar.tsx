@@ -13,12 +13,14 @@ export function OperationalListToolbar({
   filterOpen,
   onFilterOpenChange,
   activeFilterCount,
+  canClearFilters,
   onClearFilters,
   onApplyFilters,
   filterPanel,
   sortValue,
   sortOptions,
   onSortChange,
+  leadingActions,
 }: {
   search: string;
   onSearchChange: (value: string) => void;
@@ -26,12 +28,15 @@ export function OperationalListToolbar({
   filterOpen: boolean;
   onFilterOpenChange: (open: boolean) => void;
   activeFilterCount: number;
+  canClearFilters?: boolean;
   onClearFilters: () => void;
   onApplyFilters: () => void;
   filterPanel: React.ReactNode;
   sortValue: string;
   sortOptions: Array<{ value: string; label: string }>;
   onSortChange?: (value: string) => void;
+  /** Primary/list actions rendered before Filters (e.g. New asset). */
+  leadingActions?: React.ReactNode;
 }) {
   return (
     <div className="op-toolbar">
@@ -42,10 +47,13 @@ export function OperationalListToolbar({
       />
 
       <div className="op-toolbar-actions">
+        {leadingActions}
+
         <FilterPopover
           open={filterOpen}
           onClose={() => onFilterOpenChange(false)}
           activeCount={activeFilterCount}
+          canClear={canClearFilters ?? activeFilterCount > 0}
           onClear={onClearFilters}
           onApply={onApplyFilters}
           trigger={

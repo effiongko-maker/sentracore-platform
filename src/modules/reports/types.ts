@@ -64,6 +64,11 @@ export interface ReportWizardState {
   allFacilities: boolean;
   period: ReportPeriodSelection;
   sections: ReportSectionId[];
+  /**
+   * Template defaults captured when the report type is selected.
+   * Used by “Reset to defaults” — not a generic hard-coded list.
+   */
+  sectionsBaseline: ReportSectionId[];
 }
 
 export interface ReportKpiMetric {

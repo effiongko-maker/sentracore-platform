@@ -10,15 +10,20 @@ export function IntelligencePage({
 
   if (status.state === "unavailable" || !status.supported) {
     return (
-      <div className="ix-stage" style={{ minHeight: "60vh", padding: "3rem 2rem" }}>
-        <p className="ix-rail-mark">Intelligence</p>
-        <h1 className="ix-statement-headline ix-statement-headline-calm mt-4">
-          Not available right now
-        </h1>
-        <p className="ix-statement-support">
-          SentraCore Intelligence is preparing organisational analysis for this
-          context. Enter Operations to continue working, or try again shortly.
-        </p>
+      <div className="ix-experience">
+        <div className="ix-experience-main">
+          <header className="ix-header">
+            <div className="ix-header-copy">
+              <p className="ix-header-mark">SentraCore Intelligence</p>
+              <h1 className="ix-header-headline">Not available right now</h1>
+              <p className="ix-header-support">
+                SentraCore Intelligence is preparing organisational analysis for
+                this context. Enter Facility Management to continue working, or
+                try again shortly.
+              </p>
+            </div>
+          </header>
+        </div>
       </div>
     );
   }

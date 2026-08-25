@@ -218,6 +218,7 @@ export function IncidentsToolbar({
         filterOpen={filterOpen}
         onFilterOpenChange={setFilterOpen}
         activeFilterCount={activeFilterCount}
+        canClearFilters={countActive(draft) > 0 || activeFilterCount > 0}
         onClearFilters={clearAll}
         onApplyFilters={applyDraft}
         sortValue="newest"

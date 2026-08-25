@@ -212,7 +212,7 @@ var AssetRepository = (function () {
       condition: (payload && payload.condition) || "good",
       status: (payload && payload.status) || "pending",
       assignedTo: (payload && payload.assignedTo) || "",
-      criticality: (payload && payload.criticality) || "medium",
+      criticality: (payload && payload.criticality) || "unassessed",
       description: (payload && payload.description) || "",
       createdAt: createdAt,
       updatedAt: updatedAt,

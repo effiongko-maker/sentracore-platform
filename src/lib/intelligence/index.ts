@@ -21,6 +21,7 @@ export type {
   IntelligenceRiskView,
   IntelligenceSignalView,
   IntelligenceStatusState,
+  OperationalStorySummary,
   OrganisationIntelligence,
   OrganisationIntelligenceStatus,
   OrganisationOperationalContext,
@@ -45,3 +46,11 @@ export {
 } from "./getOrganisationIntelligence";
 
 export { detectOrganisationIntelligenceChanges } from "./detectOrganisationIntelligenceChanges";
+export {
+  detectOperationalLifecyclePatterns,
+  OPERATIONAL_PATTERN_THRESHOLDS,
+} from "./patterns/detectOperationalLifecyclePatterns";
+export {
+  synthesiseOperationalStories,
+  type OperationalStory,
+} from "./synthesis";

@@ -36,6 +36,14 @@ export function useAssets() {
     setPage(1);
   }, []);
 
+  const clearAll = useCallback(() => {
+    setSearch("");
+    setStatusState("all");
+    setCategoryState("all");
+    setFacilityState("all");
+    setPage(1);
+  }, []);
+
   useEffect(() => {
     if (previousSearch.current !== debouncedSearch) {
       previousSearch.current = debouncedSearch;
@@ -64,6 +72,9 @@ export function useAssets() {
         setAssets(result.data);
         setTotalPages(result.totalPages);
         setTotal(result.total);
+        if (result.page !== nextPage) {
+          setPage(result.page);
+        }
       } catch (err) {
         if (id !== requestId.current) return;
         setError(
@@ -82,12 +93,25 @@ export function useAssets() {
   );
 
   useEffect(() => {
-    fetchAssets(page);
+    void fetchAssets(page);
   }, [fetchAssets, page]);
 
   const deactivateAsset = useCallback(async (id: string) => {
     return AssetService.deactivateAsset(id);
   }, []);
+
+  const reload = useCallback(async () => {
+    await fetchAssets(page);
+  }, [fetchAssets, page]);
+
+  /** After create/update — always return to newest-first page 1. */
+  const reloadFirstPage = useCallback(async () => {
+    if (page !== 1) {
+      setPage(1);
+      return;
+    }
+    await fetchAssets(1);
+  }, [fetchAssets, page]);
 
   return {
     assets,
@@ -101,11 +125,13 @@ export function useAssets() {
     setCategory,
     facility,
     setFacility,
+    clearAll,
     page,
     setPage,
     totalPages,
     total,
-    reload: () => fetchAssets(page),
+    reload,
+    reloadFirstPage,
     deactivateAsset,
   };
 }

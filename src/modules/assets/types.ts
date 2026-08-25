@@ -2,7 +2,12 @@ export type AssetStatus = "active" | "inactive" | "pending" | "suspended";
 
 export type AssetCondition = "excellent" | "good" | "fair" | "poor";
 
-export type AssetCriticality = "low" | "medium" | "high" | "critical";
+export type AssetCriticality =
+  | "unassessed"
+  | "low"
+  | "medium"
+  | "high"
+  | "critical";
 
 export type AssetCategory =
   | "hvac"

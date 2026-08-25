@@ -22,7 +22,8 @@ import {
   WORK_ORDER_STATUSES,
   WORK_ORDER_TYPES,
 } from "../constants";
-import { WorkOrderService } from "../services/WorkOrderService";
+import { createWorkOrder } from "../actions/createWorkOrder";
+import { updateWorkOrderOperational } from "@/lib/operational/lifecycle/updateActions";
 import { labelize, optionalString, toCreateFormValues } from "../utils";
 import type {
   CreateWorkOrderInput,
@@ -154,14 +155,20 @@ export function WorkOrderFormModal({
       };
 
       if (mode === "edit" && workOrder) {
-        await WorkOrderService.updateWorkOrder(workOrder.id, payload);
+        const result = await updateWorkOrderOperational(workOrder.id, payload);
+        if (!result.success) {
+          throw new Error(result.error.message);
+        }
         toast({
           type: "success",
           title: "Work order updated",
           description: `${payload.title} has been saved.`,
         });
       } else {
-        await WorkOrderService.createWorkOrder(payload);
+        const result = await createWorkOrder(payload);
+        if (!result.success) {
+          throw new Error(result.error.message);
+        }
         toast({
           type: "success",
           title: "Work order created",

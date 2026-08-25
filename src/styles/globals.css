@@ -2,6 +2,7 @@
 @import "./sentracore-os.css";
 @import "./intelligence-experience.css";
 @import "./reports-experience.css";
+@import "./dashboard-experience.css";
 @import "./operational-list.css";
 
 /* Product aliases → OS foundation (do not fork values here) */

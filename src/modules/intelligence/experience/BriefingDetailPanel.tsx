@@ -6,7 +6,7 @@ import { formatEvidenceFigure } from "../utils/evidenceDisplay";
 
 const KIND_LABEL: Record<BriefingFinding["kind"], string> = {
   priority: "Priority",
-  change: "Movement",
+  change: "Change",
   pattern: "Pattern",
   attention: "Observation",
 };
@@ -39,10 +39,109 @@ export function BriefingDetailPanel({
             <p className="ix-detail-evidence-value">
               {formatEvidenceFigure(finding.evidence)}
             </p>
-            <p className="ix-detail-evidence-label">Supporting count</p>
+            <p className="ix-detail-evidence-label">Related activities</p>
           </div>
         ) : null}
 
+        {finding.basedOn ? (
+          <div className="ix-detail-evidence-block">
+            <p className="ix-detail-evidence-value ix-detail-evidence-value-text">
+              {finding.basedOn}
+            </p>
+            <p className="ix-detail-evidence-label">Based on</p>
+          </div>
+        ) : null}
+
+        {finding.confidence ? (
+          <div className="ix-detail-evidence-block">
+            <p className="ix-detail-evidence-value ix-detail-evidence-value-text">
+              {finding.confidence}
+            </p>
+            <p className="ix-detail-evidence-label">Confidence</p>
+          </div>
+        ) : null}
+
+        {finding.affectedArea ? (
+          <div className="ix-detail-evidence-block">
+            <p className="ix-detail-evidence-value ix-detail-evidence-value-text">
+              {finding.affectedArea}
+            </p>
+            <p className="ix-detail-evidence-label">Affected area</p>
+          </div>
+        ) : null}
+        {finding.investigation?.whatItSaw ? (
+          <div className="ix-detail-evidence-block">
+            <p className="ix-detail-evidence-value ix-detail-evidence-value-text">
+              {finding.investigation.whatItSaw}
+            </p>
+            <p className="ix-detail-evidence-label">What SentraCore observed</p>
+          </div>
+        ) : null}
+        {finding.investigation?.storyStatus ? (
+          <div className="ix-detail-evidence-block">
+            <p className="ix-detail-evidence-value ix-detail-evidence-value-text">
+              {finding.investigation.storyStatus}
+            </p>
+            <p className="ix-detail-evidence-label">Current picture</p>
+          </div>
+        ) : null}
+        {finding.investigation && finding.investigation.sequence.length > 0 ? (
+          <div className="ix-detail-evidence-block">
+            <ol className="ix-detail-sequence">
+              {finding.investigation.sequence.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+            <p className="ix-detail-evidence-label">How it developed</p>
+          </div>
+        ) : null}
+        {finding.investigation?.relatedFindings &&
+        finding.investigation.relatedFindings.length > 0 ? (
+          <div className="ix-detail-evidence-block">
+            <ul className="ix-detail-evidence-facts">
+              {finding.investigation.relatedFindings.map((item) => (
+                <li key={item}>
+                  <span>Related finding</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="ix-detail-evidence-label">Related findings</p>
+          </div>
+        ) : null}
+        {finding.investigation?.whyItMatters ? (
+          <div className="ix-detail-evidence-block">
+            <p className="ix-detail-evidence-value ix-detail-evidence-value-text">
+              {finding.investigation.whyItMatters}
+            </p>
+            <p className="ix-detail-evidence-label">Why this matters</p>
+          </div>
+        ) : null}
+        {finding.investigation?.whatToInvestigate &&
+        finding.investigation.whatToInvestigate.length > 0 ? (
+          <div className="ix-detail-evidence-block">
+            <ol className="ix-detail-sequence">
+              {finding.investigation.whatToInvestigate.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ol>
+            <p className="ix-detail-evidence-label">What to look at next</p>
+          </div>
+        ) : null}
+        {finding.investigation &&
+        finding.investigation.evidenceItems.length > 0 ? (
+          <div className="ix-detail-evidence-block">
+            <ul className="ix-detail-evidence-facts">
+              {finding.investigation.evidenceItems.map((item) => (
+                <li key={item.label}>
+                  <span>{item.label}</span>
+                  <span>{item.value}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="ix-detail-evidence-label">Evidence</p>
+          </div>
+        ) : null}
         {finding.change ? (
           <div className="ix-detail-evidence-block">
             <p className="ix-detail-evidence-value">

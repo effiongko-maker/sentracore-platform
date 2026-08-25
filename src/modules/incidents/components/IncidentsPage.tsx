@@ -144,6 +144,10 @@ export function IncidentsPage() {
         incident={modal.type === "view" ? modal.incident : null}
         onClose={() => setModal({ type: "closed" })}
         onEdit={(incident) => setModal({ type: "edit", incident })}
+        onUpdated={(incident) => {
+          setModal({ type: "view", incident });
+          reload();
+        }}
       />
 
       <ConfirmDialog

@@ -31,6 +31,7 @@ export const ASSET_CONDITIONS: AssetCondition[] = [
 ];
 
 export const ASSET_CRITICALITIES: AssetCriticality[] = [
+  "unassessed",
   "low",
   "medium",
   "high",
@@ -51,6 +52,7 @@ export const ASSET_CRITICALITY_VARIANT: Record<
   AssetCriticality,
   "neutral" | "info" | "warning" | "danger"
 > = {
+  unassessed: "neutral",
   low: "neutral",
   medium: "info",
   high: "warning",

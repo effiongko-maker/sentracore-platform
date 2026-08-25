@@ -11,16 +11,23 @@ export const WORKSPACE_QUICK_ACTIONS: WorkspaceQuickAction[] = [
   {
     id: "request-maintenance",
     title: "Request maintenance",
-    description: "Raise work that needs attention",
+    description: "Raise work requiring attention",
     href: "/occupant-requests?type=maintenance",
     icon: "maintenance",
   },
   {
     id: "create-work-order",
     title: "Open work orders",
-    description: "Review active and pending work",
+    description: "Review assigned and in-progress work",
     href: "/work-orders",
     icon: "workOrder",
+  },
+  {
+    id: "manage-facilities",
+    title: "Browse facilities",
+    description: "View and manage operational locations",
+    href: "/facilities",
+    icon: "facility",
   },
   {
     id: "register-asset",
@@ -28,13 +35,6 @@ export const WORKSPACE_QUICK_ACTIONS: WorkspaceQuickAction[] = [
     description: "View and manage operational assets",
     href: "/assets",
     icon: "asset",
-  },
-  {
-    id: "manage-facilities",
-    title: "Browse facilities",
-    description: "Explore the organisation's locations",
-    href: "/facilities",
-    icon: "facility",
   },
   {
     id: "operations-dashboard",

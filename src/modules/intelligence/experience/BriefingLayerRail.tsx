@@ -2,8 +2,9 @@ import type { BriefingLayer } from "../view-model/buildBriefingViewModel";
 
 const LAYER_LABEL: Record<BriefingLayer, string> = {
   attention: "Now",
-  change: "What's changed",
+  change: "What changed",
   patterns: "Patterns",
+  explore: "Explore",
 };
 
 export function BriefingLayerRail({

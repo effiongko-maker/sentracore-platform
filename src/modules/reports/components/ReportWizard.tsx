@@ -224,13 +224,17 @@ function StepPeriod({
 
 function StepSections({
   selected,
+  baseline,
   onToggle,
   onSelectDefaults,
 }: {
   selected: ReportSectionId[];
+  baseline: ReportSectionId[];
   onToggle: (id: ReportSectionId) => void;
   onSelectDefaults: () => void;
 }) {
+  const selectedKey = selected.slice().sort().join("|");
+
   return (
     <div className="rp-step-body">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -241,12 +245,18 @@ function StepSections({
             is always included.
           </p>
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={onSelectDefaults}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onSelectDefaults}
+          disabled={baseline.length === 0}
+        >
           Reset to defaults
         </Button>
       </div>
 
-      <div className="rp-section-grid">
+      <div className="rp-section-grid" key={selectedKey}>
         {REPORT_SECTIONS.map((section) => {
           const checked = selected.includes(section.id);
           return (
@@ -430,6 +440,7 @@ export function ReportWizard({
       {wizard.step === "sections" ? (
         <StepSections
           selected={wizard.sections}
+          baseline={wizard.sectionsBaseline}
           onToggle={onToggleSection}
           onSelectDefaults={onResetSections}
         />

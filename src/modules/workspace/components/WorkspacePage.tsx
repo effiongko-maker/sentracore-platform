@@ -2,6 +2,7 @@
 
 import { Home } from "lucide-react";
 import {
+  HOME_LOADING_STATUS,
   LoadingGate,
   WORKSPACE_LOADING_MESSAGES,
   WorkspaceSkeleton,
@@ -29,6 +30,7 @@ export function WorkspacePage() {
     <LoadingGate
       loading={loading || !snapshot}
       skeleton={<WorkspaceSkeleton />}
+      status={HOME_LOADING_STATUS}
       messages={WORKSPACE_LOADING_MESSAGES}
       title="Loading Home"
     >

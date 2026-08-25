@@ -42,12 +42,15 @@ export interface Maintenance {
   assignedToUserId?: string;
   assignedGroupId?: string;
   /**
-   * TODO: Temporary / forward-compatible link to Event Log.
-   * Sheet column: Event ID. Not an Incident id.
+   * Supabase operational_events.id when recorded.
+   * Sheet column: Event ID — not an Incident id.
    */
+  operationalEventId?: string;
+  /** @deprecated use operationalEventId */
   eventId?: string;
   incidentId?: string;
   workOrderId?: string;
+  workOrderIds?: string[];
   parentMaintenanceId?: string;
 
   priority: MaintenancePriority;
@@ -84,8 +87,10 @@ export interface CreateMaintenanceInput {
   assignedToUserId?: string;
   assignedGroupId?: string;
   eventId?: string;
+  operationalEventId?: string;
   incidentId?: string;
   workOrderId?: string;
+  workOrderIds?: string[];
   parentMaintenanceId?: string;
   priority: MaintenancePriority;
   status: MaintenanceStatus;

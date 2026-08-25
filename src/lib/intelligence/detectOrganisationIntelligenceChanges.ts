@@ -444,7 +444,7 @@ function changeCopy(input: {
   if (category === "incident_volume") {
     if (direction === "emerging") {
       return {
-        title: "Incident activity has emerged recently",
+        title: "Incident activity has started showing up recently",
         summary: `${recent} incidents were reported recently, after none in the previous week.`,
       };
     }
@@ -464,7 +464,7 @@ function changeCopy(input: {
     const riskLabel = metricLabel;
     if (direction === "emerging") {
       return {
-        title: `${riskLabel} have emerged`,
+        title: `${riskLabel} have started showing up`,
         summary: `${recent} ${riskLabel.toLowerCase()} were reported recently, after none in the previous week.`,
       };
     }
@@ -484,13 +484,13 @@ function changeCopy(input: {
     if (subjectLabel) {
       if (direction === "emerging") {
         return {
-          title: "This pattern has emerged recently",
+          title: "This issue has started showing up recently",
           summary: `Similar ${subjectLabel} incidents occurred ${comparison.replace(".", "")}.`,
         };
       }
       if (direction === "increasing") {
         return {
-          title: "This pattern is becoming more frequent",
+          title: "This issue is showing up more often",
           summary: `Similar ${subjectLabel} incidents occurred ${comparison.replace(".", "")}.`,
         };
       }
@@ -498,19 +498,19 @@ function changeCopy(input: {
 
     if (direction === "emerging") {
       return {
-        title: "A recurring pattern has emerged",
+        title: "A recurring issue has started showing up",
         summary: `Similar incidents occurred ${comparison.replace(".", "")}.`,
       };
     }
     if (direction === "increasing") {
       return {
-        title: "This pattern is becoming more frequent",
+        title: "This issue is showing up more often",
         summary: `Similar incidents occurred ${comparison.replace(".", "")}.`,
       };
     }
     return {
-      title: "A recurring pattern has eased",
-      summary: `This pattern appeared less often this week than in the previous week.`,
+      title: "A recurring issue has eased",
+      summary: `This issue appeared less often this week than in the previous week.`,
     };
   }
 

@@ -45,6 +45,8 @@ Current pack file list:
 - [ ] `ReportingSnapshotRepository.gs`
 - [ ] `ReportingSnapshotService.gs`
 - [ ] `ReportingSnapshotTriggers.gs`
+- [ ] `SheetFieldUtils.gs`
+- [ ] `UserRepository.gs`
 - [ ] `UsersController.gs`
 - [ ] `UserService.gs`
 - [ ] `WorkOrderRepository.gs`
@@ -90,6 +92,8 @@ For each file that already exists in Apps Script, **replace the entire contents*
 - [ ] Replace `ReportingSnapshotRepository.gs`
 - [ ] Replace `ReportingSnapshotService.gs`
 - [ ] Replace `ReportingSnapshotTriggers.gs`
+- [ ] Replace `SheetFieldUtils.gs`
+- [ ] Replace `UserRepository.gs`
 - [ ] Replace `UsersController.gs`
 - [ ] Replace `UserService.gs`
 - [ ] Replace `WorkOrderRepository.gs`

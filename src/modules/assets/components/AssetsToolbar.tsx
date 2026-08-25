@@ -1,10 +1,22 @@
 "use client";
 
-import { SlidersHorizontal } from "lucide-react";
-import { SearchBox } from "@/components/ui/SearchBox";
-import { toolbarSelectClassName } from "@/components/forms/FormField";
+import { Plus } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  ActiveFilters,
+  FilterField,
+  OperationalListToolbar,
+  ResultContext,
+  buildResultContext,
+  type ActiveFilterChip,
+} from "@/components/operational";
+import { Button } from "@/components/ui/Button";
 import { useFacilityOptions } from "@/hooks/useFacilityOptions";
-import { ASSET_CATEGORIES, ASSET_STATUSES } from "../constants";
+import {
+  ASSETS_PAGE_SIZE,
+  ASSET_CATEGORIES,
+  ASSET_STATUSES,
+} from "../constants";
 import { labelize } from "../utils";
 import type { AssetCategory, AssetStatus } from "../types";
 
@@ -17,6 +29,24 @@ interface AssetsToolbarProps {
   onFacilityChange: (value: string | "all") => void;
   status: AssetStatus | "all";
   onStatusChange: (value: AssetStatus | "all") => void;
+  total: number;
+  loading?: boolean;
+  onClearAll: () => void;
+  onCreate: () => void;
+}
+
+type DraftFilters = {
+  status: AssetStatus | "all";
+  category: AssetCategory | "all";
+  facility: string | "all";
+};
+
+function countActive(filters: DraftFilters): number {
+  let count = 0;
+  if (filters.status !== "all") count += 1;
+  if (filters.category !== "all") count += 1;
+  if (filters.facility !== "all") count += 1;
+  return count;
 }
 
 export function AssetsToolbar({
@@ -28,72 +58,195 @@ export function AssetsToolbar({
   onFacilityChange,
   status,
   onStatusChange,
+  total,
+  loading,
+  onClearAll,
+  onCreate,
 }: AssetsToolbarProps) {
   const { facilities } = useFacilityOptions();
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [draft, setDraft] = useState<DraftFilters>({
+    status,
+    category,
+    facility,
+  });
+
+  useEffect(() => {
+    if (filterOpen) {
+      setDraft({ status, category, facility });
+    }
+  }, [filterOpen, status, category, facility]);
+
+  const applied: DraftFilters = { status, category, facility };
+  const activeFilterCount = countActive(applied);
+  const hasSearch = Boolean(search.trim());
+  const filtered = activeFilterCount > 0 || hasSearch;
+
+  const chips: ActiveFilterChip[] = useMemo(() => {
+    const next: ActiveFilterChip[] = [];
+    if (hasSearch) {
+      next.push({
+        id: "search",
+        label: `“${search.trim()}”`,
+        onRemove: () => onSearchChange(""),
+      });
+    }
+    if (category !== "all") {
+      next.push({
+        id: "category",
+        label: labelize(category),
+        onRemove: () => onCategoryChange("all"),
+      });
+    }
+    if (facility !== "all") {
+      const match = facilities.find(
+        (item) => item.id === facility || item.name === facility
+      );
+      next.push({
+        id: "facility",
+        label: match?.name ?? facility,
+        onRemove: () => onFacilityChange("all"),
+      });
+    }
+    if (status !== "all") {
+      next.push({
+        id: "status",
+        label: labelize(status),
+        onRemove: () => onStatusChange("all"),
+      });
+    }
+    return next;
+  }, [
+    hasSearch,
+    search,
+    category,
+    facility,
+    status,
+    facilities,
+    onSearchChange,
+    onCategoryChange,
+    onFacilityChange,
+    onStatusChange,
+  ]);
+
+  function clearFiltersOnly() {
+    onStatusChange("all");
+    onCategoryChange("all");
+    onFacilityChange("all");
+    setDraft({ status: "all", category: "all", facility: "all" });
+  }
+
+  function clearAll() {
+    setDraft({ status: "all", category: "all", facility: "all" });
+    onClearAll();
+  }
+
+  function applyDraft() {
+    onStatusChange(draft.status);
+    onCategoryChange(draft.category);
+    onFacilityChange(draft.facility);
+  }
 
   return (
-    <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-      <SearchBox
-        value={search}
-        onChange={onSearchChange}
-        placeholder="Search by name, tag, facility, serial..."
-        className="w-full xl:max-w-md"
+    <div className="flex flex-col gap-3">
+      <OperationalListToolbar
+        search={search}
+        onSearchChange={onSearchChange}
+        searchPlaceholder="Search by name, tag, ID, facility, serial…"
+        filterOpen={filterOpen}
+        onFilterOpenChange={setFilterOpen}
+        activeFilterCount={activeFilterCount}
+        canClearFilters={countActive(draft) > 0 || activeFilterCount > 0}
+        onClearFilters={clearFiltersOnly}
+        onApplyFilters={applyDraft}
+        sortValue="newest"
+        sortOptions={[{ value: "newest", label: "Newest" }]}
+        leadingActions={
+          <Button
+            type="button"
+            size="sm"
+            className="h-9 shrink-0 rounded-md px-3.5 text-[0.8125rem] font-semibold shadow-none"
+            onClick={onCreate}
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+            New asset
+          </Button>
+        }
+        filterPanel={
+          <>
+            <FilterField
+              id="asset-filter-category"
+              label="Category"
+              value={draft.category}
+              onChange={(value) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  category: value as AssetCategory | "all",
+                }))
+              }
+            >
+              <option value="all">All categories</option>
+              {ASSET_CATEGORIES.map((value) => (
+                <option key={value} value={value}>
+                  {labelize(value)}
+                </option>
+              ))}
+            </FilterField>
+
+            <FilterField
+              id="asset-filter-facility"
+              label="Facility"
+              value={draft.facility}
+              onChange={(value) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  facility: value as string | "all",
+                }))
+              }
+            >
+              <option value="all">All facilities</option>
+              {facilities.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </FilterField>
+
+            <FilterField
+              id="asset-filter-status"
+              label="Status"
+              value={draft.status}
+              onChange={(value) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  status: value as AssetStatus | "all",
+                }))
+              }
+            >
+              <option value="all">All statuses</option>
+              {ASSET_STATUSES.map((value) => (
+                <option key={value} value={value}>
+                  {labelize(value)}
+                </option>
+              ))}
+            </FilterField>
+          </>
+        }
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="inline-flex h-10 items-center gap-2 rounded-[12px] border border-border bg-card px-3 text-sm text-muted">
-          <SlidersHorizontal className="h-3.5 w-3.5" />
-          Filters
-        </div>
+      <ActiveFilters chips={chips} onClearAll={clearAll} />
 
-        <select
-          value={category}
-          onChange={(event) =>
-            onCategoryChange(event.target.value as AssetCategory | "all")
-          }
-          className={toolbarSelectClassName}
-          aria-label="Filter by category"
-        >
-          <option value="all">All categories</option>
-          {ASSET_CATEGORIES.map((value) => (
-            <option key={value} value={value}>
-              {labelize(value)}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={facility}
-          onChange={(event) =>
-            onFacilityChange(event.target.value as string | "all")
-          }
-          className={toolbarSelectClassName}
-          aria-label="Filter by facility"
-        >
-          <option value="all">All facilities</option>
-          {facilities.map((item) => (
-            <option key={item.id} value={item.name}>
-              {item.name}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={status}
-          onChange={(event) =>
-            onStatusChange(event.target.value as AssetStatus | "all")
-          }
-          className={toolbarSelectClassName}
-          aria-label="Filter by status"
-        >
-          <option value="all">All statuses</option>
-          {ASSET_STATUSES.map((value) => (
-            <option key={value} value={value}>
-              {labelize(value)}
-            </option>
-          ))}
-        </select>
-      </div>
+      {!loading && filtered ? (
+        <ResultContext
+          text={buildResultContext({
+            noun: "asset",
+            nounPlural: "assets",
+            total,
+            filtered,
+            pageSize: ASSETS_PAGE_SIZE,
+          })}
+        />
+      ) : null}
     </div>
   );
 }

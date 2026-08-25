@@ -67,3 +67,34 @@ export async function postToAppsScript(
 
   return parseJsonOrThrow(text, `[${logPrefix}] Apps Script response`);
 }
+
+/**
+ * Server-side Apps Script call that unwraps the envelope.
+ * Used by domain services when running outside the browser (Server Actions /
+ * scripts), where relative `/api/*` fetches are not valid.
+ */
+export async function postToAppsScriptData(
+  body: AppsScriptProxyBody,
+  defaults: { resource: string; action: string },
+  logPrefix: string
+): Promise<unknown> {
+  const raw = await postToAppsScript(body, defaults, logPrefix);
+  const envelope = raw as {
+    data?: unknown;
+    success?: boolean;
+    message?: string;
+  };
+
+  if (envelope && typeof envelope === "object" && envelope.success === false) {
+    const message = envelope.message ?? "Apps Script request failed";
+    const err = new Error(message) as Error & { status?: number };
+    err.status = /not found/i.test(message) ? 404 : 400;
+    throw err;
+  }
+
+  if (envelope && typeof envelope === "object" && "data" in envelope) {
+    return envelope.data;
+  }
+
+  return raw;
+}

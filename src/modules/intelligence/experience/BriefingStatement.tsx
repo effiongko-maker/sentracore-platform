@@ -12,10 +12,10 @@ export function BriefingStatement({
 }) {
   let headline = vm.statement;
   if (layer === "change" && !vm.processing && vm.changeCount > 0) {
-    headline = "What's changed";
+    headline = "What changed";
   }
   if (layer === "patterns" && !vm.processing && vm.patternCount > 0) {
-    headline = "Patterns we're seeing";
+    headline = "What SentaCore is starting to notice";
   }
 
   const metaParts: string[] = [];

@@ -19,7 +19,7 @@ export type ShellNavState = "compass" | "focus" | "cognitive" | "platform";
 
 export const MODE_LABEL: Record<ProductMode, string> = {
   platform: "SentraCore",
-  command: "Operations",
+  command: "Facility Management",
   understand: "Intelligence",
   organise: "Organisation",
   act: "Work",
@@ -30,7 +30,7 @@ export const MODE_LABEL: Record<ProductMode, string> = {
 
 export const MODE_DESCRIPTION: Record<ProductMode, string> = {
   platform: "Your organisation's operating environment",
-  command: "Operations Management home",
+  command: "Facility Management home",
   understand: "What the organisation is telling you",
   organise: "Facilities, assets, and people",
   act: "Requests and work in progress",
@@ -49,7 +49,13 @@ function layerToMode(
 
 /** Map route to product canvas mode. */
 export function productModeFromPath(pathname: string): ProductMode {
-  if (pathname.startsWith("/intelligence")) return "cognitive";
+  if (
+    pathname.startsWith("/intelligence") ||
+    pathname.startsWith("/reports") ||
+    pathname.startsWith("/dashboards")
+  ) {
+    return "cognitive";
+  }
   if (isPlatformHomePath(pathname) || isWorkspacePreviewPath(pathname)) {
     return "platform";
   }

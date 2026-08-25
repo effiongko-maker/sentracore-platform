@@ -29,7 +29,7 @@ export function toCreateFormValues(asset?: Asset | null) {
     condition: asset?.condition ?? ("good" as const),
     status: asset?.status ?? ("pending" as const),
     assignedTo: asset?.assignedTo ?? "",
-    criticality: asset?.criticality ?? ("medium" as const),
+    criticality: asset?.criticality ?? ("unassessed" as const),
     description: asset?.description ?? "",
   };
 }

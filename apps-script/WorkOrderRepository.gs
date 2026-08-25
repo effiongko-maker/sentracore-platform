@@ -1,50 +1,22 @@
 /**
  * WorkOrderRepository.gs
  *
- * Sheet: existing Work Orders sheet (source of truth — do not recreate).
- * Live headers (row 1):
- *   Work Order ID | Event ID | Maintenance ID | Facility ID | Asset ID |
- *   Description | Priority | Assigned To | Completed By | Date Opened |
- *   Date Completed | Date Closed | Status
- *
- * Maps spreadsheet fields → frozen canonical WorkOrder model.
- * Soft-deactivate maps to Status=cancelled. Never delete rows.
+ * Sheet: Work Orders (source of truth).
+ * Relationship columns (added on first write if missing):
+ *   Incident ID, Parent Work Order ID, Source, Title
+ * Event ID = Supabase operational_events.id only.
+ * Maintenance ID = maintenance activity id (not parent work order).
  */
 
 var WorkOrderRepository = (function () {
   var SHEET_CANDIDATES = ["Work Orders", "WorkOrders", "WORK_ORDERS"];
 
-  var SHEET_HEADERS = [
-    "Work Order ID",
-    "Event ID",
-    "Maintenance ID",
-    "Facility ID",
-    "Asset ID",
-    "Description",
-    "Priority",
-    "Assigned To",
-    "Completed By",
-    "Date Opened",
-    "Date Completed",
-    "Date Closed",
-    "Status",
+  var RELATIONSHIP_HEADERS = [
+    "Incident ID",
+    "Parent Work Order ID",
+    "Source",
+    "Title",
   ];
-
-  function cellText_(value) {
-    if (value == null || value === "") return "";
-    if (Object.prototype.toString.call(value) === "[object Date]") {
-      return value.toISOString();
-    }
-    return String(value).trim();
-  }
-
-  function cellDateIso_(value) {
-    if (value == null || value === "") return "";
-    if (Object.prototype.toString.call(value) === "[object Date]") {
-      return value.toISOString();
-    }
-    return String(value).trim();
-  }
 
   function getSheet_() {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -56,7 +28,6 @@ var WorkOrderRepository = (function () {
       if (sheet) return sheet;
     }
 
-    // Discover by header: first sheet whose row 1 includes "Work Order ID".
     var sheets = ss.getSheets();
     for (i = 0; i < sheets.length; i++) {
       var candidate = sheets[i];
@@ -75,41 +46,91 @@ var WorkOrderRepository = (function () {
     );
   }
 
-  function rowToSheetObject_(headers, row) {
-    var obj = {};
-    for (var i = 0; i < headers.length; i++) {
-      obj[String(headers[i]).trim()] = row[i];
+  function ensureHeaders_(sheet) {
+    var headerMap = SheetFieldUtils.getHeaderMap(sheet);
+    var lastCol = sheet.getLastColumn();
+    var added = 0;
+    for (var i = 0; i < RELATIONSHIP_HEADERS.length; i++) {
+      var name = RELATIONSHIP_HEADERS[i];
+      if (!SheetFieldUtils.hasHeader(headerMap, name)) {
+        sheet.getRange(1, lastCol + 1 + added).setValue(name);
+        added++;
+      }
     }
-    return obj;
+    return SheetFieldUtils.getHeaderMap(sheet);
   }
 
-  /**
-   * Map live sheet row → frozen canonical WorkOrder fields.
-   */
-  function toCanonical_(sheetRow) {
-    var description = cellText_(sheetRow["Description"]);
-    var requestedAt = cellDateIso_(sheetRow["Date Opened"]);
-    var completedAt = cellDateIso_(sheetRow["Date Completed"]);
-    var status = cellText_(sheetRow["Status"]).toLowerCase().replace(/\s+/g, "_");
-    var priority = cellText_(sheetRow["Priority"])
+  function readIncidentId_(sheetRow, headerMap) {
+    if (SheetFieldUtils.hasHeader(headerMap, "Incident ID")) {
+      var explicit = SheetFieldUtils.cellText(sheetRow["Incident ID"]);
+      if (explicit) return explicit;
+    }
+    var legacy = SheetFieldUtils.cellText(sheetRow["Event ID"]);
+    if (legacy && /^INC-/i.test(legacy)) return legacy;
+    return undefined;
+  }
+
+  function readMaintenanceId_(sheetRow, headerMap) {
+    var raw = SheetFieldUtils.cellText(sheetRow["Maintenance ID"]);
+    if (!raw) return undefined;
+    if (SheetFieldUtils.hasHeader(headerMap, "Parent Work Order ID")) {
+      return /^MNT-/i.test(raw) ? raw : undefined;
+    }
+    if (/^MNT-/i.test(raw)) return raw;
+    return undefined;
+  }
+
+  function readParentWorkOrderId_(sheetRow, headerMap) {
+    if (SheetFieldUtils.hasHeader(headerMap, "Parent Work Order ID")) {
+      return (
+        SheetFieldUtils.cellText(sheetRow["Parent Work Order ID"]) || undefined
+      );
+    }
+    var legacy = SheetFieldUtils.cellText(sheetRow["Maintenance ID"]);
+    if (legacy && /^WO-/i.test(legacy)) return legacy;
+    if (legacy && !/^MNT-/i.test(legacy) && legacy) return legacy;
+    return undefined;
+  }
+
+  function readOperationalEventId_(sheetRow, headerMap) {
+    var raw = SheetFieldUtils.cellText(sheetRow["Event ID"]);
+    if (!raw) return undefined;
+    if (/^INC-/i.test(raw)) return undefined;
+    return raw;
+  }
+
+  function toCanonical_(sheetRow, headerMap) {
+    var description = SheetFieldUtils.cellText(sheetRow["Description"]);
+    var title =
+      SheetFieldUtils.cellText(sheetRow["Title"]) || description;
+    var requestedAt = SheetFieldUtils.cellText(sheetRow["Date Opened"]);
+    var completedAt = SheetFieldUtils.cellText(sheetRow["Date Completed"]);
+    var status = SheetFieldUtils.cellText(sheetRow["Status"])
       .toLowerCase()
       .replace(/\s+/g, "_");
+    var priority = SheetFieldUtils.cellText(sheetRow["Priority"])
+      .toLowerCase()
+      .replace(/\s+/g, "_");
+    var source = SheetFieldUtils.cellText(sheetRow["Source"]) || "manual";
 
     if (!status) status = "open";
     if (!priority) priority = "medium";
 
     return {
-      id: cellText_(sheetRow["Work Order ID"]),
-      title: description,
+      id: SheetFieldUtils.cellText(sheetRow["Work Order ID"]),
+      title: title,
       description: description || undefined,
       type: "corrective",
-      source: "manual",
-      facilityId: cellText_(sheetRow["Facility ID"]),
-      assetId: cellText_(sheetRow["Asset ID"]) || undefined,
+      source: source,
+      facilityId: SheetFieldUtils.cellText(sheetRow["Facility ID"]),
+      assetId: SheetFieldUtils.cellText(sheetRow["Asset ID"]) || undefined,
       reportedByUserId: undefined,
-      incidentId: cellText_(sheetRow["Event ID"]) || undefined,
-      parentWorkOrderId: cellText_(sheetRow["Maintenance ID"]) || undefined,
-      assignedToUserId: cellText_(sheetRow["Assigned To"]) || undefined,
+      incidentId: readIncidentId_(sheetRow, headerMap),
+      maintenanceId: readMaintenanceId_(sheetRow, headerMap),
+      parentWorkOrderId: readParentWorkOrderId_(sheetRow, headerMap),
+      operationalEventId: readOperationalEventId_(sheetRow, headerMap),
+      assignedToUserId:
+        SheetFieldUtils.cellText(sheetRow["Assigned To"]) || undefined,
       assignedGroupId: undefined,
       requestedAt: requestedAt || undefined,
       scheduledStartAt: undefined,
@@ -133,28 +154,40 @@ var WorkOrderRepository = (function () {
       updatedAt: completedAt || requestedAt || new Date().toISOString(),
       createdByUserId: undefined,
       updatedByUserId: undefined,
-      // Sheet-only (not part of frozen UI model; kept for write-back)
-      _completedBy: cellText_(sheetRow["Completed By"]) || "",
-      _dateClosed: cellDateIso_(sheetRow["Date Closed"]) || "",
+      _completedBy: SheetFieldUtils.cellText(sheetRow["Completed By"]) || "",
+      _dateClosed: SheetFieldUtils.cellText(sheetRow["Date Closed"]) || "",
     };
   }
 
-  function canonicalToSheetRow_(canonical) {
-    return [
-      canonical.id || "",
-      canonical.incidentId || "",
-      canonical.parentWorkOrderId || "",
-      canonical.facilityId || "",
-      canonical.assetId || "",
-      canonical.description || canonical.title || "",
-      canonical.priority || "medium",
-      canonical.assignedToUserId || "",
-      canonical._completedBy || "",
-      canonical.requestedAt || canonical.createdAt || "",
-      canonical.completedAt || "",
-      canonical._dateClosed || "",
-      canonical.status || "open",
-    ];
+  function canonicalToFields_(canonical) {
+    var description = canonical.description || canonical.title || "";
+    return {
+      "Work Order ID": canonical.id || "",
+      "Event ID": canonical.operationalEventId || "",
+      "Maintenance ID": canonical.maintenanceId || "",
+      "Facility ID": canonical.facilityId || "",
+      "Asset ID": canonical.assetId || "",
+      Description: description,
+      Title: canonical.title || description,
+      Priority: canonical.priority || "medium",
+      "Assigned To": canonical.assignedToUserId || "",
+      "Completed By": canonical._completedBy || "",
+      "Date Opened": canonical.requestedAt || canonical.createdAt || "",
+      "Date Completed": canonical.completedAt || "",
+      "Date Closed": canonical._dateClosed || "",
+      Status: canonical.status || "open",
+      "Incident ID": canonical.incidentId || "",
+      "Parent Work Order ID": canonical.parentWorkOrderId || "",
+      Source: canonical.source || "manual",
+    };
+  }
+
+  function writeRow_(sheet, rowIndex, canonical) {
+    var headerMap = ensureHeaders_(sheet);
+    var lastCol = sheet.getLastColumn();
+    var fields = canonicalToFields_(canonical);
+    var row = SheetFieldUtils.buildRowFromFields(headerMap, lastCol, fields);
+    sheet.getRange(rowIndex, 1, 1, lastCol).setValues([row]);
   }
 
   function getAll() {
@@ -163,13 +196,13 @@ var WorkOrderRepository = (function () {
     if (values.length <= 1) return [];
 
     var headers = values[0];
+    var headerMap = SheetFieldUtils.getHeaderMap(sheet);
     var rows = [];
     for (var r = 1; r < values.length; r++) {
-      var sheetRow = rowToSheetObject_(headers, values[r]);
-      var id = cellText_(sheetRow["Work Order ID"]);
+      var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[r]);
+      var id = SheetFieldUtils.cellText(sheetRow["Work Order ID"]);
       if (!id) continue;
-      var canonical = toCanonical_(sheetRow);
-      // Strip write-back helpers from API responses
+      var canonical = toCanonical_(sheetRow, headerMap);
       delete canonical._completedBy;
       delete canonical._dateClosed;
       rows.push(canonical);
@@ -202,7 +235,7 @@ var WorkOrderRepository = (function () {
 
     for (var r = 1; r < values.length; r++) {
       if (String(values[r][idCol]) === String(id)) {
-        return r + 1; // 1-based
+        return r + 1;
       }
     }
     return -1;
@@ -214,8 +247,8 @@ var WorkOrderRepository = (function () {
     var maxYear = 0;
     var i;
     for (i = 0; i < all.length; i++) {
-      var id = String(all[i].id || "");
-      var yearMatch = id.match(/^WO-(\d{4})-(\d+)$/i);
+      var workOrderId = String(all[i].id || "");
+      var yearMatch = workOrderId.match(/^WO-(\d{4})-(\d+)$/i);
       if (yearMatch && parseInt(yearMatch[1], 10) === year) {
         maxYear = Math.max(maxYear, parseInt(yearMatch[2], 10));
       }
@@ -223,6 +256,56 @@ var WorkOrderRepository = (function () {
     var next = maxYear + 1;
     var padded = ("000000" + next).slice(-6);
     return "WO-" + year + "-" + padded;
+  }
+
+  function mergeCanonical_(current, payload) {
+    var description =
+      payload.description != null
+        ? payload.description
+        : payload.title != null
+          ? payload.title
+          : current.description || current.title || "";
+
+    return {
+      id: current.id,
+      title: payload.title != null ? payload.title : description,
+      description: description,
+      type: payload.type != null ? payload.type : current.type,
+      source: payload.source != null ? payload.source : current.source,
+      facilityId:
+        payload.facilityId != null ? payload.facilityId : current.facilityId,
+      assetId: payload.assetId != null ? payload.assetId : current.assetId,
+      incidentId:
+        payload.incidentId != null ? payload.incidentId : current.incidentId,
+      maintenanceId:
+        payload.maintenanceId != null
+          ? payload.maintenanceId
+          : current.maintenanceId,
+      parentWorkOrderId:
+        payload.parentWorkOrderId != null
+          ? payload.parentWorkOrderId
+          : current.parentWorkOrderId,
+      operationalEventId:
+        payload.operationalEventId != null
+          ? payload.operationalEventId
+          : current.operationalEventId,
+      assignedToUserId:
+        payload.assignedToUserId != null
+          ? payload.assignedToUserId
+          : current.assignedToUserId,
+      requestedAt:
+        payload.requestedAt != null
+          ? payload.requestedAt
+          : current.requestedAt || current.createdAt,
+      completedAt:
+        payload.completedAt != null ? payload.completedAt : current.completedAt,
+      status: payload.status != null ? payload.status : current.status,
+      priority: payload.priority != null ? payload.priority : current.priority,
+      createdAt: current.createdAt,
+      updatedAt: new Date().toISOString(),
+      _completedBy: current._completedBy || "",
+      _dateClosed: current._dateClosed || "",
+    };
   }
 
   function create(payload) {
@@ -234,14 +317,16 @@ var WorkOrderRepository = (function () {
 
     var canonical = {
       id: id,
-      title: description,
+      title: payload.title || description,
       description: description,
       type: payload.type || "corrective",
       source: payload.source || "manual",
       facilityId: payload.facilityId || "",
       assetId: payload.assetId || "",
       incidentId: payload.incidentId || "",
+      maintenanceId: payload.maintenanceId || "",
       parentWorkOrderId: payload.parentWorkOrderId || "",
+      operationalEventId: payload.operationalEventId || "",
       assignedToUserId: payload.assignedToUserId || "",
       requestedAt: requestedAt,
       completedAt: payload.completedAt || "",
@@ -253,7 +338,12 @@ var WorkOrderRepository = (function () {
       _dateClosed: "",
     };
 
-    sheet.appendRow(canonicalToSheetRow_(canonical));
+    ensureHeaders_(sheet);
+    var lastCol = sheet.getLastColumn();
+    var headerMap = SheetFieldUtils.getHeaderMap(sheet);
+    var fields = canonicalToFields_(canonical);
+    var row = SheetFieldUtils.buildRowFromFields(headerMap, lastCol, fields);
+    sheet.appendRow(row);
     return getById(id);
   }
 
@@ -262,60 +352,14 @@ var WorkOrderRepository = (function () {
     var rowIndex = findRowIndex_(id);
     if (rowIndex === -1) return null;
 
-    var current = getById(id);
-    if (!current) return null;
-
-    // Re-read sheet-only fields for write-back
     var values = sheet.getDataRange().getValues();
     var headers = values[0];
-    var sheetRow = rowToSheetObject_(headers, values[rowIndex - 1]);
-    var completedBy = cellText_(sheetRow["Completed By"]);
-    var dateClosed = cellDateIso_(sheetRow["Date Closed"]);
+    var headerMap = SheetFieldUtils.getHeaderMap(sheet);
+    var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[rowIndex - 1]);
+    var currentRaw = toCanonical_(sheetRow, headerMap);
 
-    var description =
-      payload.description != null
-        ? payload.description
-        : payload.title != null
-          ? payload.title
-          : current.description || current.title || "";
-
-    var requestedAt =
-      payload.requestedAt != null
-        ? payload.requestedAt
-        : current.requestedAt || current.createdAt || "";
-
-    var completedAt =
-      payload.completedAt != null ? payload.completedAt : current.completedAt || "";
-
-    var updated = {
-      id: id,
-      title: description,
-      description: description,
-      facilityId:
-        payload.facilityId != null ? payload.facilityId : current.facilityId,
-      assetId: payload.assetId != null ? payload.assetId : current.assetId || "",
-      incidentId:
-        payload.incidentId != null ? payload.incidentId : current.incidentId || "",
-      parentWorkOrderId:
-        payload.parentWorkOrderId != null
-          ? payload.parentWorkOrderId
-          : current.parentWorkOrderId || "",
-      assignedToUserId:
-        payload.assignedToUserId != null
-          ? payload.assignedToUserId
-          : current.assignedToUserId || "",
-      requestedAt: requestedAt,
-      completedAt: completedAt,
-      status: payload.status != null ? payload.status : current.status,
-      priority: payload.priority != null ? payload.priority : current.priority,
-      _completedBy: completedBy,
-      _dateClosed: dateClosed,
-    };
-
-    sheet
-      .getRange(rowIndex, 1, 1, SHEET_HEADERS.length)
-      .setValues([canonicalToSheetRow_(updated)]);
-
+    var updated = mergeCanonical_(currentRaw, payload);
+    writeRow_(sheet, rowIndex, updated);
     return getById(id);
   }
 

@@ -279,9 +279,23 @@ export function createInitialWizardState(): ReportWizardState {
     allFacilities: true,
     period: buildDefaultPeriod("month"),
     sections: [],
+    sectionsBaseline: [],
   };
 }
 
 export function defaultSectionsForType(typeId: ReportTypeId): ReportSectionId[] {
   return [...(getReportType(typeId)?.defaultSections ?? [])];
+}
+
+/** Ensure older persisted sessions still expose a baseline for reset. */
+export function withSectionsBaseline(
+  wizard: ReportWizardState
+): ReportWizardState {
+  if (Array.isArray(wizard.sectionsBaseline) && wizard.sectionsBaseline.length > 0) {
+    return wizard;
+  }
+  const baseline = wizard.reportType
+    ? defaultSectionsForType(wizard.reportType)
+    : [...wizard.sections];
+  return { ...wizard, sectionsBaseline: baseline };
 }

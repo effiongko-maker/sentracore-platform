@@ -1,49 +1,23 @@
 /**
  * IncidentRepository.gs
  *
- * Sheet: existing Incidents sheet (source of truth — do not recreate).
- * Live headers (row 1):
- *   Incident ID | Event ID | Facility ID | Incident Type | Severity |
- *   Description | Reported By | Date Reported | Root Cause |
- *   Corrective Action | Owner | Status
- *
- * Maps spreadsheet fields → frozen canonical Incident model.
- * Soft-deactivate maps to Status=cancelled. Never delete rows.
+ * Sheet: Incidents (source of truth).
+ * Relationship columns (added on first write if missing):
+ *   Asset ID, Work Order IDs, Maintenance IDs, Parent Incident ID, Source, Title
+ * Event ID = Supabase operational_events.id only (not Incident / Parent ids).
  */
 
 var IncidentRepository = (function () {
   var SHEET_CANDIDATES = ["Incidents", "INCIDENTS"];
 
-  var SHEET_HEADERS = [
-    "Incident ID",
-    "Event ID",
-    "Facility ID",
-    "Incident Type",
-    "Severity",
-    "Description",
-    "Reported By",
-    "Date Reported",
-    "Root Cause",
-    "Corrective Action",
-    "Owner",
-    "Status",
+  var RELATIONSHIP_HEADERS = [
+    "Asset ID",
+    "Work Order IDs",
+    "Maintenance IDs",
+    "Parent Incident ID",
+    "Source",
+    "Title",
   ];
-
-  function cellText_(value) {
-    if (value == null || value === "") return "";
-    if (Object.prototype.toString.call(value) === "[object Date]") {
-      return value.toISOString();
-    }
-    return String(value).trim();
-  }
-
-  function cellDateIso_(value) {
-    if (value == null || value === "") return "";
-    if (Object.prototype.toString.call(value) === "[object Date]") {
-      return value.toISOString();
-    }
-    return String(value).trim();
-  }
 
   function normalizeEnum_(value) {
     return String(value || "")
@@ -67,7 +41,6 @@ var IncidentRepository = (function () {
       if (sheet) return sheet;
     }
 
-    // Discover by header: first sheet whose row 1 includes "Incident ID".
     var sheets = ss.getSheets();
     for (i = 0; i < sheets.length; i++) {
       var candidate = sheets[i];
@@ -86,41 +59,67 @@ var IncidentRepository = (function () {
     );
   }
 
-  function rowToSheetObject_(headers, row) {
-    var obj = {};
-    for (var i = 0; i < headers.length; i++) {
-      obj[String(headers[i]).trim()] = row[i];
+  function ensureHeaders_(sheet) {
+    var headerMap = SheetFieldUtils.getHeaderMap(sheet);
+    var lastCol = sheet.getLastColumn();
+    var added = 0;
+    for (var i = 0; i < RELATIONSHIP_HEADERS.length; i++) {
+      var name = RELATIONSHIP_HEADERS[i];
+      if (!SheetFieldUtils.hasHeader(headerMap, name)) {
+        sheet.getRange(1, lastCol + 1 + added).setValue(name);
+        added++;
+      }
     }
-    return obj;
+    return SheetFieldUtils.getHeaderMap(sheet);
   }
 
-  /**
-   * Map live sheet row → frozen canonical Incident fields.
-   */
-  function toCanonical_(sheetRow) {
-    var description = cellText_(sheetRow["Description"]);
-    var reportedAt = cellDateIso_(sheetRow["Date Reported"]);
+  function readWorkOrderIds_(sheetRow, headerMap) {
+    if (SheetFieldUtils.hasHeader(headerMap, "Work Order IDs")) {
+      return SheetFieldUtils.parseIdList(sheetRow["Work Order IDs"]);
+    }
+    var single = SheetFieldUtils.cellText(sheetRow["Work Order ID"]);
+    return single ? [single] : [];
+  }
+
+  function readMaintenanceIds_(sheetRow, headerMap) {
+    if (SheetFieldUtils.hasHeader(headerMap, "Maintenance IDs")) {
+      return SheetFieldUtils.parseIdList(sheetRow["Maintenance IDs"]);
+    }
+    return [];
+  }
+
+  function toCanonical_(sheetRow, headerMap) {
+    var description = SheetFieldUtils.cellText(sheetRow["Description"]);
+    var title =
+      SheetFieldUtils.cellText(sheetRow["Title"]) || description;
+    var reportedAt = SheetFieldUtils.cellText(sheetRow["Date Reported"]);
     var status = mapStatus_(sheetRow["Status"]);
     var severity = normalizeEnum_(sheetRow["Severity"]) || "medium";
     var type = normalizeEnum_(sheetRow["Incident Type"]) || "other";
+    var source = normalizeEnum_(sheetRow["Source"]) || "manual";
+    var workOrderIds = readWorkOrderIds_(sheetRow, headerMap);
+    var maintenanceIds = readMaintenanceIds_(sheetRow, headerMap);
 
     return {
-      id: cellText_(sheetRow["Incident ID"]),
-      // title mirrors description when the sheet has no Title column
-      title: description,
+      id: SheetFieldUtils.cellText(sheetRow["Incident ID"]),
+      title: title,
       description: description || undefined,
       type: type,
-      source: "manual",
-      facilityId: cellText_(sheetRow["Facility ID"]),
-      assetId: undefined,
+      source: source,
+      facilityId: SheetFieldUtils.cellText(sheetRow["Facility ID"]),
+      assetId: SheetFieldUtils.cellText(sheetRow["Asset ID"]) || undefined,
       locationDetail: undefined,
-      reportedByUserId: cellText_(sheetRow["Reported By"]) || undefined,
-      assignedToUserId: cellText_(sheetRow["Owner"]) || undefined,
+      reportedByUserId:
+        SheetFieldUtils.cellText(sheetRow["Reported By"]) || undefined,
+      assignedToUserId: SheetFieldUtils.cellText(sheetRow["Owner"]) || undefined,
       assignedGroupId: undefined,
-      workOrderId: undefined,
-      // TODO: Temporary mapping until the Event Log module is implemented.
-      // Event ID is not a parent incident; it will move to a dedicated Event entity.
-      parentIncidentId: cellText_(sheetRow["Event ID"]) || undefined,
+      workOrderIds: workOrderIds,
+      workOrderId: workOrderIds.length ? workOrderIds[0] : undefined,
+      maintenanceIds: maintenanceIds,
+      parentIncidentId:
+        SheetFieldUtils.cellText(sheetRow["Parent Incident ID"]) || undefined,
+      operationalEventId:
+        SheetFieldUtils.cellText(sheetRow["Event ID"]) || undefined,
       reportedAt: reportedAt || new Date().toISOString(),
       discoveredAt: undefined,
       reportedVia: undefined,
@@ -129,15 +128,16 @@ var IncidentRepository = (function () {
       isEmergency: undefined,
       status: status,
       holdReason: undefined,
-      requiresWorkOrder: undefined,
+      requiresWorkOrder: workOrderIds.length > 0 ? true : undefined,
       acknowledgedAt: undefined,
       responseDueAt: undefined,
       containedAt: undefined,
       resolvedAt: undefined,
       closedAt: undefined,
       immediateActions: undefined,
-      rootCause: cellText_(sheetRow["Root Cause"]) || undefined,
-      correctiveActions: cellText_(sheetRow["Corrective Action"]) || undefined,
+      rootCause: SheetFieldUtils.cellText(sheetRow["Root Cause"]) || undefined,
+      correctiveActions:
+        SheetFieldUtils.cellText(sheetRow["Corrective Action"]) || undefined,
       preventiveActions: undefined,
       resolutionNotes: undefined,
       createdAt: reportedAt || new Date().toISOString(),
@@ -147,21 +147,41 @@ var IncidentRepository = (function () {
     };
   }
 
-  function canonicalToSheetRow_(canonical) {
-    return [
-      canonical.id || "",
-      canonical.parentIncidentId || "",
-      canonical.facilityId || "",
-      canonical.type || "other",
-      canonical.severity || "medium",
-      canonical.description || canonical.title || "",
-      canonical.reportedByUserId || "",
-      canonical.reportedAt || canonical.createdAt || "",
-      canonical.rootCause || "",
-      canonical.correctiveActions || "",
-      canonical.assignedToUserId || "",
-      canonical.status || "reported",
-    ];
+  function canonicalToFields_(canonical) {
+    var workOrderIds =
+      canonical.workOrderIds ||
+      (canonical.workOrderId ? [canonical.workOrderId] : []);
+    var maintenanceIds = canonical.maintenanceIds || [];
+    var description = canonical.description || canonical.title || "";
+
+    return {
+      "Incident ID": canonical.id || "",
+      "Event ID": canonical.operationalEventId || "",
+      "Facility ID": canonical.facilityId || "",
+      "Incident Type": canonical.type || "other",
+      Severity: canonical.severity || "medium",
+      Description: description,
+      Title: canonical.title || description,
+      "Reported By": canonical.reportedByUserId || "",
+      "Date Reported": canonical.reportedAt || canonical.createdAt || "",
+      "Root Cause": canonical.rootCause || "",
+      "Corrective Action": canonical.correctiveActions || "",
+      Owner: canonical.assignedToUserId || "",
+      Status: canonical.status || "reported",
+      "Asset ID": canonical.assetId || "",
+      "Work Order IDs": SheetFieldUtils.formatIdList(workOrderIds),
+      "Maintenance IDs": SheetFieldUtils.formatIdList(maintenanceIds),
+      "Parent Incident ID": canonical.parentIncidentId || "",
+      Source: canonical.source || "manual",
+    };
+  }
+
+  function writeRow_(sheet, rowIndex, canonical) {
+    var headerMap = ensureHeaders_(sheet);
+    var lastCol = sheet.getLastColumn();
+    var fields = canonicalToFields_(canonical);
+    var row = SheetFieldUtils.buildRowFromFields(headerMap, lastCol, fields);
+    sheet.getRange(rowIndex, 1, 1, lastCol).setValues([row]);
   }
 
   function getAll() {
@@ -170,12 +190,13 @@ var IncidentRepository = (function () {
     if (values.length <= 1) return [];
 
     var headers = values[0];
+    var headerMap = SheetFieldUtils.getHeaderMap(sheet);
     var rows = [];
     for (var r = 1; r < values.length; r++) {
-      var sheetRow = rowToSheetObject_(headers, values[r]);
-      var id = cellText_(sheetRow["Incident ID"]);
+      var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[r]);
+      var id = SheetFieldUtils.cellText(sheetRow["Incident ID"]);
       if (!id) continue;
-      rows.push(toCanonical_(sheetRow));
+      rows.push(toCanonical_(sheetRow, headerMap));
     }
     return rows;
   }
@@ -205,7 +226,7 @@ var IncidentRepository = (function () {
 
     for (var r = 1; r < values.length; r++) {
       if (String(values[r][idCol]) === String(id)) {
-        return r + 1; // 1-based
+        return r + 1;
       }
     }
     return -1;
@@ -217,8 +238,8 @@ var IncidentRepository = (function () {
     var maxYear = 0;
     var i;
     for (i = 0; i < all.length; i++) {
-      var id = String(all[i].id || "");
-      var yearMatch = id.match(/^INC-(\d{4})-(\d+)$/i);
+      var incidentId = String(all[i].id || "");
+      var yearMatch = incidentId.match(/^INC-(\d{4})-(\d+)$/i);
       if (yearMatch && parseInt(yearMatch[1], 10) === year) {
         maxYear = Math.max(maxYear, parseInt(yearMatch[2], 10));
       }
@@ -228,27 +249,108 @@ var IncidentRepository = (function () {
     return "INC-" + year + "-" + padded;
   }
 
+  function mergeCanonical_(current, payload) {
+    var workOrderIds =
+      payload.workOrderIds != null
+        ? payload.workOrderIds
+        : current.workOrderIds || [];
+    if (payload.workOrderId && workOrderIds.indexOf(payload.workOrderId) === -1) {
+      workOrderIds = SheetFieldUtils.appendUniqueId(
+        workOrderIds,
+        payload.workOrderId
+      );
+    }
+    var maintenanceIds =
+      payload.maintenanceIds != null
+        ? payload.maintenanceIds
+        : current.maintenanceIds || [];
+
+    var description =
+      payload.description != null
+        ? payload.description
+        : payload.title != null
+          ? payload.title
+          : current.description || current.title || "";
+
+    return {
+      id: current.id,
+      title: payload.title != null ? payload.title : description,
+      description: description,
+      type: payload.type != null ? payload.type : current.type,
+      source: payload.source != null ? payload.source : current.source,
+      facilityId:
+        payload.facilityId != null ? payload.facilityId : current.facilityId,
+      assetId: payload.assetId != null ? payload.assetId : current.assetId,
+      reportedByUserId:
+        payload.reportedByUserId != null
+          ? payload.reportedByUserId
+          : current.reportedByUserId,
+      assignedToUserId:
+        payload.assignedToUserId != null
+          ? payload.assignedToUserId
+          : current.assignedToUserId,
+      workOrderIds: workOrderIds,
+      workOrderId: workOrderIds.length ? workOrderIds[0] : undefined,
+      maintenanceIds: maintenanceIds,
+      parentIncidentId:
+        payload.parentIncidentId != null
+          ? payload.parentIncidentId
+          : current.parentIncidentId,
+      operationalEventId:
+        payload.operationalEventId != null
+          ? payload.operationalEventId
+          : current.operationalEventId,
+      reportedAt:
+        payload.reportedAt != null
+          ? payload.reportedAt
+          : current.reportedAt || current.createdAt,
+      severity:
+        payload.severity != null ? payload.severity : current.severity,
+      status: payload.status != null ? payload.status : current.status,
+      rootCause:
+        payload.rootCause != null ? payload.rootCause : current.rootCause,
+      correctiveActions:
+        payload.correctiveActions != null
+          ? payload.correctiveActions
+          : current.correctiveActions,
+      createdAt: current.createdAt,
+      updatedAt: new Date().toISOString(),
+      requiresWorkOrder:
+        payload.requiresWorkOrder != null
+          ? payload.requiresWorkOrder
+          : current.requiresWorkOrder,
+    };
+  }
+
   function create(payload) {
     var sheet = getSheet_();
     var now = new Date().toISOString();
     var id = nextId_();
     var description = payload.description || payload.title || "";
     var reportedAt = payload.reportedAt || now;
-
-    // Enforce: requiresWorkOrder=false ⇒ workOrderId cleared (sheet has no WO column).
-    var requiresWorkOrder = payload.requiresWorkOrder === true;
+    var workOrderIds = payload.workOrderIds || [];
+    if (payload.workOrderId) {
+      workOrderIds = SheetFieldUtils.appendUniqueId(
+        workOrderIds,
+        payload.workOrderId
+      );
+    }
 
     var canonical = {
       id: id,
-      title: description,
+      title: payload.title || description,
       description: description,
       type: payload.type || "other",
-      source: "manual",
+      source: payload.source || "manual",
       facilityId: payload.facilityId || "",
+      assetId: payload.assetId || "",
       reportedByUserId: payload.reportedByUserId || "",
       assignedToUserId: payload.assignedToUserId || "",
-      // TODO: Temporary mapping until the Event Log module is implemented.
+      workOrderIds: workOrderIds,
+      workOrderId: workOrderIds.length ? workOrderIds[0] : undefined,
+      maintenanceIds: payload.maintenanceIds || [],
       parentIncidentId: payload.parentIncidentId || "",
+      operationalEventId: payload.operationalEventId || "",
       reportedAt: reportedAt,
       severity: payload.severity || "medium",
       status: payload.status || "reported",
@@ -256,10 +358,15 @@ var IncidentRepository = (function () {
       correctiveActions: payload.correctiveActions || "",
       createdAt: reportedAt,
       updatedAt: reportedAt,
-      requiresWorkOrder: requiresWorkOrder,
+      requiresWorkOrder: payload.requiresWorkOrder === true,
     };
 
-    sheet.appendRow(canonicalToSheetRow_(canonical));
+    ensureHeaders_(sheet);
+    var lastCol = sheet.getLastColumn();
+    var headerMap = SheetFieldUtils.getHeaderMap(sheet);
+    var fields = canonicalToFields_(canonical);
+    var row = SheetFieldUtils.buildRowFromFields(headerMap, lastCol, fields);
+    sheet.appendRow(row);
     return getById(id);
   }
 
@@ -271,54 +378,8 @@ var IncidentRepository = (function () {
     var current = getById(id);
     if (!current) return null;
 
-    var description =
-      payload.description != null
-        ? payload.description
-        : payload.title != null
-          ? payload.title
-          : current.description || current.title || "";
-
-    var reportedAt =
-      payload.reportedAt != null
-        ? payload.reportedAt
-        : current.reportedAt || current.createdAt || "";
-
-    var updated = {
-      id: id,
-      title: description,
-      description: description,
-      type: payload.type != null ? payload.type : current.type,
-      facilityId:
-        payload.facilityId != null ? payload.facilityId : current.facilityId,
-      reportedByUserId:
-        payload.reportedByUserId != null
-          ? payload.reportedByUserId
-          : current.reportedByUserId || "",
-      assignedToUserId:
-        payload.assignedToUserId != null
-          ? payload.assignedToUserId
-          : current.assignedToUserId || "",
-      // TODO: Temporary mapping until the Event Log module is implemented.
-      parentIncidentId:
-        payload.parentIncidentId != null
-          ? payload.parentIncidentId
-          : current.parentIncidentId || "",
-      reportedAt: reportedAt,
-      severity:
-        payload.severity != null ? payload.severity : current.severity,
-      status: payload.status != null ? payload.status : current.status,
-      rootCause:
-        payload.rootCause != null ? payload.rootCause : current.rootCause || "",
-      correctiveActions:
-        payload.correctiveActions != null
-          ? payload.correctiveActions
-          : current.correctiveActions || "",
-    };
-
-    sheet
-      .getRange(rowIndex, 1, 1, SHEET_HEADERS.length)
-      .setValues([canonicalToSheetRow_(updated)]);
-
+    var updated = mergeCanonical_(current, payload);
+    writeRow_(sheet, rowIndex, updated);
     return getById(id);
   }
 

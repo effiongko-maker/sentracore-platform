@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { Package } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { DataTable, type Column } from "@/components/tables/DataTable";
+import { useFacilityName } from "@/hooks/useEntityLabel";
 import {
   ASSET_CRITICALITY_VARIANT,
   ASSET_STATUS_VARIANT,
@@ -11,6 +12,11 @@ import {
 import { getAssetInitials, labelize } from "../utils";
 import type { Asset } from "../types";
 import { AssetRowActions } from "./AssetRowActions";
+
+function FacilityCell({ value }: { value: string }) {
+  const name = useFacilityName(value);
+  return <span className="text-muted">{name || value || "—"}</span>;
+}
 
 interface AssetsTableProps {
   assets: Asset[];
@@ -62,9 +68,7 @@ export function AssetsTable({
       {
         key: "facility",
         header: "Facility",
-        render: (asset) => (
-          <span className="text-muted">{asset.facility}</span>
-        ),
+        render: (asset) => <FacilityCell value={asset.facility} />,
       },
       {
         key: "condition",

@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     template: "%s · SentraCore",
   },
   description:
-    "SentraCore™ — Operating System by Beacon Africa Limited.",
+    "SentraCore™ — Enterprise Operating Platform by Beacon Africa Limited.",
   icons: {
     icon: "/brand/sentracore-logo.png",
     apple: "/brand/sentracore-logo.png",

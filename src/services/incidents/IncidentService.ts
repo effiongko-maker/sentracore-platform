@@ -1,3 +1,4 @@
+import { parseIdList, primaryId } from "@/lib/operational/idLists";
 import type { PaginatedResult } from "@/types";
 import type {
   CreateIncidentInput,
@@ -13,7 +14,10 @@ import type {
 import { applyWorkOrderRule } from "@/modules/incidents/utils";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
-import { postToAppsScript } from "@/services/api/appsScriptProxy";
+import {
+  postToAppsScript,
+  postToAppsScriptData,
+} from "@/services/api/appsScriptProxy";
 
 type RemoteIncident = Record<string, unknown>;
 
@@ -68,6 +72,26 @@ function mapStatus(raw: string): IncidentStatus {
   return (value || "reported") as IncidentStatus;
 }
 
+function coalesceIdList(...sources: unknown[]): string[] {
+  for (const source of sources) {
+    const parsed = parseIdList(source);
+    if (parsed.length > 0) return parsed;
+  }
+  return [];
+}
+
+function readOperationalEventId(raw: RemoteIncident): string | undefined {
+  const value = optionalMappedString(
+    raw,
+    "operationalEventId",
+    "Event ID",
+    "Event Id"
+  );
+  if (!value) return undefined;
+  if (/^INC-/i.test(value)) return undefined;
+  return value;
+}
+
 function mapRemoteIncident(raw: RemoteIncident): Incident {
   const type = normalizeEnum(
     String(pickField(raw, "type", "Type", "Incident Type") ?? "other")
@@ -106,18 +130,23 @@ function mapRemoteIncident(raw: RemoteIncident): Incident {
     ) ?? new Date().toISOString()
   );
 
-  const workOrderId = optionalMappedString(
-    raw,
-    "workOrderId",
-    "Work Order ID"
+  const workOrderIds = coalesceIdList(
+    pickField(raw, "workOrderIds"),
+    pickField(raw, "Work Order IDs"),
+    pickField(raw, "workOrderId", "Work Order ID")
   );
+  const maintenanceIds = coalesceIdList(
+    pickField(raw, "maintenanceIds"),
+    pickField(raw, "Maintenance IDs")
+  );
+  const workOrderId = primaryId(workOrderIds);
   let requiresWorkOrder = optionalBoolean(
     raw,
     "requiresWorkOrder",
     "Requires Work Order"
   );
   if (requiresWorkOrder == null) {
-    requiresWorkOrder = Boolean(workOrderId);
+    requiresWorkOrder = workOrderIds.length > 0;
   }
 
   return applyWorkOrderRule({
@@ -155,11 +184,14 @@ function mapRemoteIncident(raw: RemoteIncident): Incident {
       "Assigned Group ID"
     ),
     workOrderId,
+    workOrderIds,
+    maintenanceIds,
     parentIncidentId: optionalMappedString(
       raw,
       "parentIncidentId",
       "Parent Incident ID"
     ),
+    operationalEventId: readOperationalEventId(raw),
     reportedAt,
     discoveredAt: optionalMappedString(
       raw,
@@ -293,6 +325,19 @@ export const IncidentService = {
 
   async getIncident(id: string): Promise<Incident | null> {
     try {
+      if (typeof window === "undefined") {
+        const row = await postToAppsScriptData(
+          {
+            resource: "incidents",
+            action: "getById",
+            payload: { id },
+          },
+          { resource: "incidents", action: "getById" },
+          "IncidentService.getIncident"
+        );
+        return mapRemoteIncident(row as RemoteIncident);
+      }
+
       const response = await apiClient.post<Incident>("/incidents", {
         resource: "incidents",
         action: "getById",
@@ -301,6 +346,12 @@ export const IncidentService = {
       return mapRemoteIncident(response.data as unknown as RemoteIncident);
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) return null;
+      if (
+        error instanceof Error &&
+        (error as Error & { status?: number }).status === 404
+      ) {
+        return null;
+      }
       throw error;
     }
   },
@@ -351,6 +402,20 @@ export const IncidentService = {
     input: UpdateIncidentInput
   ): Promise<Incident> {
     const payload = applyWorkOrderRule({ ...input, id });
+
+    if (typeof window === "undefined") {
+      const row = await postToAppsScriptData(
+        {
+          resource: "incidents",
+          action: "update",
+          payload,
+        },
+        { resource: "incidents", action: "update" },
+        "IncidentService.updateIncident"
+      );
+      return mapRemoteIncident(row as RemoteIncident);
+    }
+
     const response = await apiClient.post<Incident>("/incidents", {
       resource: "incidents",
       action: "update",

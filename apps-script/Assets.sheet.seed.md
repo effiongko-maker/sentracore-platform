@@ -26,4 +26,6 @@
 `excellent` · `good` · `fair` · `poor`
 
 ## Criticality values
-`low` · `medium` · `high` · `critical`
+`unassessed` · `low` · `medium` · `high` · `critical`
+
+New assets default to `unassessed` until criticality is set in edit.

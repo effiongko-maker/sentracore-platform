@@ -5,9 +5,16 @@ import type {
   IntelligencePrioritySeverity,
   OrganisationIntelligence,
 } from "@/lib/intelligence";
-import { priorityEvidenceValue } from "../utils/evidenceDisplay";
+import {
+  investigationFromEvidence,
+  patternEvidenceValue,
+  priorityEvidenceValue,
+  type BriefingInvestigation,
+} from "../utils/evidenceDisplay";
 
-export type BriefingLayer = "attention" | "change" | "patterns";
+export type BriefingLayer = "attention" | "change" | "patterns" | "explore";
+
+export type BriefingConfidence = "High" | "Medium" | "Low";
 
 export type BriefingPosture =
   | "forming"
@@ -29,6 +36,10 @@ export type BriefingFinding = {
   summary: string;
   severity?: IntelligencePrioritySeverity | IntelligencePattern["severity"];
   evidence: number | null;
+  confidence?: BriefingConfidence;
+  affectedArea?: string;
+  basedOn?: string;
+  investigation?: BriefingInvestigation;
   change?: {
     direction: IntelligenceChange["direction"];
     recent: number;
@@ -84,14 +95,58 @@ function changeScore(c: IntelligenceChange): number {
   return score;
 }
 
+function deriveConfidence(
+  p: IntelligencePriority,
+  evidence: number | null
+): BriefingConfidence {
+  const evidenceConfidence = p.evidence?.find((e) => e.type === "confidence")
+    ?.value;
+  if (evidenceConfidence === "high") return "High";
+  if (evidenceConfidence === "medium") return "Medium";
+  if (evidenceConfidence === "low") return "Low";
+  if (p.severity === "critical" && (evidence ?? 0) >= 3) return "High";
+  if (p.severity === "critical" || p.severity === "high") return "Medium";
+  return "Low";
+}
+
+function deriveAffectedArea(p: IntelligencePriority): string | undefined {
+  if (p.facilityId) return p.facilityId.replace(/_/g, " ");
+  const subject = p.evidence?.find((e) => e.type === "subject")?.value;
+  if (typeof subject === "string" && subject.trim()) return subject.trim();
+  return undefined;
+}
+
+function deriveBasedOn(p: IntelligencePriority, evidence: number | null): string {
+  const count = evidence ?? p.relatedEventIds?.length ?? 0;
+  if (p.category === "incident_pattern" && count > 0) {
+    return `${count} related incident${count === 1 ? "" : "s"}`;
+  }
+  if (p.category === "recommendation_response" && count > 0) {
+    return `${count} recommendation response${count === 1 ? "" : "s"}`;
+  }
+  if (p.category === "operational_lifecycle" && count > 0) {
+    return `${count} related activit${count === 1 ? "y" : "ies"}`;
+  }
+  if (p.category === "operational_story" && count > 0) {
+    return `${count} related activit${count === 1 ? "y" : "ies"}`;
+  }
+  if (count > 0) return `${count} related activit${count === 1 ? "y" : "ies"}`;
+  return "Recent activity across SentraCore";
+}
+
 function toPriorityFinding(p: IntelligencePriority): BriefingFinding {
+  const evidence = priorityEvidenceValue(p);
   return {
     id: p.id,
     kind: "priority",
     title: p.title,
     summary: p.summary,
     severity: p.severity,
-    evidence: priorityEvidenceValue(p),
+    evidence,
+    confidence: deriveConfidence(p, evidence),
+    affectedArea: deriveAffectedArea(p),
+    basedOn: deriveBasedOn(p, evidence),
+    investigation: investigationFromEvidence(p),
   };
 }
 
@@ -120,7 +175,15 @@ function toPatternFinding(p: IntelligencePattern): BriefingFinding {
     title: p.title,
     summary: p.summary,
     severity: p.severity,
-    evidence: null,
+    evidence: patternEvidenceValue(p),
+    basedOn:
+      p.relatedEventIds && p.relatedEventIds.length > 0
+        ? `${p.relatedEventIds.length} related activit${
+            p.relatedEventIds.length === 1 ? "y" : "ies"
+          }`
+        : undefined,
+    affectedArea: p.facilityId?.replace(/_/g, " "),
+    investigation: investigationFromEvidence(p),
   };
 }
 
@@ -132,6 +195,7 @@ function toAttentionFinding(p: IntelligencePriority): BriefingFinding {
     summary: p.summary,
     severity: p.severity,
     evidence: priorityEvidenceValue(p),
+    investigation: investigationFromEvidence(p),
   };
 }
 
@@ -277,6 +341,8 @@ export function layerPrimary(
       return vm.changeFindings[0] ?? null;
     case "patterns":
       return vm.patternFindings[0] ?? null;
+    case "explore":
+      return null;
   }
 }
 
@@ -291,6 +357,8 @@ export function layerOrbit(
       return vm.changeFindings.slice(1);
     case "patterns":
       return vm.patternFindings.slice(1);
+    case "explore":
+      return [];
   }
 }
 
@@ -305,9 +373,12 @@ export function layerFindings(
       return vm.changeFindings;
     case "patterns":
       return vm.patternFindings;
+    case "explore":
+      return [];
   }
 }
 
 export function layerCount(vm: BriefingViewModel, layer: BriefingLayer): number {
+  if (layer === "explore") return 0;
   return layerFindings(vm, layer).length;
 }

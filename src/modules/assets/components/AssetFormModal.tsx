@@ -92,6 +92,9 @@ export function AssetFormModal({
         warrantyExpiry: form.warrantyExpiry.trim(),
         assignedTo: form.assignedTo.trim(),
         description: form.description?.trim() || undefined,
+        // Criticality is assessed after registration, not during create.
+        criticality:
+          mode === "edit" ? form.criticality : ("unassessed" as const),
       };
       delete payload.assetTag;
 
@@ -324,26 +327,6 @@ export function AssetFormModal({
           </select>
         </FormField>
 
-        <FormField label="Criticality" htmlFor="asset-criticality" required>
-          <select
-            id="asset-criticality"
-            className={selectClassName}
-            value={form.criticality}
-            onChange={(event) =>
-              updateField(
-                "criticality",
-                event.target.value as AssetCriticality
-              )
-            }
-          >
-            {ASSET_CRITICALITIES.map((value) => (
-              <option key={value} value={value}>
-                {labelize(value)}
-              </option>
-            ))}
-          </select>
-        </FormField>
-
         <FormField label="Status" htmlFor="asset-status" required>
           <select
             id="asset-status"
@@ -360,6 +343,28 @@ export function AssetFormModal({
             ))}
           </select>
         </FormField>
+
+        {isEdit ? (
+          <FormField label="Criticality" htmlFor="asset-criticality">
+            <select
+              id="asset-criticality"
+              className={selectClassName}
+              value={form.criticality}
+              onChange={(event) =>
+                updateField(
+                  "criticality",
+                  event.target.value as AssetCriticality
+                )
+              }
+            >
+              {ASSET_CRITICALITIES.map((value) => (
+                <option key={value} value={value}>
+                  {labelize(value)}
+                </option>
+              ))}
+            </select>
+          </FormField>
+        ) : null}
 
         <FormField
           label="Description"

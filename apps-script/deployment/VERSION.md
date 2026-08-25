@@ -5,7 +5,7 @@ Title:
 Master Data Phase 1
 
 Generated:
-2026-08-04T13:40:58.860Z
+2026-08-25T18:48:48.063Z
 
 Features
 - Master Data module for shared lookup entities: Departments, Buildings, Floors, Rooms, Vendors
@@ -38,6 +38,8 @@ Files Changed
 - ReportingSnapshotRepository.gs
 - ReportingSnapshotService.gs
 - ReportingSnapshotTriggers.gs
+- SheetFieldUtils.gs
+- UserRepository.gs
 - UsersController.gs
 - UserService.gs
 - WorkOrderRepository.gs

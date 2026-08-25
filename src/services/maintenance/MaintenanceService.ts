@@ -1,3 +1,4 @@
+import { parseIdList, primaryId } from "@/lib/operational/idLists";
 import type { PaginatedResult } from "@/types";
 import type {
   CreateMaintenanceInput,
@@ -12,7 +13,10 @@ import type {
 import { applyWorkOrderRule } from "@/modules/maintenance/utils";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
-import { postToAppsScript } from "@/services/api/appsScriptProxy";
+import {
+  postToAppsScript,
+  postToAppsScriptData,
+} from "@/services/api/appsScriptProxy";
 
 type RemoteMaintenance = Record<string, unknown>;
 
@@ -57,6 +61,23 @@ function mapStatus(raw: string): MaintenanceStatus {
   return (value || "requested") as MaintenanceStatus;
 }
 
+function coalesceIdList(...sources: unknown[]): string[] {
+  for (const source of sources) {
+    const parsed = parseIdList(source);
+    if (parsed.length > 0) return parsed;
+  }
+  return [];
+}
+
+function readOperationalEventId(raw: RemoteMaintenance): string | undefined {
+  const legacy = optionalMappedString(raw, "eventId", "Event ID", "Event Id");
+  const explicit = optionalMappedString(raw, "operationalEventId");
+  const value = explicit ?? legacy;
+  if (!value) return undefined;
+  if (/^MNT-/i.test(value) || /^INC-/i.test(value)) return undefined;
+  return value;
+}
+
 function mapRemoteMaintenance(raw: RemoteMaintenance): Maintenance {
   const type = normalizeEnum(
     String(pickField(raw, "type", "Type", "Maintenance Type") ?? "corrective")
@@ -94,18 +115,19 @@ function mapRemoteMaintenance(raw: RemoteMaintenance): Maintenance {
     "Date Completed"
   );
 
-  const workOrderId = optionalMappedString(
-    raw,
-    "workOrderId",
-    "Work Order ID"
+  const workOrderIds = coalesceIdList(
+    pickField(raw, "workOrderIds"),
+    pickField(raw, "Work Order IDs"),
+    pickField(raw, "workOrderId", "Work Order ID")
   );
+  const workOrderId = primaryId(workOrderIds);
   let requiresWorkOrder = optionalBoolean(
     raw,
     "requiresWorkOrder",
     "Requires Work Order"
   );
   if (requiresWorkOrder == null) {
-    requiresWorkOrder = Boolean(workOrderId);
+    requiresWorkOrder = workOrderIds.length > 0;
   }
 
   return applyWorkOrderRule({
@@ -136,9 +158,11 @@ function mapRemoteMaintenance(raw: RemoteMaintenance): Maintenance {
       "assignedGroupId",
       "Assigned Group ID"
     ),
-    eventId: optionalMappedString(raw, "eventId", "Event ID", "Event Id"),
+    operationalEventId: readOperationalEventId(raw),
+    eventId: readOperationalEventId(raw),
     incidentId: optionalMappedString(raw, "incidentId", "Incident ID"),
     workOrderId,
+    workOrderIds,
     parentMaintenanceId: optionalMappedString(
       raw,
       "parentMaintenanceId",
@@ -247,6 +271,19 @@ export const MaintenanceService = {
 
   async getMaintenance(id: string): Promise<Maintenance | null> {
     try {
+      if (typeof window === "undefined") {
+        const row = await postToAppsScriptData(
+          {
+            resource: "maintenance",
+            action: "getById",
+            payload: { id },
+          },
+          { resource: "maintenance", action: "getById" },
+          "MaintenanceService.getMaintenance"
+        );
+        return mapRemoteMaintenance(row as RemoteMaintenance);
+      }
+
       const response = await apiClient.post<Maintenance>("/maintenance", {
         resource: "maintenance",
         action: "getById",
@@ -255,6 +292,12 @@ export const MaintenanceService = {
       return mapRemoteMaintenance(response.data as unknown as RemoteMaintenance);
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) return null;
+      if (
+        error instanceof Error &&
+        (error as Error & { status?: number }).status === 404
+      ) {
+        return null;
+      }
       throw error;
     }
   },
@@ -309,6 +352,20 @@ export const MaintenanceService = {
     input: UpdateMaintenanceInput
   ): Promise<Maintenance> {
     const payload = applyWorkOrderRule({ ...input, id });
+
+    if (typeof window === "undefined") {
+      const row = await postToAppsScriptData(
+        {
+          resource: "maintenance",
+          action: "update",
+          payload,
+        },
+        { resource: "maintenance", action: "update" },
+        "MaintenanceService.updateMaintenance"
+      );
+      return mapRemoteMaintenance(row as RemoteMaintenance);
+    }
+
     const response = await apiClient.post<Maintenance>("/maintenance", {
       resource: "maintenance",
       action: "update",

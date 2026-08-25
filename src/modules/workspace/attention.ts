@@ -30,7 +30,7 @@ function buildReason(incident: Incident): string {
       return "Potential safety risk requires immediate assessment.";
     }
     if (incident.status === "reported" || incident.status === "triaged") {
-      return "Critical severity with no containment yet — escalate now.";
+      return "Critical severity with no containment recorded. Immediate action required.";
     }
     if (incident.status === "investigating") {
       return "Critical investigation in progress — maintain close oversight.";
@@ -127,7 +127,7 @@ export function buildAttentionModel(
       total > ATTENTION_VISIBLE_LIMIT ? "/incidents" : undefined,
     viewAllLabel:
       total > ATTENTION_VISIBLE_LIMIT
-        ? `View all ${total} matters →`
+        ? "View all attention items →"
         : undefined,
   };
 }

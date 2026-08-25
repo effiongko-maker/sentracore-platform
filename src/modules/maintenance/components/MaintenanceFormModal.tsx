@@ -24,8 +24,8 @@ import {
   MAINTENANCE_STATUSES,
   MAINTENANCE_TYPES,
 } from "../constants";
-import { MaintenanceService } from "../services/MaintenanceService";
 import { requestMaintenance } from "../actions/requestMaintenance";
+import { updateMaintenanceOperational } from "@/lib/operational/lifecycle/updateActions";
 import {
   applyWorkOrderRule,
   labelize,
@@ -180,7 +180,13 @@ export function MaintenanceFormModal({
       });
 
       if (mode === "edit" && maintenance) {
-        await MaintenanceService.updateMaintenance(maintenance.id, payload);
+        const result = await updateMaintenanceOperational(
+          maintenance.id,
+          payload
+        );
+        if (!result.success) {
+          throw new Error(result.error.message);
+        }
         toast({
           type: "success",
           title: "Maintenance updated",

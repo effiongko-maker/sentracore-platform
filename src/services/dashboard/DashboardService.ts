@@ -89,6 +89,7 @@ export const DashboardService = {
           score: report.health.score,
           summary: report.health.summary,
         },
+        pulse: { ...report.kpis },
         sections: buildSections(cards),
       };
     })().finally(() => {

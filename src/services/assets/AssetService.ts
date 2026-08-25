@@ -11,6 +11,8 @@ import type {
 } from "@/modules/assets/types";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
+import { FacilityService } from "@/services/facilities/FacilityService";
+import { queryAssetsPage } from "./queryAssets";
 
 /** Raw row shape from the Apps Script assets API. */
 type RemoteAsset = Record<string, unknown>;
@@ -35,7 +37,7 @@ function mapRemoteAsset(raw: RemoteAsset): Asset {
     .toLowerCase()
     .replace(/\s+/g, "_") as AssetCondition;
   const criticality = String(
-    pickField(raw, "criticality", "Criticality") ?? "medium"
+    pickField(raw, "criticality", "Criticality") ?? "unassessed"
   )
     .toLowerCase()
     .replace(/\s+/g, "_") as AssetCriticality;
@@ -78,57 +80,90 @@ function mapRemoteAsset(raw: RemoteAsset): Asset {
   };
 }
 
-function toPaginatedAssets(
-  payload: unknown,
-  params: AssetListParams
-): PaginatedResult<Asset> {
+function extractAssetRows(payload: unknown): Asset[] {
   if (Array.isArray(payload)) {
-    const data = payload.map((row) => mapRemoteAsset(row as RemoteAsset));
-    return {
-      data,
-      page: params.page ?? 1,
-      pageSize: params.pageSize ?? data.length,
-      total: data.length,
-      totalPages: 1,
-    };
+    return payload.map((row) => mapRemoteAsset(row as RemoteAsset));
   }
-
   if (payload && typeof payload === "object") {
     const page = payload as Record<string, unknown>;
     const rows = Array.isArray(page.data) ? page.data : [];
-    return {
-      data: rows.map((row) => mapRemoteAsset(row as RemoteAsset)),
-      page: Number(page.page ?? params.page ?? 1),
-      pageSize: Number(page.pageSize ?? params.pageSize ?? rows.length),
-      total: Number(page.total ?? rows.length),
-      totalPages: Number(page.totalPages ?? 1),
-    };
+    return rows.map((row) => mapRemoteAsset(row as RemoteAsset));
+  }
+  return [];
+}
+
+async function loadAllAssets(): Promise<Asset[]> {
+  const pageSize = 500;
+  let page = 1;
+  let totalPages = 1;
+  const all: Asset[] = [];
+
+  while (page <= totalPages) {
+    const response = await apiClient.post<unknown>("/assets", {
+      resource: "assets",
+      action: "getAll",
+      payload: {
+        page,
+        pageSize,
+        // Fetch the unfiltered set — search/filter/sort/paginate run locally
+        // so the UI pipeline stays correct even if Apps Script is stale.
+        search: "",
+        status: "all",
+        category: "all",
+        facility: "all",
+      },
+    });
+
+    const payload = response.data;
+    const rows = extractAssetRows(payload);
+    all.push(...rows);
+
+    if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+      const meta = payload as Record<string, unknown>;
+      totalPages = Math.max(1, Number(meta.totalPages ?? 1));
+      const total = Number(meta.total ?? all.length);
+      if (all.length >= total || rows.length === 0) break;
+    } else {
+      break;
+    }
+
+    page += 1;
+    if (page > 100) break;
   }
 
-  return {
-    data: [],
-    page: 1,
-    pageSize: params.pageSize ?? 8,
-    total: 0,
-    totalPages: 1,
-  };
+  // Deduplicate by id in case of overlapping pages.
+  const byId = new Map<string, Asset>();
+  for (const asset of all) {
+    if (asset.id) byId.set(asset.id, asset);
+  }
+  return Array.from(byId.values());
+}
+
+async function loadFacilityNameById(): Promise<Map<string, string>> {
+  try {
+    const result = await FacilityService.listFacilities({
+      page: 1,
+      pageSize: 500,
+    });
+    return new Map(result.data.map((facility) => [facility.id, facility.name]));
+  } catch {
+    return new Map();
+  }
 }
 
 /**
  * Assets domain service.
  *
  * Talks only to ApiClient — never to storage backends or UI details.
- * Mirrors FacilityService exactly.
+ * List uses: all → sort newest → search → filters → paginate.
  */
 export const AssetService = {
   async listAssets(params: AssetListParams = {}): Promise<PaginatedResult<Asset>> {
-    const response = await apiClient.post<unknown>("/assets", {
-      resource: "assets",
-      action: "getAll",
-      payload: params,
-    });
-
-    return toPaginatedAssets(response.data, params);
+    const [assets, facilityNameById] = await Promise.all([
+      loadAllAssets(),
+      loadFacilityNameById(),
+    ]);
+    return queryAssetsPage(assets, params, facilityNameById);
   },
 
   async getAsset(id: string): Promise<Asset | null> {
