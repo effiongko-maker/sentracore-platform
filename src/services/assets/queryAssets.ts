@@ -1,5 +1,5 @@
 import type { PaginatedResult } from "@/types";
-import type { Asset, AssetListParams } from "@/modules/assets/types";
+import type { Asset, AssetListParams, AssetSort } from "@/modules/assets/types";
 
 function normalize(value: unknown): string {
   return String(value ?? "")
@@ -7,16 +7,42 @@ function normalize(value: unknown): string {
     .toLowerCase();
 }
 
+function compareCreatedAt(a: Asset, b: Asset): number {
+  const aAt = a.createdAt || a.updatedAt || "";
+  const bAt = b.createdAt || b.updatedAt || "";
+  if (aAt === bAt) return b.id.localeCompare(a.id);
+  return aAt < bAt ? -1 : 1;
+}
+
+function compareName(a: Asset, b: Asset): number {
+  const byName = a.name.localeCompare(b.name, undefined, {
+    sensitivity: "base",
+  });
+  if (byName !== 0) return byName;
+  return a.id.localeCompare(b.id);
+}
+
 /** Newest created first; id descending as stable tie-breaker. */
 export function sortAssetsNewestFirst(assets: Asset[]): Asset[] {
-  return [...assets].sort((a, b) => {
-    const aAt = a.createdAt || a.updatedAt || "";
-    const bAt = b.createdAt || b.updatedAt || "";
-    if (aAt === bAt) {
-      return b.id.localeCompare(a.id);
-    }
-    return aAt < bAt ? 1 : -1;
-  });
+  return sortAssets(assets, "newest");
+}
+
+export function sortAssets(
+  assets: Asset[],
+  sort: AssetSort | undefined = "newest"
+): Asset[] {
+  const next = [...assets];
+  switch (sort) {
+    case "oldest":
+      return next.sort((a, b) => compareCreatedAt(a, b));
+    case "name_asc":
+      return next.sort((a, b) => compareName(a, b));
+    case "name_desc":
+      return next.sort((a, b) => compareName(b, a));
+    case "newest":
+    default:
+      return next.sort((a, b) => compareCreatedAt(b, a));
+  }
 }
 
 /**
@@ -131,14 +157,14 @@ export function paginateAssets(
 
 /**
  * Canonical list pipeline:
- * all assets → sort newest first → search → filters → paginate
+ * all assets → search/filters → sort → paginate
  */
 export function queryAssetsPage(
   assets: Asset[],
   params: AssetListParams = {},
   facilityNameById: Map<string, string> = new Map()
 ): PaginatedResult<Asset> {
-  const sorted = sortAssetsNewestFirst(assets);
-  const filtered = applyAssetListFilters(sorted, params, facilityNameById);
-  return paginateAssets(filtered, params);
+  const filtered = applyAssetListFilters(assets, params, facilityNameById);
+  const sorted = sortAssets(filtered, params.sort ?? "newest");
+  return paginateAssets(sorted, params);
 }

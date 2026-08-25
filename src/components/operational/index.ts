@@ -6,6 +6,7 @@ export {
   FilterField,
   FiltersTriggerButton,
 } from "./FilterPopover";
+export { SortMenu } from "./SortMenu";
 export { ActiveFilters, type ActiveFilterChip } from "./ActiveFilters";
 export { ResultContext, buildResultContext } from "./ResultContext";
 export { OperationalTone } from "./OperationalTone";

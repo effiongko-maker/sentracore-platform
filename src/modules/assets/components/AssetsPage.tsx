@@ -31,6 +31,8 @@ export function AssetsPage() {
     setCategory,
     facility,
     setFacility,
+    sort,
+    setSort,
     clearAll,
     page,
     setPage,
@@ -86,6 +88,8 @@ export function AssetsPage() {
         onFacilityChange={setFacility}
         status={status}
         onStatusChange={setStatus}
+        sort={sort}
+        onSortChange={setSort}
         total={total}
         loading={loading}
         onClearAll={clearAll}
@@ -121,7 +125,9 @@ export function AssetsPage() {
         mode={modal.type === "edit" ? "edit" : "create"}
         asset={modal.type === "edit" ? modal.asset : null}
         onClose={() => setModal({ type: "closed" })}
-        onSaved={() => void reloadFirstPage()}
+        onSaved={async () => {
+          await reloadFirstPage();
+        }}
       />
 
       <ViewAssetModal

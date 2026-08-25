@@ -10,6 +10,23 @@ const APPS_SCRIPT_URL =
   process.env.NEXT_PUBLIC_API_URL ??
   "https://script.google.com/macros/s/AKfycbz8DUM4MS2NTlEAeHsMVw9sGY0CyCdJwu_24mYJCpUwJWQb9FKEGABO2TEZhzKO-5Xm/exec";
 
+/** TEMP DIAG — identify which /exec deployment is actually called. */
+export function getAppsScriptUrlForDiagnostics(): string {
+  return APPS_SCRIPT_URL;
+}
+
+export function summarizeAppsScriptUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    const deploymentId = parts[parts.length - 2] ?? parts[parts.length - 1] ?? "";
+    const tail = deploymentId.slice(-12);
+    return `${parsed.origin}/macros/s/...${tail}/exec`;
+  } catch {
+    return "(invalid APPS_SCRIPT_URL)";
+  }
+}
+
 export type AppsScriptProxyBody = {
   resource?: string;
   action?: string;
@@ -42,6 +59,21 @@ export async function postToAppsScript(
     resource: body.resource ?? defaults.resource,
     action: body.action ?? defaults.action,
     payload: body.payload ?? {},
+  });
+
+  // TEMP DIAG — facility persistence investigation
+  console.info(`[${logPrefix}] apps-script-request`, {
+    url: summarizeAppsScriptUrl(APPS_SCRIPT_URL),
+    resource: body.resource ?? defaults.resource,
+    action: body.action ?? defaults.action,
+    payloadPreview:
+      body.payload && typeof body.payload === "object"
+        ? {
+            id: (body.payload as Record<string, unknown>).id,
+            facility: (body.payload as Record<string, unknown>).facility,
+            name: (body.payload as Record<string, unknown>).name,
+          }
+        : body.payload,
   });
 
   const response = await fetch(APPS_SCRIPT_URL, {

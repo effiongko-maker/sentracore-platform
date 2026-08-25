@@ -76,6 +76,39 @@ var SheetFieldUtils = (function () {
     return headerMap[name] !== undefined;
   }
 
+  /**
+   * CacheService values are Latin-1 ByteStrings. Arbitrary Unicode (e.g. … — –)
+   * must be UTF-8 encoded then base64'd before put().
+   */
+  var CACHE_UTF8_PREFIX = "u8b64:";
+
+  function cachePutUtf8(cache, key, value, ttlSeconds) {
+    var text = value == null ? "" : String(value);
+    var encoded =
+      CACHE_UTF8_PREFIX +
+      Utilities.base64Encode(text, Utilities.Charset.UTF_8);
+    if (ttlSeconds == null) {
+      cache.put(key, encoded);
+    } else {
+      cache.put(key, encoded, ttlSeconds);
+    }
+    return encoded.length;
+  }
+
+  function cacheGetUtf8(cache, key) {
+    var raw = cache.get(key);
+    if (raw == null) return null;
+    var text = String(raw);
+    if (text.indexOf(CACHE_UTF8_PREFIX) === 0) {
+      var bytes = Utilities.base64Decode(
+        text.substring(CACHE_UTF8_PREFIX.length)
+      );
+      return Utilities.newBlob(bytes).getDataAsString("UTF-8");
+    }
+    // Legacy plain entries (ASCII / previously written Latin-1-safe JSON).
+    return text;
+  }
+
   return {
     cellText: cellText_,
     parseIdList: parseIdList_,
@@ -85,5 +118,7 @@ var SheetFieldUtils = (function () {
     rowToSheetObject: rowToSheetObject_,
     buildRowFromFields: buildRowFromFields_,
     hasHeader: hasHeader_,
+    cachePutUtf8: cachePutUtf8,
+    cacheGetUtf8: cacheGetUtf8,
   };
 })();

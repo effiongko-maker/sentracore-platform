@@ -2,11 +2,11 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { SlidersHorizontal } from "lucide-react";
+import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const PANEL_WIDTH = 340;
-const PANEL_GAP = 6;
+const PANEL_WIDTH = 360;
+const PANEL_GAP = 8;
 const VIEWPORT_PAD = 8;
 
 type PanelCoords = {
@@ -39,6 +39,7 @@ export function FilterPopover({
   canClear,
   onClear,
   onApply,
+  mode = "apply",
   children,
   trigger,
 }: {
@@ -46,10 +47,13 @@ export function FilterPopover({
   onClose: () => void;
   title?: string;
   activeCount: number;
-  /** When false, Clear is muted/disabled. Defaults to activeCount > 0. */
+  /** When false, Clear is hidden/disabled. Defaults to activeCount > 0. */
   canClear?: boolean;
   onClear: () => void;
-  onApply: () => void;
+  /** Required when mode is "apply". */
+  onApply?: () => void;
+  /** "live" applies filters as fields change; "apply" waits for Done. */
+  mode?: "live" | "apply";
   children: React.ReactNode;
   trigger: React.ReactNode;
 }) {
@@ -59,6 +63,8 @@ export function FilterPopover({
   const [coords, setCoords] = useState<PanelCoords | null>(null);
   const [mounted, setMounted] = useState(false);
   const clearEnabled = canClear ?? activeCount > 0;
+  const showDone = mode === "apply";
+  const showFooter = clearEnabled || showDone;
 
   useEffect(() => {
     setMounted(true);
@@ -95,6 +101,7 @@ export function FilterPopover({
       const target = event.target as Node;
       if (anchorRef.current?.contains(target)) return;
       if (panelRef.current?.contains(target)) return;
+      // Close only — never clear applied filters.
       onClose();
     }
 
@@ -125,29 +132,33 @@ export function FilterPopover({
               {title}
             </p>
             <div className="op-filter-fields">{children}</div>
-            <div className="op-filter-footer">
-              <button
-                type="button"
-                className={cn(
-                  "op-filter-clear",
-                  !clearEnabled && "op-filter-clear-muted"
+            {showFooter ? (
+              <div className="op-filter-footer">
+                {clearEnabled ? (
+                  <button
+                    type="button"
+                    className="op-filter-clear"
+                    onClick={onClear}
+                  >
+                    Clear filters
+                  </button>
+                ) : (
+                  <span />
                 )}
-                disabled={!clearEnabled}
-                onClick={onClear}
-              >
-                Clear filters
-              </button>
-              <button
-                type="button"
-                className="op-filter-apply"
-                onClick={() => {
-                  onApply();
-                  onClose();
-                }}
-              >
-                Done
-              </button>
-            </div>
+                {showDone ? (
+                  <button
+                    type="button"
+                    className="op-filter-apply"
+                    onClick={() => {
+                      onApply?.();
+                      onClose();
+                    }}
+                  >
+                    Done
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </div>,
           document.body
         )
@@ -177,13 +188,17 @@ export function FilterField({
   return (
     <div className="op-filter-field">
       <label htmlFor={id}>{label}</label>
-      <select
-        id={id}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {children}
-      </select>
+      <div className="op-filter-select-wrap">
+        <select
+          id={id}
+          className="op-filter-select"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          {children}
+        </select>
+        <ChevronDown className="op-filter-select-chevron" aria-hidden />
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { Modal } from "@/components/modals/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { useFacilityName } from "@/hooks/useEntityLabel";
 import { formatDate } from "@/lib/utils";
 import {
   ASSET_CRITICALITY_VARIANT,
@@ -27,6 +28,11 @@ function Detail({ label, value }: { label: string; value: React.ReactNode }) {
       <div className="text-sm text-foreground">{value || "—"}</div>
     </div>
   );
+}
+
+function FacilityDetail({ value }: { value: string }) {
+  const name = useFacilityName(value);
+  return <>{name || value || "—"}</>;
 }
 
 export function ViewAssetModal({
@@ -77,7 +83,7 @@ export function ViewAssetModal({
             </Badge>
           </div>
           <p className="mt-1 text-sm text-muted">
-            {labelize(asset.category)} · {asset.facility}
+            {labelize(asset.category)} · <FacilityDetail value={asset.facility} />
           </p>
         </div>
       </div>
@@ -86,7 +92,7 @@ export function ViewAssetModal({
         <Detail label="Asset ID" value={asset.id} />
         <Detail label="Asset number" value={asset.assetTag || asset.id} />
         <Detail label="Category" value={labelize(asset.category)} />
-        <Detail label="Facility" value={asset.facility} />
+        <Detail label="Facility" value={<FacilityDetail value={asset.facility} />} />
         <Detail label="Manufacturer" value={asset.manufacturer} />
         <Detail label="Model" value={asset.model} />
         <Detail label="Serial number" value={asset.serialNumber} />

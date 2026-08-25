@@ -32,7 +32,19 @@ interface AssetFormModalProps {
   mode: "create" | "edit";
   asset?: Asset | null;
   onClose: () => void;
-  onSaved?: () => void;
+  onSaved?: () => void | Promise<void>;
+}
+
+function resolveFacilityId(
+  value: string,
+  facilities: Array<{ id: string; name: string }>
+): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const match = facilities.find(
+    (item) => item.id === trimmed || item.name === trimmed
+  );
+  return match?.id ?? trimmed;
 }
 
 export function AssetFormModal({
@@ -55,6 +67,16 @@ export function AssetFormModal({
     setForm(toCreateFormValues(mode === "edit" ? asset : null));
     setErrors({});
   }, [open, mode, asset]);
+
+  // Canonicalise legacy name-stored facility values to facility ids once options load.
+  useEffect(() => {
+    if (!open || facilities.length === 0) return;
+    setForm((current) => {
+      const resolved = resolveFacilityId(current.facility, facilities);
+      if (!resolved || resolved === current.facility) return current;
+      return { ...current, facility: resolved };
+    });
+  }, [open, facilities]);
 
   function updateField<K extends keyof CreateAssetInput>(
     key: K,
@@ -80,11 +102,19 @@ export function AssetFormModal({
 
     setSaving(true);
     try {
+      const facilityId = resolveFacilityId(form.facility, facilities);
+      if (!facilityId) {
+        setErrors((current) => ({
+          ...current,
+          facility: "Facility is required",
+        }));
+        return;
+      }
+
       const payload: CreateAssetInput = {
         ...form,
         name: form.name.trim(),
-        // Asset number is assigned by the platform on create.
-        facility: form.facility.trim(),
+        facility: facilityId,
         manufacturer: form.manufacturer.trim(),
         model: form.model.trim(),
         serialNumber: form.serialNumber.trim(),
@@ -99,14 +129,51 @@ export function AssetFormModal({
       delete payload.assetTag;
 
       if (mode === "edit" && asset) {
-        await AssetService.updateAsset(asset.id, payload);
+        if (!asset.id?.trim()) {
+          throw new Error("Cannot update asset: missing asset id.");
+        }
+
+        const selectedFacility = facilities.find(
+          (item) => item.id === facilityId || item.name === facilityId
+        );
+
+        // TEMP DIAG — facility persistence investigation
+        console.info("[asset-diag][ui] submit edit", {
+          assetId: asset.id,
+          assetName: asset.name,
+          previousFacility: asset.facility,
+          selectedFacilityId: facilityId,
+          selectedFacilityName: selectedFacility?.name ?? "(unresolved)",
+          clientExecHint: process.env.NEXT_PUBLIC_API_URL ?? "(unset)",
+        });
+
+        const result = await AssetService.updateAssetWithDiagnostics(
+          asset.id,
+          payload
+        );
+
+        console.info("[asset-diag][ui] update evidence", result);
+
+        if (result.path !== "persisted") {
+          throw new Error(
+            `Update not confirmed (${result.path}). ${result.evidence.join(" · ")}`
+          );
+        }
+
+        await onSaved?.();
+
+        const listedMatch =
+          result.evidence.find((line) => line.startsWith("list.facility=")) ??
+          "";
+
         toast({
           type: "success",
           title: "Asset updated",
-          description: `${payload.name} has been saved.`,
+          description: `${payload.name} saved. Facility ${result.asset.facility}. ${listedMatch}`,
         });
       } else {
         await AssetService.createAsset(payload);
+        await onSaved?.();
         toast({
           type: "success",
           title: "Asset created",
@@ -114,7 +181,6 @@ export function AssetFormModal({
         });
       }
 
-      onSaved?.();
       onClose();
     } catch (err) {
       toast({
@@ -130,6 +196,11 @@ export function AssetFormModal({
   }
 
   const isEdit = mode === "edit";
+  const facilitySelectValue = resolveFacilityId(form.facility, facilities);
+  const facilityKnown = facilities.some(
+    (item) =>
+      item.id === facilitySelectValue || item.name === facilitySelectValue
+  );
 
   return (
     <Modal
@@ -218,19 +289,23 @@ export function AssetFormModal({
           <select
             id="asset-facility"
             className={selectClassName}
-            value={form.facility}
-            onChange={(event) => updateField("facility", event.target.value)}
+            value={facilitySelectValue}
+            onChange={(event) =>
+              updateField(
+                "facility",
+                resolveFacilityId(event.target.value, facilities)
+              )
+            }
             disabled={facilitiesLoading}
           >
             <option value="">
               {facilitiesLoading ? "Loading facilities…" : "Select facility"}
             </option>
-            {form.facility &&
-            !facilities.some((item) => item.name === form.facility) ? (
-              <option value={form.facility}>{form.facility}</option>
+            {facilitySelectValue && !facilityKnown ? (
+              <option value={facilitySelectValue}>{facilitySelectValue}</option>
             ) : null}
             {facilities.map((item) => (
-              <option key={item.id} value={item.name}>
+              <option key={item.id} value={item.id}>
                 {item.name}
               </option>
             ))}

@@ -11,6 +11,7 @@ export type {
   AssetCriticality,
   AssetListParams,
   AssetModalState,
+  AssetSort,
   AssetStatus,
   CreateAssetInput,
   UpdateAssetInput,

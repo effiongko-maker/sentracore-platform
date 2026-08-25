@@ -301,7 +301,7 @@ var ReportingSnapshotService = (function () {
   function readCachedSnapshot_(facilityId) {
     try {
       var key = snapshotCacheKey_(facilityId);
-      var text = scriptCache_().get(key);
+      var text = SheetFieldUtils.cacheGetUtf8(scriptCache_(), key);
       if (!text) {
         Logger.log("[REPORTING_SNAPSHOT] cache MISS key=" + key);
         return null;
@@ -334,19 +334,28 @@ var ReportingSnapshotService = (function () {
         delete snapshot._snapshotMeta.cache;
       }
       var text = JSON.stringify(snapshot);
-      if (!text || text.length > CACHE_MAX_CHARS) {
+      if (!text) {
+        return false;
+      }
+      // UTF-8 → base64 expands size; leave headroom under CacheService ~100KB.
+      var encodedLengthEstimate = Math.ceil((text.length * 4) / 3) + 8;
+      if (
+        text.length > CACHE_MAX_CHARS ||
+        encodedLengthEstimate > CACHE_MAX_CHARS
+      ) {
         Logger.log(
-          "[REPORTING_SNAPSHOT] skip cache write — payload too large (" +
-            (text ? text.length : 0) +
+          "[REPORTING_SNAPSHOT] skip cache write - payload too large (" +
+            text.length +
             " chars)"
         );
         return false;
       }
       var key = snapshotCacheKey_(facilityId);
       var cache = scriptCache_();
-      cache.put(key, text, CACHE_TTL_SECONDS);
-      // Verify immediately — silent put failures are the usual cause of "no speedup".
-      var verify = cache.get(key);
+      // CacheService is ByteString/Latin-1 safe only — encode Unicode first.
+      SheetFieldUtils.cachePutUtf8(cache, key, text, CACHE_TTL_SECONDS);
+      // Verify immediately - silent put failures are the usual cause of "no speedup".
+      var verify = SheetFieldUtils.cacheGetUtf8(cache, key);
       if (!verify || verify.length !== text.length) {
         Logger.log(
           "[REPORTING_SNAPSHOT] cache put VERIFY FAILED key=" +

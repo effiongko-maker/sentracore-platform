@@ -5,6 +5,7 @@ import {
   FilterPopover,
   FiltersTriggerButton,
 } from "./FilterPopover";
+import { SortMenu } from "./SortMenu";
 
 export function OperationalListToolbar({
   search,
@@ -16,6 +17,7 @@ export function OperationalListToolbar({
   canClearFilters,
   onClearFilters,
   onApplyFilters,
+  filterMode = "apply",
   filterPanel,
   sortValue,
   sortOptions,
@@ -30,7 +32,8 @@ export function OperationalListToolbar({
   activeFilterCount: number;
   canClearFilters?: boolean;
   onClearFilters: () => void;
-  onApplyFilters: () => void;
+  onApplyFilters?: () => void;
+  filterMode?: "live" | "apply";
   filterPanel: React.ReactNode;
   sortValue: string;
   sortOptions: Array<{ value: string; label: string }>;
@@ -56,6 +59,7 @@ export function OperationalListToolbar({
           canClear={canClearFilters ?? activeFilterCount > 0}
           onClear={onClearFilters}
           onApply={onApplyFilters}
+          mode={filterMode}
           trigger={
             <FiltersTriggerButton
               activeCount={activeFilterCount}
@@ -67,21 +71,11 @@ export function OperationalListToolbar({
           {filterPanel}
         </FilterPopover>
 
-        <div className="op-sort">
-          <label htmlFor="op-sort-select">Sort</label>
-          <select
-            id="op-sort-select"
-            value={sortValue}
-            onChange={(event) => onSortChange?.(event.target.value)}
-            aria-label="Sort"
-          >
-            {sortOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <SortMenu
+          value={sortValue}
+          options={sortOptions}
+          onChange={onSortChange}
+        />
       </div>
     </div>
   );

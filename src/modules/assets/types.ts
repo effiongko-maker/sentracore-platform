@@ -59,6 +59,12 @@ export interface CreateAssetInput {
 
 export type UpdateAssetInput = Partial<CreateAssetInput>;
 
+export type AssetSort =
+  | "newest"
+  | "oldest"
+  | "name_asc"
+  | "name_desc";
+
 export interface AssetListParams {
   page?: number;
   pageSize?: number;
@@ -67,6 +73,7 @@ export interface AssetListParams {
   category?: AssetCategory | "all";
   facility?: string | "all";
   criticality?: AssetCriticality | "all";
+  sort?: AssetSort;
 }
 
 export type AssetModalState =

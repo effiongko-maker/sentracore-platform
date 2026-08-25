@@ -32,6 +32,9 @@ var AssetService = (function () {
         String(row.facility || "")
           .toLowerCase()
           .indexOf(search) !== -1 ||
+        String(row.facilityId || "")
+          .toLowerCase()
+          .indexOf(search) !== -1 ||
         String(row.serialNumber || "")
           .toLowerCase()
           .indexOf(search) !== -1 ||
@@ -55,11 +58,12 @@ var AssetService = (function () {
         category === "all" ||
         String(row.category).toLowerCase() === String(category).toLowerCase();
 
+      var rowFacility = String(row.facilityId || row.facility || "");
       // Facility values may be an id or a display name depending on row age.
       var matchesFacility =
         !facility ||
         facility === "all" ||
-        String(row.facility) === String(facility);
+        rowFacility === String(facility);
 
       if (
         !matchesFacility &&
@@ -76,7 +80,7 @@ var AssetService = (function () {
             var fname = String(f.name || "");
             if (
               (fid === String(facility) || fname === String(facility)) &&
-              (String(row.facility) === fid || String(row.facility) === fname)
+              (rowFacility === fid || rowFacility === fname)
             ) {
               matchesFacility = true;
               break;

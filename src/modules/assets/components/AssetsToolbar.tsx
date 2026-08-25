@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActiveFilters,
   FilterField,
@@ -15,10 +15,11 @@ import { useFacilityOptions } from "@/hooks/useFacilityOptions";
 import {
   ASSETS_PAGE_SIZE,
   ASSET_CATEGORIES,
-  ASSET_STATUSES,
+  ASSET_FILTER_STATUSES,
+  ASSET_SORT_OPTIONS,
 } from "../constants";
 import { labelize } from "../utils";
-import type { AssetCategory, AssetStatus } from "../types";
+import type { AssetCategory, AssetSort, AssetStatus } from "../types";
 
 interface AssetsToolbarProps {
   search: string;
@@ -29,19 +30,19 @@ interface AssetsToolbarProps {
   onFacilityChange: (value: string | "all") => void;
   status: AssetStatus | "all";
   onStatusChange: (value: AssetStatus | "all") => void;
+  sort: AssetSort;
+  onSortChange: (value: AssetSort) => void;
   total: number;
   loading?: boolean;
   onClearAll: () => void;
   onCreate: () => void;
 }
 
-type DraftFilters = {
+function countActiveFilters(filters: {
   status: AssetStatus | "all";
   category: AssetCategory | "all";
   facility: string | "all";
-};
-
-function countActive(filters: DraftFilters): number {
+}): number {
   let count = 0;
   if (filters.status !== "all") count += 1;
   if (filters.category !== "all") count += 1;
@@ -58,6 +59,8 @@ export function AssetsToolbar({
   onFacilityChange,
   status,
   onStatusChange,
+  sort,
+  onSortChange,
   total,
   loading,
   onClearAll,
@@ -65,20 +68,8 @@ export function AssetsToolbar({
 }: AssetsToolbarProps) {
   const { facilities } = useFacilityOptions();
   const [filterOpen, setFilterOpen] = useState(false);
-  const [draft, setDraft] = useState<DraftFilters>({
-    status,
-    category,
-    facility,
-  });
 
-  useEffect(() => {
-    if (filterOpen) {
-      setDraft({ status, category, facility });
-    }
-  }, [filterOpen, status, category, facility]);
-
-  const applied: DraftFilters = { status, category, facility };
-  const activeFilterCount = countActive(applied);
+  const activeFilterCount = countActiveFilters({ status, category, facility });
   const hasSearch = Boolean(search.trim());
   const filtered = activeFilterCount > 0 || hasSearch;
 
@@ -133,18 +124,6 @@ export function AssetsToolbar({
     onStatusChange("all");
     onCategoryChange("all");
     onFacilityChange("all");
-    setDraft({ status: "all", category: "all", facility: "all" });
-  }
-
-  function clearAll() {
-    setDraft({ status: "all", category: "all", facility: "all" });
-    onClearAll();
-  }
-
-  function applyDraft() {
-    onStatusChange(draft.status);
-    onCategoryChange(draft.category);
-    onFacilityChange(draft.facility);
   }
 
   return (
@@ -152,15 +131,16 @@ export function AssetsToolbar({
       <OperationalListToolbar
         search={search}
         onSearchChange={onSearchChange}
-        searchPlaceholder="Search by name, tag, ID, facility, serial…"
+        searchPlaceholder="Search by name, asset ID, facility, serial number…"
         filterOpen={filterOpen}
         onFilterOpenChange={setFilterOpen}
         activeFilterCount={activeFilterCount}
-        canClearFilters={countActive(draft) > 0 || activeFilterCount > 0}
+        canClearFilters={activeFilterCount > 0}
         onClearFilters={clearFiltersOnly}
-        onApplyFilters={applyDraft}
-        sortValue="newest"
-        sortOptions={[{ value: "newest", label: "Newest" }]}
+        filterMode="live"
+        sortValue={sort}
+        sortOptions={ASSET_SORT_OPTIONS}
+        onSortChange={(value) => onSortChange(value as AssetSort)}
         leadingActions={
           <Button
             type="button"
@@ -177,12 +157,9 @@ export function AssetsToolbar({
             <FilterField
               id="asset-filter-category"
               label="Category"
-              value={draft.category}
+              value={category}
               onChange={(value) =>
-                setDraft((prev) => ({
-                  ...prev,
-                  category: value as AssetCategory | "all",
-                }))
+                onCategoryChange(value as AssetCategory | "all")
               }
             >
               <option value="all">All categories</option>
@@ -196,12 +173,9 @@ export function AssetsToolbar({
             <FilterField
               id="asset-filter-facility"
               label="Facility"
-              value={draft.facility}
+              value={facility}
               onChange={(value) =>
-                setDraft((prev) => ({
-                  ...prev,
-                  facility: value as string | "all",
-                }))
+                onFacilityChange(value as string | "all")
               }
             >
               <option value="all">All facilities</option>
@@ -215,16 +189,13 @@ export function AssetsToolbar({
             <FilterField
               id="asset-filter-status"
               label="Status"
-              value={draft.status}
+              value={status}
               onChange={(value) =>
-                setDraft((prev) => ({
-                  ...prev,
-                  status: value as AssetStatus | "all",
-                }))
+                onStatusChange(value as AssetStatus | "all")
               }
             >
               <option value="all">All statuses</option>
-              {ASSET_STATUSES.map((value) => (
+              {ASSET_FILTER_STATUSES.map((value) => (
                 <option key={value} value={value}>
                   {labelize(value)}
                 </option>
@@ -234,7 +205,7 @@ export function AssetsToolbar({
         }
       />
 
-      <ActiveFilters chips={chips} onClearAll={clearAll} />
+      <ActiveFilters chips={chips} onClearAll={onClearAll} />
 
       {!loading && filtered ? (
         <ResultContext

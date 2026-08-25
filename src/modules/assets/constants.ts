@@ -2,6 +2,7 @@ import type {
   AssetCategory,
   AssetCondition,
   AssetCriticality,
+  AssetSort,
   AssetStatus,
 } from "./types";
 
@@ -21,6 +22,13 @@ export const ASSET_STATUSES: AssetStatus[] = [
   "pending",
   "inactive",
   "suspended",
+];
+
+/** Statuses shown in the Assets list filter popover. */
+export const ASSET_FILTER_STATUSES: AssetStatus[] = [
+  "active",
+  "inactive",
+  "pending",
 ];
 
 export const ASSET_CONDITIONS: AssetCondition[] = [
@@ -60,3 +68,12 @@ export const ASSET_CRITICALITY_VARIANT: Record<
 };
 
 export const ASSETS_PAGE_SIZE = 8;
+
+export const ASSET_SORT_OPTIONS: Array<{ value: AssetSort; label: string }> = [
+  { value: "newest", label: "Newest" },
+  { value: "oldest", label: "Oldest" },
+  { value: "name_asc", label: "Name: A–Z" },
+  { value: "name_desc", label: "Name: Z–A" },
+];
+
+export const DEFAULT_ASSET_SORT: AssetSort = "newest";

@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { ASSETS_PAGE_SIZE } from "../constants";
+import { ASSETS_PAGE_SIZE, DEFAULT_ASSET_SORT } from "../constants";
 import { AssetService } from "../services/AssetService";
-import type { Asset, AssetCategory, AssetStatus } from "../types";
+import type { Asset, AssetCategory, AssetSort, AssetStatus } from "../types";
 
 export function useAssets() {
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -14,6 +14,7 @@ export function useAssets() {
   const [status, setStatusState] = useState<AssetStatus | "all">("all");
   const [category, setCategoryState] = useState<AssetCategory | "all">("all");
   const [facility, setFacilityState] = useState<string | "all">("all");
+  const [sort, setSortState] = useState<AssetSort>(DEFAULT_ASSET_SORT);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -33,6 +34,11 @@ export function useAssets() {
 
   const setFacility = useCallback((value: string | "all") => {
     setFacilityState(value);
+    setPage(1);
+  }, []);
+
+  const setSort = useCallback((value: AssetSort) => {
+    setSortState(value);
     setPage(1);
   }, []);
 
@@ -65,6 +71,7 @@ export function useAssets() {
           status,
           category,
           facility,
+          sort,
         });
 
         if (id !== requestId.current) return;
@@ -89,7 +96,7 @@ export function useAssets() {
         if (id === requestId.current) setLoading(false);
       }
     },
-    [page, debouncedSearch, status, category, facility]
+    [page, debouncedSearch, status, category, facility, sort]
   );
 
   useEffect(() => {
@@ -104,7 +111,7 @@ export function useAssets() {
     await fetchAssets(page);
   }, [fetchAssets, page]);
 
-  /** After create/update — always return to newest-first page 1. */
+  /** After create/update — always return to page 1 (newest-friendly). */
   const reloadFirstPage = useCallback(async () => {
     if (page !== 1) {
       setPage(1);
@@ -125,6 +132,8 @@ export function useAssets() {
     setCategory,
     facility,
     setFacility,
+    sort,
+    setSort,
     clearAll,
     page,
     setPage,

@@ -18,13 +18,25 @@
  */
 
 function jsonResponse_(success, message, data) {
-  return ContentService.createTextOutput(
-    JSON.stringify({
-      success: !!success,
-      message: message || "",
-      data: data === undefined ? null : data,
-    })
-  ).setMimeType(ContentService.MimeType.JSON);
+  var payload = {
+    success: !!success,
+    message: message == null ? "" : String(message),
+    data: data === undefined ? null : data,
+  };
+  var text;
+  try {
+    text = JSON.stringify(payload);
+  } catch (err) {
+    text = JSON.stringify({
+      success: false,
+      message: "Failed to serialise Apps Script response.",
+      data: null,
+    });
+  }
+  // ContentService accepts Unicode strings; do not pass through ByteString APIs.
+  return ContentService.createTextOutput(text).setMimeType(
+    ContentService.MimeType.JSON
+  );
 }
 
 function doPost(e) {

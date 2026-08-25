@@ -2,19 +2,35 @@
 
 **Sheet name:** `Assets`
 
-## Header row (exact)
+## Preferred header row (display names)
 
-| id | assetTag | name | category | facility | manufacturer | model | serialNumber | purchaseDate | warrantyExpiry | condition | status | assignedTo | criticality | description | createdAt | updatedAt |
+| Asset ID | Asset Number | Asset Name | Category | Facility ID | Manufacturer | Model | Serial Number | Install Date | Warranty Expiry | Condition | Status | Assigned To | Criticality | Description | Created At | Updated At |
 
-## Seed rows (optional)
+CamelCase headers (`id`, `assetTag`, `name`, `facility`, …) are also accepted.
 
-| id | assetTag | name | category | facility | manufacturer | model | serialNumber | purchaseDate | warrantyExpiry | condition | status | assignedTo | criticality | description | createdAt | updatedAt |
-|----|----------|------|----------|----------|--------------|-------|--------------|--------------|----------------|-----------|--------|------------|-------------|-------------|-----------|-----------|
-| AST-0001 | CHL-002 | Chiller Unit #02 | hvac | Lagos HQ | Carrier | 30XA | SN-48291 | 2022-03-15 | 2027-03-15 | good | active | Daniel Mensah | critical | Primary cooling plant | 2024-01-12T09:00:00Z | 2026-08-03T10:00:00Z |
-| AST-0002 | UPS-01A | UPS Bank A | power | Lagos HQ | Eaton | 9395 | SN-11022 | 2021-11-02 | 2026-11-02 | excellent | active | Priya Sharma | high | Data hall UPS bank | 2024-03-18T11:30:00Z | 2026-08-03T09:00:00Z |
-| AST-0003 | LFT-01A | Passenger Lift 1 | vertical_transport | Accra Hub | Otis | Gen2 | SN-77810 | 2020-06-20 | 2025-06-20 | fair | pending | Daniel Mensah | high | Main lobby lift | 2024-07-21T14:00:00Z | 2026-08-02T16:00:00Z |
-| AST-0004 | GEN-W01 | Standby Generator | power | Plant West | Cummins | C1500 | SN-99102 | 2019-09-01 | 2024-09-01 | good | active | Priya Sharma | critical | West plant standby | 2025-01-15T09:45:00Z | 2026-07-28T12:00:00Z |
-| AST-0005 | SW-SW01 | Core Switch | it | Docklands Campus | Cisco | C9300 | SN-33401 | 2023-02-10 | 2028-02-10 | excellent | inactive | Sophie Laurent | medium | Campus core switch | 2025-06-30T16:45:00Z | 2026-06-14T09:30:00Z |
+## Canonical API fields
+
+| Sheet header | API field |
+|---|---|
+| Asset ID / id | `id` |
+| Asset Number / Asset Tag | `assetTag` |
+| Asset Name / name | `name` |
+| Category | `category` |
+| Facility ID | `facilityId` (+ mirrored as `facility`) |
+| Manufacturer | `manufacturer` |
+| Model | `model` |
+| Serial Number | `serialNumber` |
+| Install Date / Purchase Date | `purchaseDate` |
+| Warranty Expiry | `warrantyExpiry` |
+| Condition | `condition` |
+| Status | `status` |
+| Assigned To / OEM ID | `assignedTo` |
+| Criticality | `criticality` |
+| Description | `description` |
+| Created At | `createdAt` |
+| Updated At | `updatedAt` |
+
+**Important:** Facility ID resolution must never write into Manufacturer / Model / Serial Number. Reads and writes are by header name only.
 
 ## Status values
 `active` · `pending` · `inactive` · `suspended`
