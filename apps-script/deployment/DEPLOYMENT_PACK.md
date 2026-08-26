@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Generated: 2026-08-25T23:47:02.598Z
+Generated: 2026-08-26T01:24:33.394Z
 
 This document is the **single source of truth** for copying Apps Script
 source into the Google Apps Script project.
@@ -1894,7 +1894,13 @@ MaintenanceRepository.gs
 var MaintenanceRepository = (function () {
   var SHEET_CANDIDATES = ["Maintenance", "MAINTENANCE", "Maintenances"];
 
-  var RELATIONSHIP_HEADERS = ["Incident ID", "Work Order IDs", "Source", "Title"];
+  var RELATIONSHIP_HEADERS = [
+    "Incident ID",
+    "Work Order IDs",
+    "Source",
+    "Title",
+    "Updated At",
+  ];
 
   function normalizeEnum_(value) {
     return String(value || "")
@@ -1964,6 +1970,10 @@ var MaintenanceRepository = (function () {
       SheetFieldUtils.cellText(sheetRow["Title"]) || description;
     var reportedAt = SheetFieldUtils.cellText(sheetRow["Date Requested"]);
     var completedAt = SheetFieldUtils.cellText(sheetRow["Date Completed"]);
+    var updatedAt =
+      SheetFieldUtils.cellText(sheetRow["Updated At"]) ||
+      completedAt ||
+      reportedAt;
     var status = mapStatus_(sheetRow["Status"]);
     var priority = normalizeEnum_(sheetRow["Priority"]) || "medium";
     var now = new Date().toISOString();
@@ -2005,7 +2015,7 @@ var MaintenanceRepository = (function () {
       completionNotes: undefined,
       workPerformed: undefined,
       createdAt: reported,
-      updatedAt: completedAt || reported,
+      updatedAt: updatedAt || reported,
       createdByUserId: undefined,
       updatedByUserId: undefined,
     };
@@ -2030,6 +2040,12 @@ var MaintenanceRepository = (function () {
       "Assigned To": canonical.assignedToUserId || "",
       "Date Requested": canonical.reportedAt || canonical.createdAt || "",
       "Date Completed": canonical.completedAt || "",
+      "Updated At":
+        canonical.updatedAt ||
+        canonical.completedAt ||
+        canonical.reportedAt ||
+        canonical.createdAt ||
+        "",
       Status: canonical.status || "requested",
       "Incident ID": canonical.incidentId || "",
       "Work Order IDs": SheetFieldUtils.formatIdList(workOrderIds),
@@ -2373,8 +2389,8 @@ var MaintenanceService = (function () {
 
   function sortNewestFirst_(rows) {
     return rows.slice().sort(function (a, b) {
-      var aAt = String(a.createdAt || a.reportedAt || a.updatedAt || "");
-      var bAt = String(b.createdAt || b.reportedAt || b.updatedAt || "");
+      var aAt = String(a.updatedAt || a.createdAt || a.reportedAt || "");
+      var bAt = String(b.updatedAt || b.createdAt || b.reportedAt || "");
       if (aAt === bAt) {
         return String(b.id || "").localeCompare(String(a.id || ""));
       }
@@ -2546,7 +2562,7 @@ var MasterDataRepository = (function () {
         "id",
         "name",
         "code",
-        "facilityId",
+        "facility",
         "status",
         "description",
         "createdAt",
@@ -2560,7 +2576,7 @@ var MasterDataRepository = (function () {
         "id",
         "name",
         "code",
-        "facilityId",
+        "facility",
         "status",
         "description",
         "createdAt",
@@ -2574,8 +2590,8 @@ var MasterDataRepository = (function () {
         "id",
         "name",
         "code",
-        "facilityId",
-        "buildingId",
+        "facility",
+        "building",
         "level",
         "status",
         "description",
@@ -2590,9 +2606,9 @@ var MasterDataRepository = (function () {
         "id",
         "name",
         "code",
-        "facilityId",
-        "buildingId",
-        "floorId",
+        "facility",
+        "building",
+        "floor",
         "status",
         "description",
         "createdAt",
@@ -2640,6 +2656,24 @@ var MasterDataRepository = (function () {
       obj[headers[i]] = row[i];
     }
     return obj;
+  }
+
+  /**
+   * Accept both live sheet keys (facility/building/floor) and camelId aliases
+   * from the frontend (facilityId/buildingId/floorId).
+   */
+  function payloadValue_(payload, key) {
+    payload = payload || {};
+    if (payload[key] != null && String(payload[key]).trim() !== "") {
+      return payload[key];
+    }
+    if (key === "facility" && payload.facilityId != null) return payload.facilityId;
+    if (key === "building" && payload.buildingId != null) return payload.buildingId;
+    if (key === "floor" && payload.floorId != null) return payload.floorId;
+    if (key === "facilityId" && payload.facility != null) return payload.facility;
+    if (key === "buildingId" && payload.building != null) return payload.building;
+    if (key === "floorId" && payload.floor != null) return payload.floor;
+    return payload[key];
   }
 
   function getAll(entity) {
@@ -2723,7 +2757,10 @@ var MasterDataRepository = (function () {
       else if (key === "code") {
         var code = payload.code != null ? String(payload.code).trim() : "";
         record.code = code || defaultCode_(entity, id, payload);
-      } else record[key] = payload[key] != null ? payload[key] : "";
+      } else {
+        var value = payloadValue_(payload, key);
+        record[key] = value != null ? value : "";
+      }
     }
 
     var row = config.headers.map(function (key) {
@@ -2763,8 +2800,9 @@ var MasterDataRepository = (function () {
       else if (key === "code") {
         // Codes are immutable after create.
         updated.code = current.code || id;
-      } else if (payload && payload[key] != null) updated[key] = payload[key];
-      else updated[key] = current[key] != null ? current[key] : "";
+      } else if (payload && payloadValue_(payload, key) != null) {
+        updated[key] = payloadValue_(payload, key);
+      } else updated[key] = current[key] != null ? current[key] : "";
     }
 
     var row = config.headers.map(function (key) {
@@ -2858,17 +2896,17 @@ var MasterDataService = (function () {
       var matchesFacility =
         !facilityId ||
         facilityId === "all" ||
-        String(row.facilityId || "") === String(facilityId);
+        String(row.facilityId || row.facility || "") === String(facilityId);
 
       var matchesBuilding =
         !buildingId ||
         buildingId === "all" ||
-        String(row.buildingId || "") === String(buildingId);
+        String(row.buildingId || row.building || "") === String(buildingId);
 
       var matchesFloor =
         !floorId ||
         floorId === "all" ||
-        String(row.floorId || "") === String(floorId);
+        String(row.floorId || row.floor || "") === String(floorId);
 
       var matchesCategory =
         !category ||
@@ -5537,8 +5575,27 @@ var WorkOrderRepository = (function () {
 
   function toCanonical_(sheetRow, headerMap) {
     var description = SheetFieldUtils.cellText(sheetRow["Description"]);
-    var title =
-      SheetFieldUtils.cellText(sheetRow["Title"]) || description;
+    var explicitTitle = SheetFieldUtils.cellText(sheetRow["Title"]);
+    var title = explicitTitle;
+    if (
+      !title ||
+      /(?:^|\n|\s)(?:Location|Department|Category|Source maintenance)\s*:/i.test(
+        title
+      )
+    ) {
+      var titleSource = title || description || "";
+      if (titleSource) {
+        var cut = titleSource.search(
+          /\s*(?:\n\n+|(?:Location|Department|Category|Source maintenance)\s*:)/i
+        );
+        title =
+          cut > 0
+            ? String(titleSource.slice(0, cut)).trim()
+            : String(titleSource.split(/\n+/)[0] || "").trim();
+      } else {
+        title = "";
+      }
+    }
     var requestedAt = SheetFieldUtils.cellText(sheetRow["Date Opened"]);
     var completedAt = SheetFieldUtils.cellText(sheetRow["Date Completed"]);
     var status = SheetFieldUtils.cellText(sheetRow["Status"])
@@ -5920,6 +5977,9 @@ var WorkOrderService = (function () {
     var facilityId = payload.facilityId;
     var assignedToUserId = payload.assignedToUserId;
     var type = payload.type;
+    var assetId = payload.assetId;
+    var maintenanceId = payload.maintenanceId;
+    var dueDate = payload.dueDate;
 
     return rows.filter(function (row) {
       var matchesSearch =
@@ -5940,6 +6000,9 @@ var WorkOrderService = (function () {
           .toLowerCase()
           .indexOf(search) !== -1 ||
         String(row.assetId || "")
+          .toLowerCase()
+          .indexOf(search) !== -1 ||
+        String(row.maintenanceId || "")
           .toLowerCase()
           .indexOf(search) !== -1;
 
@@ -5968,13 +6031,54 @@ var WorkOrderService = (function () {
         type === "all" ||
         String(row.type).toLowerCase() === String(type).toLowerCase();
 
+      var matchesAsset =
+        !assetId ||
+        assetId === "all" ||
+        String(row.assetId || "") === String(assetId);
+
+      var matchesMaintenance =
+        !maintenanceId ||
+        maintenanceId === "all" ||
+        String(row.maintenanceId || "") === String(maintenanceId);
+
+      var matchesDue = true;
+      if (dueDate && dueDate !== "all") {
+        var dueRaw = String(row.dueAt || "").trim();
+        if (dueDate === "no_due") {
+          matchesDue = !dueRaw;
+        } else if (!dueRaw) {
+          matchesDue = false;
+        } else {
+          var dueMs = Date.parse(dueRaw);
+          if (!isFinite(dueMs)) {
+            matchesDue = false;
+          } else {
+            var now = new Date();
+            var startOfToday = new Date(
+              now.getFullYear(),
+              now.getMonth(),
+              now.getDate()
+            ).getTime();
+            if (dueDate === "overdue") {
+              matchesDue = dueMs < startOfToday;
+            } else if (dueDate === "next_7_days") {
+              var weekMs = startOfToday + 7 * 24 * 60 * 60 * 1000;
+              matchesDue = dueMs >= startOfToday && dueMs <= weekMs;
+            }
+          }
+        }
+      }
+
       return (
         matchesSearch &&
         matchesStatus &&
         matchesPriority &&
         matchesFacility &&
         matchesAssignee &&
-        matchesType
+        matchesType &&
+        matchesAsset &&
+        matchesMaintenance &&
+        matchesDue
       );
     });
   }

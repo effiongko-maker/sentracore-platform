@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Release: **v0.3.0** — Master Data Phase 1
+Release: **v0.3.3** — Maintenance updatedAt on WO link + list filter rendering
 
 Use this checklist with `DEPLOYMENT_PACK.md` open. Someone unfamiliar
 with the project should be able to deploy from these steps alone.
@@ -150,22 +150,10 @@ A **new Web App version** is REQUIRED.
 
 With `npm run dev` running:
 
-### Master data health (router lists master-data)
+### Maintenance list newest
 
 ```bash
-curl -sS "$APPS_SCRIPT_URL"
-```
-
-### Master data list departments
-
-```bash
-curl -sS -X POST http://localhost:3000/api/master-data -H 'Content-Type: application/json' -d '{"resource":"master-data","action":"getAll","payload":{"entity":"departments","page":1,"pageSize":10}}'
-```
-
-### Master data create department (optional)
-
-```bash
-curl -sS -X POST http://localhost:3000/api/master-data -H 'Content-Type: application/json' -d '{"resource":"master-data","action":"create","payload":{"entity":"departments","name":"Facilities","code":"FAC","status":"active"}}'
+curl -sS -X POST http://localhost:3000/api/maintenance -H 'Content-Type: application/json' -d '{"resource":"maintenance","action":"getAll","payload":{"page":1,"pageSize":5}}'
 ```
 
 Expected checks:

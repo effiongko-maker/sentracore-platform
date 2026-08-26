@@ -2,8 +2,11 @@
 
 import { ClipboardList } from "lucide-react";
 import { useState } from "react";
-import { ModeFrame, StreamSurface } from "@/components/platform";
-import { OperationalPageHeader } from "@/components/operational";
+import {
+  ModeFrame,
+  OperateHeader,
+  StreamSurface,
+} from "@/components/platform";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
@@ -28,13 +31,23 @@ export function WorkOrdersPage() {
     setPriority,
     facilityId,
     setFacilityId,
+    assetId,
+    setAssetId,
     assignedToUserId,
     setAssignedToUserId,
+    dueDate,
+    setDueDate,
+    maintenanceId,
+    setMaintenanceId,
+    sort,
+    setSort,
+    clearAll,
     page,
     setPage,
     totalPages,
     total,
     reload,
+    reloadFirstPage,
     deactivateWorkOrder,
   } = useWorkOrders();
 
@@ -53,7 +66,7 @@ export function WorkOrdersPage() {
         description: `${modal.workOrder.title} is now cancelled.`,
       });
       setModal({ type: "closed" });
-      reload();
+      await reload();
     } catch (err) {
       toast({
         type: "error",
@@ -68,65 +81,72 @@ export function WorkOrdersPage() {
 
   return (
     <ModeFrame mode="execute">
-      <div className="op-page">
-        <OperationalPageHeader
-          title="Work Orders"
-          description="Plan, assign, and track work moving through the organisation."
-          countValue={total}
-          countLabel="In view"
-          actionLabel="New work order"
-          onAction={() => setModal({ type: "create" })}
-          loading={loading}
-        />
+      <OperateHeader
+        title="Work Orders"
+        description="Plan, assign, and track work moving through the organisation."
+        signalValue={loading ? "—" : total}
+        signalLabel="In view"
+      />
 
-        <WorkOrdersToolbar
-          search={search}
-          onSearchChange={setSearch}
-          status={status}
-          onStatusChange={setStatus}
-          priority={priority}
-          onPriorityChange={setPriority}
-          facilityId={facilityId}
-          onFacilityIdChange={setFacilityId}
-          assignedToUserId={assignedToUserId}
-          onAssignedToUserIdChange={setAssignedToUserId}
-          total={total}
-          loading={loading}
-        />
+      <WorkOrdersToolbar
+        search={search}
+        onSearchChange={setSearch}
+        status={status}
+        onStatusChange={setStatus}
+        priority={priority}
+        onPriorityChange={setPriority}
+        facilityId={facilityId}
+        onFacilityIdChange={setFacilityId}
+        assetId={assetId}
+        onAssetIdChange={setAssetId}
+        assignedToUserId={assignedToUserId}
+        onAssignedToUserIdChange={setAssignedToUserId}
+        dueDate={dueDate}
+        onDueDateChange={setDueDate}
+        maintenanceId={maintenanceId}
+        onMaintenanceIdChange={setMaintenanceId}
+        sort={sort}
+        onSortChange={setSort}
+        total={total}
+        loading={loading}
+        onClearAll={clearAll}
+        onCreate={() => setModal({ type: "create" })}
+      />
 
-        {error ? (
-          <EmptyState
-            icon={ClipboardList}
-            title="Couldn’t load work orders"
-            description={error}
-            actionLabel="Retry"
-            onAction={reload}
+      {error ? (
+        <EmptyState
+          icon={ClipboardList}
+          title="Couldn’t load work orders"
+          description={error}
+          actionLabel="Retry"
+          onAction={() => void reload()}
+        />
+      ) : (
+        <StreamSurface>
+          <WorkOrdersTable
+            workOrders={workOrders}
+            loading={loading}
+            page={page}
+            totalPages={totalPages}
+            total={total}
+            onPageChange={setPage}
+            onView={(workOrder) => setModal({ type: "view", workOrder })}
+            onEdit={(workOrder) => setModal({ type: "edit", workOrder })}
+            onDeactivate={(workOrder) =>
+              setModal({ type: "deactivate", workOrder })
+            }
           />
-        ) : (
-          <StreamSurface>
-            <WorkOrdersTable
-              workOrders={workOrders}
-              loading={loading}
-              page={page}
-              totalPages={totalPages}
-              total={total}
-              onPageChange={setPage}
-              onView={(workOrder) => setModal({ type: "view", workOrder })}
-              onEdit={(workOrder) => setModal({ type: "edit", workOrder })}
-              onDeactivate={(workOrder) =>
-                setModal({ type: "deactivate", workOrder })
-              }
-            />
-          </StreamSurface>
-        )}
-      </div>
+        </StreamSurface>
+      )}
 
       <WorkOrderFormModal
         open={modal.type === "create" || modal.type === "edit"}
         mode={modal.type === "edit" ? "edit" : "create"}
         workOrder={modal.type === "edit" ? modal.workOrder : null}
         onClose={() => setModal({ type: "closed" })}
-        onSaved={reload}
+        onSaved={async () => {
+          await reloadFirstPage();
+        }}
       />
 
       <ViewWorkOrderModal

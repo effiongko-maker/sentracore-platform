@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Modal } from "@/components/modals/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -10,11 +11,17 @@ import {
   useUserName,
   useWorkOrderTitle,
 } from "@/hooks/useEntityLabel";
+import { createWorkOrderFromMaintenance } from "@/modules/work-orders/actions/createWorkOrderFromMaintenance";
+import { useToast } from "@/components/ui/Toast";
 import {
   MAINTENANCE_PRIORITY_VARIANT,
   MAINTENANCE_STATUS_VARIANT,
 } from "../constants";
-import { labelize } from "../utils";
+import {
+  displayMaintenanceTitle,
+  labelize,
+  parseMaintenanceDescriptionNotes,
+} from "../utils";
 import type { Maintenance } from "../types";
 
 interface ViewMaintenanceModalProps {
@@ -22,6 +29,8 @@ interface ViewMaintenanceModalProps {
   maintenance: Maintenance | null;
   onClose: () => void;
   onEdit?: (maintenance: Maintenance) => void;
+  onUpdated?: (maintenance: Maintenance) => void;
+  onOpenWorkOrder?: (workOrderId: string) => void;
 }
 
 function Detail({ label, value }: { label: string; value: React.ReactNode }) {
@@ -30,7 +39,9 @@ function Detail({ label, value }: { label: string; value: React.ReactNode }) {
       <p className="text-xs font-medium uppercase tracking-wider text-muted">
         {label}
       </p>
-      <div className="text-sm text-foreground">{value || "—"}</div>
+      <div className="text-sm text-foreground whitespace-pre-wrap">
+        {value || "—"}
+      </div>
     </div>
   );
 }
@@ -40,7 +51,11 @@ export function ViewMaintenanceModal({
   maintenance,
   onClose,
   onEdit,
+  onUpdated,
+  onOpenWorkOrder,
 }: ViewMaintenanceModalProps) {
+  const { toast } = useToast();
+  const [creatingWorkOrder, setCreatingWorkOrder] = useState(false);
   const facilityName = useFacilityName(maintenance?.facilityId);
   const assetName = useAssetName(maintenance?.assetId);
   const assigneeName = useUserName(maintenance?.assignedToUserId);
@@ -49,11 +64,47 @@ export function ViewMaintenanceModal({
 
   if (!maintenance) return null;
 
+  const title = displayMaintenanceTitle(maintenance);
+  const notes = parseMaintenanceDescriptionNotes(maintenance.description);
+  const requesterLabel =
+    notes.requestedBy ||
+    (maintenance.reportedByUserId
+      ? reportedByName || maintenance.reportedByUserId
+      : undefined);
+  const needsWorkOrderLink =
+    Boolean(maintenance.requiresWorkOrder) && !maintenance.workOrderId;
+
+  async function handleCreateWorkOrder() {
+    if (!maintenance) return;
+    setCreatingWorkOrder(true);
+    try {
+      const result = await createWorkOrderFromMaintenance(maintenance.id);
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
+      toast({
+        type: "success",
+        title: "Work order created",
+        description: `${result.data.workOrder.id} linked to this maintenance record.`,
+      });
+      onUpdated?.(result.data.maintenance);
+    } catch (err) {
+      toast({
+        type: "error",
+        title: "Unable to create work order",
+        description:
+          err instanceof Error ? err.message : "Please try again in a moment.",
+      });
+    } finally {
+      setCreatingWorkOrder(false);
+    }
+  }
+
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={maintenance.title}
+      title={title}
       description={maintenance.id}
       size="lg"
       footer={
@@ -89,7 +140,23 @@ export function ViewMaintenanceModal({
         <Detail label="Source" value={labelize(maintenance.source)} />
         <Detail
           label="Facility"
-          value={facilityName || maintenance.facilityId}
+          value={
+            <div>
+              <div>{facilityName || maintenance.facilityId}</div>
+              {notes.location ? (
+                <p className="mt-1 text-xs text-muted">{notes.location}</p>
+              ) : null}
+            </div>
+          }
+        />
+        <Detail
+          label="Category"
+          value={
+            notes.category ||
+            (maintenance.categoryId
+              ? labelize(maintenance.categoryId)
+              : "—")
+          }
         />
         <Detail
           label="Asset"
@@ -103,14 +170,7 @@ export function ViewMaintenanceModal({
               : "—"
           }
         />
-        <Detail
-          label="Reported by"
-          value={
-            maintenance.reportedByUserId
-              ? reportedByName || maintenance.reportedByUserId
-              : "—"
-          }
-        />
+        <Detail label="Requested by" value={requesterLabel || "—"} />
         <Detail label="Department" value={maintenance.department || "—"} />
         <Detail label="Event ID" value={maintenance.eventId || "—"} />
         <Detail label="Reported at" value={formatDate(maintenance.reportedAt)} />
@@ -127,16 +187,55 @@ export function ViewMaintenanceModal({
         <Detail
           label="Work order"
           value={
-            maintenance.workOrderId
-              ? workOrderTitle || maintenance.workOrderId
-              : "—"
+            maintenance.workOrderId ? (
+              <button
+                type="button"
+                className="text-left text-sm font-medium text-accent underline-offset-2 hover:underline"
+                onClick={() => onOpenWorkOrder?.(maintenance.workOrderId!)}
+              >
+                {maintenance.workOrderId}
+                {workOrderTitle ? ` — ${workOrderTitle}` : ""}
+              </button>
+            ) : needsWorkOrderLink ? (
+              <div className="space-y-2">
+                <p className="text-sm text-muted">No work order linked yet</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    loading={creatingWorkOrder}
+                    onClick={() => void handleCreateWorkOrder()}
+                  >
+                    Create new work order
+                  </Button>
+                  {onEdit ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        onClose();
+                        onEdit(maintenance);
+                      }}
+                    >
+                      Link existing work order
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              "—"
+            )
           }
         />
         <Detail label="Created at" value={formatDate(maintenance.createdAt)} />
         <Detail
           label="Description"
-          value={maintenance.description || "—"}
+          value={notes.body || maintenance.description || "—"}
         />
+        {notes.attachment ? (
+          <Detail label="Attachment" value={notes.attachment} />
+        ) : null}
         <Detail
           label="Completion notes"
           value={maintenance.completionNotes || "—"}

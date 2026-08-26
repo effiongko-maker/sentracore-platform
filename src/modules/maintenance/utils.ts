@@ -1,4 +1,32 @@
-import type { CreateMaintenanceInput, Maintenance } from "./types";
+import type {
+  CreateMaintenanceInput,
+  Maintenance,
+  MaintenanceSort,
+} from "./types";
+
+const STRUCTURED_NOTE_LABELS = [
+  "Location",
+  "Category",
+  "Attachment",
+  "Requested by",
+  "Reported by",
+] as const;
+
+type StructuredNoteLabel = (typeof STRUCTURED_NOTE_LABELS)[number];
+
+const STRUCTURED_NOTE_PATTERN = new RegExp(
+  `^(${STRUCTURED_NOTE_LABELS.join("|")}):\\s*(.*)$`,
+  "i"
+);
+
+export type MaintenanceDescriptionNotes = {
+  /** Free-text body without structured Location/Category/Requester lines. */
+  body: string;
+  location?: string;
+  category?: string;
+  requestedBy?: string;
+  attachment?: string;
+};
 
 export function labelize(value: string) {
   return value
@@ -22,11 +50,160 @@ export function applyWorkOrderRule<
   return input;
 }
 
+function normalizeNoteLabel(label: string): StructuredNoteLabel | null {
+  const match = STRUCTURED_NOTE_LABELS.find(
+    (item) => item.toLowerCase() === label.toLowerCase()
+  );
+  return match ?? null;
+}
+
+/**
+ * Occupant requests append Location / Category / Requested by into description.
+ * Parse those out for clean table + detail presentation.
+ */
+export function parseMaintenanceDescriptionNotes(
+  description?: string | null
+): MaintenanceDescriptionNotes {
+  const text = description?.trim() ?? "";
+  if (!text) return { body: "" };
+
+  const blocks = text
+    .split(/\n\n+/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  const bodyParts: string[] = [];
+  const notes: MaintenanceDescriptionNotes = { body: "" };
+
+  for (const block of blocks) {
+    const lines = block
+      .split(/\n+/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    let matchedStructured = false;
+
+    for (const line of lines) {
+      const match = line.match(STRUCTURED_NOTE_PATTERN);
+      if (!match) continue;
+      const label = normalizeNoteLabel(match[1] ?? "");
+      const value = (match[2] ?? "").trim();
+      if (!label || !value) continue;
+      matchedStructured = true;
+      if (label === "Location") notes.location = value;
+      else if (label === "Category") notes.category = value;
+      else if (label === "Attachment") notes.attachment = value;
+      else if (label === "Requested by" || label === "Reported by") {
+        notes.requestedBy = value;
+      }
+    }
+
+    if (!matchedStructured) {
+      bodyParts.push(block);
+    }
+  }
+
+  notes.body = bodyParts.join("\n\n").trim();
+  return notes;
+}
+
+/**
+ * Prefer a real Title column value. When Title fell back to the full
+ * Description (Apps Script / mapper), strip structured metadata lines.
+ */
+export function displayMaintenanceTitle(
+  row: Pick<Maintenance, "title" | "description">
+): string {
+  const rawTitle = row.title?.trim() ?? "";
+  const notesFromDescription = parseMaintenanceDescriptionNotes(
+    row.description
+  );
+  const notesFromTitle = parseMaintenanceDescriptionNotes(rawTitle);
+
+  if (!rawTitle) {
+    return notesFromDescription.body || "Untitled";
+  }
+
+  const description = row.description?.trim() ?? "";
+  const titleLooksLikeDescription =
+    Boolean(description) &&
+    (rawTitle === description ||
+      notesFromTitle.location != null ||
+      notesFromTitle.category != null ||
+      notesFromTitle.requestedBy != null ||
+      notesFromTitle.attachment != null);
+
+  if (titleLooksLikeDescription) {
+    return (
+      notesFromTitle.body ||
+      notesFromDescription.body ||
+      rawTitle.split(/\n+/)[0]?.trim() ||
+      "Untitled"
+    );
+  }
+
+  // Keep single-line operational titles as-is.
+  if (!rawTitle.includes("\n")) return rawTitle;
+
+  return notesFromTitle.body || rawTitle.split(/\n+/)[0]?.trim() || "Untitled";
+}
+
+export function displayMaintenanceLocation(
+  row: Pick<Maintenance, "description">
+): string | undefined {
+  return parseMaintenanceDescriptionNotes(row.description).location;
+}
+
+function compareIsoDesc(a?: string, b?: string) {
+  const left = Date.parse(a ?? "") || 0;
+  const right = Date.parse(b ?? "") || 0;
+  return right - left;
+}
+
+export function sortMaintenance(
+  items: Maintenance[],
+  sort: MaintenanceSort = "newest"
+): Maintenance[] {
+  const next = items.slice();
+  switch (sort) {
+    case "oldest":
+      return next.sort((a, b) =>
+        compareIsoDesc(
+          b.updatedAt || b.reportedAt,
+          a.updatedAt || a.reportedAt
+        )
+      );
+    case "title_asc":
+      return next.sort((a, b) =>
+        displayMaintenanceTitle(a).localeCompare(
+          displayMaintenanceTitle(b),
+          undefined,
+          { sensitivity: "base" }
+        )
+      );
+    case "title_desc":
+      return next.sort((a, b) =>
+        displayMaintenanceTitle(b).localeCompare(
+          displayMaintenanceTitle(a),
+          undefined,
+          { sensitivity: "base" }
+        )
+      );
+    case "newest":
+    default:
+      return next.sort((a, b) =>
+        compareIsoDesc(
+          a.updatedAt || a.reportedAt,
+          b.updatedAt || b.reportedAt
+        )
+      );
+  }
+}
+
 export function toCreateFormValues(
   maintenance?: Maintenance | null
 ): CreateMaintenanceInput {
   return {
-    title: maintenance?.title ?? "",
+    title: maintenance ? displayMaintenanceTitle(maintenance) : "",
     description: maintenance?.description ?? "",
     type: maintenance?.type ?? "corrective",
     source: maintenance?.source ?? "manual",

@@ -156,3 +156,17 @@ export function linkWorkOrderToMaintenance(
     workOrderId: primaryId(workOrderIds),
   };
 }
+
+export function unlinkWorkOrderFromMaintenance(
+  maintenance: MaintenanceRelationships,
+  workOrderId: string
+): MaintenanceRelationships {
+  const workOrderIds = (maintenance.workOrderIds ?? []).filter(
+    (id) => id !== workOrderId
+  );
+  return {
+    ...maintenance,
+    workOrderIds,
+    workOrderId: primaryId(workOrderIds),
+  };
+}

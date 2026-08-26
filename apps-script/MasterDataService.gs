@@ -57,17 +57,17 @@ var MasterDataService = (function () {
       var matchesFacility =
         !facilityId ||
         facilityId === "all" ||
-        String(row.facilityId || "") === String(facilityId);
+        String(row.facilityId || row.facility || "") === String(facilityId);
 
       var matchesBuilding =
         !buildingId ||
         buildingId === "all" ||
-        String(row.buildingId || "") === String(buildingId);
+        String(row.buildingId || row.building || "") === String(buildingId);
 
       var matchesFloor =
         !floorId ||
         floorId === "all" ||
-        String(row.floorId || "") === String(floorId);
+        String(row.floorId || row.floor || "") === String(floorId);
 
       var matchesCategory =
         !category ||

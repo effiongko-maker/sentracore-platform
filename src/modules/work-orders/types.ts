@@ -122,6 +122,18 @@ export interface CreateWorkOrderInput {
 
 export type UpdateWorkOrderInput = Partial<CreateWorkOrderInput>;
 
+export type WorkOrderDueDateFilter =
+  | "all"
+  | "overdue"
+  | "next_7_days"
+  | "no_due";
+
+export type WorkOrderSort =
+  | "newest"
+  | "oldest"
+  | "title_asc"
+  | "title_desc";
+
 export interface WorkOrderListParams {
   page?: number;
   pageSize?: number;
@@ -131,6 +143,10 @@ export interface WorkOrderListParams {
   facilityId?: string | "all";
   assignedToUserId?: string | "all";
   type?: WorkOrderType | "all";
+  assetId?: string | "all";
+  maintenanceId?: string | "all";
+  dueDate?: WorkOrderDueDateFilter;
+  sort?: WorkOrderSort;
 }
 
 export type WorkOrderModalState =

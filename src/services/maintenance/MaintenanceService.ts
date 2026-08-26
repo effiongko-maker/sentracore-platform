@@ -93,10 +93,31 @@ function mapRemoteMaintenance(raw: RemoteMaintenance): Maintenance {
   );
 
   const description = optionalMappedString(raw, "description", "Description");
+  const explicitTitle = optionalMappedString(
+    raw,
+    "title",
+    "Title",
+    "Maintenance Title"
+  );
+  // Never promote the full description blob (Location/Category/Requester notes)
+  // into title when the Title column is empty — take the first free-text line.
   const title =
-    optionalMappedString(raw, "title", "Title", "Maintenance Title") ||
-    description ||
-    "";
+    explicitTitle ||
+    (() => {
+      if (!description) return "";
+      const firstBlock = description
+        .split(/\n\n+/)
+        .map((block) => block.trim())
+        .find(
+          (block) =>
+            block &&
+            !/^(Location|Category|Attachment|Requested by|Reported by):/i.test(
+              block
+            )
+        );
+      if (firstBlock) return firstBlock.split(/\n+/)[0]?.trim() || "";
+      return "";
+    })();
 
   const reportedAt = String(
     pickField(

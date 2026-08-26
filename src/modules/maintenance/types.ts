@@ -25,6 +25,12 @@ export type MaintenanceSource =
   | "request"
   | "system";
 
+export type MaintenanceSort =
+  | "newest"
+  | "oldest"
+  | "title_asc"
+  | "title_desc";
+
 /** Canonical Maintenance domain model — frozen. Do not modify. */
 export interface Maintenance {
   id: string;
@@ -120,6 +126,7 @@ export interface MaintenanceListParams {
   facilityId?: string | "all";
   assignedToUserId?: string | "all";
   requiresWorkOrder?: boolean | "all";
+  sort?: MaintenanceSort;
 }
 
 export type MaintenanceModalState =

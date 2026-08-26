@@ -2,11 +2,17 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { WORK_ORDERS_PAGE_SIZE } from "../constants";
+import {
+  DEFAULT_WORK_ORDER_SORT,
+  WORK_ORDERS_PAGE_SIZE,
+} from "../constants";
 import { WorkOrderService } from "../services/WorkOrderService";
+import { sortWorkOrders } from "../utils";
 import type {
   WorkOrder,
+  WorkOrderDueDateFilter,
   WorkOrderPriority,
+  WorkOrderSort,
   WorkOrderStatus,
 } from "../types";
 
@@ -20,9 +26,15 @@ export function useWorkOrders() {
     "all"
   );
   const [facilityId, setFacilityIdState] = useState<string | "all">("all");
+  const [assetId, setAssetIdState] = useState<string | "all">("all");
   const [assignedToUserId, setAssignedToUserIdState] = useState<
     string | "all"
   >("all");
+  const [dueDate, setDueDateState] = useState<WorkOrderDueDateFilter>("all");
+  const [maintenanceId, setMaintenanceIdState] = useState<string | "all">(
+    "all"
+  );
+  const [sort, setSortState] = useState<WorkOrderSort>(DEFAULT_WORK_ORDER_SORT);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -45,8 +57,40 @@ export function useWorkOrders() {
     setPage(1);
   }, []);
 
+  const setAssetId = useCallback((value: string | "all") => {
+    setAssetIdState(value);
+    setPage(1);
+  }, []);
+
   const setAssignedToUserId = useCallback((value: string | "all") => {
     setAssignedToUserIdState(value);
+    setPage(1);
+  }, []);
+
+  const setDueDate = useCallback((value: WorkOrderDueDateFilter) => {
+    setDueDateState(value);
+    setPage(1);
+  }, []);
+
+  const setMaintenanceId = useCallback((value: string | "all") => {
+    setMaintenanceIdState(value);
+    setPage(1);
+  }, []);
+
+  const setSort = useCallback((value: WorkOrderSort) => {
+    setSortState(value);
+    setPage(1);
+  }, []);
+
+  const clearAll = useCallback(() => {
+    setSearch("");
+    setStatusState("all");
+    setPriorityState("all");
+    setFacilityIdState("all");
+    setAssetIdState("all");
+    setAssignedToUserIdState("all");
+    setDueDateState("all");
+    setMaintenanceIdState("all");
     setPage(1);
   }, []);
 
@@ -72,11 +116,15 @@ export function useWorkOrders() {
           priority,
           facilityId,
           assignedToUserId,
+          assetId,
+          maintenanceId,
+          dueDate,
+          sort,
         });
 
         if (id !== requestId.current) return;
 
-        setWorkOrders(result.data);
+        setWorkOrders(sortWorkOrders(result.data, sort));
         setTotalPages(result.totalPages);
         setTotal(result.total);
       } catch (err) {
@@ -93,16 +141,39 @@ export function useWorkOrders() {
         if (id === requestId.current) setLoading(false);
       }
     },
-    [page, debouncedSearch, status, priority, facilityId, assignedToUserId]
+    [
+      page,
+      debouncedSearch,
+      status,
+      priority,
+      facilityId,
+      assignedToUserId,
+      assetId,
+      maintenanceId,
+      dueDate,
+      sort,
+    ]
   );
 
   useEffect(() => {
-    fetchWorkOrders(page);
+    void fetchWorkOrders(page);
   }, [fetchWorkOrders, page]);
 
   const deactivateWorkOrder = useCallback(async (id: string) => {
     return WorkOrderService.deactivateWorkOrder(id);
   }, []);
+
+  const reload = useCallback(async () => {
+    await fetchWorkOrders(page);
+  }, [fetchWorkOrders, page]);
+
+  const reloadFirstPage = useCallback(async () => {
+    if (page !== 1) {
+      setPage(1);
+      return;
+    }
+    await fetchWorkOrders(1);
+  }, [fetchWorkOrders, page]);
 
   return {
     workOrders,
@@ -116,13 +187,23 @@ export function useWorkOrders() {
     setPriority,
     facilityId,
     setFacilityId,
+    assetId,
+    setAssetId,
     assignedToUserId,
     setAssignedToUserId,
+    dueDate,
+    setDueDate,
+    maintenanceId,
+    setMaintenanceId,
+    sort,
+    setSort,
+    clearAll,
     page,
     setPage,
     totalPages,
     total,
-    reload: () => fetchWorkOrders(page),
+    reload,
+    reloadFirstPage,
     deactivateWorkOrder,
   };
 }

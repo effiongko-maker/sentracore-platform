@@ -10,7 +10,13 @@
 var MaintenanceRepository = (function () {
   var SHEET_CANDIDATES = ["Maintenance", "MAINTENANCE", "Maintenances"];
 
-  var RELATIONSHIP_HEADERS = ["Incident ID", "Work Order IDs", "Source", "Title"];
+  var RELATIONSHIP_HEADERS = [
+    "Incident ID",
+    "Work Order IDs",
+    "Source",
+    "Title",
+    "Updated At",
+  ];
 
   function normalizeEnum_(value) {
     return String(value || "")
@@ -80,6 +86,10 @@ var MaintenanceRepository = (function () {
       SheetFieldUtils.cellText(sheetRow["Title"]) || description;
     var reportedAt = SheetFieldUtils.cellText(sheetRow["Date Requested"]);
     var completedAt = SheetFieldUtils.cellText(sheetRow["Date Completed"]);
+    var updatedAt =
+      SheetFieldUtils.cellText(sheetRow["Updated At"]) ||
+      completedAt ||
+      reportedAt;
     var status = mapStatus_(sheetRow["Status"]);
     var priority = normalizeEnum_(sheetRow["Priority"]) || "medium";
     var now = new Date().toISOString();
@@ -121,7 +131,7 @@ var MaintenanceRepository = (function () {
       completionNotes: undefined,
       workPerformed: undefined,
       createdAt: reported,
-      updatedAt: completedAt || reported,
+      updatedAt: updatedAt || reported,
       createdByUserId: undefined,
       updatedByUserId: undefined,
     };
@@ -146,6 +156,12 @@ var MaintenanceRepository = (function () {
       "Assigned To": canonical.assignedToUserId || "",
       "Date Requested": canonical.reportedAt || canonical.createdAt || "",
       "Date Completed": canonical.completedAt || "",
+      "Updated At":
+        canonical.updatedAt ||
+        canonical.completedAt ||
+        canonical.reportedAt ||
+        canonical.createdAt ||
+        "",
       Status: canonical.status || "requested",
       "Incident ID": canonical.incidentId || "",
       "Work Order IDs": SheetFieldUtils.formatIdList(workOrderIds),

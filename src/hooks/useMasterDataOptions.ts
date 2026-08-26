@@ -18,6 +18,9 @@ export type MasterDataOptionFilters = {
 /**
  * Lookup hook for master-data selectors across the app.
  * Always reads from Google Sheets via MasterDataService.
+ *
+ * Cascade filters (facility → building → floor) are applied in
+ * MasterDataService against the normalized facilityId/buildingId/floorId model.
  */
 export function useMasterDataOptions(
   entity: MasterDataEntity,

@@ -27,7 +27,14 @@ import {
 import { requestMaintenance } from "../actions/requestMaintenance";
 import { updateMaintenanceOperational } from "@/lib/operational/lifecycle/updateActions";
 import {
+  normalizeMaintenanceRelationships,
+  unlinkWorkOrderFromMaintenance,
+} from "@/lib/operational/relationships";
+import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
+import { createWorkOrderFromMaintenance } from "@/modules/work-orders/actions/createWorkOrderFromMaintenance";
+import {
   applyWorkOrderRule,
+  displayMaintenanceTitle,
   labelize,
   optionalString,
   toCreateFormValues,
@@ -72,11 +79,16 @@ export function MaintenanceFormModal({
   const [assets, setAssets] = useState<Asset[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
+  const [creatingWorkOrder, setCreatingWorkOrder] = useState(false);
+  const [linkMode, setLinkMode] = useState<"choose" | "link">("choose");
 
   useEffect(() => {
     if (!open) return;
     setForm(toCreateFormValues(mode === "edit" ? maintenance : null));
     setErrors({});
+    setLinkMode(
+      mode === "edit" && maintenance?.workOrderId ? "link" : "choose"
+    );
   }, [open, mode, maintenance]);
 
   useEffect(() => {
@@ -187,6 +199,62 @@ export function MaintenanceFormModal({
         if (!result.success) {
           throw new Error(result.error.message);
         }
+
+        const previousWorkOrderId = optionalString(maintenance.workOrderId);
+        const nextWorkOrderId = optionalString(payload.workOrderId);
+
+        // Keep WO ↔ maintenance bidirectional when linking / unlinking / switching.
+        if (previousWorkOrderId && previousWorkOrderId !== nextWorkOrderId) {
+          try {
+            const previous = await WorkOrderService.getWorkOrder(
+              previousWorkOrderId
+            );
+            if (previous?.maintenanceId === maintenance.id) {
+              await WorkOrderService.updateWorkOrder(previousWorkOrderId, {
+                maintenanceId: "",
+              });
+            }
+          } catch {
+            // Non-blocking
+          }
+        }
+
+        if (nextWorkOrderId) {
+          try {
+            const linked = await WorkOrderService.getWorkOrder(nextWorkOrderId);
+            if (linked && linked.maintenanceId !== maintenance.id) {
+              const priorMaintenanceId = optionalString(linked.maintenanceId);
+              if (priorMaintenanceId && priorMaintenanceId !== maintenance.id) {
+                try {
+                  const prior =
+                    await MaintenanceService.getMaintenance(priorMaintenanceId);
+                  if (prior) {
+                    const rel = unlinkWorkOrderFromMaintenance(
+                      normalizeMaintenanceRelationships(prior),
+                      nextWorkOrderId
+                    );
+                    await MaintenanceService.updateMaintenance(
+                      priorMaintenanceId,
+                      {
+                        workOrderIds: rel.workOrderIds,
+                        workOrderId: rel.workOrderId,
+                        requiresWorkOrder: (rel.workOrderIds?.length ?? 0) > 0,
+                      }
+                    );
+                  }
+                } catch {
+                  // Non-blocking
+                }
+              }
+              await WorkOrderService.updateWorkOrder(nextWorkOrderId, {
+                maintenanceId: maintenance.id,
+              });
+            }
+          } catch {
+            // Non-blocking — maintenance side already holds the relationship.
+          }
+        }
+
         toast({
           type: "success",
           title: "Maintenance updated",
@@ -197,6 +265,17 @@ export function MaintenanceFormModal({
         if (!result.success) {
           throw new Error(result.error.message);
         }
+
+        if (payload.workOrderId && result.data.id) {
+          try {
+            await WorkOrderService.updateWorkOrder(payload.workOrderId, {
+              maintenanceId: result.data.id,
+            });
+          } catch {
+            // Non-blocking
+          }
+        }
+
         toast({
           type: "success",
           title: "Maintenance created",
@@ -221,8 +300,98 @@ export function MaintenanceFormModal({
     }
   }
 
+  async function handleCreateWorkOrder() {
+    if (mode !== "edit" || !maintenance?.id) {
+      toast({
+        type: "info",
+        title: "Save maintenance first",
+        description:
+          "Create the maintenance record, then you can generate a work order from it.",
+      });
+      return;
+    }
+
+    setCreatingWorkOrder(true);
+    try {
+      // Persist current form so requiresWorkOrder / context are current.
+      if (!validate()) return;
+      const description =
+        optionalString(form.description) || form.title.trim();
+      const payload = applyWorkOrderRule({
+        ...form,
+        title: form.title.trim(),
+        description,
+        categoryId: optionalString(form.categoryId),
+        department: optionalString(form.department),
+        facilityId: form.facilityId.trim(),
+        assetId: optionalString(form.assetId),
+        reportedByUserId: optionalString(form.reportedByUserId),
+        assignedToUserId: optionalString(form.assignedToUserId),
+        assignedGroupId: optionalString(form.assignedGroupId),
+        eventId: optionalString(form.eventId),
+        incidentId: optionalString(form.incidentId),
+        workOrderId: optionalString(form.workOrderId),
+        parentMaintenanceId: optionalString(form.parentMaintenanceId),
+        requiresWorkOrder: true,
+        reportedAt: new Date(form.reportedAt).toISOString(),
+        scheduledStartAt: toIsoOrUndefined(form.scheduledStartAt),
+        scheduledEndAt: toIsoOrUndefined(form.scheduledEndAt),
+        dueAt: toIsoOrUndefined(form.dueAt),
+        startedAt: toIsoOrUndefined(form.startedAt),
+        completedAt: toIsoOrUndefined(form.completedAt),
+        holdReason: optionalString(form.holdReason),
+        completionNotes: optionalString(form.completionNotes),
+        workPerformed: optionalString(form.workPerformed),
+        createdByUserId: optionalString(form.createdByUserId),
+        updatedByUserId: optionalString(form.updatedByUserId),
+      });
+
+      const saveResult = await updateMaintenanceOperational(
+        maintenance.id,
+        payload
+      );
+      if (!saveResult.success) {
+        throw new Error(saveResult.error.message);
+      }
+
+      const result = await createWorkOrderFromMaintenance(maintenance.id);
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
+
+      const created = result.data.workOrder;
+      updateField("workOrderId", created.id);
+      updateField("requiresWorkOrder", true);
+      setWorkOrders((current) => {
+        if (current.some((row) => row.id === created.id)) return current;
+        return [created, ...current];
+      });
+      setLinkMode("link");
+      toast({
+        type: "success",
+        title: "Work order created",
+        description: `${created.id} linked to ${displayMaintenanceTitle(result.data.maintenance)}.`,
+      });
+      onSaved?.();
+    } catch (err) {
+      toast({
+        type: "error",
+        title: "Unable to create work order",
+        description:
+          err instanceof Error ? err.message : "Please try again in a moment.",
+      });
+    } finally {
+      setCreatingWorkOrder(false);
+    }
+  }
+
   const isEdit = mode === "edit";
   const requiresWo = Boolean(form.requiresWorkOrder);
+  const linkedWorkOrderId = optionalString(form.workOrderId);
+  const linkedWorkOrder = linkedWorkOrderId
+    ? workOrders.find((row) => row.id === linkedWorkOrderId)
+    : undefined;
+  const needsWorkOrderLink = requiresWo && !linkedWorkOrderId;
 
   return (
     <Modal
@@ -233,8 +402,8 @@ export function MaintenanceFormModal({
       title={isEdit ? "Edit maintenance" : "New maintenance"}
       description={
         isEdit
-          ? "Update request details, assignment, and completion."
-          : "Log a new maintenance request."
+          ? "Update request details, ownership, work order links, and resolution."
+          : "Direct operational entry — create a maintenance record for authorized users."
       }
       size="lg"
       footer={
@@ -446,16 +615,6 @@ export function MaintenanceFormModal({
           />
         </FormField>
 
-        <FormField label="Completed at" htmlFor="mnt-completed-at">
-          <input
-            id="mnt-completed-at"
-            type="datetime-local"
-            className={inputClassName}
-            value={form.completedAt ?? ""}
-            onChange={(event) => updateField("completedAt", event.target.value)}
-          />
-        </FormField>
-
         <FormField
           label="External reference"
           htmlFor="mnt-event"
@@ -475,9 +634,14 @@ export function MaintenanceFormModal({
             id="mnt-requires-wo"
             className={selectClassName}
             value={form.requiresWorkOrder ? "true" : "false"}
-            onChange={(event) =>
-              updateField("requiresWorkOrder", event.target.value === "true")
-            }
+            onChange={(event) => {
+              const next = event.target.value === "true";
+              updateField("requiresWorkOrder", next);
+              if (!next) {
+                updateField("workOrderId", "");
+                setLinkMode("choose");
+              }
+            }}
           >
             <option value="false">No</option>
             <option value="true">Yes</option>
@@ -488,23 +652,93 @@ export function MaintenanceFormModal({
           label="Work order"
           htmlFor="mnt-wo"
           error={errors.workOrderId}
+          className="sm:col-span-2"
+          hint={
+            !requiresWo
+              ? "Not required for this maintenance record."
+              : needsWorkOrderLink
+                ? "No work order linked yet."
+                : undefined
+          }
         >
-          <select
-            id="mnt-wo"
-            className={selectClassName}
-            value={form.workOrderId ?? ""}
-            disabled={!requiresWo}
-            onChange={(event) => updateField("workOrderId", event.target.value)}
-          >
-            <option value="">
-              {requiresWo ? "Not linked yet" : "Not applicable"}
-            </option>
-            {workOrders.map((workOrder) => (
-              <option key={workOrder.id} value={workOrder.id}>
-                {workOrder.id} — {workOrder.title}
-              </option>
-            ))}
-          </select>
+          {!requiresWo ? (
+            <p className="text-sm text-muted">Not applicable</p>
+          ) : linkedWorkOrderId ? (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="min-w-0 flex-1 rounded-md border border-border bg-card px-3 py-2 text-sm">
+                <span className="font-medium text-foreground">
+                  {linkedWorkOrderId}
+                </span>
+                {linkedWorkOrder?.title ? (
+                  <span className="text-muted"> — {linkedWorkOrder.title}</span>
+                ) : null}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={() => {
+                  updateField("workOrderId", "");
+                  setLinkMode("link");
+                }}
+              >
+                Change link
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3 rounded-md border border-border/80 bg-muted/20 p-3">
+              <p className="text-sm font-medium text-foreground">
+                No work order linked yet
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="sm:flex-1"
+                  loading={creatingWorkOrder}
+                  disabled={!isEdit || creatingWorkOrder || saving}
+                  onClick={() => void handleCreateWorkOrder()}
+                >
+                  Create new work order
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="sm:flex-1"
+                  disabled={creatingWorkOrder || saving}
+                  onClick={() => setLinkMode("link")}
+                >
+                  Link existing work order
+                </Button>
+              </div>
+              {!isEdit ? (
+                <p className="text-xs text-muted">
+                  Save this maintenance record first to create a work order from
+                  its context. You can still link an existing work order below
+                  after choosing Link existing.
+                </p>
+              ) : null}
+              {linkMode === "link" ? (
+                <select
+                  id="mnt-wo"
+                  className={selectClassName}
+                  value={form.workOrderId ?? ""}
+                  onChange={(event) =>
+                    updateField("workOrderId", event.target.value)
+                  }
+                >
+                  <option value="">Select an existing work order…</option>
+                  {workOrders.map((workOrder) => (
+                    <option key={workOrder.id} value={workOrder.id}>
+                      {workOrder.id} — {workOrder.title}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+            </div>
+          )}
         </FormField>
 
         <FormField
@@ -520,6 +754,35 @@ export function MaintenanceFormModal({
             onChange={(event) => updateField("description", event.target.value)}
           />
         </FormField>
+
+        <section className="sm:col-span-2 space-y-3 border-t border-border/70 pt-4">
+          <div className="space-y-1">
+            <h3 className="text-sm font-semibold text-foreground">Resolution</h3>
+            <p className="text-xs text-muted">
+              Capture completion details once the maintenance work has been
+              resolved.
+            </p>
+          </div>
+          <FormField
+            label="Completed at"
+            htmlFor="mnt-completed-at"
+            hint={
+              form.status === "completed" || form.status === "cancelled"
+                ? undefined
+                : "Usually set when status moves to Completed."
+            }
+          >
+            <input
+              id="mnt-completed-at"
+              type="datetime-local"
+              className={inputClassName}
+              value={form.completedAt ?? ""}
+              onChange={(event) =>
+                updateField("completedAt", event.target.value)
+              }
+            />
+          </FormField>
+        </section>
       </form>
     </Modal>
   );

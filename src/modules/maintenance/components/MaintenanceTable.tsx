@@ -14,7 +14,11 @@ import {
   MAINTENANCE_PRIORITY_VARIANT,
   MAINTENANCE_STATUS_VARIANT,
 } from "../constants";
-import { labelize } from "../utils";
+import {
+  displayMaintenanceLocation,
+  displayMaintenanceTitle,
+  labelize,
+} from "../utils";
 import type { Maintenance } from "../types";
 import { MaintenanceRowActions } from "./MaintenanceRowActions";
 
@@ -30,8 +34,16 @@ interface MaintenanceTableProps {
   onDeactivate: (maintenance: Maintenance) => void;
 }
 
-function FacilityLabel({ id }: { id: string }) {
-  return <>{useFacilityName(id) || "—"}</>;
+function FacilityCell({ row }: { row: Maintenance }) {
+  const name = useFacilityName(row.facilityId);
+  const location = displayMaintenanceLocation(row);
+
+  return (
+    <div>
+      <span className="text-foreground">{name || row.facilityId || "—"}</span>
+      {location ? <p className="text-xs text-muted">{location}</p> : null}
+    </div>
+  );
 }
 
 function AssetLabel({ id }: { id?: string }) {
@@ -62,7 +74,9 @@ export function MaintenanceTable({
         header: "Maintenance",
         render: (row) => (
           <div>
-            <span className="font-medium text-foreground">{row.title}</span>
+            <span className="font-medium text-foreground">
+              {displayMaintenanceTitle(row)}
+            </span>
             <p className="text-xs text-muted">{row.id}</p>
           </div>
         ),
@@ -70,11 +84,7 @@ export function MaintenanceTable({
       {
         key: "facilityId",
         header: "Facility",
-        render: (row) => (
-          <span className="text-muted">
-            <FacilityLabel id={row.facilityId} />
-          </span>
-        ),
+        render: (row) => <FacilityCell row={row} />,
       },
       {
         key: "assetId",
@@ -125,6 +135,7 @@ export function MaintenanceTable({
         className: "w-20 text-right",
         render: (row) => (
           <MaintenanceRowActions
+            key={`${row.id}:${page}:${total}`}
             maintenance={row}
             onView={onView}
             onEdit={onEdit}
@@ -133,7 +144,7 @@ export function MaintenanceTable({
         ),
       },
     ],
-    [onView, onEdit, onDeactivate]
+    [onView, onEdit, onDeactivate, page, total]
   );
 
   return (

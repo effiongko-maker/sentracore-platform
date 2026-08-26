@@ -16,6 +16,9 @@ var WorkOrderService = (function () {
     var facilityId = payload.facilityId;
     var assignedToUserId = payload.assignedToUserId;
     var type = payload.type;
+    var assetId = payload.assetId;
+    var maintenanceId = payload.maintenanceId;
+    var dueDate = payload.dueDate;
 
     return rows.filter(function (row) {
       var matchesSearch =
@@ -36,6 +39,9 @@ var WorkOrderService = (function () {
           .toLowerCase()
           .indexOf(search) !== -1 ||
         String(row.assetId || "")
+          .toLowerCase()
+          .indexOf(search) !== -1 ||
+        String(row.maintenanceId || "")
           .toLowerCase()
           .indexOf(search) !== -1;
 
@@ -64,13 +70,54 @@ var WorkOrderService = (function () {
         type === "all" ||
         String(row.type).toLowerCase() === String(type).toLowerCase();
 
+      var matchesAsset =
+        !assetId ||
+        assetId === "all" ||
+        String(row.assetId || "") === String(assetId);
+
+      var matchesMaintenance =
+        !maintenanceId ||
+        maintenanceId === "all" ||
+        String(row.maintenanceId || "") === String(maintenanceId);
+
+      var matchesDue = true;
+      if (dueDate && dueDate !== "all") {
+        var dueRaw = String(row.dueAt || "").trim();
+        if (dueDate === "no_due") {
+          matchesDue = !dueRaw;
+        } else if (!dueRaw) {
+          matchesDue = false;
+        } else {
+          var dueMs = Date.parse(dueRaw);
+          if (!isFinite(dueMs)) {
+            matchesDue = false;
+          } else {
+            var now = new Date();
+            var startOfToday = new Date(
+              now.getFullYear(),
+              now.getMonth(),
+              now.getDate()
+            ).getTime();
+            if (dueDate === "overdue") {
+              matchesDue = dueMs < startOfToday;
+            } else if (dueDate === "next_7_days") {
+              var weekMs = startOfToday + 7 * 24 * 60 * 60 * 1000;
+              matchesDue = dueMs >= startOfToday && dueMs <= weekMs;
+            }
+          }
+        }
+      }
+
       return (
         matchesSearch &&
         matchesStatus &&
         matchesPriority &&
         matchesFacility &&
         matchesAssignee &&
-        matchesType
+        matchesType &&
+        matchesAsset &&
+        matchesMaintenance &&
+        matchesDue
       );
     });
   }

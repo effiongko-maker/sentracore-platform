@@ -122,8 +122,8 @@ var MaintenanceService = (function () {
 
   function sortNewestFirst_(rows) {
     return rows.slice().sort(function (a, b) {
-      var aAt = String(a.createdAt || a.reportedAt || a.updatedAt || "");
-      var bAt = String(b.createdAt || b.reportedAt || b.updatedAt || "");
+      var aAt = String(a.updatedAt || a.createdAt || a.reportedAt || "");
+      var bAt = String(b.updatedAt || b.createdAt || b.reportedAt || "");
       if (aAt === bAt) {
         return String(b.id || "").localeCompare(String(a.id || ""));
       }

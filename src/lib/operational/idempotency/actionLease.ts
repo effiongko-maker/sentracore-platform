@@ -421,3 +421,7 @@ export function incidentMaintenanceLeaseKey(incidentId: string): string {
 export function incidentWorkOrderLeaseKey(incidentId: string): string {
   return `incident:${incidentId}:link_work_order`;
 }
+
+export function maintenanceWorkOrderLeaseKey(maintenanceId: string): string {
+  return `maintenance:${maintenanceId}:link_work_order`;
+}

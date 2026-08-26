@@ -1,6 +1,8 @@
 import type {
+  WorkOrderDueDateFilter,
   WorkOrderMaintenanceType,
   WorkOrderPriority,
+  WorkOrderSort,
   WorkOrderSource,
   WorkOrderStatus,
   WorkOrderType,
@@ -72,3 +74,25 @@ export const WORK_ORDER_PRIORITY_VARIANT: Record<
 };
 
 export const WORK_ORDERS_PAGE_SIZE = 8;
+
+export const WORK_ORDER_SORT_OPTIONS: Array<{
+  value: WorkOrderSort;
+  label: string;
+}> = [
+  { value: "newest", label: "Newest" },
+  { value: "oldest", label: "Oldest" },
+  { value: "title_asc", label: "Title: A–Z" },
+  { value: "title_desc", label: "Title: Z–A" },
+];
+
+export const DEFAULT_WORK_ORDER_SORT: WorkOrderSort = "newest";
+
+export const WORK_ORDER_DUE_DATE_OPTIONS: Array<{
+  value: WorkOrderDueDateFilter;
+  label: string;
+}> = [
+  { value: "all", label: "All due dates" },
+  { value: "overdue", label: "Overdue" },
+  { value: "next_7_days", label: "Due in next 7 days" },
+  { value: "no_due", label: "No due date" },
+];

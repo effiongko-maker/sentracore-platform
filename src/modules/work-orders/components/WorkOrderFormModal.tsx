@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/modals/Modal";
 import { Button } from "@/components/ui/Button";
 import {
@@ -8,12 +8,16 @@ import {
   inputClassName,
   selectClassName,
 } from "@/components/forms/FormField";
+import { SearchableSelect } from "@/components/forms/SearchableSelect";
 import { useToast } from "@/components/ui/Toast";
 import { FacilityService } from "@/services/facilities/FacilityService";
 import { AssetService } from "@/services/assets/AssetService";
+import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 import { UserService } from "@/services/users/UserService";
 import type { Facility } from "@/modules/facilities/types";
 import type { Asset } from "@/modules/assets/types";
+import type { Maintenance } from "@/modules/maintenance/types";
+import { displayMaintenanceTitle } from "@/modules/maintenance/utils";
 import type { User } from "@/modules/users/types";
 import {
   WORK_ORDER_MAINTENANCE_TYPES,
@@ -24,7 +28,17 @@ import {
 } from "../constants";
 import { createWorkOrder } from "../actions/createWorkOrder";
 import { updateWorkOrderOperational } from "@/lib/operational/lifecycle/updateActions";
-import { labelize, optionalString, toCreateFormValues } from "../utils";
+import {
+  linkWorkOrderToMaintenance,
+  normalizeMaintenanceRelationships,
+  unlinkWorkOrderFromMaintenance,
+} from "@/lib/operational/relationships";
+import {
+  displayWorkOrderTitle,
+  labelize,
+  optionalString,
+  toCreateFormValues,
+} from "../utils";
 import type {
   CreateWorkOrderInput,
   WorkOrder,
@@ -34,6 +48,24 @@ import type {
   WorkOrderStatus,
   WorkOrderType,
 } from "../types";
+
+const TERMINAL_WORK_ORDER_STATUSES: WorkOrderStatus[] = [
+  "completed",
+  "closed",
+  "cancelled",
+];
+
+function isTerminalStatus(status: WorkOrderStatus) {
+  return TERMINAL_WORK_ORDER_STATUSES.includes(status);
+}
+
+function toIsoOrUndefined(value?: string) {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  const ms = Date.parse(trimmed);
+  if (!Number.isFinite(ms)) return undefined;
+  return new Date(ms).toISOString();
+}
 
 interface WorkOrderFormModalProps {
   open: boolean;
@@ -59,6 +91,8 @@ export function WorkOrderFormModal({
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [maintenanceRows, setMaintenanceRows] = useState<Maintenance[]>([]);
+  const [maintenanceLoading, setMaintenanceLoading] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -69,22 +103,29 @@ export function WorkOrderFormModal({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
+    setMaintenanceLoading(true);
     Promise.all([
       FacilityService.listFacilities({ page: 1, pageSize: 200 }),
       AssetService.listAssets({ page: 1, pageSize: 200 }),
       UserService.listUsers({ page: 1, pageSize: 200 }),
+      MaintenanceService.listMaintenance({ page: 1, pageSize: 200 }),
     ])
-      .then(([facilityPage, assetPage, userPage]) => {
+      .then(([facilityPage, assetPage, userPage, maintenancePage]) => {
         if (cancelled) return;
         setFacilities(facilityPage.data);
         setAssets(assetPage.data);
         setUsers(userPage.data);
+        setMaintenanceRows(maintenancePage.data);
       })
       .catch(() => {
         if (cancelled) return;
         setFacilities([]);
         setAssets([]);
         setUsers([]);
+        setMaintenanceRows([]);
+      })
+      .finally(() => {
+        if (!cancelled) setMaintenanceLoading(false);
       });
     return () => {
       cancelled = true;
@@ -105,6 +146,20 @@ export function WorkOrderFormModal({
       )
     : assets;
 
+  const maintenanceOptions = useMemo(() => {
+    return maintenanceRows.map((row) => {
+      const title = displayMaintenanceTitle(row);
+      const facilityLabel =
+        facilities.find((facility) => facility.id === row.facilityId)?.name ??
+        row.facilityId;
+      return {
+        value: row.id,
+        label: `${row.id} — ${title}`,
+        searchText: `${row.id} ${title} ${facilityLabel} ${row.facilityId}`,
+      };
+    });
+  }, [maintenanceRows, facilities]);
+
   function updateField<K extends keyof CreateWorkOrderInput>(
     key: K,
     value: CreateWorkOrderInput[K]
@@ -119,6 +174,58 @@ export function WorkOrderFormModal({
     if (!form.facilityId.trim()) next.facilityId = "Facility is required";
     setErrors(next);
     return Object.keys(next).length === 0;
+  }
+
+  async function syncMaintenanceRelationship(
+    workOrderId: string,
+    maintenanceId?: string,
+    previousMaintenanceId?: string
+  ) {
+    const nextId = optionalString(maintenanceId);
+    const previousId = optionalString(previousMaintenanceId);
+
+    if (previousId && previousId !== nextId) {
+      try {
+        const previous = await MaintenanceService.getMaintenance(previousId);
+        if (previous) {
+          const rel = unlinkWorkOrderFromMaintenance(
+            normalizeMaintenanceRelationships(previous),
+            workOrderId
+          );
+          await MaintenanceService.updateMaintenance(previousId, {
+            workOrderIds: rel.workOrderIds,
+            workOrderId: rel.workOrderId,
+            requiresWorkOrder: (rel.workOrderIds?.length ?? 0) > 0,
+          });
+        }
+      } catch {
+        // Non-blocking
+      }
+    }
+
+    if (!nextId) return;
+
+    try {
+      const maintenance = await MaintenanceService.getMaintenance(nextId);
+      if (!maintenance) return;
+
+      const alreadyLinked =
+        maintenance.workOrderId === workOrderId ||
+        (maintenance.workOrderIds ?? []).includes(workOrderId);
+      if (alreadyLinked) return;
+
+      const rel = linkWorkOrderToMaintenance(
+        normalizeMaintenanceRelationships(maintenance),
+        workOrderId
+      );
+      await MaintenanceService.updateMaintenance(nextId, {
+        workOrderIds: rel.workOrderIds,
+        workOrderId: rel.workOrderId,
+        requiresWorkOrder: true,
+      });
+    } catch {
+      // Non-blocking — WO already holds maintenanceId.
+    }
   }
 
   async function handleSubmit(event: React.FormEvent) {
@@ -137,6 +244,7 @@ export function WorkOrderFormModal({
         assetId: optionalString(form.assetId),
         reportedByUserId: optionalString(form.reportedByUserId),
         incidentId: optionalString(form.incidentId),
+        maintenanceId: optionalString(form.maintenanceId),
         parentWorkOrderId: optionalString(form.parentWorkOrderId),
         assignedToUserId: optionalString(form.assignedToUserId),
         assignedGroupId: optionalString(form.assignedGroupId),
@@ -146,7 +254,7 @@ export function WorkOrderFormModal({
         dueAt: optionalString(form.dueAt),
         holdReason: optionalString(form.holdReason),
         startedAt: optionalString(form.startedAt),
-        completedAt: optionalString(form.completedAt),
+        completedAt: toIsoOrUndefined(form.completedAt),
         completionNotes: optionalString(form.completionNotes),
         workPerformed: optionalString(form.workPerformed),
         slaDueAt: optionalString(form.slaDueAt),
@@ -154,25 +262,41 @@ export function WorkOrderFormModal({
         updatedByUserId: optionalString(form.updatedByUserId),
       };
 
+      let savedId = workOrder?.id ?? "";
+
       if (mode === "edit" && workOrder) {
         const result = await updateWorkOrderOperational(workOrder.id, payload);
         if (!result.success) {
           throw new Error(result.error.message);
         }
+        savedId = result.data.id;
+        await syncMaintenanceRelationship(
+          savedId,
+          payload.maintenanceId,
+          workOrder.maintenanceId
+        );
         toast({
           type: "success",
           title: "Work order updated",
-          description: `${payload.title} has been saved.`,
+          description: `${displayWorkOrderTitle(result.data)} has been saved.`,
         });
       } else {
         const result = await createWorkOrder(payload);
         if (!result.success) {
           throw new Error(result.error.message);
         }
+        savedId = result.data.id;
+        // Create orchestration already back-links when maintenanceId is present;
+        // sync is idempotent, bumps updatedAt, and covers any missed link.
+        await syncMaintenanceRelationship(
+          savedId,
+          payload.maintenanceId,
+          undefined
+        );
         toast({
           type: "success",
           title: "Work order created",
-          description: `${payload.title} has been added.`,
+          description: `${displayWorkOrderTitle(result.data)} has been added.`,
         });
       }
 
@@ -194,6 +318,14 @@ export function WorkOrderFormModal({
   }
 
   const isEdit = mode === "edit";
+  const showResolutionDetails =
+    isTerminalStatus(form.status) ||
+    Boolean(
+      form.completedAt ||
+        form.completionNotes ||
+        form.actualHours != null ||
+        form.actualCost != null
+    );
 
   return (
     <Modal
@@ -204,8 +336,8 @@ export function WorkOrderFormModal({
       title={isEdit ? "Edit work order" : "New work order"}
       description={
         isEdit
-          ? "Update assignment, schedule, and status."
-          : "Create a new operational work request."
+          ? "Update assignment, schedule, source maintenance, and resolution."
+          : "Direct operational entry — create a work order for authorized users."
       }
       size="lg"
       footer={
@@ -392,23 +524,6 @@ export function WorkOrderFormModal({
           </select>
         </FormField>
 
-        <FormField label="Status" htmlFor="wo-status" required>
-          <select
-            id="wo-status"
-            className={selectClassName}
-            value={form.status}
-            onChange={(event) =>
-              updateField("status", event.target.value as WorkOrderStatus)
-            }
-          >
-            {WORK_ORDER_STATUSES.map((value) => (
-              <option key={value} value={value}>
-                {labelize(value)}
-              </option>
-            ))}
-          </select>
-        </FormField>
-
         <FormField label="Due date" htmlFor="wo-due">
           <input
             id="wo-due"
@@ -416,6 +531,26 @@ export function WorkOrderFormModal({
             className={inputClassName}
             value={form.dueAt ?? ""}
             onChange={(event) => updateField("dueAt", event.target.value)}
+          />
+        </FormField>
+
+        <FormField
+          label="Source maintenance"
+          htmlFor="wo-maintenance-id"
+          className="sm:col-span-2"
+          hint="Optional. Link to an existing maintenance record."
+        >
+          <SearchableSelect
+            id="wo-maintenance-id"
+            aria-label="Source maintenance"
+            value={form.maintenanceId ?? ""}
+            onChange={(value) => updateField("maintenanceId", value)}
+            options={maintenanceOptions}
+            allowEmpty
+            emptyOptionLabel="Not linked to maintenance"
+            searchPlaceholder="Search by reference, title, or facility…"
+            loading={maintenanceLoading}
+            disabled={saving}
           />
         </FormField>
 
@@ -488,6 +623,113 @@ export function WorkOrderFormModal({
             }
           />
         </FormField>
+
+        <section className="sm:col-span-2 space-y-3 border-t border-border/70 pt-4">
+          <div className="space-y-1">
+            <h3 className="text-sm font-semibold text-foreground">Resolution</h3>
+            <p className="text-xs text-muted">
+              Capture completion details once the work order has been resolved.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="Status" htmlFor="wo-status" required>
+              <select
+                id="wo-status"
+                className={selectClassName}
+                value={form.status}
+                onChange={(event) =>
+                  updateField("status", event.target.value as WorkOrderStatus)
+                }
+              >
+                {WORK_ORDER_STATUSES.map((value) => (
+                  <option key={value} value={value}>
+                    {labelize(value)}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+
+            {showResolutionDetails ? (
+              <>
+                <FormField
+                  label="Completed at"
+                  htmlFor="wo-completed-at"
+                  hint={
+                    isTerminalStatus(form.status)
+                      ? undefined
+                      : "Usually set when status moves to Completed."
+                  }
+                >
+                  <input
+                    id="wo-completed-at"
+                    type="datetime-local"
+                    className={inputClassName}
+                    value={form.completedAt ?? ""}
+                    onChange={(event) =>
+                      updateField("completedAt", event.target.value)
+                    }
+                  />
+                </FormField>
+
+                <FormField label="Actual hours" htmlFor="wo-actual-hours">
+                  <input
+                    id="wo-actual-hours"
+                    type="number"
+                    min={0}
+                    step="0.5"
+                    className={inputClassName}
+                    value={form.actualHours ?? ""}
+                    onChange={(event) =>
+                      updateField(
+                        "actualHours",
+                        event.target.value === ""
+                          ? undefined
+                          : Number(event.target.value)
+                      )
+                    }
+                  />
+                </FormField>
+
+                <FormField label="Actual cost" htmlFor="wo-actual-cost">
+                  <input
+                    id="wo-actual-cost"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    className={inputClassName}
+                    value={form.actualCost ?? ""}
+                    onChange={(event) =>
+                      updateField(
+                        "actualCost",
+                        event.target.value === ""
+                          ? undefined
+                          : Number(event.target.value)
+                      )
+                    }
+                  />
+                </FormField>
+
+                <FormField
+                  label="Resolution / completion notes"
+                  htmlFor="wo-completion-notes"
+                  className="sm:col-span-2"
+                >
+                  <textarea
+                    id="wo-completion-notes"
+                    className={`${inputClassName} h-auto min-h-[72px] py-2.5`}
+                    rows={2}
+                    placeholder="What was done to close this work order"
+                    value={form.completionNotes ?? ""}
+                    onChange={(event) =>
+                      updateField("completionNotes", event.target.value)
+                    }
+                  />
+                </FormField>
+              </>
+            ) : null}
+          </div>
+        </section>
       </form>
     </Modal>
   );

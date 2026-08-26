@@ -1,18 +1,21 @@
 "use client";
 
-import { Plus, Wrench } from "lucide-react";
-import { useState } from "react";
+import { Wrench } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
   ModeFrame,
   OperateHeader,
   StreamSurface,
 } from "@/components/platform";
-import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
+import { ViewWorkOrderModal } from "@/modules/work-orders/components/ViewWorkOrderModal";
+import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
+import type { WorkOrder } from "@/modules/work-orders/types";
 import { useMaintenance } from "../hooks/useMaintenance";
-import type { MaintenanceModalState } from "../types";
+import { displayMaintenanceTitle } from "../utils";
+import type { Maintenance, MaintenanceModalState } from "../types";
 import { MaintenanceFormModal } from "./MaintenanceFormModal";
 import { MaintenanceTable } from "./MaintenanceTable";
 import { MaintenanceToolbar } from "./MaintenanceToolbar";
@@ -38,16 +41,40 @@ export function MaintenancePage() {
     setAssignedToUserId,
     requiresWorkOrder,
     setRequiresWorkOrder,
+    sort,
+    setSort,
+    clearAll,
     page,
     setPage,
     totalPages,
     total,
     reload,
+    reloadFirstPage,
     deactivateMaintenance,
   } = useMaintenance();
 
   const [modal, setModal] = useState<MaintenanceModalState>({ type: "closed" });
   const [deactivating, setDeactivating] = useState(false);
+  const [viewWorkOrderId, setViewWorkOrderId] = useState<string | null>(null);
+  const [viewWorkOrder, setViewWorkOrder] = useState<WorkOrder | null>(null);
+
+  useEffect(() => {
+    if (!viewWorkOrderId) {
+      setViewWorkOrder(null);
+      return;
+    }
+    let cancelled = false;
+    void WorkOrderService.getWorkOrder(viewWorkOrderId)
+      .then((row) => {
+        if (!cancelled) setViewWorkOrder(row);
+      })
+      .catch(() => {
+        if (!cancelled) setViewWorkOrder(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [viewWorkOrderId]);
 
   async function handleDeactivate() {
     if (modal.type !== "deactivate") return;
@@ -58,10 +85,10 @@ export function MaintenancePage() {
       toast({
         type: "success",
         title: "Maintenance deactivated",
-        description: `${modal.maintenance.title} is now cancelled.`,
+        description: `${displayMaintenanceTitle(modal.maintenance)} is now cancelled.`,
       });
       setModal({ type: "closed" });
-      reload();
+      await reload();
     } catch (err) {
       toast({
         type: "error",
@@ -74,6 +101,11 @@ export function MaintenancePage() {
     }
   }
 
+  function handleMaintenanceUpdated(next: Maintenance) {
+    setModal({ type: "view", maintenance: next });
+    void reload();
+  }
+
   return (
     <ModeFrame mode="execute">
       <OperateHeader
@@ -81,12 +113,6 @@ export function MaintenancePage() {
         description="Operational flow — requests, assignments, and work moving through your facilities."
         signalValue={loading ? "—" : total}
         signalLabel="In flow"
-        actions={
-          <Button onClick={() => setModal({ type: "create" })}>
-            <Plus className="h-4 w-4" />
-            New maintenance
-          </Button>
-        }
       />
 
       <MaintenanceToolbar
@@ -104,6 +130,12 @@ export function MaintenancePage() {
         onAssignedToUserIdChange={setAssignedToUserId}
         requiresWorkOrder={requiresWorkOrder}
         onRequiresWorkOrderChange={setRequiresWorkOrder}
+        sort={sort}
+        onSortChange={setSort}
+        total={total}
+        loading={loading}
+        onClearAll={clearAll}
+        onCreate={() => setModal({ type: "create" })}
       />
 
       {error ? (
@@ -112,7 +144,7 @@ export function MaintenancePage() {
           title="Couldn’t load maintenance"
           description={error}
           actionLabel="Retry"
-          onAction={reload}
+          onAction={() => void reload()}
         />
       ) : (
         <StreamSurface>
@@ -137,7 +169,9 @@ export function MaintenancePage() {
         mode={modal.type === "edit" ? "edit" : "create"}
         maintenance={modal.type === "edit" ? modal.maintenance : null}
         onClose={() => setModal({ type: "closed" })}
-        onSaved={reload}
+        onSaved={async () => {
+          await reloadFirstPage();
+        }}
       />
 
       <ViewMaintenanceModal
@@ -145,6 +179,19 @@ export function MaintenancePage() {
         maintenance={modal.type === "view" ? modal.maintenance : null}
         onClose={() => setModal({ type: "closed" })}
         onEdit={(row) => setModal({ type: "edit", maintenance: row })}
+        onUpdated={handleMaintenanceUpdated}
+        onOpenWorkOrder={(workOrderId) => {
+          setViewWorkOrderId(workOrderId);
+        }}
+      />
+
+      <ViewWorkOrderModal
+        open={Boolean(viewWorkOrderId)}
+        workOrder={viewWorkOrder}
+        onClose={() => {
+          setViewWorkOrderId(null);
+          setViewWorkOrder(null);
+        }}
       />
 
       <ConfirmDialog
@@ -154,7 +201,7 @@ export function MaintenancePage() {
         title="Deactivate maintenance?"
         description={
           modal.type === "deactivate"
-            ? `${modal.maintenance.title} will be marked cancelled. Maintenance rows are never deleted.`
+            ? `${displayMaintenanceTitle(modal.maintenance)} will be marked cancelled. Maintenance rows are never deleted.`
             : undefined
         }
         confirmLabel="Deactivate"

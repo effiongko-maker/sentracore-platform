@@ -101,8 +101,27 @@ var WorkOrderRepository = (function () {
 
   function toCanonical_(sheetRow, headerMap) {
     var description = SheetFieldUtils.cellText(sheetRow["Description"]);
-    var title =
-      SheetFieldUtils.cellText(sheetRow["Title"]) || description;
+    var explicitTitle = SheetFieldUtils.cellText(sheetRow["Title"]);
+    var title = explicitTitle;
+    if (
+      !title ||
+      /(?:^|\n|\s)(?:Location|Department|Category|Source maintenance)\s*:/i.test(
+        title
+      )
+    ) {
+      var titleSource = title || description || "";
+      if (titleSource) {
+        var cut = titleSource.search(
+          /\s*(?:\n\n+|(?:Location|Department|Category|Source maintenance)\s*:)/i
+        );
+        title =
+          cut > 0
+            ? String(titleSource.slice(0, cut)).trim()
+            : String(titleSource.split(/\n+/)[0] || "").trim();
+      } else {
+        title = "";
+      }
+    }
     var requestedAt = SheetFieldUtils.cellText(sheetRow["Date Opened"]);
     var completedAt = SheetFieldUtils.cellText(sheetRow["Date Completed"]);
     var status = SheetFieldUtils.cellText(sheetRow["Status"])

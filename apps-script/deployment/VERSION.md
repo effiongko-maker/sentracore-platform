@@ -1,19 +1,16 @@
 Release:
-v0.3.0
+v0.3.3
 
 Title:
-Master Data Phase 1
+Maintenance updatedAt on WO link + list filter rendering
 
 Generated:
-2026-08-25T23:47:02.605Z
+2026-08-26T01:24:33.401Z
 
 Features
-- Master Data module for shared lookup entities: Departments, Buildings, Floors, Rooms, Vendors
-- Apps Script MasterDataRepository / MasterDataService / MasterDataController
-- ROUTER resource: master-data
-- Next.js /api/master-data proxy + MasterDataService + /master-data UI
-- Consumers: Maintenance department select; Incident/Occupant location cascading selects
-- Core operational modules remain dedicated (Facilities, Users, Assets, Work Orders, Incidents, Maintenance)
+- Maintenance sheet persists Updated At; list Sort Newest uses updatedAt DESC
+- WO create/link/relink/unlink bumps linked Maintenance updatedAt via repository update
+- Maintenance actions menu portals correctly; filtered list no longer blanks on page clamp
 
 Performance
 
@@ -57,28 +54,15 @@ YES
 
 Smoke Tests
 
-Master data health (router lists master-data):
+Maintenance list newest:
 
 ```bash
-curl -sS "$APPS_SCRIPT_URL"
-```
-
-Master data list departments:
-
-```bash
-curl -sS -X POST http://localhost:3000/api/master-data -H 'Content-Type: application/json' -d '{"resource":"master-data","action":"getAll","payload":{"entity":"departments","page":1,"pageSize":10}}'
-```
-
-Master data create department (optional):
-
-```bash
-curl -sS -X POST http://localhost:3000/api/master-data -H 'Content-Type: application/json' -d '{"resource":"master-data","action":"create","payload":{"entity":"departments","name":"Facilities","code":"FAC","status":"active"}}'
+curl -sS -X POST http://localhost:3000/api/maintenance -H 'Content-Type: application/json' -d '{"resource":"maintenance","action":"getAll","payload":{"page":1,"pageSize":5}}'
 ```
 
 Notes
-- Phase 1 scope only: Departments, Buildings, Floors, Rooms, Vendors.
-- Minimum new/replaced Apps Script files: MasterDataRepository.gs, MasterDataService.gs, MasterDataController.gs, ROUTER.gs.
-- Sheets are auto-created on first access. No seed-row migration.
+- Replace MaintenanceRepository.gs and MaintenanceService.gs from the deployment pack.
+- First write after deploy adds an Updated At column if missing.
 - Deploy a new Web App version after pasting. Unpublished editor saves do not go live.
 
 <!-- GENERATED FILE — do not edit by hand. npm run apps-script:pack -->

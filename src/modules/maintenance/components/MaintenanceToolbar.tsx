@@ -1,21 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { SlidersHorizontal } from "lucide-react";
-import { SearchBox } from "@/components/ui/SearchBox";
-import { toolbarSelectClassName } from "@/components/forms/FormField";
-import { FacilityService } from "@/services/facilities/FacilityService";
+import { Plus } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  ActiveFilters,
+  FilterField,
+  OperationalListToolbar,
+  ResultContext,
+  buildResultContext,
+  type ActiveFilterChip,
+} from "@/components/operational";
+import { Button } from "@/components/ui/Button";
+import { useFacilityOptions } from "@/hooks/useFacilityOptions";
 import { UserService } from "@/services/users/UserService";
-import type { Facility } from "@/modules/facilities/types";
 import type { User } from "@/modules/users/types";
 import {
+  DEFAULT_MAINTENANCE_SORT,
+  MAINTENANCE_PAGE_SIZE,
   MAINTENANCE_PRIORITIES,
+  MAINTENANCE_SORT_OPTIONS,
   MAINTENANCE_STATUSES,
   MAINTENANCE_TYPES,
 } from "../constants";
 import { labelize } from "../utils";
 import type {
   MaintenancePriority,
+  MaintenanceSort,
   MaintenanceStatus,
   MaintenanceType,
 } from "../types";
@@ -35,8 +45,31 @@ interface MaintenanceToolbarProps {
   onAssignedToUserIdChange: (value: string | "all") => void;
   requiresWorkOrder: boolean | "all";
   onRequiresWorkOrderChange: (value: boolean | "all") => void;
+  sort: MaintenanceSort;
+  onSortChange: (value: MaintenanceSort) => void;
+  total: number;
+  loading?: boolean;
+  onClearAll: () => void;
+  onCreate: () => void;
 }
 
+function countActiveFilters(filters: {
+  priority: MaintenancePriority | "all";
+  status: MaintenanceStatus | "all";
+  type: MaintenanceType | "all";
+  facilityId: string | "all";
+  assignedToUserId: string | "all";
+  requiresWorkOrder: boolean | "all";
+}): number {
+  let count = 0;
+  if (filters.priority !== "all") count += 1;
+  if (filters.status !== "all") count += 1;
+  if (filters.type !== "all") count += 1;
+  if (filters.facilityId !== "all") count += 1;
+  if (filters.assignedToUserId !== "all") count += 1;
+  if (filters.requiresWorkOrder !== "all") count += 1;
+  return count;
+}
 
 export function MaintenanceToolbar({
   search,
@@ -53,148 +86,272 @@ export function MaintenanceToolbar({
   onAssignedToUserIdChange,
   requiresWorkOrder,
   onRequiresWorkOrderChange,
+  sort = DEFAULT_MAINTENANCE_SORT,
+  onSortChange,
+  total,
+  loading,
+  onClearAll,
+  onCreate,
 }: MaintenanceToolbarProps) {
-  const [facilities, setFacilities] = useState<Facility[]>([]);
+  const { facilities } = useFacilityOptions();
   const [users, setUsers] = useState<User[]>([]);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      FacilityService.listFacilities({ page: 1, pageSize: 200 }),
-      UserService.listUsers({ page: 1, pageSize: 200 }),
-    ])
-      .then(([facilityPage, userPage]) => {
-        if (cancelled) return;
-        setFacilities(facilityPage.data);
-        setUsers(userPage.data);
+    UserService.listUsers({ page: 1, pageSize: 200 })
+      .then((page) => {
+        if (!cancelled) setUsers(page.data);
       })
       .catch(() => {
-        if (cancelled) return;
-        setFacilities([]);
-        setUsers([]);
+        if (!cancelled) setUsers([]);
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
+  const activeFilterCount = countActiveFilters({
+    priority,
+    status,
+    type,
+    facilityId,
+    assignedToUserId,
+    requiresWorkOrder,
+  });
+  const hasSearch = Boolean(search.trim());
+  const filtered = activeFilterCount > 0 || hasSearch;
+
+  const chips: ActiveFilterChip[] = useMemo(() => {
+    const next: ActiveFilterChip[] = [];
+    if (hasSearch) {
+      next.push({
+        id: "search",
+        label: `“${search.trim()}”`,
+        onRemove: () => onSearchChange(""),
+      });
+    }
+    if (priority !== "all") {
+      next.push({
+        id: "priority",
+        label: labelize(priority),
+        onRemove: () => onPriorityChange("all"),
+      });
+    }
+    if (status !== "all") {
+      next.push({
+        id: "status",
+        label: labelize(status),
+        onRemove: () => onStatusChange("all"),
+      });
+    }
+    if (type !== "all") {
+      next.push({
+        id: "type",
+        label: labelize(type),
+        onRemove: () => onTypeChange("all"),
+      });
+    }
+    if (facilityId !== "all") {
+      const match = facilities.find((item) => item.id === facilityId);
+      next.push({
+        id: "facility",
+        label: match?.name ?? facilityId,
+        onRemove: () => onFacilityIdChange("all"),
+      });
+    }
+    if (assignedToUserId !== "all") {
+      const match = users.find((item) => item.id === assignedToUserId);
+      next.push({
+        id: "assignee",
+        label: match?.name ?? assignedToUserId,
+        onRemove: () => onAssignedToUserIdChange("all"),
+      });
+    }
+    if (requiresWorkOrder !== "all") {
+      next.push({
+        id: "requiresWorkOrder",
+        label: requiresWorkOrder
+          ? "Requires work order"
+          : "No work order required",
+        onRemove: () => onRequiresWorkOrderChange("all"),
+      });
+    }
+    return next;
+  }, [
+    hasSearch,
+    search,
+    priority,
+    status,
+    type,
+    facilityId,
+    assignedToUserId,
+    requiresWorkOrder,
+    facilities,
+    users,
+    onSearchChange,
+    onPriorityChange,
+    onStatusChange,
+    onTypeChange,
+    onFacilityIdChange,
+    onAssignedToUserIdChange,
+    onRequiresWorkOrderChange,
+  ]);
+
+  function clearFiltersOnly() {
+    onPriorityChange("all");
+    onStatusChange("all");
+    onTypeChange("all");
+    onFacilityIdChange("all");
+    onAssignedToUserIdChange("all");
+    onRequiresWorkOrderChange("all");
+  }
+
   return (
-    <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-      <SearchBox
-        value={search}
-        onChange={onSearchChange}
-        placeholder="Search by title, id, description..."
-        className="w-full xl:max-w-md"
+    <div className="flex flex-col gap-3">
+      <OperationalListToolbar
+        search={search}
+        onSearchChange={onSearchChange}
+        searchPlaceholder="Search by title, id, description…"
+        filterOpen={filterOpen}
+        onFilterOpenChange={setFilterOpen}
+        activeFilterCount={activeFilterCount}
+        canClearFilters={activeFilterCount > 0}
+        onClearFilters={clearFiltersOnly}
+        filterMode="live"
+        sortValue={sort}
+        sortOptions={MAINTENANCE_SORT_OPTIONS}
+        onSortChange={(value) => onSortChange(value as MaintenanceSort)}
+        leadingActions={
+          <Button
+            type="button"
+            size="sm"
+            className="h-9 shrink-0 rounded-md px-3.5 text-[0.8125rem] font-semibold shadow-none"
+            onClick={onCreate}
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+            New maintenance
+          </Button>
+        }
+        filterPanel={
+          <>
+            <FilterField
+              id="mnt-filter-priority"
+              label="Priority"
+              value={priority}
+              onChange={(value) =>
+                onPriorityChange(value as MaintenancePriority | "all")
+              }
+            >
+              <option value="all">All priorities</option>
+              {MAINTENANCE_PRIORITIES.map((value) => (
+                <option key={value} value={value}>
+                  {labelize(value)}
+                </option>
+              ))}
+            </FilterField>
+
+            <FilterField
+              id="mnt-filter-status"
+              label="Status"
+              value={status}
+              onChange={(value) =>
+                onStatusChange(value as MaintenanceStatus | "all")
+              }
+            >
+              <option value="all">All statuses</option>
+              {MAINTENANCE_STATUSES.map((value) => (
+                <option key={value} value={value}>
+                  {labelize(value)}
+                </option>
+              ))}
+            </FilterField>
+
+            <FilterField
+              id="mnt-filter-type"
+              label="Type"
+              value={type}
+              onChange={(value) =>
+                onTypeChange(value as MaintenanceType | "all")
+              }
+            >
+              <option value="all">All types</option>
+              {MAINTENANCE_TYPES.map((value) => (
+                <option key={value} value={value}>
+                  {labelize(value)}
+                </option>
+              ))}
+            </FilterField>
+
+            <FilterField
+              id="mnt-filter-facility"
+              label="Facility"
+              value={facilityId}
+              onChange={(value) =>
+                onFacilityIdChange(value as string | "all")
+              }
+            >
+              <option value="all">All facilities</option>
+              {facilities.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </FilterField>
+
+            <FilterField
+              id="mnt-filter-assignee"
+              label="Assignee"
+              value={assignedToUserId}
+              onChange={(value) =>
+                onAssignedToUserIdChange(value as string | "all")
+              }
+            >
+              <option value="all">All assignees</option>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name}
+                </option>
+              ))}
+            </FilterField>
+
+            <FilterField
+              id="mnt-filter-requires-wo"
+              label="Work order"
+              value={
+                requiresWorkOrder === "all"
+                  ? "all"
+                  : requiresWorkOrder
+                    ? "true"
+                    : "false"
+              }
+              onChange={(value) =>
+                onRequiresWorkOrderChange(
+                  value === "all" ? "all" : value === "true"
+                )
+              }
+            >
+              <option value="all">All</option>
+              <option value="true">Requires work order</option>
+              <option value="false">No work order required</option>
+            </FilterField>
+          </>
+        }
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="inline-flex h-10 items-center gap-2 rounded-[12px] border border-border bg-card px-3 text-sm text-muted">
-          <SlidersHorizontal className="h-3.5 w-3.5" />
-          Filters
-        </div>
+      <ActiveFilters chips={chips} onClearAll={onClearAll} />
 
-        <select
-          value={priority}
-          onChange={(event) =>
-            onPriorityChange(event.target.value as MaintenancePriority | "all")
-          }
-          className={toolbarSelectClassName}
-          aria-label="Filter by priority"
-        >
-          <option value="all">All priorities</option>
-          {MAINTENANCE_PRIORITIES.map((value) => (
-            <option key={value} value={value}>
-              {labelize(value)}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={status}
-          onChange={(event) =>
-            onStatusChange(event.target.value as MaintenanceStatus | "all")
-          }
-          className={toolbarSelectClassName}
-          aria-label="Filter by status"
-        >
-          <option value="all">All statuses</option>
-          {MAINTENANCE_STATUSES.map((value) => (
-            <option key={value} value={value}>
-              {labelize(value)}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={type}
-          onChange={(event) =>
-            onTypeChange(event.target.value as MaintenanceType | "all")
-          }
-          className={toolbarSelectClassName}
-          aria-label="Filter by type"
-        >
-          <option value="all">All types</option>
-          {MAINTENANCE_TYPES.map((value) => (
-            <option key={value} value={value}>
-              {labelize(value)}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={facilityId}
-          onChange={(event) =>
-            onFacilityIdChange(event.target.value as string | "all")
-          }
-          className={toolbarSelectClassName}
-          aria-label="Filter by facility"
-        >
-          <option value="all">All facilities</option>
-          {facilities.map((facility) => (
-            <option key={facility.id} value={facility.id}>
-              {facility.name}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={assignedToUserId}
-          onChange={(event) =>
-            onAssignedToUserIdChange(event.target.value as string | "all")
-          }
-          className={toolbarSelectClassName}
-          aria-label="Filter by assigned user"
-        >
-          <option value="all">All assignees</option>
-          {users.map((user) => (
-            <option key={user.id} value={user.id}>
-              {user.name}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={
-            requiresWorkOrder === "all"
-              ? "all"
-              : requiresWorkOrder
-                ? "true"
-                : "false"
-          }
-          onChange={(event) => {
-            const value = event.target.value;
-            onRequiresWorkOrderChange(
-              value === "all" ? "all" : value === "true"
-            );
-          }}
-          className={toolbarSelectClassName}
-          aria-label="Filter by requires work order"
-        >
-          <option value="all">WO requirement: all</option>
-          <option value="true">Requires work order</option>
-          <option value="false">No work order required</option>
-        </select>
-      </div>
+      {!loading && filtered ? (
+        <ResultContext
+          text={buildResultContext({
+            noun: "maintenance record",
+            nounPlural: "maintenance records",
+            total,
+            filtered,
+            pageSize: MAINTENANCE_PAGE_SIZE,
+          })}
+        />
+      ) : null}
     </div>
   );
 }

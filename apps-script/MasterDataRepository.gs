@@ -17,7 +17,7 @@ var MasterDataRepository = (function () {
         "id",
         "name",
         "code",
-        "facilityId",
+        "facility",
         "status",
         "description",
         "createdAt",
@@ -31,7 +31,7 @@ var MasterDataRepository = (function () {
         "id",
         "name",
         "code",
-        "facilityId",
+        "facility",
         "status",
         "description",
         "createdAt",
@@ -45,8 +45,8 @@ var MasterDataRepository = (function () {
         "id",
         "name",
         "code",
-        "facilityId",
-        "buildingId",
+        "facility",
+        "building",
         "level",
         "status",
         "description",
@@ -61,9 +61,9 @@ var MasterDataRepository = (function () {
         "id",
         "name",
         "code",
-        "facilityId",
-        "buildingId",
-        "floorId",
+        "facility",
+        "building",
+        "floor",
         "status",
         "description",
         "createdAt",
@@ -111,6 +111,24 @@ var MasterDataRepository = (function () {
       obj[headers[i]] = row[i];
     }
     return obj;
+  }
+
+  /**
+   * Accept both live sheet keys (facility/building/floor) and camelId aliases
+   * from the frontend (facilityId/buildingId/floorId).
+   */
+  function payloadValue_(payload, key) {
+    payload = payload || {};
+    if (payload[key] != null && String(payload[key]).trim() !== "") {
+      return payload[key];
+    }
+    if (key === "facility" && payload.facilityId != null) return payload.facilityId;
+    if (key === "building" && payload.buildingId != null) return payload.buildingId;
+    if (key === "floor" && payload.floorId != null) return payload.floorId;
+    if (key === "facilityId" && payload.facility != null) return payload.facility;
+    if (key === "buildingId" && payload.building != null) return payload.building;
+    if (key === "floorId" && payload.floor != null) return payload.floor;
+    return payload[key];
   }
 
   function getAll(entity) {
@@ -194,7 +212,10 @@ var MasterDataRepository = (function () {
       else if (key === "code") {
         var code = payload.code != null ? String(payload.code).trim() : "";
         record.code = code || defaultCode_(entity, id, payload);
-      } else record[key] = payload[key] != null ? payload[key] : "";
+      } else {
+        var value = payloadValue_(payload, key);
+        record[key] = value != null ? value : "";
+      }
     }
 
     var row = config.headers.map(function (key) {
@@ -234,8 +255,9 @@ var MasterDataRepository = (function () {
       else if (key === "code") {
         // Codes are immutable after create.
         updated.code = current.code || id;
-      } else if (payload && payload[key] != null) updated[key] = payload[key];
-      else updated[key] = current[key] != null ? current[key] : "";
+      } else if (payload && payloadValue_(payload, key) != null) {
+        updated[key] = payloadValue_(payload, key);
+      } else updated[key] = current[key] != null ? current[key] : "";
     }
 
     var row = config.headers.map(function (key) {

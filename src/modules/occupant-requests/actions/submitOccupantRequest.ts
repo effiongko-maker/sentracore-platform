@@ -5,8 +5,6 @@ import {
   orchestrateReportIncident,
   orchestrateRequestMaintenance,
 } from "@/lib/operational/orchestration";
-import type { Incident } from "@/modules/incidents/types";
-import type { Maintenance } from "@/modules/maintenance/types";
 import { getOccupantActor } from "../context/OccupantSession";
 import {
   mapIncidentToOccupantStatus,
@@ -88,5 +86,3 @@ export async function submitOccupantIncidentReport(
     },
   });
 }
-
-export type { Incident, Maintenance };

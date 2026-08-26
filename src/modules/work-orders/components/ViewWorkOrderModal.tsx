@@ -7,13 +7,14 @@ import { formatDate } from "@/lib/utils";
 import {
   useAssetName,
   useFacilityName,
+  useMaintenanceTitle,
   useUserName,
 } from "@/hooks/useEntityLabel";
 import {
   WORK_ORDER_PRIORITY_VARIANT,
   WORK_ORDER_STATUS_VARIANT,
 } from "../constants";
-import { labelize } from "../utils";
+import { displayWorkOrderTitle, labelize } from "../utils";
 import type { WorkOrder } from "../types";
 
 interface ViewWorkOrderModalProps {
@@ -44,14 +45,17 @@ export function ViewWorkOrderModal({
   const assetName = useAssetName(workOrder?.assetId);
   const assigneeName = useUserName(workOrder?.assignedToUserId);
   const reportedByName = useUserName(workOrder?.reportedByUserId);
+  const maintenanceTitle = useMaintenanceTitle(workOrder?.maintenanceId);
 
   if (!workOrder) return null;
+
+  const title = displayWorkOrderTitle(workOrder);
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={workOrder.title}
+      title={title}
       description={workOrder.id}
       size="lg"
       footer={
@@ -96,6 +100,20 @@ export function ViewWorkOrderModal({
           value={
             workOrder.assetId ? assetName || workOrder.assetId : "—"
           }
+        />
+        <Detail
+          label="Source maintenance"
+          value={
+            workOrder.maintenanceId
+              ? `${workOrder.maintenanceId}${
+                  maintenanceTitle ? ` — ${maintenanceTitle}` : ""
+                }`
+              : "—"
+          }
+        />
+        <Detail
+          label="Source incident"
+          value={workOrder.incidentId || "—"}
         />
         <Detail
           label="Assigned to"

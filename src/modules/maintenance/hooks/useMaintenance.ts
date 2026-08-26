@@ -2,11 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { MAINTENANCE_PAGE_SIZE } from "../constants";
+import {
+  DEFAULT_MAINTENANCE_SORT,
+  MAINTENANCE_PAGE_SIZE,
+} from "../constants";
 import { MaintenanceService } from "../services/MaintenanceService";
+import { sortMaintenance } from "../utils";
 import type {
   Maintenance,
   MaintenancePriority,
+  MaintenanceSort,
   MaintenanceStatus,
   MaintenanceType,
 } from "../types";
@@ -28,6 +33,9 @@ export function useMaintenance() {
   const [requiresWorkOrder, setRequiresWorkOrderState] = useState<
     boolean | "all"
   >("all");
+  const [sort, setSortState] = useState<MaintenanceSort>(
+    DEFAULT_MAINTENANCE_SORT
+  );
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -65,18 +73,28 @@ export function useMaintenance() {
     setPage(1);
   }, []);
 
-  useEffect(() => {
-    if (previousSearch.current !== debouncedSearch) {
-      previousSearch.current = debouncedSearch;
-      setPage(1);
-    }
-  }, [debouncedSearch]);
+  const setSort = useCallback((value: MaintenanceSort) => {
+    setSortState(value);
+    setPage(1);
+  }, []);
+
+  const clearAll = useCallback(() => {
+    setSearch("");
+    setPriorityState("all");
+    setStatusState("all");
+    setTypeState("all");
+    setFacilityIdState("all");
+    setAssignedToUserIdState("all");
+    setRequiresWorkOrderState("all");
+    setPage(1);
+  }, []);
 
   const fetchMaintenance = useCallback(
     async (nextPage = page) => {
       const id = ++requestId.current;
       setLoading(true);
       setError(null);
+      let keepLoadingForPageClamp = false;
 
       try {
         const result = await MaintenanceService.listMaintenance({
@@ -89,11 +107,26 @@ export function useMaintenance() {
           facilityId,
           assignedToUserId,
           requiresWorkOrder,
+          sort,
         });
 
         if (id !== requestId.current) return;
 
-        setItems(result.data);
+        // Filters/search can shrink results below the current page. Clamp without
+        // painting an empty table while the footer still shows a non-zero total.
+        if (
+          result.data.length === 0 &&
+          result.total > 0 &&
+          nextPage > result.totalPages
+        ) {
+          setTotalPages(result.totalPages);
+          setTotal(result.total);
+          keepLoadingForPageClamp = true;
+          setPage(Math.max(1, result.totalPages));
+          return;
+        }
+
+        setItems(sortMaintenance(result.data, sort));
         setTotalPages(result.totalPages);
         setTotal(result.total);
       } catch (err) {
@@ -107,7 +140,9 @@ export function useMaintenance() {
         setTotal(0);
         setTotalPages(1);
       } finally {
-        if (id === requestId.current) setLoading(false);
+        if (id === requestId.current && !keepLoadingForPageClamp) {
+          setLoading(false);
+        }
       }
     },
     [
@@ -119,16 +154,43 @@ export function useMaintenance() {
       facilityId,
       assignedToUserId,
       requiresWorkOrder,
+      sort,
     ]
   );
 
   useEffect(() => {
-    fetchMaintenance(page);
-  }, [fetchMaintenance, page]);
+    if (previousSearch.current !== debouncedSearch) {
+      previousSearch.current = debouncedSearch;
+      if (page !== 1) {
+        setPage(1);
+        return;
+      }
+    }
+    void fetchMaintenance(page);
+  }, [fetchMaintenance, page, debouncedSearch]);
+
+  useEffect(() => {
+    if (totalPages >= 1 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   const deactivateMaintenance = useCallback(async (id: string) => {
     return MaintenanceService.deactivateMaintenance(id);
   }, []);
+
+  const reload = useCallback(async () => {
+    await fetchMaintenance(page);
+  }, [fetchMaintenance, page]);
+
+  /** After create/update — always return to page 1 (newest-friendly). */
+  const reloadFirstPage = useCallback(async () => {
+    if (page !== 1) {
+      setPage(1);
+      return;
+    }
+    await fetchMaintenance(1);
+  }, [fetchMaintenance, page]);
 
   return {
     items,
@@ -148,11 +210,15 @@ export function useMaintenance() {
     setAssignedToUserId,
     requiresWorkOrder,
     setRequiresWorkOrder,
+    sort,
+    setSort,
+    clearAll,
     page,
     setPage,
     totalPages,
     total,
-    reload: () => fetchMaintenance(page),
+    reload,
+    reloadFirstPage,
     deactivateMaintenance,
   };
 }

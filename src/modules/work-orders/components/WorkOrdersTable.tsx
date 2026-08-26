@@ -12,7 +12,7 @@ import {
   useUserName,
 } from "@/hooks/useEntityLabel";
 import { WORK_ORDER_STATUS_VARIANT } from "../constants";
-import { labelize } from "../utils";
+import { displayWorkOrderTitle, labelize } from "../utils";
 import type { WorkOrder } from "../types";
 import { WorkOrderRowActions } from "./WorkOrderRowActions";
 
@@ -61,7 +61,7 @@ export function WorkOrdersTable({
         render: (workOrder) => (
           <div>
             <span className="font-medium text-foreground">
-              {workOrder.title}
+              {displayWorkOrderTitle(workOrder)}
             </span>
             <p className="text-xs text-muted">{workOrder.id}</p>
           </div>

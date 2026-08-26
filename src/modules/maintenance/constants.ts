@@ -1,5 +1,6 @@
 import type {
   MaintenancePriority,
+  MaintenanceSort,
   MaintenanceSource,
   MaintenanceStatus,
   MaintenanceType,
@@ -64,3 +65,15 @@ export const MAINTENANCE_PRIORITY_VARIANT: Record<
 };
 
 export const MAINTENANCE_PAGE_SIZE = 8;
+
+export const MAINTENANCE_SORT_OPTIONS: Array<{
+  value: MaintenanceSort;
+  label: string;
+}> = [
+  { value: "newest", label: "Newest" },
+  { value: "oldest", label: "Oldest" },
+  { value: "title_asc", label: "Title: A–Z" },
+  { value: "title_desc", label: "Title: Z–A" },
+];
+
+export const DEFAULT_MAINTENANCE_SORT: MaintenanceSort = "newest";

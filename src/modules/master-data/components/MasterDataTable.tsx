@@ -3,30 +3,14 @@
 import { useMemo } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { DataTable, type Column } from "@/components/tables/DataTable";
-import {
-  useBuildingName,
-  useFacilityName,
-  useFloorName,
-} from "@/hooks/useEntityLabel";
 import { MASTER_DATA_STATUS_VARIANT } from "../constants";
+import {
+  resolveRelationName,
+  useMasterDataRelationMaps,
+} from "../hooks/useMasterDataRelationMaps";
 import { labelize } from "../utils";
 import type { MasterDataEntity, MasterDataItem } from "../types";
 import { MasterDataRowActions } from "./MasterDataRowActions";
-
-function FacilityLabel({ id }: { id?: string }) {
-  const name = useFacilityName(id);
-  return <span className="text-muted">{id ? name || id : "—"}</span>;
-}
-
-function BuildingLabel({ id }: { id?: string }) {
-  const name = useBuildingName(id);
-  return <span className="text-muted">{id ? name || id : "—"}</span>;
-}
-
-function FloorLabel({ id }: { id?: string }) {
-  const name = useFloorName(id);
-  return <span className="text-muted">{id ? name || id : "—"}</span>;
-}
 
 export function MasterDataTable({
   entity,
@@ -51,6 +35,9 @@ export function MasterDataTable({
   onEdit: (item: MasterDataItem) => void;
   onDeactivate: (item: MasterDataItem) => void;
 }) {
+  const { facilities, buildings, floors, ready } =
+    useMasterDataRelationMaps(true);
+
   const columns = useMemo<Column<MasterDataItem>[]>(() => {
     const cols: Column<MasterDataItem>[] = [
       {
@@ -76,7 +63,11 @@ export function MasterDataTable({
       cols.push({
         key: "facilityId",
         header: "Facility",
-        render: (item) => <FacilityLabel id={item.facilityId} />,
+        render: (item) => (
+          <span className="text-muted">
+            {resolveRelationName(item.facilityId, facilities, ready)}
+          </span>
+        ),
       });
     }
 
@@ -84,7 +75,11 @@ export function MasterDataTable({
       cols.push({
         key: "buildingId",
         header: "Building",
-        render: (item) => <BuildingLabel id={item.buildingId} />,
+        render: (item) => (
+          <span className="text-muted">
+            {resolveRelationName(item.buildingId, buildings, ready)}
+          </span>
+        ),
       });
     }
 
@@ -92,7 +87,11 @@ export function MasterDataTable({
       cols.push({
         key: "floorId",
         header: "Floor",
-        render: (item) => <FloorLabel id={item.floorId} />,
+        render: (item) => (
+          <span className="text-muted">
+            {resolveRelationName(item.floorId, floors, ready)}
+          </span>
+        ),
       });
     }
 
@@ -142,7 +141,16 @@ export function MasterDataTable({
     );
 
     return cols;
-  }, [entity, onView, onEdit, onDeactivate]);
+  }, [
+    entity,
+    facilities,
+    buildings,
+    floors,
+    ready,
+    onView,
+    onEdit,
+    onDeactivate,
+  ]);
 
   return (
     <DataTable

@@ -9,6 +9,7 @@ import {
 import {
   incidentMaintenanceLeaseKey,
   incidentWorkOrderLeaseKey,
+  maintenanceWorkOrderLeaseKey,
   runExclusiveOperationalAction,
 } from "@/lib/operational/idempotency/actionLease";
 import {
@@ -226,6 +227,122 @@ export async function orchestrateCreateWorkOrder(options: {
   }
 
   return workOrder;
+}
+
+/**
+ * Create a Work Order from an existing Maintenance record, copying context and
+ * linking both sides (maintenance.workOrderId ↔ workOrder.maintenanceId).
+ */
+export async function orchestrateCreateWorkOrderFromMaintenance(options: {
+  maintenanceId: string;
+  context: ActionContext;
+  title?: string;
+}): Promise<{ maintenance: Maintenance; workOrder: WorkOrder }> {
+  const maintenance = await MaintenanceService.getMaintenance(
+    options.maintenanceId
+  );
+  if (!maintenance) {
+    throw new Error("Maintenance not found");
+  }
+
+  const existingId = maintenance.workOrderId ?? maintenance.workOrderIds?.[0];
+  if (existingId) {
+    const existing = await WorkOrderService.getWorkOrder(existingId);
+    if (existing) {
+      return { maintenance, workOrder: existing };
+    }
+  }
+
+  const workOrder = await runExclusiveOperationalAction({
+    organisationId: options.context.organisation.id,
+    scopeKey: maintenanceWorkOrderLeaseKey(maintenance.id),
+    actorProfileId: options.context.profile.id,
+    entityType: "work_order",
+    recoverExisting: async () => {
+      const fresh = await MaintenanceService.getMaintenance(maintenance.id);
+      if (!fresh) return null;
+      const linkedId = fresh.workOrderId ?? fresh.workOrderIds?.[0];
+      if (!linkedId) return null;
+      const existing = await WorkOrderService.getWorkOrder(linkedId);
+      if (!existing) return null;
+      return { entityId: existing.id, value: existing };
+    },
+    loadByEntityId: async (entityId) => {
+      const existing = await WorkOrderService.getWorkOrder(entityId);
+      if (!existing) return null;
+      return { entityId: existing.id, value: existing };
+    },
+    create: async () => {
+      const {
+        displayMaintenanceTitle,
+        parseMaintenanceDescriptionNotes,
+      } = await import("@/modules/maintenance/utils");
+      const title = (
+        options.title?.trim() || displayMaintenanceTitle(maintenance)
+      ).slice(0, 200);
+      const notes = parseMaintenanceDescriptionNotes(maintenance.description);
+      const descriptionParts = [
+        notes.body || undefined,
+        notes.location ? `Location: ${notes.location}` : undefined,
+        maintenance.department
+          ? `Department: ${maintenance.department}`
+          : undefined,
+        notes.category ? `Category: ${notes.category}` : undefined,
+        `Source maintenance: ${maintenance.id}`,
+      ].filter(Boolean);
+
+      const typeMap: Record<string, WorkOrder["type"]> = {
+        preventive: "preventive",
+        corrective: "corrective",
+        inspection: "inspection",
+        predictive: "preventive",
+        routine: "preventive",
+        other: "other",
+      };
+
+      const created = await orchestrateCreateWorkOrder({
+        input: {
+          title,
+          description: descriptionParts.join("\n\n") || undefined,
+          type: typeMap[maintenance.type] ?? "corrective",
+          maintenanceType:
+            maintenance.type === "preventive" ||
+            maintenance.type === "routine" ||
+            maintenance.type === "predictive"
+              ? "planned"
+              : "unplanned",
+          source:
+            maintenance.source === "request" ||
+            maintenance.source === "incident"
+              ? maintenance.source === "incident"
+                ? "incident"
+                : "request"
+              : "manual",
+          categoryId: maintenance.categoryId,
+          facilityId: maintenance.facilityId,
+          assetId: maintenance.assetId,
+          maintenanceId: maintenance.id,
+          incidentId: maintenance.incidentId,
+          reportedByUserId: maintenance.reportedByUserId,
+          assignedToUserId: maintenance.assignedToUserId,
+          priority: maintenance.priority,
+          status: "open",
+          requestedAt: options.context.now,
+          createdByUserId: options.context.userId,
+          updatedByUserId: options.context.userId,
+        },
+        context: options.context,
+        intake: "staff",
+      });
+
+      return { entityId: created.id, value: created };
+    },
+  });
+
+  const refreshed =
+    (await MaintenanceService.getMaintenance(maintenance.id)) ?? maintenance;
+
+  return { maintenance: refreshed, workOrder };
 }
 
 export type TriageResponse =

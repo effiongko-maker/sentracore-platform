@@ -127,7 +127,26 @@ function mapRemoteWorkOrder(raw: RemoteWorkOrder): WorkOrder {
 
   return {
     id: String(pickField(raw, "id", "Work Order ID") ?? ""),
-    title: String(pickField(raw, "title", "Title") ?? ""),
+    title: (() => {
+      const explicit = optionalMappedString(raw, "title", "Title");
+      const description = optionalMappedString(
+        raw,
+        "description",
+        "Description"
+      );
+      if (explicit && !/(?:^|\n|\s)(?:Location|Department|Category|Source maintenance)\s*:/i.test(explicit)) {
+        return explicit;
+      }
+      // Title missing or polluted with description context — take the core issue only.
+      const source = explicit || description || "";
+      if (!source) return "";
+      const cut = source.search(
+        /\s*(?:\n\n+|(?:Location|Department|Category|Source maintenance)\s*:)/i
+      );
+      if (cut > 0) return source.slice(0, cut).trim();
+      const firstLine = source.split(/\n+/)[0]?.trim() ?? "";
+      return firstLine;
+    })(),
     description: optionalMappedString(raw, "description", "Description"),
     type,
     maintenanceType,
