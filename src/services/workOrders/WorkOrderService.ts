@@ -14,6 +14,14 @@ import type {
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
 import {
+  CacheNamespaces,
+  onWorkOrderMutation,
+} from "@/services/cache/domainCache";
+import {
+  sharedRequest,
+  stableRequestKey,
+} from "@/services/cache/sharedRequest";
+import {
   postToAppsScript,
   postToAppsScriptData,
 } from "@/services/api/appsScriptProxy";
@@ -162,6 +170,7 @@ function mapRemoteWorkOrder(raw: RemoteWorkOrder): WorkOrder {
     reportedByUserId: optionalMappedString(
       raw,
       "reportedByUserId",
+      "Reported By",
       "Reported By User ID"
     ),
     incidentId: readWorkOrderIncidentId(raw),
@@ -171,7 +180,9 @@ function mapRemoteWorkOrder(raw: RemoteWorkOrder): WorkOrder {
     assignedToUserId: optionalMappedString(
       raw,
       "assignedToUserId",
-      "Assigned To User ID"
+      "Assigned To User ID",
+      // Apps Script persists assignee on "Assigned To" (ID, not display name).
+      "Assigned To"
     ),
     assignedGroupId: optionalMappedString(
       raw,
@@ -278,13 +289,27 @@ export const WorkOrderService = {
   async listWorkOrders(
     params: WorkOrderListParams = {}
   ): Promise<PaginatedResult<WorkOrder>> {
-    const response = await apiClient.post<unknown>("/work-orders", {
-      resource: "work-orders",
-      action: "getAll",
-      payload: params,
+    const key = stableRequestKey(CacheNamespaces.workOrdersList, {
+      page: params.page ?? 1,
+      pageSize: params.pageSize ?? 8,
+      search: params.search ?? "",
+      status: params.status ?? "all",
+      priority: params.priority ?? "all",
+      facilityId: params.facilityId ?? "all",
+      assetId: params.assetId ?? "all",
+      assignedToUserId: params.assignedToUserId ?? "all",
+      maintenanceId: params.maintenanceId ?? "all",
+      sort: params.sort ?? "",
+      dueDate: params.dueDate ?? "",
     });
-
-    return toPaginatedWorkOrders(response.data, params);
+    return sharedRequest(key, async () => {
+      const response = await apiClient.post<unknown>("/work-orders", {
+        resource: "work-orders",
+        action: "getAll",
+        payload: params,
+      });
+      return toPaginatedWorkOrders(response.data, params);
+    });
   },
 
   async getWorkOrder(id: string): Promise<WorkOrder | null> {
@@ -350,7 +375,9 @@ export const WorkOrderService = {
           ? envelope.data
           : raw;
 
-      return mapRemoteWorkOrder(row as RemoteWorkOrder);
+      const created = mapRemoteWorkOrder(row as RemoteWorkOrder);
+      onWorkOrderMutation();
+      return created;
     }
 
     const response = await apiClient.post<WorkOrder>("/work-orders", {
@@ -358,7 +385,11 @@ export const WorkOrderService = {
       action: "create",
       payload: input,
     });
-    return mapRemoteWorkOrder(response.data as unknown as RemoteWorkOrder);
+    const created = mapRemoteWorkOrder(
+      response.data as unknown as RemoteWorkOrder
+    );
+    onWorkOrderMutation();
+    return created;
   },
 
   async updateWorkOrder(
@@ -375,7 +406,9 @@ export const WorkOrderService = {
         { resource: "work-orders", action: "update" },
         "WorkOrderService.updateWorkOrder"
       );
-      return mapRemoteWorkOrder(row as RemoteWorkOrder);
+      const updated = mapRemoteWorkOrder(row as RemoteWorkOrder);
+      onWorkOrderMutation();
+      return updated;
     }
 
     const response = await apiClient.post<WorkOrder>("/work-orders", {
@@ -383,7 +416,11 @@ export const WorkOrderService = {
       action: "update",
       payload: { id, ...input },
     });
-    return mapRemoteWorkOrder(response.data as unknown as RemoteWorkOrder);
+    const updated = mapRemoteWorkOrder(
+      response.data as unknown as RemoteWorkOrder
+    );
+    onWorkOrderMutation();
+    return updated;
   },
 
   /** Soft-cancel — work orders are never deleted. Maps to status=cancelled. */
@@ -393,7 +430,11 @@ export const WorkOrderService = {
       action: "deactivate",
       payload: { id },
     });
-    return mapRemoteWorkOrder(response.data as unknown as RemoteWorkOrder);
+    const deactivated = mapRemoteWorkOrder(
+      response.data as unknown as RemoteWorkOrder
+    );
+    onWorkOrderMutation();
+    return deactivated;
   },
 
   async getOpenWorkOrders(): Promise<WorkOrder[]> {

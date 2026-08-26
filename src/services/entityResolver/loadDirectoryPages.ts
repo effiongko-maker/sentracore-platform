@@ -36,3 +36,20 @@ export async function loadDirectoryPages<T>(options: {
 
   return map;
 }
+
+/** One-shot catalog load — preferred for users/assets (avoids page×N fan-out). */
+export async function loadDirectoryFromCatalog<T>(options: {
+  loadAll: () => Promise<T[]>;
+  getId: (row: T) => string;
+  getName: (row: T) => string;
+}): Promise<Map<string, string>> {
+  const rows = await options.loadAll();
+  const map = new Map<string, string>();
+  for (const row of rows) {
+    const id = String(options.getId(row) ?? "").trim();
+    if (!id) continue;
+    const name = String(options.getName(row) ?? "").trim();
+    map.set(id, name || id);
+  }
+  return map;
+}

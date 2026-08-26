@@ -1,18 +1,23 @@
 Release:
-v0.4.3
+v0.4.5
 
 Title:
-Fix Approval submit status transition (awaiting_decision)
+Data-access stabilization — catalogs, coalescing, WO strict persistence
 
 Generated:
-2026-08-26T03:00:57.301Z
+2026-08-26T14:36:19.073Z
 
 Features
-- Canonical Approval statuses: draft → awaiting_decision → approved|rejected
-- Submit atomically writes Status=awaiting_decision with submittedAt (no draft fallback)
-- Heal rows where submittedAt was set but Status stayed draft
+- Lightweight User/Asset catalogs skip workload fan-out for toolbars/modals/labels
+- Shared in-flight coalescing + 60s catalog TTL with mutation invalidation
+- Operational list in-flight dedupe; workload derive 30s TTL
+- WorkOrderRepository ensures Facility/Asset/Assigned To/Reported By; strict writes
+- ROUTER error classification (validation/timeout/transient/exception)
 
 Performance
+- Home uses fetchUsersCatalog instead of enriched fetchAllUsers
+- Reporting domain fallback uses listUsersCatalog/listAssetsCatalog
+- WO create/update reuse loaded sheet values within one Apps Script request
 
 Files Changed
 - ROUTER.gs
@@ -57,14 +62,14 @@ YES
 
 Smoke Tests
 
-Approvals list:
+Work orders list:
 
 ```bash
-curl -sS -X POST http://localhost:3000/api/approvals -H 'Content-Type: application/json' -d '{"resource":"approvals","action":"getAll","payload":{"page":1,"pageSize":5}}'
+curl -sS -X POST http://localhost:3000/api/work-orders -H 'Content-Type: application/json' -d '{"resource":"work-orders","action":"getAll","payload":{"page":1,"pageSize":5}}'
 ```
 
 Notes
-- CRITICAL: Redeploy ApprovalRepository.gs from the pack. Old mapStatus_ mapped unknown statuses (e.g. awaiting_response) to draft while still writing Submitted At.
-- After redeploy, Mark as submitted must return awaiting_decision everywhere.
+- CRITICAL: Redeploy SheetFieldUtils.gs, WorkOrderRepository.gs, and ROUTER.gs from the pack.
+- Strict persistence remains: missing relationship headers fail loudly instead of silent drop.
 
 <!-- GENERATED FILE — do not edit by hand. npm run apps-script:pack -->

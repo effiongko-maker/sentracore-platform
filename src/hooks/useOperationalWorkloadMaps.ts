@@ -8,7 +8,9 @@ import {
 
 const EMPTY: OperationalWorkloadMaps = {
   byUserId: {},
+  byUserIdEvidence: {},
   byAssetId: {},
+  byAssetIdEvidence: {},
 };
 
 /**

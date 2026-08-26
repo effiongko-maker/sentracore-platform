@@ -9,6 +9,14 @@ import type {
 } from "@/modules/users/types";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
+import {
+  CacheNamespaces,
+  onUserMutation,
+} from "@/services/cache/domainCache";
+import {
+  CATALOG_TTL_MS,
+  sharedRequest,
+} from "@/services/cache/sharedRequest";
 import { FacilityService } from "@/services/facilities/FacilityService";
 import { OperationalWorkloadService } from "@/services/operational/OperationalWorkloadService";
 import { queryUsersPage } from "./queryUsers";
@@ -92,7 +100,7 @@ function extractUserRows(payload: unknown): User[] {
   return [];
 }
 
-async function loadAllUsers(): Promise<User[]> {
+async function fetchAllUsersUncached(): Promise<User[]> {
   const pageSize = 500;
   let page = 1;
   let totalPages = 1;
@@ -140,6 +148,15 @@ async function loadAllUsers(): Promise<User[]> {
     if (user.id) byId.set(user.id, user);
   }
   return Array.from(byId.values());
+}
+
+/** Coalesced + short-TTL user catalog rows (no workload enrichment). */
+async function loadAllUsers(): Promise<User[]> {
+  return sharedRequest(
+    `${CacheNamespaces.usersCatalog}:all`,
+    fetchAllUsersUncached,
+    { ttlMs: CATALOG_TTL_MS }
+  );
 }
 
 async function loadFacilityNameById(): Promise<Map<string, string>> {
@@ -234,6 +251,25 @@ export const UserService = {
     return page;
   },
 
+  /**
+   * Lightweight reference catalog — id/name selects and EntityResolver only.
+   * Does NOT run OperationalWorkloadService (no WO/MNT/INC fan-out).
+   */
+  async listUsersCatalog(
+    params: UserListParams = {}
+  ): Promise<PaginatedResult<User>> {
+    const [users, facilityNameById] = await Promise.all([
+      loadAllUsers(),
+      loadFacilityNameById(),
+    ]);
+    return queryUsersPage(users, params, facilityNameById);
+  },
+
+  /** Full unfiltered user list without workload enrichment. */
+  async fetchUsersCatalog(): Promise<User[]> {
+    return loadAllUsers();
+  },
+
   async listUsersWithCatalog(
     params: UserListParams = {}
   ): Promise<{ catalog: User[]; page: PaginatedResult<User> }> {
@@ -249,7 +285,7 @@ export const UserService = {
     };
   },
 
-  /** Unfiltered user catalog for filter option discovery. */
+  /** Unfiltered user catalog for filter option discovery (enriched — People only). */
   async fetchAllUsers(): Promise<User[]> {
     return OperationalWorkloadService.enrichUsers(await loadAllUsers());
   },
@@ -324,6 +360,7 @@ export const UserService = {
       );
     }
     await assertUserPersisted(input, verified);
+    onUserMutation();
     return verified;
   },
 
@@ -345,6 +382,7 @@ export const UserService = {
       );
     }
     await assertUserPersisted(input, verified);
+    onUserMutation();
     return verified;
   },
 
@@ -366,6 +404,7 @@ export const UserService = {
     if (normalizeText(verified.status) !== "inactive") {
       throw fieldMismatch("status", "inactive", verified.status);
     }
+    onUserMutation();
     return verified;
   },
 };

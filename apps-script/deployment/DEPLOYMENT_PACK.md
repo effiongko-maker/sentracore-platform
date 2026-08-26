@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Generated: 2026-08-26T03:00:57.294Z
+Generated: 2026-08-26T14:36:19.067Z
 
 This document is the **single source of truth** for copying Apps Script
 source into the Google Apps Script project.
@@ -73,12 +73,15 @@ ROUTER.gs
  * `module` is accepted as an alias for `resource` for backwards compatibility.
  */
 
-function jsonResponse_(success, message, data) {
+function jsonResponse_(success, message, data, meta) {
   var payload = {
     success: !!success,
     message: message == null ? "" : String(message),
     data: data === undefined ? null : data,
   };
+  if (meta && typeof meta === "object") {
+    payload.meta = meta;
+  }
   var text;
   try {
     text = JSON.stringify(payload);
@@ -87,12 +90,33 @@ function jsonResponse_(success, message, data) {
       success: false,
       message: "Failed to serialise Apps Script response.",
       data: null,
+      meta: { errorClass: "serialization" },
     });
   }
   // ContentService accepts Unicode strings; do not pass through ByteString APIs.
   return ContentService.createTextOutput(text).setMimeType(
     ContentService.MimeType.JSON
   );
+}
+
+/** Classify Apps Script failures for client diagnostics (not end-user copy). */
+function classifyAppsScriptError_(error) {
+  var message = (error && error.message) || String(error || "");
+  var lower = message.toLowerCase();
+  if (
+    /missing headers|missing required|is required|validation|invalid|cannot write sheet fields/.test(
+      lower
+    )
+  ) {
+    return { errorClass: "validation", retryable: false };
+  }
+  if (/timed out|timeout|exceeded maximum execution|service invoked too many/.test(lower)) {
+    return { errorClass: "timeout", retryable: true };
+  }
+  if (/temporarily unavailable|rate limit|quota|backend error|internal error/.test(lower)) {
+    return { errorClass: "transient", retryable: true };
+  }
+  return { errorClass: "exception", retryable: false };
 }
 
 function doPost(e) {
@@ -137,14 +161,17 @@ function doPost(e) {
         resource
           ? "Unknown module: " + resource
           : "Missing resource. Expected users|facilities|assets|work-orders|incidents|maintenance|approvals|master-data|reporting-snapshot.",
-        null
+        null,
+        { errorClass: "validation", retryable: false }
       );
     }
   } catch (error) {
+    var classified = classifyAppsScriptError_(error);
     result = jsonResponse_(
       false,
       (error && error.message) || "Unhandled Apps Script error.",
-      null
+      null,
+      classified
     );
   }
 
@@ -5373,6 +5400,11 @@ var SheetFieldUtils = (function () {
     var lastCol = sheet.getLastColumn();
     if (lastCol < 1) return {};
     var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+    return headerMapFromRow_(headers);
+  }
+
+  /** Build header map from an already-loaded header row (avoids re-read). */
+  function headerMapFromRow_(headers) {
     var map = {};
     for (var i = 0; i < headers.length; i++) {
       map[String(headers[i]).trim()] = i;
@@ -5397,6 +5429,27 @@ var SheetFieldUtils = (function () {
       }
     }
     return row;
+  }
+
+  /**
+   * Like buildRowFromFields_, but throws when any field with a non-empty value
+   * targets a missing header — prevents silent data loss on writes.
+   */
+  function buildRowFromFieldsStrict_(headerMap, lastCol, fields) {
+    var missing = [];
+    for (var header in fields) {
+      if (!fields.hasOwnProperty(header)) continue;
+      if (headerMap[header] !== undefined) continue;
+      var value = fields[header];
+      if (value == null || String(value).trim() === "") continue;
+      missing.push(header);
+    }
+    if (missing.length) {
+      throw new Error(
+        "Cannot write sheet fields — missing headers: " + missing.join(", ")
+      );
+    }
+    return buildRowFromFields_(headerMap, lastCol, fields);
   }
 
   function hasHeader_(headerMap, name) {
@@ -5442,8 +5495,10 @@ var SheetFieldUtils = (function () {
     formatIdList: formatIdList_,
     appendUniqueId: appendUniqueId_,
     getHeaderMap: getHeaderMap_,
+    headerMapFromRow: headerMapFromRow_,
     rowToSheetObject: rowToSheetObject_,
     buildRowFromFields: buildRowFromFields_,
+    buildRowFromFieldsStrict: buildRowFromFieldsStrict_,
     hasHeader: hasHeader_,
     cachePutUtf8: cachePutUtf8,
     cacheGetUtf8: cacheGetUtf8,
@@ -6352,7 +6407,8 @@ WorkOrderRepository.gs
  *
  * Sheet: Work Orders (source of truth).
  * Relationship columns (added on first write if missing):
- *   Incident ID, Parent Work Order ID, Source, Title
+ *   Facility ID, Asset ID, Assigned To, Reported By,
+ *   Incident ID, Parent Work Order ID, Source, Title, Approval ID
  * Event ID = Supabase operational_events.id only.
  * Maintenance ID = maintenance activity id (not parent work order).
  */
@@ -6360,7 +6416,12 @@ WorkOrderRepository.gs
 var WorkOrderRepository = (function () {
   var SHEET_CANDIDATES = ["Work Orders", "WorkOrders", "WORK_ORDERS"];
 
+  /** Headers required for canonical Work Order relationship persistence. */
   var RELATIONSHIP_HEADERS = [
+    "Facility ID",
+    "Asset ID",
+    "Assigned To",
+    "Reported By",
     "Incident ID",
     "Parent Work Order ID",
     "Source",
@@ -6398,7 +6459,7 @@ var WorkOrderRepository = (function () {
 
   function ensureHeaders_(sheet) {
     var headerMap = SheetFieldUtils.getHeaderMap(sheet);
-    var lastCol = sheet.getLastColumn();
+    var lastCol = Math.max(1, sheet.getLastColumn());
     var added = 0;
     for (var i = 0; i < RELATIONSHIP_HEADERS.length; i++) {
       var name = RELATIONSHIP_HEADERS[i];
@@ -6407,7 +6468,20 @@ var WorkOrderRepository = (function () {
         added++;
       }
     }
-    return SheetFieldUtils.getHeaderMap(sheet);
+    headerMap = SheetFieldUtils.getHeaderMap(sheet);
+    var missing = [];
+    for (var j = 0; j < RELATIONSHIP_HEADERS.length; j++) {
+      if (!SheetFieldUtils.hasHeader(headerMap, RELATIONSHIP_HEADERS[j])) {
+        missing.push(RELATIONSHIP_HEADERS[j]);
+      }
+    }
+    if (missing.length) {
+      throw new Error(
+        "Work Orders sheet missing required headers after ensure: " +
+          missing.join(", ")
+      );
+    }
+    return headerMap;
   }
 
   function readIncidentId_(sheetRow, headerMap) {
@@ -6493,7 +6567,8 @@ var WorkOrderRepository = (function () {
       source: source,
       facilityId: SheetFieldUtils.cellText(sheetRow["Facility ID"]),
       assetId: SheetFieldUtils.cellText(sheetRow["Asset ID"]) || undefined,
-      reportedByUserId: undefined,
+      reportedByUserId:
+        SheetFieldUtils.cellText(sheetRow["Reported By"]) || undefined,
       incidentId: readIncidentId_(sheetRow, headerMap),
       maintenanceId: readMaintenanceId_(sheetRow, headerMap),
       parentWorkOrderId: readParentWorkOrderId_(sheetRow, headerMap),
@@ -6542,6 +6617,7 @@ var WorkOrderRepository = (function () {
       Title: canonical.title || description,
       Priority: canonical.priority || "medium",
       "Assigned To": canonical.assignedToUserId || "",
+      "Reported By": canonical.reportedByUserId || "",
       "Completed By": canonical._completedBy || "",
       "Date Opened": canonical.requestedAt || canonical.createdAt || "",
       "Date Completed": canonical.completedAt || "",
@@ -6558,7 +6634,11 @@ var WorkOrderRepository = (function () {
     var headerMap = ensureHeaders_(sheet);
     var lastCol = sheet.getLastColumn();
     var fields = canonicalToFields_(canonical);
-    var row = SheetFieldUtils.buildRowFromFields(headerMap, lastCol, fields);
+    var row = SheetFieldUtils.buildRowFromFieldsStrict(
+      headerMap,
+      lastCol,
+      fields
+    );
     sheet.getRange(rowIndex, 1, 1, lastCol).setValues([row]);
   }
 
@@ -6568,7 +6648,9 @@ var WorkOrderRepository = (function () {
     if (values.length <= 1) return [];
 
     var headers = values[0];
-    var headerMap = SheetFieldUtils.getHeaderMap(sheet);
+    var headerMap = SheetFieldUtils.headerMapFromRow
+      ? SheetFieldUtils.headerMapFromRow(headers)
+      : SheetFieldUtils.getHeaderMap(sheet);
     var rows = [];
     for (var r = 1; r < values.length; r++) {
       var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[r]);
@@ -6583,9 +6665,30 @@ var WorkOrderRepository = (function () {
   }
 
   function getById(id) {
-    var all = getAll();
-    for (var i = 0; i < all.length; i++) {
-      if (String(all[i].id) === String(id)) return all[i];
+    var sheet = getSheet_();
+    var values = sheet.getDataRange().getValues();
+    if (values.length <= 1) return null;
+
+    var headers = values[0];
+    var headerMap = SheetFieldUtils.headerMapFromRow
+      ? SheetFieldUtils.headerMapFromRow(headers)
+      : SheetFieldUtils.getHeaderMap(sheet);
+    var idCol = -1;
+    for (var c = 0; c < headers.length; c++) {
+      if (String(headers[c]).trim() === "Work Order ID") {
+        idCol = c;
+        break;
+      }
+    }
+    if (idCol === -1) return null;
+
+    for (var r = 1; r < values.length; r++) {
+      if (String(values[r][idCol]) !== String(id)) continue;
+      var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[r]);
+      var canonical = toCanonical_(sheetRow, headerMap);
+      delete canonical._completedBy;
+      delete canonical._dateClosed;
+      return canonical;
     }
     return null;
   }
@@ -6613,13 +6716,26 @@ var WorkOrderRepository = (function () {
     return -1;
   }
 
-  function nextId_() {
+  /** Generate next WO id from an already-loaded values matrix (one read). */
+  function nextIdFromValues_(values) {
     var year = new Date().getFullYear();
-    var all = getAll();
     var maxYear = 0;
-    var i;
-    for (i = 0; i < all.length; i++) {
-      var workOrderId = String(all[i].id || "");
+    if (values.length <= 1) {
+      return "WO-" + year + "-000001";
+    }
+    var headers = values[0];
+    var idCol = -1;
+    for (var c = 0; c < headers.length; c++) {
+      if (String(headers[c]).trim() === "Work Order ID") {
+        idCol = c;
+        break;
+      }
+    }
+    if (idCol === -1) {
+      throw new Error('Work Orders sheet missing "Work Order ID" header.');
+    }
+    for (var r = 1; r < values.length; r++) {
+      var workOrderId = String(values[r][idCol] || "");
       var yearMatch = workOrderId.match(/^WO-(\d{4})-(\d+)$/i);
       if (yearMatch && parseInt(yearMatch[1], 10) === year) {
         maxYear = Math.max(maxYear, parseInt(yearMatch[2], 10));
@@ -6628,6 +6744,12 @@ var WorkOrderRepository = (function () {
     var next = maxYear + 1;
     var padded = ("000000" + next).slice(-6);
     return "WO-" + year + "-" + padded;
+  }
+
+  function nextId_() {
+    var sheet = getSheet_();
+    var values = sheet.getDataRange().getValues();
+    return nextIdFromValues_(values);
   }
 
   function mergeCanonical_(current, payload) {
@@ -6647,6 +6769,10 @@ var WorkOrderRepository = (function () {
       facilityId:
         payload.facilityId != null ? payload.facilityId : current.facilityId,
       assetId: payload.assetId != null ? payload.assetId : current.assetId,
+      reportedByUserId:
+        payload.reportedByUserId != null
+          ? payload.reportedByUserId
+          : current.reportedByUserId,
       incidentId:
         payload.incidentId != null ? payload.incidentId : current.incidentId,
       maintenanceId:
@@ -6689,7 +6815,8 @@ var WorkOrderRepository = (function () {
   function create(payload) {
     var sheet = getSheet_();
     var now = new Date().toISOString();
-    var id = nextId_();
+    var values = sheet.getDataRange().getValues();
+    var id = nextIdFromValues_(values);
     var description = payload.description || payload.title || "";
     var requestedAt = payload.requestedAt || payload.createdAt || now;
 
@@ -6701,6 +6828,7 @@ var WorkOrderRepository = (function () {
       source: payload.source || "manual",
       facilityId: payload.facilityId || "",
       assetId: payload.assetId || "",
+      reportedByUserId: payload.reportedByUserId || "",
       incidentId: payload.incidentId || "",
       maintenanceId: payload.maintenanceId || "",
       parentWorkOrderId: payload.parentWorkOrderId || "",
@@ -6718,29 +6846,68 @@ var WorkOrderRepository = (function () {
       _dateClosed: "",
     };
 
-    ensureHeaders_(sheet);
+    var headerMap = ensureHeaders_(sheet);
     var lastCol = sheet.getLastColumn();
-    var headerMap = SheetFieldUtils.getHeaderMap(sheet);
     var fields = canonicalToFields_(canonical);
-    var row = SheetFieldUtils.buildRowFromFields(headerMap, lastCol, fields);
+    var row = SheetFieldUtils.buildRowFromFieldsStrict(
+      headerMap,
+      lastCol,
+      fields
+    );
     sheet.appendRow(row);
-    return getById(id);
+
+    // Return written canonical (no second full-sheet getById).
+    var response = {};
+    for (var key in canonical) {
+      if (!canonical.hasOwnProperty(key)) continue;
+      if (key === "_completedBy" || key === "_dateClosed") continue;
+      response[key] = canonical[key];
+    }
+    return response;
   }
 
   function update(id, payload) {
     var sheet = getSheet_();
-    var rowIndex = findRowIndex_(id);
+    var values = sheet.getDataRange().getValues();
+    if (values.length <= 1) return null;
+
+    var headers = values[0];
+    var headerMap = SheetFieldUtils.headerMapFromRow
+      ? SheetFieldUtils.headerMapFromRow(headers)
+      : SheetFieldUtils.getHeaderMap(sheet);
+    var idCol = -1;
+    for (var c = 0; c < headers.length; c++) {
+      if (String(headers[c]).trim() === "Work Order ID") {
+        idCol = c;
+        break;
+      }
+    }
+    if (idCol === -1) return null;
+
+    var rowIndex = -1;
+    for (var r = 1; r < values.length; r++) {
+      if (String(values[r][idCol]) === String(id)) {
+        rowIndex = r + 1;
+        break;
+      }
+    }
     if (rowIndex === -1) return null;
 
-    var values = sheet.getDataRange().getValues();
-    var headers = values[0];
-    var headerMap = SheetFieldUtils.getHeaderMap(sheet);
-    var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[rowIndex - 1]);
+    var sheetRow = SheetFieldUtils.rowToSheetObject(
+      headers,
+      values[rowIndex - 1]
+    );
     var currentRaw = toCanonical_(sheetRow, headerMap);
-
     var updated = mergeCanonical_(currentRaw, payload);
     writeRow_(sheet, rowIndex, updated);
-    return getById(id);
+
+    var response = {};
+    for (var key in updated) {
+      if (!updated.hasOwnProperty(key)) continue;
+      if (key === "_completedBy" || key === "_dateClosed") continue;
+      response[key] = updated[key];
+    }
+    return response;
   }
 
   function deactivate(id) {

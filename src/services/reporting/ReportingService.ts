@@ -53,12 +53,14 @@ async function buildReportingSnapshotFromDomain(
     workOrders,
     currentUser,
   ] = await Promise.all([
-    loadAllPages((page, pageSize) => UserService.listUsers({ page, pageSize })),
+    loadAllPages((page, pageSize) =>
+      UserService.listUsersCatalog({ page, pageSize })
+    ),
     loadAllPages((page, pageSize) =>
       FacilityService.listFacilities({ page, pageSize })
     ),
     loadAllPages((page, pageSize) =>
-      AssetService.listAssets({ page, pageSize })
+      AssetService.listAssetsCatalog({ page, pageSize })
     ),
     loadAllPages((page, pageSize) =>
       IncidentService.listIncidents({ page, pageSize })

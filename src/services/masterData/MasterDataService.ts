@@ -7,6 +7,15 @@ import type {
   UpdateMasterDataInput,
 } from "@/modules/master-data/types";
 import { apiClient } from "@/services/api/ApiClient";
+import {
+  CacheNamespaces,
+  onMasterDataMutation,
+} from "@/services/cache/domainCache";
+import {
+  CATALOG_TTL_MS,
+  sharedRequest,
+  stableRequestKey,
+} from "@/services/cache/sharedRequest";
 
 type RemoteItem = Record<string, unknown>;
 
@@ -206,70 +215,91 @@ export const MasterDataService = {
   async list(
     params: MasterDataListParams
   ): Promise<PaginatedResult<MasterDataItem>> {
-    const needsClientCascade =
-      hasRelationFilter(params.facilityId) ||
-      hasRelationFilter(params.buildingId) ||
-      hasRelationFilter(params.floorId);
-
-    // When cascading, do not trust server-side facilityId filters — live rows
-    // store `facility`, so undeployed scripts return []. Fetch a wide page and
-    // filter on the normalized model instead.
-    const remotePayload: MasterDataListParams = needsClientCascade
-      ? {
-          entity: params.entity,
-          page: 1,
-          pageSize: Math.max(Number(params.pageSize ?? 200), 500),
-          search: "",
-          status: "all",
-        }
-      : params;
-
-    const response = await apiClient.post<unknown>("/master-data", {
-      resource: "master-data",
-      action: "getAll",
-      payload: remotePayload,
-    });
-
-    const normalized = extractRemoteRows(response.data).map(
-      normalizeMasterDataItem
-    );
-    const filtered = filterMasterDataByRelations(normalized, params);
-
-    if (
-      process.env.NODE_ENV === "development" &&
-      params.entity === "buildings" &&
-      hasRelationFilter(params.facilityId)
-    ) {
-      console.log("[MasterDataService] Selected facility:", params.facilityId);
-      console.log(
-        "[MasterDataService] Buildings (normalized):",
-        filtered.map((item) => ({
-          id: item.id,
-          name: item.name,
-          facilityId: item.facilityId,
-        }))
-      );
-    }
-
-    if (needsClientCascade) {
-      return paginateItems(filtered, params);
-    }
-
-    // Server already paginated; still normalize relation fields on each row.
-    if (response.data && typeof response.data === "object") {
-      const page = response.data as Record<string, unknown>;
-      if (Array.isArray(page.data)) {
-        return {
-          data: (page.data as RemoteItem[]).map(normalizeMasterDataItem),
-          page: Number(page.page ?? params.page ?? 1),
-          pageSize: Number(page.pageSize ?? params.pageSize ?? page.data.length),
-          total: Number(page.total ?? page.data.length),
-          totalPages: Number(page.totalPages ?? 1),
-        };
+    const key = stableRequestKey(
+      `${CacheNamespaces.masterData}:${params.entity}`,
+      {
+        page: params.page ?? 1,
+        pageSize: params.pageSize ?? 8,
+        search: params.search ?? "",
+        status: params.status ?? "all",
+        facilityId: params.facilityId ?? "all",
+        buildingId: params.buildingId ?? "all",
+        floorId: params.floorId ?? "all",
+        category: params.category ?? "all",
       }
-    }
+    );
 
-    return paginateItems(filtered, params);
+    return sharedRequest(
+      key,
+      async () => {
+        const needsClientCascade =
+          hasRelationFilter(params.facilityId) ||
+          hasRelationFilter(params.buildingId) ||
+          hasRelationFilter(params.floorId);
+
+        const remotePayload: MasterDataListParams = needsClientCascade
+          ? {
+              entity: params.entity,
+              page: 1,
+              pageSize: Math.max(Number(params.pageSize ?? 200), 500),
+              search: "",
+              status: "all",
+            }
+          : params;
+
+        const response = await apiClient.post<unknown>("/master-data", {
+          resource: "master-data",
+          action: "getAll",
+          payload: remotePayload,
+        });
+
+        const normalized = extractRemoteRows(response.data).map(
+          normalizeMasterDataItem
+        );
+        const filtered = filterMasterDataByRelations(normalized, params);
+
+        if (
+          process.env.NODE_ENV === "development" &&
+          params.entity === "buildings" &&
+          hasRelationFilter(params.facilityId)
+        ) {
+          console.log(
+            "[MasterDataService] Selected facility:",
+            params.facilityId
+          );
+          console.log(
+            "[MasterDataService] Buildings (normalized):",
+            filtered.map((item) => ({
+              id: item.id,
+              name: item.name,
+              facilityId: item.facilityId,
+            }))
+          );
+        }
+
+        if (needsClientCascade) {
+          return paginateItems(filtered, params);
+        }
+
+        if (response.data && typeof response.data === "object") {
+          const page = response.data as Record<string, unknown>;
+          if (Array.isArray(page.data)) {
+            return {
+              data: (page.data as RemoteItem[]).map(normalizeMasterDataItem),
+              page: Number(page.page ?? params.page ?? 1),
+              pageSize: Number(
+                page.pageSize ?? params.pageSize ?? page.data.length
+              ),
+              total: Number(page.total ?? page.data.length),
+              totalPages: Number(page.totalPages ?? 1),
+            };
+          }
+        }
+
+        return paginateItems(filtered, params);
+      },
+      { ttlMs: CATALOG_TTL_MS }
+    );
   },
 
   async create(input: CreateMasterDataInput): Promise<MasterDataItem> {
@@ -279,6 +309,7 @@ export const MasterDataService = {
       action: "create",
       payload: { ...input, ...relations },
     });
+    onMasterDataMutation(input.entity);
     return mapRemoteItem(response.data as RemoteItem);
   },
 
@@ -289,6 +320,7 @@ export const MasterDataService = {
       action: "update",
       payload: { ...input, ...relations },
     });
+    onMasterDataMutation(input.entity);
     return mapRemoteItem(response.data as RemoteItem);
   },
 
@@ -301,6 +333,7 @@ export const MasterDataService = {
       action: "deactivate",
       payload: { entity, id },
     });
+    onMasterDataMutation(entity);
     return mapRemoteItem(response.data as RemoteItem);
   },
 };

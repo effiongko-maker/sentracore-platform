@@ -8,7 +8,7 @@ export {
   getEntityRegistration,
   listEntityRegistrations,
 } from "./registry";
-export { loadDirectoryPages } from "./loadDirectoryPages";
+export { loadDirectoryPages, loadDirectoryFromCatalog } from "./loadDirectoryPages";
 export type {
   EntityKind,
   EntityResolverRegistration,

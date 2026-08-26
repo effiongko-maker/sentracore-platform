@@ -14,12 +14,52 @@ import {
  * Next.js → Apps Script. Platform identity uses /api/auth/me (Supabase Auth).
  *
  * The frontend never references Spreadsheets or other storage backends.
+ *
+ * Retry policy (bounded, transient-only):
+ * - Retry network failures and HTTP 408/429/502/503/504.
+ * - Never retry validation/schema failures (4xx with Apps Script validation).
+ * - Max 2 retries with short backoff — avoids storms; sharedRequest coalesces peers.
  */
 
 const LATENCY_MS = 280;
+const MAX_TRANSIENT_RETRIES = 2;
+const RETRY_BASE_MS = 350;
 
 function delay(ms = LATENCY_MS) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientHttpStatus(status: number): boolean {
+  return status === 408 || status === 429 || status === 502 || status === 503 || status === 504;
+}
+
+function isValidationFailure(
+  status: number,
+  message: string,
+  meta?: { errorClass?: string; retryable?: boolean }
+): boolean {
+  if (meta?.errorClass === "validation") return true;
+  if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
+    return true;
+  }
+  return /missing headers|is required|validation|cannot write sheet fields/i.test(
+    message
+  );
+}
+
+function shouldRetryFailure(
+  status: number,
+  message: string,
+  meta?: { errorClass?: string; retryable?: boolean }
+): boolean {
+  if (meta?.retryable === true) return true;
+  if (meta?.retryable === false) return false;
+  if (isValidationFailure(status, message, meta)) return false;
+  return isTransientHttpStatus(status);
 }
 
 async function mockRequest(
@@ -64,73 +104,108 @@ export class ApiClient {
                   ? { endpoint: "/api/maintenance", resource: "maintenance" }
                   : path === "/approvals"
                     ? { endpoint: "/api/approvals", resource: "approvals" }
-                  : path === "/master-data"
-                    ? {
-                        endpoint: "/api/master-data",
-                        resource: "master-data",
-                      }
-                    : path === "/reporting-snapshot"
+                    : path === "/master-data"
                       ? {
-                          endpoint: "/api/reporting-snapshot",
-                          resource: "reporting-snapshot",
+                          endpoint: "/api/master-data",
+                          resource: "master-data",
                         }
-                      : null;
+                      : path === "/reporting-snapshot"
+                        ? {
+                            endpoint: "/api/reporting-snapshot",
+                            resource: "reporting-snapshot",
+                          }
+                        : null;
 
     if (liveProxy) {
       return traceRequest(`ApiClient.post ${path}`, async () => {
-        const response = await fetch(liveProxy.endpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            ...options?.headers,
-          },
-          body: JSON.stringify(
-            body ?? {
-              resource: liveProxy.resource,
-              action: "getAll",
-              payload: {},
+        let attempt = 0;
+        // attempt 0 = first try; retries up to MAX_TRANSIENT_RETRIES
+        while (true) {
+          try {
+            const response = await fetch(liveProxy.endpoint, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+                ...options?.headers,
+              },
+              body: JSON.stringify(
+                body ?? {
+                  resource: liveProxy.resource,
+                  action: "getAll",
+                  payload: {},
+                }
+              ),
+              signal: options?.signal,
+            });
+
+            const text = await response.text();
+            const trimmed = text.trim();
+            if (!trimmed || trimmed.startsWith("<")) {
+              const err = new ApiError(
+                `Expected JSON from ${liveProxy.endpoint} but received HTML (status ${response.status}). Is the Next.js route at src/app/api/${liveProxy.resource}/route.ts?`,
+                response.status,
+                trimmed.slice(0, 200)
+              );
+              if (
+                attempt < MAX_TRANSIENT_RETRIES &&
+                isTransientHttpStatus(response.status)
+              ) {
+                attempt += 1;
+                await sleep(RETRY_BASE_MS * attempt);
+                continue;
+              }
+              throw err;
             }
-          ),
-          signal: options?.signal,
-        });
 
-        // Diagnose before assuming JSON (HTML 404/redirect pages break response.json()).
-        const text = await response.text();
-        const trimmed = text.trim();
-        if (!trimmed || trimmed.startsWith("<")) {
-          throw new ApiError(
-            `Expected JSON from ${liveProxy.endpoint} but received HTML (status ${response.status}). Is the Next.js route at src/app/api/${liveProxy.resource}/route.ts?`,
-            response.status,
-            trimmed.slice(0, 200)
-          );
+            let json: ApiResponse<T> & {
+              meta?: { errorClass?: string; retryable?: boolean };
+            };
+            try {
+              json = JSON.parse(trimmed) as typeof json;
+            } catch {
+              throw new ApiError(
+                `Invalid JSON from ${liveProxy.endpoint} (status ${response.status})`,
+                response.status,
+                trimmed.slice(0, 200)
+              );
+            }
+
+            if (!response.ok || json.success === false) {
+              const message =
+                json.message ??
+                `Request failed with status ${response.status}`;
+              const status = response.status || json.status || 500;
+              const meta = json.meta;
+              if (
+                attempt < MAX_TRANSIENT_RETRIES &&
+                shouldRetryFailure(status, message, meta)
+              ) {
+                attempt += 1;
+                await sleep(RETRY_BASE_MS * attempt);
+                continue;
+              }
+              throw new ApiError(message, status, json);
+            }
+
+            return {
+              success: true,
+              status: response.status,
+              data: json.data,
+              message: json.message,
+            };
+          } catch (error) {
+            if (error instanceof ApiError) throw error;
+            if (options?.signal?.aborted) throw error;
+            // Network / fetch throw — treat as transient.
+            if (attempt < MAX_TRANSIENT_RETRIES) {
+              attempt += 1;
+              await sleep(RETRY_BASE_MS * attempt);
+              continue;
+            }
+            throw error;
+          }
         }
-
-        let json: ApiResponse<T>;
-        try {
-          json = JSON.parse(trimmed) as ApiResponse<T>;
-        } catch {
-          throw new ApiError(
-            `Invalid JSON from ${liveProxy.endpoint} (status ${response.status})`,
-            response.status,
-            trimmed.slice(0, 200)
-          );
-        }
-
-        if (!response.ok || json.success === false) {
-          throw new ApiError(
-            json.message ?? `Request failed with status ${response.status}`,
-            response.status || json.status || 500,
-            json
-          );
-        }
-
-        return {
-          success: true,
-          status: response.status,
-          data: json.data,
-          message: json.message,
-        };
       });
     }
 

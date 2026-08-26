@@ -46,6 +46,11 @@ var SheetFieldUtils = (function () {
     var lastCol = sheet.getLastColumn();
     if (lastCol < 1) return {};
     var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+    return headerMapFromRow_(headers);
+  }
+
+  /** Build header map from an already-loaded header row (avoids re-read). */
+  function headerMapFromRow_(headers) {
     var map = {};
     for (var i = 0; i < headers.length; i++) {
       map[String(headers[i]).trim()] = i;
@@ -70,6 +75,27 @@ var SheetFieldUtils = (function () {
       }
     }
     return row;
+  }
+
+  /**
+   * Like buildRowFromFields_, but throws when any field with a non-empty value
+   * targets a missing header — prevents silent data loss on writes.
+   */
+  function buildRowFromFieldsStrict_(headerMap, lastCol, fields) {
+    var missing = [];
+    for (var header in fields) {
+      if (!fields.hasOwnProperty(header)) continue;
+      if (headerMap[header] !== undefined) continue;
+      var value = fields[header];
+      if (value == null || String(value).trim() === "") continue;
+      missing.push(header);
+    }
+    if (missing.length) {
+      throw new Error(
+        "Cannot write sheet fields — missing headers: " + missing.join(", ")
+      );
+    }
+    return buildRowFromFields_(headerMap, lastCol, fields);
   }
 
   function hasHeader_(headerMap, name) {
@@ -115,8 +141,10 @@ var SheetFieldUtils = (function () {
     formatIdList: formatIdList_,
     appendUniqueId: appendUniqueId_,
     getHeaderMap: getHeaderMap_,
+    headerMapFromRow: headerMapFromRow_,
     rowToSheetObject: rowToSheetObject_,
     buildRowFromFields: buildRowFromFields_,
+    buildRowFromFieldsStrict: buildRowFromFieldsStrict_,
     hasHeader: hasHeader_,
     cachePutUtf8: cachePutUtf8,
     cacheGetUtf8: cacheGetUtf8,

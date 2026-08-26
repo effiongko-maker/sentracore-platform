@@ -9,6 +9,15 @@ import type {
 } from "@/modules/facilities/types";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
+import {
+  CacheNamespaces,
+  onFacilityMutation,
+} from "@/services/cache/domainCache";
+import {
+  CATALOG_TTL_MS,
+  sharedRequest,
+  stableRequestKey,
+} from "@/services/cache/sharedRequest";
 
 /** Raw row shape from the Apps Script facilities API. */
 type RemoteFacility = Record<string, unknown>;
@@ -98,13 +107,25 @@ export const FacilityService = {
   async listFacilities(
     params: FacilityListParams = {}
   ): Promise<PaginatedResult<Facility>> {
-    const response = await apiClient.post<unknown>("/facilities", {
-      resource: "facilities",
-      action: "getAll",
-      payload: params,
+    const key = stableRequestKey(CacheNamespaces.facilities, {
+      page: params.page ?? 1,
+      pageSize: params.pageSize ?? 8,
+      search: params.search ?? "",
+      status: params.status ?? "all",
+      type: params.type ?? "all",
     });
-
-    return toPaginatedFacilities(response.data, params);
+    return sharedRequest(
+      key,
+      async () => {
+        const response = await apiClient.post<unknown>("/facilities", {
+          resource: "facilities",
+          action: "getAll",
+          payload: params,
+        });
+        return toPaginatedFacilities(response.data, params);
+      },
+      { ttlMs: CATALOG_TTL_MS }
+    );
   },
 
   async getFacility(id: string): Promise<Facility | null> {
@@ -123,6 +144,7 @@ export const FacilityService = {
       action: "create",
       payload: input,
     });
+    onFacilityMutation();
     return mapRemoteFacility(response.data as unknown as RemoteFacility);
   },
 
@@ -135,6 +157,7 @@ export const FacilityService = {
       action: "update",
       payload: { id, ...input },
     });
+    onFacilityMutation();
     return mapRemoteFacility(response.data as unknown as RemoteFacility);
   },
 
@@ -145,6 +168,7 @@ export const FacilityService = {
       action: "deactivate",
       payload: { id },
     });
+    onFacilityMutation();
     return mapRemoteFacility(response.data as unknown as RemoteFacility);
   },
 };

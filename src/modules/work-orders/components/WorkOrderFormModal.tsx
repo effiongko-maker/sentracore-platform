@@ -111,8 +111,8 @@ export function WorkOrderFormModal({
     setMaintenanceLoading(true);
     Promise.all([
       FacilityService.listFacilities({ page: 1, pageSize: 200 }),
-      AssetService.listAssets({ page: 1, pageSize: 200 }),
-      UserService.listUsers({ page: 1, pageSize: 200 }),
+      AssetService.listAssetsCatalog({ page: 1, pageSize: 200 }),
+      UserService.listUsersCatalog({ page: 1, pageSize: 200 }),
       MaintenanceService.listMaintenance({ page: 1, pageSize: 200 }),
     ])
       .then(([facilityPage, assetPage, userPage, maintenancePage]) => {
@@ -150,6 +150,79 @@ export function WorkOrderFormModal({
           (facilityName != null && asset.facility === facilityName)
       )
     : assets;
+
+  /** Keep current edit IDs selectable even if truncated catalog pages omit them. */
+  const facilityOptions = useMemo(() => {
+    if (!workOrder?.facilityId) return facilities;
+    if (facilities.some((row) => row.id === workOrder.facilityId)) {
+      return facilities;
+    }
+    return [
+      {
+        id: workOrder.facilityId,
+        name: workOrder.facilityId,
+        code: workOrder.facilityId,
+        location: "",
+        type: "office" as const,
+        manager: "",
+        status: "active" as const,
+        createdAt: "",
+        updatedAt: "",
+      },
+      ...facilities,
+    ];
+  }, [facilities, workOrder?.facilityId]);
+
+  const assetOptions = useMemo(() => {
+    const base = filteredAssets.length ? filteredAssets : assetsForFacility;
+    if (!workOrder?.assetId) return base;
+    if (base.some((row) => row.id === workOrder.assetId)) return base;
+    return [
+      {
+        id: workOrder.assetId,
+        facility: workOrder.facilityId || "",
+        name: workOrder.assetId,
+        category: "other" as const,
+        manufacturer: "",
+        model: "",
+        serialNumber: "",
+        installDate: "",
+        warrantyExpiry: "",
+        oemId: "",
+        condition: "good" as const,
+        status: "active" as const,
+        assignedTo: "",
+        criticality: "unassessed" as const,
+      },
+      ...base,
+    ];
+  }, [assetsForFacility, filteredAssets, workOrder?.assetId, workOrder?.facilityId]);
+
+  const userOptions = useMemo(() => {
+    let next = users;
+    const ensure = (id?: string) => {
+      if (!id) return;
+      if (next.some((row) => row.id === id)) return;
+      next = [
+        {
+          id,
+          name: id,
+          email: "",
+          role: "",
+          specialization: "",
+          facility: "",
+          activeWorkOrders: 0,
+          status: "active" as const,
+          lastActive: "",
+          createdAt: "",
+        },
+        ...next,
+      ];
+    };
+    ensure(workOrder?.assignedToUserId);
+    ensure(workOrder?.reportedByUserId);
+    return next;
+  }, [users, workOrder?.assignedToUserId, workOrder?.reportedByUserId]);
 
   const maintenanceOptions = useMemo(() => {
     return maintenanceRows.map((row) => {
@@ -450,7 +523,7 @@ export function WorkOrderFormModal({
             }}
           >
             <option value="">Select facility</option>
-            {facilities.map((facility) => (
+            {facilityOptions.map((facility) => (
               <option key={facility.id} value={facility.id}>
                 {facility.name}
               </option>
@@ -466,13 +539,11 @@ export function WorkOrderFormModal({
             onChange={(event) => updateField("assetId", event.target.value)}
           >
             <option value="">Unassigned</option>
-            {(filteredAssets.length ? filteredAssets : assetsForFacility).map(
-              (asset) => (
+            {assetOptions.map((asset) => (
                 <option key={asset.id} value={asset.id}>
                   {asset.name}
                 </option>
-              )
-            )}
+            ))}
           </select>
         </FormField>
 
@@ -486,7 +557,7 @@ export function WorkOrderFormModal({
             }
           >
             <option value="">Unassigned</option>
-            {users.map((user) => (
+            {userOptions.map((user) => (
               <option key={user.id} value={user.id}>
                 {user.name}
               </option>
@@ -504,7 +575,7 @@ export function WorkOrderFormModal({
             }
           >
             <option value="">Not set</option>
-            {users.map((user) => (
+            {userOptions.map((user) => (
               <option key={user.id} value={user.id}>
                 {user.name}
               </option>

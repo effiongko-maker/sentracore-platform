@@ -99,7 +99,7 @@ export function MaintenanceToolbar({
 
   useEffect(() => {
     let cancelled = false;
-    UserService.listUsers({ page: 1, pageSize: 200 })
+    UserService.listUsersCatalog({ page: 1, pageSize: 200 })
       .then((page) => {
         if (!cancelled) setUsers(page.data);
       })

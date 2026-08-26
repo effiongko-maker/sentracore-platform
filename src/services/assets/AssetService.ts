@@ -12,6 +12,14 @@ import type {
 import { normalizeAssetToken } from "@/modules/assets/utils";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
+import {
+  CacheNamespaces,
+  onAssetMutation,
+} from "@/services/cache/domainCache";
+import {
+  CATALOG_TTL_MS,
+  sharedRequest,
+} from "@/services/cache/sharedRequest";
 import { FacilityService } from "@/services/facilities/FacilityService";
 import { OperationalWorkloadService } from "@/services/operational/OperationalWorkloadService";
 import { queryAssetsPage } from "./queryAssets";
@@ -87,7 +95,7 @@ function extractAssetRows(payload: unknown): Asset[] {
   return [];
 }
 
-async function loadAllAssets(): Promise<Asset[]> {
+async function fetchAllAssetsUncached(): Promise<Asset[]> {
   const pageSize = 500;
   let page = 1;
   let totalPages = 1;
@@ -129,6 +137,15 @@ async function loadAllAssets(): Promise<Asset[]> {
     if (asset.id) byId.set(asset.id, asset);
   }
   return Array.from(byId.values());
+}
+
+/** Coalesced + short-TTL asset catalog rows (no workload enrichment). */
+async function loadAllAssets(): Promise<Asset[]> {
+  return sharedRequest(
+    `${CacheNamespaces.assetsCatalog}:all`,
+    fetchAllAssetsUncached,
+    { ttlMs: CATALOG_TTL_MS }
+  );
 }
 
 async function loadFacilityNameById(): Promise<Map<string, string>> {
@@ -243,6 +260,25 @@ export const AssetService = {
     return queryAssetsPage(enriched, params, facilityNameById);
   },
 
+  /**
+   * Lightweight reference catalog — id/name selects and EntityResolver only.
+   * Does NOT run OperationalWorkloadService (no WO/MNT/INC fan-out).
+   */
+  async listAssetsCatalog(
+    params: AssetListParams = {}
+  ): Promise<PaginatedResult<Asset>> {
+    const [assets, facilityNameById] = await Promise.all([
+      loadAllAssets(),
+      loadFacilityNameById(),
+    ]);
+    return queryAssetsPage(assets, params, facilityNameById);
+  },
+
+  /** Full unfiltered asset list without workload enrichment. */
+  async fetchAssetsCatalog(): Promise<Asset[]> {
+    return loadAllAssets();
+  },
+
   async getAsset(id: string): Promise<Asset | null> {
     try {
       const response = await apiClient.post<Asset>("/assets", {
@@ -290,6 +326,7 @@ export const AssetService = {
       );
     }
     await assertAssetPersisted(created.id, input, verified);
+    onAssetMutation();
     return verified;
   },
 
@@ -315,6 +352,7 @@ export const AssetService = {
       );
     }
     await assertAssetPersisted(id, input, verified);
+    onAssetMutation();
     return verified;
   },
 
@@ -338,6 +376,7 @@ export const AssetService = {
     if (normalizeText(verified.status) !== "inactive") {
       throw fieldMismatch("status", "inactive", verified.status);
     }
+    onAssetMutation();
     return verified;
   },
 };

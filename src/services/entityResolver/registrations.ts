@@ -5,7 +5,10 @@ import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
 import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 import { MasterDataService } from "@/services/masterData/MasterDataService";
 import type { MasterDataEntity } from "@/modules/master-data/types";
-import { loadDirectoryPages } from "./loadDirectoryPages";
+import {
+  loadDirectoryFromCatalog,
+  loadDirectoryPages,
+} from "./loadDirectoryPages";
 import { registerEntityResolver } from "./registry";
 
 /** Stable kind keys — import these at call sites instead of raw strings. */
@@ -50,10 +53,10 @@ export function registerDefaultEntityResolvers(): void {
   registerEntityResolver({
     kind: EntityKinds.user,
     label: "User",
+    // Lightweight catalog — never trigger People workload enrichment.
     loadDirectory: () =>
-      loadDirectoryPages({
-        listPage: (page, pageSize) =>
-          UserService.listUsers({ page, pageSize }),
+      loadDirectoryFromCatalog({
+        loadAll: () => UserService.fetchUsersCatalog(),
         getId: (user) => user.id,
         getName: (user) => user.name,
       }),
@@ -74,10 +77,10 @@ export function registerDefaultEntityResolvers(): void {
   registerEntityResolver({
     kind: EntityKinds.asset,
     label: "Asset",
+    // Lightweight catalog — never trigger Asset workload enrichment.
     loadDirectory: () =>
-      loadDirectoryPages({
-        listPage: (page, pageSize) =>
-          AssetService.listAssets({ page, pageSize }),
+      loadDirectoryFromCatalog({
+        loadAll: () => AssetService.fetchAssetsCatalog(),
         getId: (asset) => asset.id,
         getName: (asset) => asset.name,
       }),

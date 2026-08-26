@@ -590,7 +590,9 @@ function decisionMetricLabel(kind: "accepted" | "dismissed" | "deferred"): strin
 }
 
 /**
- * Compare recent vs baseline operational activity and surface meaningful changes.
+ * Intelligence → What Changed (period-over-period).
+ * Compare recent 7d vs prior 7d and surface meaningful volume/risk/pattern shifts.
+ * Not a chronological activity feed — Dashboard owns Recent Activity.
  * Pure read-model — no consumers, no persistence.
  */
 export function detectOrganisationIntelligenceChanges(

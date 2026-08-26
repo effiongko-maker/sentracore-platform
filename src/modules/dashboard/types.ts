@@ -80,7 +80,24 @@ export interface DashboardSnapshot {
   };
   /** Authoritative KPI counts for overview composition. */
   pulse?: DashboardPulse;
+  /**
+   * Chronological Recent Activity (not period comparison).
+   * Built from reporting entities until operational_events feeds Dashboard.
+   */
+  recentActivity?: DashboardRecentActivityItem[];
   sections: DashboardSection[];
+}
+
+/** Dashboard Recent Activity row — meaningful operational events only. */
+export interface DashboardRecentActivityItem {
+  id: string;
+  title: string;
+  summary: string;
+  at: string;
+  href: string;
+  tone: DashboardCardTone;
+  module: DashboardModuleRef;
+  entityId: string;
 }
 
 export interface DashboardSection {

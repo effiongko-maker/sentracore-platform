@@ -32,6 +32,7 @@ import {
   ACTIVE_INCIDENT_STATUSES,
   ACTIVE_MAINTENANCE_STATUSES,
   WORKSPACE_ASSIGNED_WORK_ORDER_STATUSES,
+  deriveOperationalWorkloadMaps,
 } from "@/lib/operational/workload";
 
 const OPEN_WO = WORKSPACE_ASSIGNED_WORK_ORDER_STATUSES;
@@ -330,9 +331,10 @@ export const WorkspaceService = {
   async getWorkspace(): Promise<WorkspaceSnapshot> {
     const asOf = new Date().toISOString();
 
-    const [currentUser, lists] = await Promise.all([
+    const [currentUser, lists, catalogUsers] = await Promise.all([
       UserService.getCurrentUser().catch(() => null),
       loadDomainLists(),
+      UserService.fetchUsersCatalog().catch(() => []),
     ]);
 
     const workOrders = lists.workOrders.data;
@@ -348,6 +350,14 @@ export const WorkspaceService = {
     const facilityNameById = new Map(
       lists.facilities.data.map((facility) => [facility.id, facility.name])
     );
+    const userNameById = new Map(
+      catalogUsers.map((user) => [user.id, user.name || user.id])
+    );
+    const workloadMaps = deriveOperationalWorkloadMaps({
+      workOrders,
+      maintenance,
+      incidents,
+    });
     const activity = buildActivity(workOrders, incidents, maintenance);
     const pulse = buildPulse(incidents, maintenance, workOrders, activity);
     const attention = buildAttentionModel({
@@ -357,6 +367,8 @@ export const WorkspaceService = {
       workOrders,
       maintenance,
       approvals,
+      workloadByUserId: workloadMaps.byUserId,
+      userNameById,
       facilityNameById,
     });
 

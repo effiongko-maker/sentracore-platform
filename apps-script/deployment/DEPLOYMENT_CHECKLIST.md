@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Release: **v0.4.3** — Fix Approval submit status transition (awaiting_decision)
+Release: **v0.4.5** — Data-access stabilization — catalogs, coalescing, WO strict persistence
 
 Use this checklist with `DEPLOYMENT_PACK.md` open. Someone unfamiliar
 with the project should be able to deploy from these steps alone.
@@ -156,10 +156,10 @@ A **new Web App version** is REQUIRED.
 
 With `npm run dev` running:
 
-### Approvals list
+### Work orders list
 
 ```bash
-curl -sS -X POST http://localhost:3000/api/approvals -H 'Content-Type: application/json' -d '{"resource":"approvals","action":"getAll","payload":{"page":1,"pageSize":5}}'
+curl -sS -X POST http://localhost:3000/api/work-orders -H 'Content-Type: application/json' -d '{"resource":"work-orders","action":"getAll","payload":{"page":1,"pageSize":5}}'
 ```
 
 Expected checks:

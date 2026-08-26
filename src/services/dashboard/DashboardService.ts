@@ -7,6 +7,7 @@ import type {
   DashboardSnapshot,
 } from "@/modules/dashboard/types";
 import { ReportingService } from "@/services/reporting";
+import { buildRecentActivityFromReportingSnapshot } from "./buildRecentActivity";
 import { getDashboardWidgets } from "./registry";
 import { registerDefaultDashboardWidgets } from "./widgets";
 
@@ -90,6 +91,7 @@ export const DashboardService = {
           summary: report.health.summary,
         },
         pulse: { ...report.kpis },
+        recentActivity: buildRecentActivityFromReportingSnapshot(report),
         sections: buildSections(cards),
       };
     })().finally(() => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { Users } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ExploreHeader,
   ModeFrame,
@@ -10,6 +10,9 @@ import {
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
+import { ViewWorkOrderModal } from "@/modules/work-orders/components/ViewWorkOrderModal";
+import type { WorkOrder } from "@/modules/work-orders/types";
+import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
 import { DEFAULT_USER_SORT } from "../constants";
 import { useUsers } from "../hooks/useUsers";
 import type { UserModalState } from "../types";
@@ -44,6 +47,26 @@ export function UsersPage() {
 
   const [modal, setModal] = useState<UserModalState>({ type: "closed" });
   const [deactivating, setDeactivating] = useState(false);
+  const [viewWorkOrderId, setViewWorkOrderId] = useState<string | null>(null);
+  const [viewWorkOrder, setViewWorkOrder] = useState<WorkOrder | null>(null);
+
+  useEffect(() => {
+    if (!viewWorkOrderId) {
+      setViewWorkOrder(null);
+      return;
+    }
+    let cancelled = false;
+    void WorkOrderService.getWorkOrder(viewWorkOrderId)
+      .then((row) => {
+        if (!cancelled && row) setViewWorkOrder(row);
+      })
+      .catch(() => {
+        /* Keep the seeded work order from the workload snapshot. */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [viewWorkOrderId]);
 
   async function handleDeactivate() {
     if (modal.type !== "deactivate") return;
@@ -116,6 +139,10 @@ export function UsersPage() {
             onView={(user) => setModal({ type: "view", user })}
             onEdit={(user) => setModal({ type: "edit", user })}
             onDeactivate={(user) => setModal({ type: "deactivate", user })}
+            onViewWorkOrder={(workOrder) => {
+              setViewWorkOrder(workOrder);
+              setViewWorkOrderId(workOrder.id);
+            }}
           />
         </StreamSurface>
       )}
@@ -133,6 +160,15 @@ export function UsersPage() {
         user={modal.type === "view" ? modal.user : null}
         onClose={() => setModal({ type: "closed" })}
         onEdit={(user) => setModal({ type: "edit", user })}
+      />
+
+      <ViewWorkOrderModal
+        open={Boolean(viewWorkOrderId)}
+        workOrder={viewWorkOrder}
+        onClose={() => {
+          setViewWorkOrderId(null);
+          setViewWorkOrder(null);
+        }}
       />
 
       <ConfirmDialog

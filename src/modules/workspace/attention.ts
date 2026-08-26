@@ -39,8 +39,17 @@ export type AttentionBuildInput = {
   workOrders: WorkOrder[];
   maintenance: Maintenance[];
   approvals: Approval[];
+  /** Active WO counts by user ID — for overload attention only. */
+  workloadByUserId?: Record<string, number>;
+  userNameById?: Map<string, string>;
   facilityNameById: Map<string, string>;
 };
+
+/** Explicit threshold — only surface overload when at/above this active WO count. */
+export const PEOPLE_WORKLOAD_ATTENTION_THRESHOLD = 5;
+
+/** Awaiting decision with no follow-up for this many days → attention. */
+export const APPROVAL_FOLLOW_UP_OVERDUE_DAYS = 3;
 
 function dayKey(iso: string): string {
   return toIsoUtc(iso).slice(0, 10);
@@ -243,6 +252,71 @@ function fromPriorityMaintenance(
       actionLabel: needsWo ? "Create work order →" : "Review maintenance →",
       href: needsWo ? "/work-orders" : "/maintenance",
       entityId: row.id,
+    });
+  }
+  return matters;
+}
+
+function fromOverdueApprovalFollowUps(
+  approvals: Approval[],
+  asOf: string,
+  facilityNameById: Map<string, string>
+): AttentionMatter[] {
+  const matters: AttentionMatter[] = [];
+  const asOfMs = Date.parse(asOf) || Date.now();
+  const overdueMs = APPROVAL_FOLLOW_UP_OVERDUE_DAYS * 24 * 60 * 60 * 1000;
+
+  for (const row of approvals) {
+    const status = String(row.status || "");
+    const awaiting =
+      status === "awaiting_decision" ||
+      status === "submitted" ||
+      status === "awaiting_response" ||
+      status === "returned";
+    if (!awaiting) continue;
+
+    const anchor = row.lastFollowUpAt || row.submittedAt;
+    if (!anchor) continue;
+    const age = asOfMs - (Date.parse(anchor) || 0);
+    if (age < overdueMs) continue;
+
+    const days = Math.max(1, Math.floor(age / (24 * 60 * 60 * 1000)));
+    matters.push({
+      id: `apr-fu-overdue-${row.id}`,
+      severity: days >= 7 ? "critical" : "high",
+      title: row.title?.trim() || row.id,
+      location: facilityLabel(row.facilityId, facilityNameById),
+      entityLabel: "Approval",
+      reason: row.lastFollowUpAt
+        ? `No follow-up for ${days} day${days === 1 ? "" : "s"} while awaiting client decision.`
+        : `Submitted ${days} day${days === 1 ? "" : "s"} ago — record a follow-up or decision.`,
+      actionLabel: "Record follow-up →",
+      href: "/approvals",
+      entityId: row.id,
+    });
+  }
+  return matters;
+}
+
+function fromOverloadedPeople(
+  workloadByUserId: Record<string, number> | undefined,
+  userNameById: Map<string, string> | undefined
+): AttentionMatter[] {
+  if (!workloadByUserId) return [];
+  const matters: AttentionMatter[] = [];
+  for (const [userId, count] of Object.entries(workloadByUserId)) {
+    if (count < PEOPLE_WORKLOAD_ATTENTION_THRESHOLD) continue;
+    const name = userNameById?.get(userId) || userId;
+    matters.push({
+      id: `user-overload-${userId}`,
+      severity: count >= PEOPLE_WORKLOAD_ATTENTION_THRESHOLD * 2 ? "critical" : "high",
+      title: name,
+      location: "Workforce",
+      entityLabel: "People",
+      reason: `${count} active work orders assigned — above the attention threshold (${PEOPLE_WORKLOAD_ATTENTION_THRESHOLD}).`,
+      actionLabel: "Review people →",
+      href: "/users",
+      entityId: userId,
     });
   }
   return matters;
@@ -506,6 +580,18 @@ export function buildAttentionModel(
   );
   const seenIncIds = new Set(incidentMatters.map((m) => m.entityId));
 
+  // Overdue follow-ups first so they win over generic approval queue rows.
+  const overdueApprovalMatters = fromOverdueApprovalFollowUps(
+    inputNormalized.approvals,
+    inputNormalized.asOf,
+    inputNormalized.facilityNameById
+  );
+  const seenAprIds = new Set(overdueApprovalMatters.map((m) => m.entityId));
+  const approvalMatters = fromApprovals(
+    inputNormalized.approvals,
+    inputNormalized.facilityNameById
+  ).filter((m) => !seenAprIds.has(m.entityId));
+
   const matters = sortMatters([
     ...incidentMatters,
     ...fromOverdueWorkOrders(
@@ -525,10 +611,8 @@ export function buildAttentionModel(
       inputNormalized.facilityNameById,
       seenMntIds
     ),
-    ...fromApprovals(
-      inputNormalized.approvals,
-      inputNormalized.facilityNameById
-    ),
+    ...overdueApprovalMatters,
+    ...approvalMatters,
     ...fromApprovalRequiredWorkOrders(
       inputNormalized.workOrders,
       inputNormalized.approvals,
@@ -540,6 +624,10 @@ export function buildAttentionModel(
       seenWoIds,
       seenIncIds,
       seenMntIds
+    ),
+    ...fromOverloadedPeople(
+      inputNormalized.workloadByUserId,
+      inputNormalized.userNameById
     ),
   ]);
 

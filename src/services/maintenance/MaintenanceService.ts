@@ -14,6 +14,14 @@ import { applyWorkOrderRule } from "@/modules/maintenance/utils";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
 import {
+  CacheNamespaces,
+  onMaintenanceMutation,
+} from "@/services/cache/domainCache";
+import {
+  sharedRequest,
+  stableRequestKey,
+} from "@/services/cache/sharedRequest";
+import {
   postToAppsScript,
   postToAppsScriptData,
 } from "@/services/api/appsScriptProxy";
@@ -282,12 +290,26 @@ export const MaintenanceService = {
   async listMaintenance(
     params: MaintenanceListParams = {}
   ): Promise<PaginatedResult<Maintenance>> {
-    const response = await apiClient.post<unknown>("/maintenance", {
-      resource: "maintenance",
-      action: "getAll",
-      payload: params,
+    const key = stableRequestKey(CacheNamespaces.maintenanceList, {
+      page: params.page ?? 1,
+      pageSize: params.pageSize ?? 8,
+      search: params.search ?? "",
+      status: params.status ?? "all",
+      priority: params.priority ?? "all",
+      type: params.type ?? "all",
+      facilityId: params.facilityId ?? "all",
+      assignedToUserId: params.assignedToUserId ?? "all",
+      requiresWorkOrder: params.requiresWorkOrder ?? "all",
+      sort: params.sort ?? "",
     });
-    return toPaginatedMaintenance(response.data, params);
+    return sharedRequest(key, async () => {
+      const response = await apiClient.post<unknown>("/maintenance", {
+        resource: "maintenance",
+        action: "getAll",
+        payload: params,
+      });
+      return toPaginatedMaintenance(response.data, params);
+    });
   },
 
   async getMaintenance(id: string): Promise<Maintenance | null> {
@@ -357,7 +379,9 @@ export const MaintenanceService = {
           ? envelope.data
           : raw;
 
-      return mapRemoteMaintenance(row as RemoteMaintenance);
+      const created = mapRemoteMaintenance(row as RemoteMaintenance);
+      onMaintenanceMutation();
+      return created;
     }
 
     const response = await apiClient.post<Maintenance>("/maintenance", {
@@ -365,7 +389,11 @@ export const MaintenanceService = {
       action: "create",
       payload,
     });
-    return mapRemoteMaintenance(response.data as unknown as RemoteMaintenance);
+    const created = mapRemoteMaintenance(
+      response.data as unknown as RemoteMaintenance
+    );
+    onMaintenanceMutation();
+    return created;
   },
 
   async updateMaintenance(
@@ -384,7 +412,9 @@ export const MaintenanceService = {
         { resource: "maintenance", action: "update" },
         "MaintenanceService.updateMaintenance"
       );
-      return mapRemoteMaintenance(row as RemoteMaintenance);
+      const updated = mapRemoteMaintenance(row as RemoteMaintenance);
+      onMaintenanceMutation();
+      return updated;
     }
 
     const response = await apiClient.post<Maintenance>("/maintenance", {
@@ -392,7 +422,11 @@ export const MaintenanceService = {
       action: "update",
       payload,
     });
-    return mapRemoteMaintenance(response.data as unknown as RemoteMaintenance);
+    const updated = mapRemoteMaintenance(
+      response.data as unknown as RemoteMaintenance
+    );
+    onMaintenanceMutation();
+    return updated;
   },
 
   /** Soft-cancel — maintenance rows are never deleted. */
@@ -402,7 +436,11 @@ export const MaintenanceService = {
       action: "deactivate",
       payload: { id },
     });
-    return mapRemoteMaintenance(response.data as unknown as RemoteMaintenance);
+    const deactivated = mapRemoteMaintenance(
+      response.data as unknown as RemoteMaintenance
+    );
+    onMaintenanceMutation();
+    return deactivated;
   },
 };
 

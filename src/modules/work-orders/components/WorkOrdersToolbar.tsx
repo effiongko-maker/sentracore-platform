@@ -112,8 +112,8 @@ export function WorkOrdersToolbar({
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      UserService.listUsers({ page: 1, pageSize: 200 }),
-      AssetService.listAssets({ page: 1, pageSize: 200 }),
+      UserService.listUsersCatalog({ page: 1, pageSize: 200 }),
+      AssetService.listAssetsCatalog({ page: 1, pageSize: 200 }),
       MaintenanceService.listMaintenance({ page: 1, pageSize: 200 }),
     ])
       .then(([userPage, assetPage, maintenancePage]) => {

@@ -679,6 +679,10 @@ a.db-panel-row:hover .db-panel-row-title {
   color: #93c5fd;
 }
 
+.db-panel-delta-neutral {
+  color: var(--db-muted);
+}
+
 .db-count-pill {
   display: inline-flex;
   align-items: center;

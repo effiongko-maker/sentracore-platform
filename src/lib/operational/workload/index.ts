@@ -6,11 +6,23 @@ export {
 } from "./activeStatuses";
 export {
   deriveOperationalWorkloadMaps,
+  isCanonicalAssetId,
+  isCanonicalUserId,
+  workloadEvidenceForAsset,
+  workloadEvidenceForUser,
   workloadFor,
   workloadForAsset,
   workloadForUser,
   type AssetWorkload,
+  type AssetWorkloadEvidence,
   type OperationalWorkloadMaps,
+  type UserWorkloadEvidence,
   type WorkloadBreakdown,
 } from "./deriveOperationalWorkload";
-export { loadOperationalWorkloadMaps } from "./loadOperationalWorkload";
+export {
+  invalidateOperationalWorkload,
+  loadOperationalWorkloadMaps,
+  loadOperationalWorkloadSource,
+  peekOperationalWorkloadSource,
+  type OperationalWorkloadSource,
+} from "./loadOperationalWorkload";

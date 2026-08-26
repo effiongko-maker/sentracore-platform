@@ -78,8 +78,8 @@ export function IncidentFormModal({
     let cancelled = false;
     Promise.all([
       FacilityService.listFacilities({ page: 1, pageSize: 200 }),
-      AssetService.listAssets({ page: 1, pageSize: 200 }),
-      UserService.listUsers({ page: 1, pageSize: 200 }),
+      AssetService.listAssetsCatalog({ page: 1, pageSize: 200 }),
+      UserService.listUsersCatalog({ page: 1, pageSize: 200 }),
       WorkOrderService.listWorkOrders({ page: 1, pageSize: 200 }),
     ])
       .then(([facilityPage, assetPage, userPage, workOrderPage]) => {

@@ -17,6 +17,11 @@ export interface User {
    * (not the stale sheet cell). Field name retained for API compatibility.
    */
   activeWorkOrders: number;
+  /**
+   * Work Order IDs that produced `activeWorkOrders` (same derive pass).
+   * Used so the People workload popover cannot disagree with the count.
+   */
+  workloadWorkOrderIds?: string[];
   /** Empty when the sheet Status cell is blank. */
   status: UserStatus | "";
   avatarUrl?: string;

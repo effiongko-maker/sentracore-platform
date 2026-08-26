@@ -15,6 +15,14 @@ import { applyWorkOrderRule } from "@/modules/incidents/utils";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
 import {
+  CacheNamespaces,
+  onIncidentMutation,
+} from "@/services/cache/domainCache";
+import {
+  sharedRequest,
+  stableRequestKey,
+} from "@/services/cache/sharedRequest";
+import {
   postToAppsScript,
   postToAppsScriptData,
 } from "@/services/api/appsScriptProxy";
@@ -315,12 +323,24 @@ export const IncidentService = {
   async listIncidents(
     params: IncidentListParams = {}
   ): Promise<PaginatedResult<Incident>> {
-    const response = await apiClient.post<unknown>("/incidents", {
-      resource: "incidents",
-      action: "getAll",
-      payload: params,
+    const key = stableRequestKey(CacheNamespaces.incidentsList, {
+      page: params.page ?? 1,
+      pageSize: params.pageSize ?? 8,
+      search: params.search ?? "",
+      status: params.status ?? "all",
+      severity: params.severity ?? "all",
+      facilityId: params.facilityId ?? "all",
+      assignedToUserId: params.assignedToUserId ?? "all",
+      requiresWorkOrder: params.requiresWorkOrder ?? "all",
     });
-    return toPaginatedIncidents(response.data, params);
+    return sharedRequest(key, async () => {
+      const response = await apiClient.post<unknown>("/incidents", {
+        resource: "incidents",
+        action: "getAll",
+        payload: params,
+      });
+      return toPaginatedIncidents(response.data, params);
+    });
   },
 
   async getIncident(id: string): Promise<Incident | null> {
@@ -386,7 +406,9 @@ export const IncidentService = {
           ? envelope.data
           : raw;
 
-      return mapRemoteIncident(row as RemoteIncident);
+      const created = mapRemoteIncident(row as RemoteIncident);
+      onIncidentMutation();
+      return created;
     }
 
     const response = await apiClient.post<Incident>("/incidents", {
@@ -394,7 +416,11 @@ export const IncidentService = {
       action: "create",
       payload,
     });
-    return mapRemoteIncident(response.data as unknown as RemoteIncident);
+    const created = mapRemoteIncident(
+      response.data as unknown as RemoteIncident
+    );
+    onIncidentMutation();
+    return created;
   },
 
   async updateIncident(
@@ -413,7 +439,9 @@ export const IncidentService = {
         { resource: "incidents", action: "update" },
         "IncidentService.updateIncident"
       );
-      return mapRemoteIncident(row as RemoteIncident);
+      const updated = mapRemoteIncident(row as RemoteIncident);
+      onIncidentMutation();
+      return updated;
     }
 
     const response = await apiClient.post<Incident>("/incidents", {
@@ -421,7 +449,11 @@ export const IncidentService = {
       action: "update",
       payload,
     });
-    return mapRemoteIncident(response.data as unknown as RemoteIncident);
+    const updated = mapRemoteIncident(
+      response.data as unknown as RemoteIncident
+    );
+    onIncidentMutation();
+    return updated;
   },
 
   /** Soft-cancel — incidents are never deleted. */
@@ -431,7 +463,11 @@ export const IncidentService = {
       action: "deactivate",
       payload: { id },
     });
-    return mapRemoteIncident(response.data as unknown as RemoteIncident);
+    const deactivated = mapRemoteIncident(
+      response.data as unknown as RemoteIncident
+    );
+    onIncidentMutation();
+    return deactivated;
   },
 };
 

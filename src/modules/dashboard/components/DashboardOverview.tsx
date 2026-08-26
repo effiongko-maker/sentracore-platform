@@ -208,28 +208,26 @@ export function DashboardOverview({
       </section>
 
       <div className="db-lower">
-        <section className="db-panel" aria-labelledby="db-changed-heading">
+        <section className="db-panel" aria-labelledby="db-activity-heading">
           <div>
-            <h2 id="db-changed-heading" className="db-section-title">
-              What changed
+            <h2 id="db-activity-heading" className="db-section-title">
+              Recent Activity
             </h2>
             <p className="db-section-support">
-              Key movements in the current day window.
+              Meaningful operational events in chronological order.
             </p>
           </div>
-          {overview.changes.length === 0 ? (
+          {overview.recentActivity.length === 0 ? (
             <div className="db-empty" style={{ borderStyle: "solid" }}>
-              <p className="db-empty-title">
-                No major operational changes since the last comparison
-              </p>
+              <p className="db-empty-title">No recent operational activity</p>
               <p className="db-empty-copy">
-                Day-over-day deltas are not available yet. Current pressures are
-                listed above.
+                Work order, maintenance, and incident updates will appear here as
+                they occur.
               </p>
             </div>
           ) : (
             <div className="db-panel-list">
-              {overview.changes.map((row) => (
+              {overview.recentActivity.map((row) => (
                 <Link
                   key={row.id}
                   href={row.href ?? "#"}
@@ -243,11 +241,11 @@ export function DashboardOverview({
                     </span>
                     <div>
                       <p className="db-panel-row-title">{row.title}</p>
-                      <p className="db-panel-row-context">{row.context}</p>
+                      <p className="db-panel-row-context">{row.summary}</p>
                     </div>
                   </div>
-                  <span className={`db-panel-delta db-panel-delta-${row.tone}`}>
-                    {row.deltaLabel}
+                  <span className="db-panel-delta db-panel-delta-neutral">
+                    {row.atLabel}
                   </span>
                 </Link>
               ))}

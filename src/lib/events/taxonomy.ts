@@ -19,6 +19,9 @@ export const OperationalEventTypes = {
   FACILITY_WORK_ORDER_STARTED: "facility.work_order_started",
   FACILITY_WORK_ORDER_COMPLETED: "facility.work_order_completed",
   FACILITY_WORK_ORDER_CANCELLED: "facility.work_order_cancelled",
+  FACILITY_WORK_ORDER_REASSIGNED: "facility.work_order_reassigned",
+  FACILITY_MAINTENANCE_LINKED_TO_WORK_ORDER:
+    "facility.maintenance_linked_to_work_order",
   FACILITY_APPROVAL_CREATED: "facility.approval_created",
   FACILITY_APPROVAL_SUBMITTED: "facility.approval_submitted",
   FACILITY_APPROVAL_FOLLOWED_UP: "facility.approval_followed_up",
@@ -119,6 +122,18 @@ export const OPERATIONAL_EVENT_CATALOG: OperationalEventTypeDefinition[] = [
     defaultEntityType: "work_order",
   },
   {
+    eventType: OperationalEventTypes.FACILITY_WORK_ORDER_REASSIGNED,
+    domain: "facility",
+    description: "A work order was reassigned to a different person.",
+    defaultEntityType: "work_order",
+  },
+  {
+    eventType: OperationalEventTypes.FACILITY_MAINTENANCE_LINKED_TO_WORK_ORDER,
+    domain: "facility",
+    description: "Maintenance was linked to a work order.",
+    defaultEntityType: "maintenance_request",
+  },
+  {
     eventType: OperationalEventTypes.FACILITY_APPROVAL_CREATED,
     domain: "facility",
     description: "A client approval request was created.",
@@ -179,7 +194,12 @@ export function isKnownEventType(eventType: string): boolean {
   return OPERATIONAL_EVENT_CATALOG.some((entry) => entry.eventType === eventType);
 }
 
-/** Operational lifecycle events Intelligence should observe. */
+/**
+ * Operational lifecycle events Intelligence should observe for patterns /
+ * What Changed (period comparison) — not a raw activity feed.
+ * Approvals + reassignment/link events are included so detectors can grow
+ * without inventing a second event plane.
+ */
 export const OPERATIONAL_LIFECYCLE_EVENT_TYPES = [
   OperationalEventTypes.FACILITY_INCIDENT_REPORTED,
   OperationalEventTypes.FACILITY_INCIDENT_TRIAGED,
@@ -189,9 +209,18 @@ export const OPERATIONAL_LIFECYCLE_EVENT_TYPES = [
   OperationalEventTypes.FACILITY_MAINTENANCE_SCHEDULED,
   OperationalEventTypes.FACILITY_MAINTENANCE_STARTED,
   OperationalEventTypes.FACILITY_MAINTENANCE_COMPLETED,
+  OperationalEventTypes.FACILITY_MAINTENANCE_LINKED_TO_WORK_ORDER,
   OperationalEventTypes.FACILITY_WORK_ORDER_CREATED,
   OperationalEventTypes.FACILITY_WORK_ORDER_ASSIGNED,
+  OperationalEventTypes.FACILITY_WORK_ORDER_REASSIGNED,
   OperationalEventTypes.FACILITY_WORK_ORDER_STARTED,
   OperationalEventTypes.FACILITY_WORK_ORDER_COMPLETED,
   OperationalEventTypes.FACILITY_WORK_ORDER_CANCELLED,
+  OperationalEventTypes.FACILITY_APPROVAL_CREATED,
+  OperationalEventTypes.FACILITY_APPROVAL_SUBMITTED,
+  OperationalEventTypes.FACILITY_APPROVAL_FOLLOWED_UP,
+  OperationalEventTypes.FACILITY_APPROVAL_APPROVED,
+  OperationalEventTypes.FACILITY_APPROVAL_PARTIALLY_APPROVED,
+  OperationalEventTypes.FACILITY_APPROVAL_REJECTED,
+  OperationalEventTypes.FACILITY_APPROVAL_CANCELLED,
 ] as const;

@@ -1,12 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Users } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { DataTable, type Column } from "@/components/tables/DataTable";
 import { USER_STATUS_VARIANT } from "../constants";
-import { formatFacilityDisplay, formatWorkload, getUserInitials, labelize } from "../utils";
+import { formatFacilityDisplay, getUserInitials, labelize } from "../utils";
 import type { User } from "../types";
+import type { WorkOrder } from "@/modules/work-orders/types";
+import { UserRowActions } from "./UserRowActions";
+import { UserWorkloadDisclosure } from "./UserWorkloadDisclosure";
 
 function statusBadgeVariant(user: User) {
   if (!user.status) return "neutral" as const;
@@ -16,7 +19,11 @@ function statusBadgeVariant(user: User) {
 function statusLabel(user: User) {
   return user.status ? labelize(user.status) : "Unset";
 }
-import { UserRowActions } from "./UserRowActions";
+
+type OpenOverlay =
+  | { type: "workload"; userId: string }
+  | { type: "actions"; userId: string }
+  | null;
 
 interface UsersTableProps {
   users: User[];
@@ -28,6 +35,7 @@ interface UsersTableProps {
   onView: (user: User) => void;
   onEdit: (user: User) => void;
   onDeactivate: (user: User) => void;
+  onViewWorkOrder: (workOrder: WorkOrder) => void;
 }
 
 export function UsersTable({
@@ -40,7 +48,16 @@ export function UsersTable({
   onView,
   onEdit,
   onDeactivate,
+  onViewWorkOrder,
 }: UsersTableProps) {
+  const [overlay, setOverlay] = useState<OpenOverlay>(null);
+
+  const rosterKey = `${page}:${users.map((user) => user.id).join(",")}`;
+
+  useEffect(() => {
+    setOverlay(null);
+  }, [rosterKey]);
+
   const columns = useMemo<Column<User>[]>(
     () => [
       {
@@ -94,9 +111,16 @@ export function UsersTable({
         key: "workload",
         header: "Current Workload",
         render: (user) => (
-          <span className="whitespace-nowrap text-sm text-foreground">
-            {formatWorkload(user.activeWorkOrders)}
-          </span>
+          <UserWorkloadDisclosure
+            user={user}
+            open={overlay?.type === "workload" && overlay.userId === user.id}
+            onOpenChange={(next) =>
+              setOverlay(
+                next ? { type: "workload", userId: user.id } : null
+              )
+            }
+            onViewWorkOrder={onViewWorkOrder}
+          />
         ),
       },
       {
@@ -115,6 +139,10 @@ export function UsersTable({
         render: (user) => (
           <UserRowActions
             user={user}
+            open={overlay?.type === "actions" && overlay.userId === user.id}
+            onOpenChange={(next) =>
+              setOverlay(next ? { type: "actions", userId: user.id } : null)
+            }
             onView={onView}
             onEdit={onEdit}
             onDeactivate={onDeactivate}
@@ -122,7 +150,7 @@ export function UsersTable({
         ),
       },
     ],
-    [onView, onEdit, onDeactivate]
+    [onView, onEdit, onDeactivate, onViewWorkOrder, overlay]
   );
 
   return (

@@ -19,16 +19,32 @@ export type AssetWorkload = {
   workloadBreakdown: WorkloadBreakdown;
 };
 
+/** Contributing record IDs for audit / Kaiso explanations. */
+export type UserWorkloadEvidence = {
+  count: number;
+  workOrderIds: string[];
+};
+
+export type AssetWorkloadEvidence = {
+  activeWorkload: number;
+  workloadBreakdown: WorkloadBreakdown;
+  workOrderIds: string[];
+  maintenanceIds: string[];
+  incidentIds: string[];
+};
+
 export type OperationalWorkloadMaps = {
   /**
-   * People register — USERS `Current Workload` / `activeWorkOrders`.
-   * Active Work Orders only, keyed by assignedToUserId.
+   * People register — active Work Orders only, keyed by assignedToUserId.
+   * Sheet USERS "Current Workload" is never the source of truth.
    */
   byUserId: Record<string, number>;
+  byUserIdEvidence: Record<string, UserWorkloadEvidence>;
   /**
-   * Assets register — derived Active Workload + breakdown by assetId.
+   * Assets register — active WO + Maintenance + Incidents by assetId.
    */
   byAssetId: Record<string, AssetWorkload>;
+  byAssetIdEvidence: Record<string, AssetWorkloadEvidence>;
 };
 
 const EMPTY_BREAKDOWN = (): WorkloadBreakdown => ({
@@ -37,32 +53,74 @@ const EMPTY_BREAKDOWN = (): WorkloadBreakdown => ({
   incidents: 0,
 });
 
+/**
+ * Only canonical IDs count — never display names.
+ * People: USR-…  Assets: AST-… (also accept UUID-shaped legacy ids).
+ */
+export function isCanonicalUserId(value?: string | null): boolean {
+  const id = String(value ?? "").trim();
+  if (!id) return false;
+  if (/^USR-/i.test(id)) return true;
+  // Reject obvious person names (spaces / letters-only without id prefix).
+  if (/\s/.test(id)) return false;
+  if (/^[A-Za-z][A-Za-z.'-]+$/.test(id) && !/^\d/.test(id)) return false;
+  return /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(id);
+}
+
+export function isCanonicalAssetId(value?: string | null): boolean {
+  const id = String(value ?? "").trim();
+  if (!id) return false;
+  if (/^AST-/i.test(id)) return true;
+  if (/\s/.test(id)) return false;
+  return /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(id);
+}
+
 function ensureAssetWorkload(
   map: Record<string, AssetWorkload>,
+  evidence: Record<string, AssetWorkloadEvidence>,
   assetId?: string | null
-): AssetWorkload | null {
+): { workload: AssetWorkload; evidence: AssetWorkloadEvidence } | null {
   const id = String(assetId ?? "").trim();
-  if (!id) return null;
+  if (!id || !isCanonicalAssetId(id)) return null;
   if (!map[id]) {
     map[id] = {
       activeWorkload: 0,
       workloadBreakdown: EMPTY_BREAKDOWN(),
     };
   }
-  return map[id];
+  if (!evidence[id]) {
+    evidence[id] = {
+      activeWorkload: 0,
+      workloadBreakdown: EMPTY_BREAKDOWN(),
+      workOrderIds: [],
+      maintenanceIds: [],
+      incidentIds: [],
+    };
+  }
+  return { workload: map[id], evidence: evidence[id] };
 }
 
-function bumpUser(map: Record<string, number>, userId?: string | null) {
-  const id = String(userId ?? "").trim();
-  if (!id) return;
+function bumpUser(
+  map: Record<string, number>,
+  evidence: Record<string, UserWorkloadEvidence>,
+  userId: string | null | undefined,
+  workOrderId: string
+) {
+  if (!isCanonicalUserId(userId)) return;
+  const id = String(userId).trim();
   map[id] = (map[id] ?? 0) + 1;
+  if (!evidence[id]) {
+    evidence[id] = { count: 0, workOrderIds: [] };
+  }
+  evidence[id].count += 1;
+  evidence[id].workOrderIds.push(workOrderId);
 }
 
 /**
  * Derive People / Asset workload from canonical operational relationships.
  *
- * People: active WO count by assignedToUserId (ignore sheet Current Workload cell).
- * Assets: active WO + Maintenance + Incidents by assetId, with breakdown.
+ * People: active WO count by assignedToUserId (IDs only).
+ * Assets: active WO + Maintenance + Incidents by assetId (IDs only).
  */
 export function deriveOperationalWorkloadMaps(input: {
   workOrders: WorkOrder[];
@@ -70,37 +128,51 @@ export function deriveOperationalWorkloadMaps(input: {
   incidents: Incident[];
 }): OperationalWorkloadMaps {
   const byUserId: Record<string, number> = {};
+  const byUserIdEvidence: Record<string, UserWorkloadEvidence> = {};
   const byAssetId: Record<string, AssetWorkload> = {};
+  const byAssetIdEvidence: Record<string, AssetWorkloadEvidence> = {};
 
   for (const row of input.workOrders) {
     if (!ACTIVE_WORK_ORDER_STATUSES.has(row.status)) continue;
-    bumpUser(byUserId, row.assignedToUserId);
-    const asset = ensureAssetWorkload(byAssetId, row.assetId);
+    if (!row.id) continue;
+    bumpUser(byUserId, byUserIdEvidence, row.assignedToUserId, row.id);
+    const asset = ensureAssetWorkload(byAssetId, byAssetIdEvidence, row.assetId);
     if (asset) {
-      asset.workloadBreakdown.workOrders += 1;
-      asset.activeWorkload += 1;
+      asset.workload.workloadBreakdown.workOrders += 1;
+      asset.workload.activeWorkload += 1;
+      asset.evidence.workloadBreakdown.workOrders += 1;
+      asset.evidence.activeWorkload += 1;
+      asset.evidence.workOrderIds.push(row.id);
     }
   }
 
   for (const row of input.maintenance) {
     if (!ACTIVE_MAINTENANCE_STATUSES.has(row.status)) continue;
-    const asset = ensureAssetWorkload(byAssetId, row.assetId);
+    if (!row.id) continue;
+    const asset = ensureAssetWorkload(byAssetId, byAssetIdEvidence, row.assetId);
     if (asset) {
-      asset.workloadBreakdown.maintenance += 1;
-      asset.activeWorkload += 1;
+      asset.workload.workloadBreakdown.maintenance += 1;
+      asset.workload.activeWorkload += 1;
+      asset.evidence.workloadBreakdown.maintenance += 1;
+      asset.evidence.activeWorkload += 1;
+      asset.evidence.maintenanceIds.push(row.id);
     }
   }
 
   for (const row of input.incidents) {
     if (!ACTIVE_INCIDENT_STATUSES.has(row.status)) continue;
-    const asset = ensureAssetWorkload(byAssetId, row.assetId);
+    if (!row.id) continue;
+    const asset = ensureAssetWorkload(byAssetId, byAssetIdEvidence, row.assetId);
     if (asset) {
-      asset.workloadBreakdown.incidents += 1;
-      asset.activeWorkload += 1;
+      asset.workload.workloadBreakdown.incidents += 1;
+      asset.workload.activeWorkload += 1;
+      asset.evidence.workloadBreakdown.incidents += 1;
+      asset.evidence.activeWorkload += 1;
+      asset.evidence.incidentIds.push(row.id);
     }
   }
 
-  return { byUserId, byAssetId };
+  return { byUserId, byUserIdEvidence, byAssetId, byAssetIdEvidence };
 }
 
 export function workloadForUser(
@@ -108,8 +180,17 @@ export function workloadForUser(
   userId?: string | null
 ): number {
   const key = String(userId ?? "").trim();
-  if (!key) return 0;
+  if (!key || !isCanonicalUserId(key)) return 0;
   return map[key] ?? 0;
+}
+
+export function workloadEvidenceForUser(
+  map: Record<string, UserWorkloadEvidence>,
+  userId?: string | null
+): UserWorkloadEvidence {
+  const key = String(userId ?? "").trim();
+  if (!key || !map[key]) return { count: 0, workOrderIds: [] };
+  return map[key];
 }
 
 export function workloadForAsset(
@@ -119,6 +200,23 @@ export function workloadForAsset(
   const key = String(assetId ?? "").trim();
   if (!key || !map[key]) {
     return { activeWorkload: 0, workloadBreakdown: EMPTY_BREAKDOWN() };
+  }
+  return map[key];
+}
+
+export function workloadEvidenceForAsset(
+  map: Record<string, AssetWorkloadEvidence>,
+  assetId?: string | null
+): AssetWorkloadEvidence {
+  const key = String(assetId ?? "").trim();
+  if (!key || !map[key]) {
+    return {
+      activeWorkload: 0,
+      workloadBreakdown: EMPTY_BREAKDOWN(),
+      workOrderIds: [],
+      maintenanceIds: [],
+      incidentIds: [],
+    };
   }
   return map[key];
 }

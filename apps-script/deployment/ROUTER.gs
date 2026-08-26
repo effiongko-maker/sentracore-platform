@@ -17,12 +17,15 @@
  * `module` is accepted as an alias for `resource` for backwards compatibility.
  */
 
-function jsonResponse_(success, message, data) {
+function jsonResponse_(success, message, data, meta) {
   var payload = {
     success: !!success,
     message: message == null ? "" : String(message),
     data: data === undefined ? null : data,
   };
+  if (meta && typeof meta === "object") {
+    payload.meta = meta;
+  }
   var text;
   try {
     text = JSON.stringify(payload);
@@ -31,12 +34,33 @@ function jsonResponse_(success, message, data) {
       success: false,
       message: "Failed to serialise Apps Script response.",
       data: null,
+      meta: { errorClass: "serialization" },
     });
   }
   // ContentService accepts Unicode strings; do not pass through ByteString APIs.
   return ContentService.createTextOutput(text).setMimeType(
     ContentService.MimeType.JSON
   );
+}
+
+/** Classify Apps Script failures for client diagnostics (not end-user copy). */
+function classifyAppsScriptError_(error) {
+  var message = (error && error.message) || String(error || "");
+  var lower = message.toLowerCase();
+  if (
+    /missing headers|missing required|is required|validation|invalid|cannot write sheet fields/.test(
+      lower
+    )
+  ) {
+    return { errorClass: "validation", retryable: false };
+  }
+  if (/timed out|timeout|exceeded maximum execution|service invoked too many/.test(lower)) {
+    return { errorClass: "timeout", retryable: true };
+  }
+  if (/temporarily unavailable|rate limit|quota|backend error|internal error/.test(lower)) {
+    return { errorClass: "transient", retryable: true };
+  }
+  return { errorClass: "exception", retryable: false };
 }
 
 function doPost(e) {
@@ -81,14 +105,17 @@ function doPost(e) {
         resource
           ? "Unknown module: " + resource
           : "Missing resource. Expected users|facilities|assets|work-orders|incidents|maintenance|approvals|master-data|reporting-snapshot.",
-        null
+        null,
+        { errorClass: "validation", retryable: false }
       );
     }
   } catch (error) {
+    var classified = classifyAppsScriptError_(error);
     result = jsonResponse_(
       false,
       (error && error.message) || "Unhandled Apps Script error.",
-      null
+      null,
+      classified
     );
   }
 

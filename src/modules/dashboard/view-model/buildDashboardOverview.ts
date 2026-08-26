@@ -30,11 +30,12 @@ export interface OverviewMetric {
   module?: DashboardModuleRef;
 }
 
-export interface OverviewChangeRow {
+export interface OverviewRecentActivityRow {
   id: string;
   title: string;
-  context: string;
-  deltaLabel: string;
+  summary: string;
+  at: string;
+  atLabel: string;
   tone: DashboardCardTone;
   href?: string;
 }
@@ -68,7 +69,8 @@ export interface DashboardOverviewViewModel {
   attention: OverviewAttentionRow[];
   attentionHref: string;
   metrics: OverviewMetric[];
-  changes: OverviewChangeRow[];
+  /** Chronological operational events — not period-over-period "What Changed". */
+  recentActivity: OverviewRecentActivityRow[];
   motion: OverviewMotionRow[];
   showQuickActions: boolean;
   quickActionCards: DashboardCard[];
@@ -285,37 +287,43 @@ function buildDrivers(pulse: DashboardPulse | undefined): OverviewHealthDriver[]
   return drivers;
 }
 
+function formatActivityAt(iso: string, asOf: string): string {
+  const atMs = Date.parse(iso);
+  const asOfMs = Date.parse(asOf) || Date.now();
+  if (!Number.isFinite(atMs)) return "";
+  const deltaMs = Math.max(0, asOfMs - atMs);
+  const minutes = Math.floor(deltaMs / 60_000);
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 /**
- * Only surfaces signals with a real same-day window.
- * Period-over-period comparison is not available — do not invent deltas.
+ * Chronological Recent Activity — not period-over-period comparison.
+ * Intelligence owns "What Changed" (7d vs prior 7d).
  */
-function buildChanges(pulse: DashboardPulse | undefined): OverviewChangeRow[] {
-  if (!pulse) return [];
-  const rows: OverviewChangeRow[] = [];
-
-  if (pulse.workOrdersCreatedToday > 0) {
-    rows.push({
-      id: "change.wo_created",
-      title: "Work orders created",
-      context: "Opened today",
-      deltaLabel: `+${pulse.workOrdersCreatedToday}`,
-      tone: "info",
-      href: resolveModulePath("work-orders"),
-    });
-  }
-
-  if (pulse.workOrdersDueToday > 0) {
-    rows.push({
-      id: "change.wo_due",
-      title: "Work orders due today",
-      context: "Due in the current day window",
-      deltaLabel: String(pulse.workOrdersDueToday),
-      tone: "warning",
-      href: resolveModulePath("work-orders"),
-    });
-  }
-
-  return rows;
+function buildRecentActivity(
+  snapshot: DashboardSnapshot
+): OverviewRecentActivityRow[] {
+  const items = snapshot.recentActivity ?? [];
+  return items.map((item) => ({
+    id: item.id,
+    title: item.title,
+    summary: item.summary,
+    at: item.at,
+    atLabel: formatActivityAt(item.at, snapshot.asOf),
+    tone: item.tone,
+    href: item.href,
+  }));
 }
 
 function buildMotion(pulse: DashboardPulse | undefined): OverviewMotionRow[] {
@@ -403,7 +411,7 @@ export function buildDashboardOverview(
     attention: buildAttention(pulse, needsAttention),
     attentionHref: resolveModulePath("incidents"),
     metrics,
-    changes: buildChanges(pulse),
+    recentActivity: buildRecentActivity(snapshot),
     motion: buildMotion(pulse),
     showQuickActions: false,
     quickActionCards: quickActions,

@@ -10,6 +10,14 @@ import type {
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
 import {
+  CacheNamespaces,
+  onApprovalMutation,
+} from "@/services/cache/domainCache";
+import {
+  sharedRequest,
+  stableRequestKey,
+} from "@/services/cache/sharedRequest";
+import {
   postToAppsScript,
   postToAppsScriptData,
 } from "@/services/api/appsScriptProxy";
@@ -283,25 +291,37 @@ export const ApprovalService = {
   async listApprovals(
     params: ApprovalListParams = {}
   ): Promise<PaginatedResult<Approval>> {
-    if (typeof window === "undefined") {
-      const row = await postToAppsScriptData(
-        {
-          resource: "approvals",
-          action: "getAll",
-          payload: params,
-        },
-        { resource: "approvals", action: "getAll" },
-        "ApprovalService.listApprovals"
-      );
-      return toPaginated(row, params);
-    }
-
-    const response = await apiClient.post<unknown>("/approvals", {
-      resource: "approvals",
-      action: "getAll",
-      payload: params,
+    const key = stableRequestKey(CacheNamespaces.approvalsList, {
+      page: params.page ?? 1,
+      pageSize: params.pageSize ?? 8,
+      search: params.search ?? "",
+      status: params.status ?? "all",
+      type: params.type ?? "all",
+      facilityId: params.facilityId ?? "all",
+      workOrderId: params.workOrderId ?? "all",
+      sort: params.sort ?? "",
     });
-    return toPaginated(response.data, params);
+    return sharedRequest(key, async () => {
+      if (typeof window === "undefined") {
+        const row = await postToAppsScriptData(
+          {
+            resource: "approvals",
+            action: "getAll",
+            payload: params,
+          },
+          { resource: "approvals", action: "getAll" },
+          "ApprovalService.listApprovals"
+        );
+        return toPaginated(row, params);
+      }
+
+      const response = await apiClient.post<unknown>("/approvals", {
+        resource: "approvals",
+        action: "getAll",
+        payload: params,
+      });
+      return toPaginated(response.data, params);
+    });
   },
 
   async getApproval(id: string): Promise<Approval | null> {
@@ -363,7 +383,9 @@ export const ApprovalService = {
         envelope && typeof envelope === "object" && "data" in envelope
           ? envelope.data
           : raw;
-      return mapRemoteApproval(row as RemoteApproval);
+      const created = mapRemoteApproval(row as RemoteApproval);
+      onApprovalMutation();
+      return created;
     }
 
     const response = await apiClient.post<Approval>("/approvals", {
@@ -371,7 +393,11 @@ export const ApprovalService = {
       action: "create",
       payload: input,
     });
-    return mapRemoteApproval(response.data as unknown as RemoteApproval);
+    const created = mapRemoteApproval(
+      response.data as unknown as RemoteApproval
+    );
+    onApprovalMutation();
+    return created;
   },
 
   async updateApproval(
@@ -403,7 +429,9 @@ export const ApprovalService = {
         envelope && typeof envelope === "object" && "data" in envelope
           ? envelope.data
           : raw;
-      return mapRemoteApproval(row as RemoteApproval);
+      const updated = mapRemoteApproval(row as RemoteApproval);
+      onApprovalMutation();
+      return updated;
     }
 
     const response = await apiClient.post<Approval>("/approvals", {
@@ -411,7 +439,11 @@ export const ApprovalService = {
       action: "update",
       payload: { id, ...input },
     });
-    return mapRemoteApproval(response.data as unknown as RemoteApproval);
+    const updated = mapRemoteApproval(
+      response.data as unknown as RemoteApproval
+    );
+    onApprovalMutation();
+    return updated;
   },
 
   async deactivateApproval(id: string): Promise<Approval> {
@@ -420,7 +452,11 @@ export const ApprovalService = {
       action: "deactivate",
       payload: { id },
     });
-    return mapRemoteApproval(response.data as unknown as RemoteApproval);
+    const deactivated = mapRemoteApproval(
+      response.data as unknown as RemoteApproval
+    );
+    onApprovalMutation();
+    return deactivated;
   },
 };
 
