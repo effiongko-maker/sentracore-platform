@@ -1,21 +1,24 @@
 Release:
-v0.3.3
+v0.4.3
 
 Title:
-Maintenance updatedAt on WO link + list filter rendering
+Fix Approval submit status transition (awaiting_decision)
 
 Generated:
-2026-08-26T01:24:33.401Z
+2026-08-26T03:00:57.301Z
 
 Features
-- Maintenance sheet persists Updated At; list Sort Newest uses updatedAt DESC
-- WO create/link/relink/unlink bumps linked Maintenance updatedAt via repository update
-- Maintenance actions menu portals correctly; filtered list no longer blanks on page clamp
+- Canonical Approval statuses: draft → awaiting_decision → approved|rejected
+- Submit atomically writes Status=awaiting_decision with submittedAt (no draft fallback)
+- Heal rows where submittedAt was set but Status stayed draft
 
 Performance
 
 Files Changed
 - ROUTER.gs
+- ApprovalRepository.gs
+- ApprovalsController.gs
+- ApprovalService.gs
 - AssetRepository.gs
 - AssetsController.gs
 - AssetService.gs
@@ -54,15 +57,14 @@ YES
 
 Smoke Tests
 
-Maintenance list newest:
+Approvals list:
 
 ```bash
-curl -sS -X POST http://localhost:3000/api/maintenance -H 'Content-Type: application/json' -d '{"resource":"maintenance","action":"getAll","payload":{"page":1,"pageSize":5}}'
+curl -sS -X POST http://localhost:3000/api/approvals -H 'Content-Type: application/json' -d '{"resource":"approvals","action":"getAll","payload":{"page":1,"pageSize":5}}'
 ```
 
 Notes
-- Replace MaintenanceRepository.gs and MaintenanceService.gs from the deployment pack.
-- First write after deploy adds an Updated At column if missing.
-- Deploy a new Web App version after pasting. Unpublished editor saves do not go live.
+- CRITICAL: Redeploy ApprovalRepository.gs from the pack. Old mapStatus_ mapped unknown statuses (e.g. awaiting_response) to draft while still writing Submitted At.
+- After redeploy, Mark as submitted must return awaiting_decision everywhere.
 
 <!-- GENERATED FILE — do not edit by hand. npm run apps-script:pack -->

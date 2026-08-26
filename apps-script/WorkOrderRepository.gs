@@ -16,6 +16,7 @@ var WorkOrderRepository = (function () {
     "Parent Work Order ID",
     "Source",
     "Title",
+    "Approval ID",
   ];
 
   function getSheet_() {
@@ -169,6 +170,8 @@ var WorkOrderRepository = (function () {
       downtimeMinutes: undefined,
       slaDueAt: undefined,
       requiresApproval: undefined,
+      approvalId:
+        SheetFieldUtils.cellText(sheetRow["Approval ID"]) || undefined,
       createdAt: requestedAt || new Date().toISOString(),
       updatedAt: completedAt || requestedAt || new Date().toISOString(),
       createdByUserId: undefined,
@@ -198,6 +201,7 @@ var WorkOrderRepository = (function () {
       "Incident ID": canonical.incidentId || "",
       "Parent Work Order ID": canonical.parentWorkOrderId || "",
       Source: canonical.source || "manual",
+      "Approval ID": canonical.approvalId || "",
     };
   }
 
@@ -320,6 +324,12 @@ var WorkOrderRepository = (function () {
         payload.completedAt != null ? payload.completedAt : current.completedAt,
       status: payload.status != null ? payload.status : current.status,
       priority: payload.priority != null ? payload.priority : current.priority,
+      requiresApproval:
+        payload.requiresApproval != null
+          ? payload.requiresApproval
+          : current.requiresApproval,
+      approvalId:
+        payload.approvalId != null ? payload.approvalId : current.approvalId,
       createdAt: current.createdAt,
       updatedAt: new Date().toISOString(),
       _completedBy: current._completedBy || "",
@@ -351,6 +361,8 @@ var WorkOrderRepository = (function () {
       completedAt: payload.completedAt || "",
       status: payload.status || "open",
       priority: payload.priority || "medium",
+      requiresApproval: payload.requiresApproval || false,
+      approvalId: payload.approvalId || "",
       createdAt: requestedAt,
       updatedAt: payload.updatedAt || requestedAt,
       _completedBy: "",

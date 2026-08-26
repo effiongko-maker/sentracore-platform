@@ -14,6 +14,7 @@ import {
   MessageSquarePlus,
   Database,
   ScanSearch,
+  FileCheck2,
   type LucideIcon,
 } from "lucide-react";
 import type { AuthEnabledModule } from "@/lib/auth/types";
@@ -128,6 +129,13 @@ export const NAV_GROUPS: NavGroup[] = [
         description: "Assignments, progress, and completion",
       }),
       item({
+        label: "Approvals",
+        href: "/approvals",
+        icon: FileCheck2,
+        title: "Approvals",
+        description: "Client authorisation to proceed with work",
+      }),
+      item({
         label: "Incidents",
         href: "/incidents",
         icon: AlertTriangle,
@@ -219,6 +227,7 @@ const ARCHETYPE_BY_HREF: Record<string, PageArchetypeHint> = {
   "/incidents": "operational-list",
   "/maintenance": "operational-list",
   "/work-orders": "operational-list",
+  "/approvals": "operational-list",
   "/facilities": "reference-admin",
   "/assets": "reference-admin",
   "/users": "reference-admin",

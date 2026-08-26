@@ -131,6 +131,7 @@ export function isOperationsPath(pathname: string): boolean {
     pathname.startsWith("/occupant-requests") ||
     pathname.startsWith("/maintenance") ||
     pathname.startsWith("/work-orders") ||
+    pathname.startsWith("/approvals") ||
     pathname.startsWith("/incidents") ||
     pathname.startsWith("/inventory") ||
     pathname.startsWith("/utilities") ||

@@ -16,6 +16,7 @@ import {
 } from "../constants";
 import { displayWorkOrderTitle, labelize } from "../utils";
 import type { WorkOrder } from "../types";
+import { WorkOrderClientApprovalSection } from "./WorkOrderClientApprovalSection";
 
 interface ViewWorkOrderModalProps {
   open: boolean;
@@ -166,6 +167,8 @@ export function ViewWorkOrderModal({
           value={workOrder.completionNotes || "—"}
         />
       </div>
+
+      <WorkOrderClientApprovalSection workOrder={workOrder} />
     </Modal>
   );
 }

@@ -1,3 +1,4 @@
+import type { Approval } from "@/modules/approvals/types";
 import type { Incident } from "@/modules/incidents/types";
 import type { Maintenance } from "@/modules/maintenance/types";
 import type { WorkOrder } from "@/modules/work-orders/types";
@@ -17,28 +18,25 @@ import type {
   WorkspaceWorkSummary,
   OperationalState,
   OrganisationalPulse,
+  AttentionModel,
 } from "@/modules/workspace/types";
 import { isSameDay, labelize } from "@/modules/workspace/utils";
+import { ApprovalService } from "@/services/approvals/ApprovalService";
 import { FacilityService } from "@/services/facilities/FacilityService";
 import { IncidentService } from "@/services/incidents/IncidentService";
 import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
+import { loadAllPages } from "@/services/reporting/loadAllPages";
 import { UserService } from "@/services/users/UserService";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
+import {
+  ACTIVE_INCIDENT_STATUSES,
+  ACTIVE_MAINTENANCE_STATUSES,
+  WORKSPACE_ASSIGNED_WORK_ORDER_STATUSES,
+} from "@/lib/operational/workload";
 
-const OPEN_WO = new Set(["open", "assigned", "in_progress", "on_hold"]);
-const OPEN_INCIDENT = new Set([
-  "reported",
-  "triaged",
-  "investigating",
-  "contained",
-]);
-const OPEN_MAINTENANCE = new Set([
-  "requested",
-  "triaged",
-  "scheduled",
-  "in_progress",
-  "on_hold",
-]);
+const OPEN_WO = WORKSPACE_ASSIGNED_WORK_ORDER_STATUSES;
+const OPEN_INCIDENT = ACTIVE_INCIDENT_STATUSES;
+const OPEN_MAINTENANCE = ACTIVE_MAINTENANCE_STATUSES;
 
 function sortByDateDesc<T>(
   rows: T[],
@@ -218,16 +216,33 @@ function buildPulse(
   };
 }
 
-function buildOperationalState(pulse: OrganisationalPulse): OperationalState {
-  if (pulse.criticalIncidents > 0) {
-    const n = pulse.criticalIncidents;
+function buildOperationalState(
+  pulse: OrganisationalPulse,
+  attention: AttentionModel
+): OperationalState {
+  if (pulse.criticalIncidents > 0 || attention.criticalCount > 0) {
+    const n = Math.max(pulse.criticalIncidents, attention.criticalCount);
     return {
       tone: "critical",
       statement:
         n === 1
           ? "One critical matter requires intervention."
           : `${n} critical matters require intervention.`,
-      subtext: `${pulse.openIncidents} open incident${pulse.openIncidents === 1 ? "" : "s"} across the operation.`,
+      subtext:
+        attention.total > n
+          ? `${attention.total} total items in the attention queue.`
+          : `${pulse.openIncidents} open incident${pulse.openIncidents === 1 ? "" : "s"} across the operation.`,
+    };
+  }
+
+  if (attention.total > 0) {
+    return {
+      tone: "attention",
+      statement:
+        attention.total === 1
+          ? "One operational matter requires attention."
+          : `${attention.total} operational matters require attention.`,
+      subtext: "Review overdue work, approvals, and assignments below.",
     };
   }
 
@@ -252,15 +267,58 @@ function buildOperationalState(pulse: OrganisationalPulse): OperationalState {
         attentionAreas === 1
           ? "The operation is mostly stable, with one area requiring attention."
           : "The operation is stable, with a few areas requiring attention.",
-      subtext: "Review recent activity below to continue work.",
+      subtext: "Open modules below to continue scheduled work.",
     };
   }
 
   return {
     tone: "stable",
     statement: "The operation is stable.",
-    subtext: "No critical matters require intervention.",
+    subtext: "No matters require intervention right now.",
   };
+}
+
+async function loadDomainLists(): Promise<{
+  workOrders: { ok: boolean; data: WorkOrder[] };
+  incidents: { ok: boolean; data: Incident[] };
+  maintenance: { ok: boolean; data: Maintenance[] };
+  approvals: { ok: boolean; data: Approval[] };
+  facilities: { ok: boolean; data: Array<{ id: string; name: string }> };
+}> {
+  const [workOrders, incidents, maintenance, approvals, facilities] =
+    await Promise.all([
+      loadAllPages((page, pageSize) =>
+        WorkOrderService.listWorkOrders({ page, pageSize })
+      )
+        .then((data) => ({ ok: true as const, data }))
+        .catch(() => ({ ok: false as const, data: [] as WorkOrder[] })),
+      loadAllPages((page, pageSize) =>
+        IncidentService.listIncidents({ page, pageSize })
+      )
+        .then((data) => ({ ok: true as const, data }))
+        .catch(() => ({ ok: false as const, data: [] as Incident[] })),
+      loadAllPages((page, pageSize) =>
+        MaintenanceService.listMaintenance({ page, pageSize })
+      )
+        .then((data) => ({ ok: true as const, data }))
+        .catch(() => ({ ok: false as const, data: [] as Maintenance[] })),
+      loadAllPages((page, pageSize) =>
+        ApprovalService.listApprovals({ page, pageSize })
+      )
+        .then((data) => ({ ok: true as const, data }))
+        .catch(() => ({ ok: false as const, data: [] as Approval[] })),
+      FacilityService.listFacilities({ page: 1, pageSize: 200 })
+        .then((page) => ({
+          ok: true as const,
+          data: page.data ?? ([] as Array<{ id: string; name: string }>),
+        }))
+        .catch(() => ({
+          ok: false as const,
+          data: [] as Array<{ id: string; name: string }>,
+        })),
+    ]);
+
+  return { workOrders, incidents, maintenance, approvals, facilities };
 }
 
 /**
@@ -272,44 +330,35 @@ export const WorkspaceService = {
   async getWorkspace(): Promise<WorkspaceSnapshot> {
     const asOf = new Date().toISOString();
 
-    const [currentUser, workOrdersResult, incidentsResult, maintenanceResult, facilitiesResult] =
-      await Promise.all([
-        UserService.getCurrentUser().catch(() => null),
-        WorkOrderService.listWorkOrders({ page: 1, pageSize: 25 })
-          .then((page) => ({ ok: true as const, data: page.data ?? [] }))
-          .catch(() => ({ ok: false as const, data: [] as WorkOrder[] })),
-        IncidentService.listIncidents({ page: 1, pageSize: 25 })
-          .then((page) => ({ ok: true as const, data: page.data ?? [] }))
-          .catch(() => ({ ok: false as const, data: [] as Incident[] })),
-        MaintenanceService.listMaintenance({ page: 1, pageSize: 25 })
-          .then((page) => ({ ok: true as const, data: page.data ?? [] }))
-          .catch(() => ({ ok: false as const, data: [] as Maintenance[] })),
-        FacilityService.listFacilities({ page: 1, pageSize: 50 })
-          .then((page) => ({
-            ok: true as const,
-            data: page.data ?? ([] as Array<{ id: string; name: string }>),
-          }))
-          .catch(() => ({
-            ok: false as const,
-            data: [] as Array<{ id: string; name: string }>,
-          })),
-      ]);
+    const [currentUser, lists] = await Promise.all([
+      UserService.getCurrentUser().catch(() => null),
+      loadDomainLists(),
+    ]);
 
-    const workOrders = workOrdersResult.data;
-    const incidents = incidentsResult.data;
-    const maintenance = maintenanceResult.data;
+    const workOrders = lists.workOrders.data;
+    const incidents = lists.incidents.data;
+    const maintenance = lists.maintenance.data;
+    const approvals = lists.approvals.data;
     const coreFailed =
-      !workOrdersResult.ok ||
-      !incidentsResult.ok ||
-      !maintenanceResult.ok;
+      !lists.workOrders.ok ||
+      !lists.incidents.ok ||
+      !lists.maintenance.ok;
 
     const userId = currentUser?.id;
     const facilityNameById = new Map(
-      facilitiesResult.data.map((facility) => [facility.id, facility.name])
+      lists.facilities.data.map((facility) => [facility.id, facility.name])
     );
     const activity = buildActivity(workOrders, incidents, maintenance);
     const pulse = buildPulse(incidents, maintenance, workOrders, activity);
-    const attention = buildAttentionModel(incidents, facilityNameById);
+    const attention = buildAttentionModel({
+      asOf,
+      currentUserId: userId,
+      incidents,
+      workOrders,
+      maintenance,
+      approvals,
+      facilityNameById,
+    });
 
     const operationalState: OperationalState = coreFailed
       ? {
@@ -318,7 +367,7 @@ export const WorkspaceService = {
           subtext:
             "Some live operational data is temporarily unavailable. Retry this page or open a module directly.",
         }
-      : buildOperationalState(pulse);
+      : buildOperationalState(pulse, attention);
 
     return {
       asOf,

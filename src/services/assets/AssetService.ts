@@ -13,6 +13,7 @@ import { normalizeAssetToken } from "@/modules/assets/utils";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
 import { FacilityService } from "@/services/facilities/FacilityService";
+import { OperationalWorkloadService } from "@/services/operational/OperationalWorkloadService";
 import { queryAssetsPage } from "./queryAssets";
 
 /** Raw row shape from the Apps Script assets API. */
@@ -233,11 +234,13 @@ async function assertAssetPersisted(
  */
 export const AssetService = {
   async listAssets(params: AssetListParams = {}): Promise<PaginatedResult<Asset>> {
-    const [assets, facilityNameById] = await Promise.all([
+    const [assets, facilityNameById, maps] = await Promise.all([
       loadAllAssets(),
       loadFacilityNameById(),
+      OperationalWorkloadService.getMaps(),
     ]);
-    return queryAssetsPage(assets, params, facilityNameById);
+    const enriched = OperationalWorkloadService.applyToAssets(assets, maps);
+    return queryAssetsPage(enriched, params, facilityNameById);
   },
 
   async getAsset(id: string): Promise<Asset | null> {
@@ -248,7 +251,9 @@ export const AssetService = {
         payload: { id },
       });
       if (response.data == null) return null;
-      return mapRemoteAsset(response.data as unknown as RemoteAsset);
+      return OperationalWorkloadService.enrichAsset(
+        mapRemoteAsset(response.data as unknown as RemoteAsset)
+      );
     } catch (error) {
       if (
         error instanceof ApiError &&

@@ -8,7 +8,7 @@
  * Request envelope:
  * {
  *   resource: "users" | "facilities" | "assets" | "work-orders" |
- *             "incidents" | "maintenance" | "master-data" |
+ *             "incidents" | "maintenance" | "approvals" | "master-data" |
  *             "reporting-snapshot",
  *   action: string,
  *   payload: object
@@ -69,6 +69,8 @@ function doPost(e) {
       result = IncidentsController.handle(action, payload);
     } else if (resource === "maintenance") {
       result = MaintenanceController.handle(action, payload);
+    } else if (resource === "approvals") {
+      result = ApprovalsController.handle(action, payload);
     } else if (resource === "master-data") {
       result = MasterDataController.handle(action, payload);
     } else if (resource === "reporting-snapshot") {
@@ -78,7 +80,7 @@ function doPost(e) {
         false,
         resource
           ? "Unknown module: " + resource
-          : "Missing resource. Expected users|facilities|assets|work-orders|incidents|maintenance|master-data|reporting-snapshot.",
+          : "Missing resource. Expected users|facilities|assets|work-orders|incidents|maintenance|approvals|master-data|reporting-snapshot.",
         null
       );
     }
@@ -115,6 +117,7 @@ function doGet() {
       "work-orders",
       "incidents",
       "maintenance",
+      "approvals",
       "master-data",
       "reporting-snapshot",
     ],

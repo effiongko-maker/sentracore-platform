@@ -62,6 +62,8 @@ export class ApiClient {
                 ? { endpoint: "/api/incidents", resource: "incidents" }
                 : path === "/maintenance"
                   ? { endpoint: "/api/maintenance", resource: "maintenance" }
+                  : path === "/approvals"
+                    ? { endpoint: "/api/approvals", resource: "approvals" }
                   : path === "/master-data"
                     ? {
                         endpoint: "/api/master-data",

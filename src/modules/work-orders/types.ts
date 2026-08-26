@@ -74,6 +74,8 @@ export interface WorkOrder {
 
   slaDueAt?: string;
   requiresApproval?: boolean;
+  /** Linked client approval request (APR-…). */
+  approvalId?: string;
 
   createdAt: string;
   updatedAt: string;
@@ -116,6 +118,7 @@ export interface CreateWorkOrderInput {
   downtimeMinutes?: number;
   slaDueAt?: string;
   requiresApproval?: boolean;
+  approvalId?: string;
   createdByUserId?: string;
   updatedByUserId?: string;
 }

@@ -11,7 +11,11 @@ export interface User {
   role: UserRole;
   specialization: string;
   facility: string;
-  /** Derived from Current Workload column — never entered in forms. */
+  /**
+   * Display value for USERS sheet "Current Workload".
+   * Derived live from active Work Orders assigned to this user id
+   * (not the stale sheet cell). Field name retained for API compatibility.
+   */
   activeWorkOrders: number;
   /** Empty when the sheet Status cell is blank. */
   status: UserStatus | "";

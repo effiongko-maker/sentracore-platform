@@ -102,6 +102,10 @@ export function useUsers() {
     return UserService.deactivateUser(userId);
   }, []);
 
+  const reload = useCallback(() => {
+    void fetchUsers(page);
+  }, [fetchUsers, page]);
+
   return {
     users,
     loading,
@@ -119,7 +123,7 @@ export function useUsers() {
     setPage,
     totalPages,
     total,
-    reload: () => fetchUsers(page),
+    reload,
     clearFilters,
     deactivateUser,
   };

@@ -34,6 +34,17 @@ export interface Asset {
   status: AssetStatus;
   assignedTo: string;
   criticality: AssetCriticality;
+  /**
+   * Derived client-side (no Assets sheet workload column).
+   * activeWorkload = workOrders + maintenance + incidents (active only),
+   * keyed by canonical assetId.
+   */
+  activeWorkload?: number;
+  workloadBreakdown?: {
+    workOrders: number;
+    maintenance: number;
+    incidents: number;
+  };
 }
 
 export interface CreateAssetInput {

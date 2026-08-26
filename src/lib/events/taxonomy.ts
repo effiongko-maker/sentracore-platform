@@ -19,6 +19,13 @@ export const OperationalEventTypes = {
   FACILITY_WORK_ORDER_STARTED: "facility.work_order_started",
   FACILITY_WORK_ORDER_COMPLETED: "facility.work_order_completed",
   FACILITY_WORK_ORDER_CANCELLED: "facility.work_order_cancelled",
+  FACILITY_APPROVAL_CREATED: "facility.approval_created",
+  FACILITY_APPROVAL_SUBMITTED: "facility.approval_submitted",
+  FACILITY_APPROVAL_FOLLOWED_UP: "facility.approval_followed_up",
+  FACILITY_APPROVAL_APPROVED: "facility.approval_approved",
+  FACILITY_APPROVAL_PARTIALLY_APPROVED: "facility.approval_partially_approved",
+  FACILITY_APPROVAL_REJECTED: "facility.approval_rejected",
+  FACILITY_APPROVAL_CANCELLED: "facility.approval_cancelled",
   SYSTEM_RECOMMENDATION_DECIDED: "system.recommendation_decided",
 } as const;
 
@@ -110,6 +117,48 @@ export const OPERATIONAL_EVENT_CATALOG: OperationalEventTypeDefinition[] = [
     domain: "facility",
     description: "A work order was cancelled.",
     defaultEntityType: "work_order",
+  },
+  {
+    eventType: OperationalEventTypes.FACILITY_APPROVAL_CREATED,
+    domain: "facility",
+    description: "A client approval request was created.",
+    defaultEntityType: "approval",
+  },
+  {
+    eventType: OperationalEventTypes.FACILITY_APPROVAL_SUBMITTED,
+    domain: "facility",
+    description: "A client approval request was submitted.",
+    defaultEntityType: "approval",
+  },
+  {
+    eventType: OperationalEventTypes.FACILITY_APPROVAL_FOLLOWED_UP,
+    domain: "facility",
+    description: "A follow-up was recorded on an outstanding approval.",
+    defaultEntityType: "approval",
+  },
+  {
+    eventType: OperationalEventTypes.FACILITY_APPROVAL_APPROVED,
+    domain: "facility",
+    description: "A client approval request was approved.",
+    defaultEntityType: "approval",
+  },
+  {
+    eventType: OperationalEventTypes.FACILITY_APPROVAL_PARTIALLY_APPROVED,
+    domain: "facility",
+    description: "A client approval request was partially approved.",
+    defaultEntityType: "approval",
+  },
+  {
+    eventType: OperationalEventTypes.FACILITY_APPROVAL_REJECTED,
+    domain: "facility",
+    description: "A client approval request was rejected.",
+    defaultEntityType: "approval",
+  },
+  {
+    eventType: OperationalEventTypes.FACILITY_APPROVAL_CANCELLED,
+    domain: "facility",
+    description: "A client approval request was cancelled.",
+    defaultEntityType: "approval",
   },
   {
     eventType: OperationalEventTypes.SYSTEM_RECOMMENDATION_DECIDED,

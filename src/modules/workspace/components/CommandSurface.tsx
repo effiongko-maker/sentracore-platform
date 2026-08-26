@@ -58,7 +58,8 @@ function buildHeroCopy(snapshot: WorkspaceSnapshot): {
   line2: string;
 } {
   const { pulse, attention, operationalState } = snapshot;
-  const critical = attention.total;
+  const attentionTotal = attention.total;
+  const critical = attention.criticalCount;
 
   if (operationalState.tone === "degraded") {
     return {
@@ -70,20 +71,17 @@ function buildHeroCopy(snapshot: WorkspaceSnapshot): {
     };
   }
 
-  if (critical > 0) {
+  if (attentionTotal > 0) {
     return {
       heading: "Your operations need attention",
       line1:
-        critical === 1
-          ? "1 critical matter requires intervention across your facilities."
-          : `${critical} critical matters require intervention across your facilities.`,
-      line2: `${pulse.openIncidents} open incident${
-        pulse.openIncidents === 1 ? "" : "s"
-      } ${pulse.openIncidents === 1 ? "is" : "are"} being tracked. ${
-        critical === 1
-          ? "1 requires immediate intervention."
-          : `${critical} require immediate intervention.`
-      }`,
+        attentionTotal === 1
+          ? "1 matter requires action across your facilities."
+          : `${attentionTotal} matters require action across your facilities.`,
+      line2:
+        critical > 0
+          ? `${critical} critical · ${pulse.openIncidents} open incidents · ${pulse.openWorkOrders} work orders · ${pulse.openMaintenance} maintenance.`
+          : `${pulse.openIncidents} open incidents · ${pulse.openWorkOrders} work orders · ${pulse.openMaintenance} maintenance.`,
     };
   }
 
@@ -99,12 +97,12 @@ function buildHeroCopy(snapshot: WorkspaceSnapshot): {
 
   return {
     heading: "Your operations are stable",
-    line1: "No critical matters require intervention across your facilities.",
+    line1: "No matters require intervention across your facilities.",
     line2:
       pulse.openIncidents > 0
         ? `${pulse.openIncidents} open incident${
             pulse.openIncidents === 1 ? "" : "s"
-          } ${pulse.openIncidents === 1 ? "is" : "are"} being tracked with no critical escalation.`
+          } ${pulse.openIncidents === 1 ? "is" : "are"} being tracked with no urgent escalation.`
         : "Facility Management is calm. Continue with scheduled work.",
   };
 }
@@ -168,7 +166,8 @@ function FacilityBlueprint() {
 
 function CommandHero({ snapshot }: { snapshot: WorkspaceSnapshot }) {
   const { pulse, attention, currentUser, asOf } = snapshot;
-  const critical = attention.total;
+  const attentionTotal = attention.total;
+  const critical = attention.criticalCount;
   const copy = buildHeroCopy(snapshot);
   const hour = new Date(asOf).getHours();
   const greeting = `${greetingForHour(hour)}, ${firstName(currentUser.name)}`;
@@ -179,7 +178,7 @@ function CommandHero({ snapshot }: { snapshot: WorkspaceSnapshot }) {
     <section
       className={cn(
         "sc-fm-hero",
-        critical > 0 ? "sc-fm-hero-critical" : "sc-fm-hero-stable"
+        attentionTotal > 0 ? "sc-fm-hero-critical" : "sc-fm-hero-stable"
       )}
       aria-labelledby="sc-fm-hero-heading"
     >
@@ -214,7 +213,11 @@ function CommandHero({ snapshot }: { snapshot: WorkspaceSnapshot }) {
             <p className="sc-fm-hero-critical-value">{padCount(critical)}</p>
             <p className="sc-fm-hero-critical-label">Critical</p>
             <p className="sc-fm-hero-critical-meta">
-              {critical > 0 ? "Requires intervention" : "No intervention needed"}
+              {critical > 0
+                ? "Requires intervention"
+                : attentionTotal > 0
+                  ? `${attentionTotal} other attention item${attentionTotal === 1 ? "" : "s"}`
+                  : "No intervention needed"}
             </p>
           </div>
 
@@ -255,10 +258,12 @@ function RequiresAttention({ attention }: { attention: AttentionModel }) {
                 : `${attention.total} matters require intervention now`}
           </p>
         </div>
-        <Link href="/incidents" className="sc-fm-view-all">
-          View all ({attention.total})
-          <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-        </Link>
+        {attention.viewAllHref ? (
+          <Link href={attention.viewAllHref} className="sc-fm-view-all">
+            View all ({attention.total})
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+          </Link>
+        ) : null}
       </div>
 
       {attention.total === 0 ? (

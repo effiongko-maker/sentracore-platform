@@ -212,6 +212,7 @@ function mapRemoteWorkOrder(raw: RemoteWorkOrder): WorkOrder {
       "requiresApproval",
       "Requires Approval"
     ),
+    approvalId: optionalMappedString(raw, "approvalId", "Approval ID"),
     createdAt: String(
       pickField(raw, "createdAt", "Created At") ?? new Date().toISOString()
     ),

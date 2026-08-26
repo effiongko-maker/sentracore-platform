@@ -93,6 +93,24 @@ export function ViewAssetModal({
         <Detail label="Condition" value={labelize(asset.condition)} />
         <Detail label="Assigned to" value={asset.assignedTo} />
         <Detail
+          label="Active Workload"
+          value={
+            <div className="space-y-1">
+              <p>
+                {asset.activeWorkload ?? 0} active operational item
+                {(asset.activeWorkload ?? 0) === 1 ? "" : "s"}
+              </p>
+              <p className="text-xs text-muted">
+                Work Orders: {asset.workloadBreakdown?.workOrders ?? 0}
+                {" · "}
+                Maintenance: {asset.workloadBreakdown?.maintenance ?? 0}
+                {" · "}
+                Incidents: {asset.workloadBreakdown?.incidents ?? 0}
+              </p>
+            </div>
+          }
+        />
+        <Detail
           label="Status"
           value={
             <Badge variant={ASSET_STATUS_VARIANT[asset.status]}>

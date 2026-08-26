@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Release: **v0.3.3** — Maintenance updatedAt on WO link + list filter rendering
+Release: **v0.4.3** — Fix Approval submit status transition (awaiting_decision)
 
 Use this checklist with `DEPLOYMENT_PACK.md` open. Someone unfamiliar
 with the project should be able to deploy from these steps alone.
@@ -26,6 +26,9 @@ Copy **every** file listed in `DEPLOYMENT_PACK.md` (full source is embedded ther
 Current pack file list:
 
 - [ ] `ROUTER.gs`
+- [ ] `ApprovalRepository.gs`
+- [ ] `ApprovalsController.gs`
+- [ ] `ApprovalService.gs`
 - [ ] `AssetRepository.gs`
 - [ ] `AssetsController.gs`
 - [ ] `AssetService.gs`
@@ -73,6 +76,9 @@ Especially ensure these reporting-snapshot files exist:
 For each file that already exists in Apps Script, **replace the entire contents**
 (do not merge by hand):
 
+- [ ] Replace `ApprovalRepository.gs`
+- [ ] Replace `ApprovalsController.gs`
+- [ ] Replace `ApprovalService.gs`
 - [ ] Replace `AssetRepository.gs`
 - [ ] Replace `AssetsController.gs`
 - [ ] Replace `AssetService.gs`
@@ -150,10 +156,10 @@ A **new Web App version** is REQUIRED.
 
 With `npm run dev` running:
 
-### Maintenance list newest
+### Approvals list
 
 ```bash
-curl -sS -X POST http://localhost:3000/api/maintenance -H 'Content-Type: application/json' -d '{"resource":"maintenance","action":"getAll","payload":{"page":1,"pageSize":5}}'
+curl -sS -X POST http://localhost:3000/api/approvals -H 'Content-Type: application/json' -d '{"resource":"approvals","action":"getAll","payload":{"page":1,"pageSize":5}}'
 ```
 
 Expected checks:

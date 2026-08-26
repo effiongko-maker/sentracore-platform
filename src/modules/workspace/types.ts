@@ -76,6 +76,8 @@ export interface AttentionMatter {
 /** Shared model: headline count and Requires attention list. */
 export interface AttentionModel {
   total: number;
+  /** Subset with severity === critical (hero Critical tile). */
+  criticalCount: number;
   visible: AttentionMatter[];
   viewAllHref?: string;
   viewAllLabel?: string;

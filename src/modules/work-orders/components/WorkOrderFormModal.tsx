@@ -48,6 +48,7 @@ import type {
   WorkOrderStatus,
   WorkOrderType,
 } from "../types";
+import { WorkOrderClientApprovalSection } from "./WorkOrderClientApprovalSection";
 
 const TERMINAL_WORK_ORDER_STATUSES: WorkOrderStatus[] = [
   "completed",
@@ -87,6 +88,9 @@ export function WorkOrderFormModal({
   const [errors, setErrors] = useState<
     Partial<Record<keyof CreateWorkOrderInput, string>>
   >({});
+  const [linkedApprovalId, setLinkedApprovalId] = useState<string | undefined>(
+    workOrder?.approvalId
+  );
   const [saving, setSaving] = useState(false);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -97,6 +101,7 @@ export function WorkOrderFormModal({
   useEffect(() => {
     if (!open) return;
     setForm(toCreateFormValues(mode === "edit" ? workOrder : null));
+    setLinkedApprovalId(workOrder?.approvalId);
     setErrors({});
   }, [open, mode, workOrder]);
 
@@ -730,6 +735,16 @@ export function WorkOrderFormModal({
             ) : null}
           </div>
         </section>
+
+        {mode === "edit" && workOrder ? (
+          <WorkOrderClientApprovalSection
+            workOrder={{
+              ...workOrder,
+              approvalId: linkedApprovalId ?? workOrder.approvalId,
+            }}
+            onLinked={(approval) => setLinkedApprovalId(approval.id)}
+          />
+        ) : null}
       </form>
     </Modal>
   );

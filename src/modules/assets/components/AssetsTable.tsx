@@ -96,6 +96,13 @@ export function AssetsTable({
         ),
       },
       {
+        key: "activeWorkload",
+        header: "Active Workload",
+        render: (asset) => (
+          <span className="text-muted">{asset.activeWorkload ?? 0}</span>
+        ),
+      },
+      {
         key: "actions",
         header: "Actions",
         className: "w-20 text-right",

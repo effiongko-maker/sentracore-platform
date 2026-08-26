@@ -17,6 +17,7 @@ import {
 } from "../constants";
 import { UserService } from "../services/UserService";
 import {
+  formatWorkload,
   labelize,
   resolveFacilityDisplayName,
   toCreateFormValues,
@@ -308,11 +309,11 @@ export function UserFormModal({
               Current Workload
             </p>
             <p className="mt-1 text-sm text-foreground">
-              {user.activeWorkOrders} Active Work Order
-              {user.activeWorkOrders === 1 ? "" : "s"}
+              {formatWorkload(user.activeWorkOrders)}
             </p>
             <p className="mt-1 text-xs text-muted">
-              Calculated automatically from open work orders. Not editable.
+              Derived live from active Work Orders assigned to this person
+              (USERS Current Workload). Not editable.
             </p>
           </div>
         ) : null}

@@ -10,6 +10,7 @@ import type {
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
 import { FacilityService } from "@/services/facilities/FacilityService";
+import { OperationalWorkloadService } from "@/services/operational/OperationalWorkloadService";
 import { queryUsersPage } from "./queryUsers";
 
 export const USER_REPOSITORY_BUILD = "2026-08-25-users-header-v3";
@@ -41,13 +42,6 @@ function normalizeUserStatus(raw: unknown): UserStatus | "" {
   return token as UserStatus;
 }
 
-function parseWorkload(raw: unknown): number {
-  const text = String(raw ?? "").trim();
-  if (!text || text === "-") return 0;
-  const n = Number(text);
-  return Number.isFinite(n) ? n : 0;
-}
-
 function mapRemoteUser(raw: RemoteUser): User {
   const id = String(pickField(raw, "id", "User ID") ?? "");
   const dateAdded = String(
@@ -69,9 +63,9 @@ function mapRemoteUser(raw: RemoteUser): User {
     facility: String(
       pickField(raw, "facility", "Facility Assigned") ?? ""
     ),
-    activeWorkOrders: parseWorkload(
-      pickField(raw, "activeWorkOrders", "Current Workload")
-    ),
+    // Sheet "Current Workload" is not authoritative — derived in list/get via
+    // OperationalWorkloadService (active WOs by assignedToUserId).
+    activeWorkOrders: 0,
     status: normalizeUserStatus(pickField(raw, "status", "Status")),
     avatarUrl: raw.avatarUrl ? String(raw.avatarUrl) : undefined,
     lastActive: dateAdded,
@@ -243,19 +237,21 @@ export const UserService = {
   async listUsersWithCatalog(
     params: UserListParams = {}
   ): Promise<{ catalog: User[]; page: PaginatedResult<User> }> {
-    const [users, facilityNameById] = await Promise.all([
+    const [users, facilityNameById, maps] = await Promise.all([
       loadAllUsers(),
       loadFacilityNameById(),
+      OperationalWorkloadService.getMaps(),
     ]);
+    const enriched = OperationalWorkloadService.applyToUsers(users, maps);
     return {
-      catalog: users,
-      page: queryUsersPage(users, params, facilityNameById),
+      catalog: enriched,
+      page: queryUsersPage(enriched, params, facilityNameById),
     };
   },
 
   /** Unfiltered user catalog for filter option discovery. */
   async fetchAllUsers(): Promise<User[]> {
-    return loadAllUsers();
+    return OperationalWorkloadService.enrichUsers(await loadAllUsers());
   },
 
   async getUser(id: string): Promise<User | null> {
@@ -266,7 +262,9 @@ export const UserService = {
         payload: { id },
       });
       if (response.data == null) return null;
-      return mapRemoteUser(response.data as RemoteUser);
+      return OperationalWorkloadService.enrichUser(
+        mapRemoteUser(response.data as RemoteUser)
+      );
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) return null;
       throw error;
