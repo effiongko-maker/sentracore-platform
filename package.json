@@ -8,7 +8,9 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "lint": "eslint",
-    "apps-script:pack": "node scripts/generate-apps-script-deployment-pack.cjs"
+    "apps-script:pack": "node scripts/generate-apps-script-deployment-pack.cjs",
+    "perf:operate-pages": "node scripts/perf/measure-operate-pages.mjs",
+    "perf:proxy-helper": "tsx scripts/perf/measure-proxy-helper.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

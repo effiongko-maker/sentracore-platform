@@ -4,6 +4,11 @@
  * call this helper — same EXEC URL, same fetch behavior.
  */
 
+import {
+  hintRowCount,
+  recordAppsScriptPerf,
+} from "@/services/api/perfMetrics";
+
 /** Prefer env; default matches the verified public Web App EXEC URL. */
 const APPS_SCRIPT_URL =
   process.env.APPS_SCRIPT_URL ??
@@ -91,28 +96,91 @@ export async function postToAppsScript(
     });
   }
 
-  const response = await fetch(APPS_SCRIPT_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: payload,
-    redirect: "follow",
-  });
+  const started = Date.now();
+  const resource = body.resource ?? defaults.resource;
+  const action = body.action ?? defaults.action;
 
-  const text = await response.text();
+  try {
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: payload,
+      redirect: "follow",
+    });
 
-  if (!response.ok) {
-    console.warn(
-      `[${logPrefix}] Apps Script ${response.status} ${response.statusText}`
-    );
-    throw new Error(
-      `Apps Script request failed: ${response.status} ${response.statusText}`
-    );
+    const text = await response.text();
+    const durationMs = Date.now() - started;
+
+    if (!response.ok) {
+      recordAppsScriptPerf({
+        ts: new Date().toISOString(),
+        kind: "apps_script_fetch",
+        resource,
+        action,
+        logPrefix,
+        ok: false,
+        status: response.status,
+        durationMs,
+        requestBytes: payload.length,
+        responseBytes: text.length,
+        error: `${response.status} ${response.statusText}`,
+      });
+      console.warn(
+        `[${logPrefix}] Apps Script ${response.status} ${response.statusText}`
+      );
+      throw new Error(
+        `Apps Script request failed: ${response.status} ${response.statusText}`
+      );
+    }
+
+    const parsed = parseJsonOrThrow(text, `[${logPrefix}] Apps Script response`);
+    recordAppsScriptPerf({
+      ts: new Date().toISOString(),
+      kind: "apps_script_fetch",
+      resource,
+      action,
+      logPrefix,
+      ok: true,
+      status: response.status,
+      durationMs,
+      requestBytes: payload.length,
+      responseBytes: text.length,
+      rowHint: hintRowCount(parsed),
+    });
+    console.info(`[${logPrefix}] apps-script-timing`, {
+      resource,
+      action,
+      durationMs,
+      responseBytes: text.length,
+      rowHint: hintRowCount(parsed),
+    });
+    return parsed;
+  } catch (error) {
+    const durationMs = Date.now() - started;
+    if (
+      !(
+        error instanceof Error &&
+        error.message.startsWith("Apps Script request failed:")
+      )
+    ) {
+      recordAppsScriptPerf({
+        ts: new Date().toISOString(),
+        kind: "apps_script_fetch",
+        resource,
+        action,
+        logPrefix,
+        ok: false,
+        durationMs,
+        requestBytes: payload.length,
+        responseBytes: 0,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
   }
-
-  return parseJsonOrThrow(text, `[${logPrefix}] Apps Script response`);
 }
 
 /**
