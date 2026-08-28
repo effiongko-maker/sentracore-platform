@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Release: **v0.4.5** — Data-access stabilization — catalogs, coalescing, WO strict persistence
+Release: **v0.7.0** — Phase 2 Request Treatment (REQ → MNT/INC)
 
 Use this checklist with `DEPLOYMENT_PACK.md` open. Someone unfamiliar
 with the project should be able to deploy from these steps alone.
@@ -32,6 +32,7 @@ Current pack file list:
 - [ ] `AssetRepository.gs`
 - [ ] `AssetsController.gs`
 - [ ] `AssetService.gs`
+- [ ] `CatalogCacheService.gs`
 - [ ] `FacilitiesController.gs`
 - [ ] `FacilityRepository.gs`
 - [ ] `FacilityService.gs`
@@ -44,10 +45,15 @@ Current pack file list:
 - [ ] `MasterDataController.gs`
 - [ ] `MasterDataRepository.gs`
 - [ ] `MasterDataService.gs`
+- [ ] `OperationalListAudit.gs`
+- [ ] `OperationalRegisterCache.gs`
 - [ ] `ReportingSnapshotController.gs`
 - [ ] `ReportingSnapshotRepository.gs`
 - [ ] `ReportingSnapshotService.gs`
 - [ ] `ReportingSnapshotTriggers.gs`
+- [ ] `RequestRepository.gs`
+- [ ] `RequestsController.gs`
+- [ ] `RequestService.gs`
 - [ ] `SheetFieldUtils.gs`
 - [ ] `UserRepository.gs`
 - [ ] `UsersController.gs`
@@ -82,6 +88,7 @@ For each file that already exists in Apps Script, **replace the entire contents*
 - [ ] Replace `AssetRepository.gs`
 - [ ] Replace `AssetsController.gs`
 - [ ] Replace `AssetService.gs`
+- [ ] Replace `CatalogCacheService.gs`
 - [ ] Replace `FacilitiesController.gs`
 - [ ] Replace `FacilityRepository.gs`
 - [ ] Replace `FacilityService.gs`
@@ -94,10 +101,15 @@ For each file that already exists in Apps Script, **replace the entire contents*
 - [ ] Replace `MasterDataController.gs`
 - [ ] Replace `MasterDataRepository.gs`
 - [ ] Replace `MasterDataService.gs`
+- [ ] Replace `OperationalListAudit.gs`
+- [ ] Replace `OperationalRegisterCache.gs`
 - [ ] Replace `ReportingSnapshotController.gs`
 - [ ] Replace `ReportingSnapshotRepository.gs`
 - [ ] Replace `ReportingSnapshotService.gs`
 - [ ] Replace `ReportingSnapshotTriggers.gs`
+- [ ] Replace `RequestRepository.gs`
+- [ ] Replace `RequestsController.gs`
+- [ ] Replace `RequestService.gs`
 - [ ] Replace `SheetFieldUtils.gs`
 - [ ] Replace `UserRepository.gs`
 - [ ] Replace `UsersController.gs`
@@ -143,7 +155,7 @@ Trigger installation is not required for this release.
 
 ## 5. Web App deployment
 
-A **new Web App version** is REQUIRED.
+Web App redeploy is not required for this release.
 
 - [ ] Deploy → Manage deployments → Edit (pencil) → **New version** → Deploy.
 - [ ] Keep the same `/exec` URL unless intentionally rotating credentials.
@@ -156,10 +168,22 @@ A **new Web App version** is REQUIRED.
 
 With `npm run dev` running:
 
-### Work orders list
+### Request treatment persistence contract
 
 ```bash
-curl -sS -X POST http://localhost:3000/api/work-orders -H 'Content-Type: application/json' -d '{"resource":"work-orders","action":"getAll","payload":{"page":1,"pageSize":5}}'
+node scripts/smoke-request-treatment-contract.cjs
+```
+
+### Location catalog Facility contract
+
+```bash
+node scripts/smoke-location-catalog-contract.cjs
+```
+
+### UI treatment hub
+
+```bash
+Open /requests → View → Create Maintenance → assert MNT.sourceRequestId and REQ.maintenanceIds
 ```
 
 Expected checks:

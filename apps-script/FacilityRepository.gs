@@ -155,9 +155,53 @@ var FacilityRepository = (function () {
     return update(id, { status: "inactive" });
   }
 
+  /** WO filter dropdown — id/name only. */
+  function listFilterCatalog() {
+    var sheet = getSheet_();
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return [];
+
+    var lastCol = sheet.getLastColumn();
+    if (lastCol < 1) return [];
+    var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+    var headerMap = {};
+    var h;
+    for (h = 0; h < headers.length; h++) {
+      headerMap[String(headers[h]).trim()] = h;
+    }
+
+    function col1Based(names) {
+      var n;
+      for (n = 0; n < names.length; n++) {
+        if (headerMap[names[n]] !== undefined) return headerMap[names[n]] + 1;
+      }
+      return -1;
+    }
+
+    var idCol = col1Based(["id", "Facility ID"]);
+    var nameCol = col1Based(["name", "Facility Name"]);
+    if (idCol < 1 || nameCol < 1) return [];
+
+    var idValues = sheet.getRange(2, idCol, lastRow, idCol).getValues();
+    var nameValues = sheet.getRange(2, nameCol, lastRow, nameCol).getValues();
+    var rows = [];
+    var r;
+    for (r = 0; r < idValues.length; r++) {
+      var id = SheetFieldUtils.cellText(idValues[r][0]);
+      if (!id) continue;
+      var name = SheetFieldUtils.cellText(nameValues[r][0]) || id;
+      rows.push({ id: id, name: name });
+    }
+    rows.sort(function (a, b) {
+      return String(a.name).localeCompare(String(b.name));
+    });
+    return rows;
+  }
+
   return {
     getAll: getAll,
     getById: getById,
+    listFilterCatalog: listFilterCatalog,
     create: create,
     update: update,
     deactivate: deactivate,

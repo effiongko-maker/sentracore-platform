@@ -4,6 +4,7 @@ import type {
   CreateWorkOrderInput,
   UpdateWorkOrderInput,
   WorkOrder,
+  WorkOrderFilterCatalog,
   WorkOrderListParams,
   WorkOrderMaintenanceType,
   WorkOrderPriority,
@@ -310,6 +311,57 @@ export const WorkOrderService = {
       });
       return toPaginatedWorkOrders(response.data, params);
     });
+  },
+
+  /** Consolidated WO filter catalogs — one Apps Script invocation. */
+  async getFilterCatalog(): Promise<WorkOrderFilterCatalog> {
+    const response = await apiClient.post<unknown>("/work-orders", {
+      resource: "work-orders",
+      action: "getFilterCatalog",
+      payload: { _auditTiming: true },
+    });
+    const raw = response.data;
+    if (!raw || typeof raw !== "object") {
+      return { facilities: [], users: [], assets: [] };
+    }
+    const data = raw as Record<string, unknown>;
+    const mapRow = (row: unknown, fields: string[]) => {
+      if (!row || typeof row !== "object") return null;
+      const obj = row as Record<string, unknown>;
+      const out: Record<string, string> = {};
+      for (const field of fields) {
+        out[field] = String(obj[field] ?? "").trim();
+      }
+      return out;
+    };
+    const facilities = Array.isArray(data.facilities)
+      ? data.facilities
+          .map((row) => mapRow(row, ["id", "name"]))
+          .filter((row): row is { id: string; name: string } => !!row?.id)
+      : [];
+    const users = Array.isArray(data.users)
+      ? data.users
+          .map((row) => mapRow(row, ["id", "name"]))
+          .filter((row): row is { id: string; name: string } => !!row?.id)
+      : [];
+    const assets = Array.isArray(data.assets)
+      ? data.assets
+          .map((row) => mapRow(row, ["id", "name", "facility"]))
+          .filter(
+            (row): row is { id: string; name: string; facility: string } =>
+              !!row?.id
+          )
+      : [];
+    const cacheDiagnostics = data._cacheDiagnostics;
+    return {
+      facilities,
+      users,
+      assets,
+      cacheDiagnostics:
+        cacheDiagnostics && typeof cacheDiagnostics === "object"
+          ? (cacheDiagnostics as WorkOrderFilterCatalog["cacheDiagnostics"])
+          : undefined,
+    };
   },
 
   async getWorkOrder(id: string): Promise<WorkOrder | null> {

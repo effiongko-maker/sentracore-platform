@@ -597,10 +597,44 @@ var UserRepository = (function () {
     };
   }
 
+  /** WO filter dropdown — id/name only. */
+  function listFilterCatalog() {
+    var sheet = getSheet_();
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return [];
+
+    var headerMap = SheetFieldUtils.getHeaderMap(sheet);
+    var idHeader = FIELD_TO_HEADER.id;
+    var nameHeader = FIELD_TO_HEADER.name;
+    if (!SheetFieldUtils.hasHeader(headerMap, idHeader)) return [];
+
+    var idCol = headerMap[idHeader] + 1;
+    var nameCol = SheetFieldUtils.hasHeader(headerMap, nameHeader)
+      ? headerMap[nameHeader] + 1
+      : -1;
+    if (nameCol < 1) return [];
+
+    var idValues = sheet.getRange(2, idCol, lastRow, idCol).getValues();
+    var nameValues = sheet.getRange(2, nameCol, lastRow, nameCol).getValues();
+    var rows = [];
+    var r;
+    for (r = 0; r < idValues.length; r++) {
+      var id = cellText_(idValues[r][0]);
+      if (!id) continue;
+      var name = cellText_(nameValues[r][0]) || id;
+      rows.push({ id: id, name: name });
+    }
+    rows.sort(function (a, b) {
+      return String(a.name).localeCompare(String(b.name));
+    });
+    return rows;
+  }
+
   return {
     BUILD_MARKER: BUILD_MARKER,
     getAll: getAll,
     getById: getById,
+    listFilterCatalog: listFilterCatalog,
     create: create,
     update: update,
     deactivate: deactivate,

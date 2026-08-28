@@ -1,5 +1,6 @@
 import type { CreateIncidentInput } from "@/modules/incidents/types";
 import type { CreateMaintenanceInput } from "@/modules/maintenance/types";
+import type { CreateRequestInput } from "@/modules/requests/types";
 import type {
   IncidentRequestFormValues,
   MaintenanceRequestFormValues,
@@ -80,6 +81,47 @@ export function toCreateMaintenanceInput(
 }
 
 /**
+ * Maps occupant maintenance form → CreateRequestInput (REQ-* intake only).
+ */
+export function toCreateRequestFromMaintenanceForm(
+  form: MaintenanceRequestFormValues,
+  actor: OccupantActor
+): CreateRequestInput {
+  const attachment = toAttachmentRef(form.attachment);
+  const now = new Date().toISOString();
+
+  return {
+    title: form.title.trim(),
+    description: appendStructuredNotes(form.description, [
+      { label: "Location", value: form.location },
+      { label: "Category", value: form.category },
+      { label: "Priority", value: form.priority },
+      { label: "Department", value: form.department },
+      {
+        label: "Attachment",
+        value: attachment
+          ? `${attachment.fileName} (pending upload support)`
+          : undefined,
+      },
+      {
+        label: "Requested by",
+        value: actor.displayName || actor.email || actor.id,
+      },
+    ]),
+    facilityId: form.facilityId,
+    occurredAt: now,
+    locationDetail: form.location.trim() || undefined,
+    reporterName: actor.displayName || undefined,
+    reporterContact: actor.email || undefined,
+    reportedByUserId: actor.id,
+    requestType: "maintenance",
+    status: "submitted",
+    createdByUserId: actor.id,
+    updatedByUserId: actor.id,
+  };
+}
+
+/**
  * Maps occupant incident form → CreateIncidentInput.
  */
 export function toCreateIncidentInput(
@@ -112,6 +154,44 @@ export function toCreateIncidentInput(
     reportedVia: "portal",
     severity: form.severity,
     status: "reported",
+    createdByUserId: actor.id,
+    updatedByUserId: actor.id,
+  };
+}
+
+/**
+ * Maps occupant incident form → CreateRequestInput (REQ-* intake only).
+ */
+export function toCreateRequestFromIncidentForm(
+  form: IncidentRequestFormValues,
+  actor: OccupantActor
+): CreateRequestInput {
+  const attachment = toAttachmentRef(form.attachment);
+  const now = new Date().toISOString();
+
+  return {
+    title: form.title.trim(),
+    description: appendStructuredNotes(form.description, [
+      { label: "Severity", value: form.severity },
+      {
+        label: "Attachment",
+        value: attachment
+          ? `${attachment.fileName} (pending upload support)`
+          : undefined,
+      },
+      {
+        label: "Reported by",
+        value: actor.displayName || actor.email || actor.id,
+      },
+    ]),
+    facilityId: form.facilityId,
+    occurredAt: now,
+    locationDetail: form.location.trim() || undefined,
+    reporterName: actor.displayName || undefined,
+    reporterContact: actor.email || undefined,
+    reportedByUserId: actor.id,
+    requestType: "incident",
+    status: "submitted",
     createdByUserId: actor.id,
     updatedByUserId: actor.id,
   };

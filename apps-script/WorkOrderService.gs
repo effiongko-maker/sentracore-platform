@@ -154,8 +154,45 @@ var WorkOrderService = (function () {
     });
   }
 
+  function loadCanonicalRows_(payload, auditCollector) {
+    payload = payload || {};
+    if (typeof OperationalRegisterCache === "undefined") {
+      return WorkOrderRepository.getAll(auditCollector);
+    }
+    return OperationalRegisterCache.getCanonicalRows(
+      OperationalRegisterCache.NAMESPACES.workOrders,
+      function (collector) {
+        return WorkOrderRepository.getAll(collector);
+      },
+      {
+        skipCache: !!payload._skipCache,
+        auditCollector: auditCollector,
+      }
+    );
+  }
+
+  function invalidateRegisterCache_() {
+    if (typeof OperationalRegisterCache !== "undefined") {
+      OperationalRegisterCache.invalidate(
+        OperationalRegisterCache.NAMESPACES.workOrders
+      );
+    }
+  }
+
   function getAll(payload) {
-    var rows = WorkOrderRepository.getAll();
+    payload = payload || {};
+    if (payload._auditTiming && typeof OperationalListAudit !== "undefined") {
+      return OperationalListAudit.instrumentGetAll_(
+        payload,
+        function (auditCollector) {
+          return loadCanonicalRows_(payload, auditCollector);
+        },
+        applyFilters_,
+        sortNewestFirst_,
+        paginate_
+      );
+    }
+    var rows = loadCanonicalRows_(payload, null);
     var filtered = applyFilters_(rows, payload);
     var sorted = sortNewestFirst_(filtered);
     return paginate_(sorted, payload);
@@ -170,21 +207,49 @@ var WorkOrderService = (function () {
   }
 
   function create(payload) {
+    var t0 = Date.now();
     if (!payload || !payload.title) throw new Error("Work order title is required.");
     if (!payload.facilityId) throw new Error("Facility id is required.");
+    var tValidated = Date.now();
     var created = WorkOrderRepository.create(payload);
+    var tRepo = Date.now();
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("workOrders");
+    }
+    invalidateRegisterCache_();
+    var tNotify = Date.now();
+    var timings = {
+      validateMs: tValidated - t0,
+      repositoryMs: tRepo - tValidated,
+      snapshotNotifyMs: tNotify - tRepo,
+      totalMs: tNotify - t0,
+    };
+    Logger.log("[WorkOrderService.create] timings " + JSON.stringify(timings));
+    if (payload && payload._auditTiming) {
+      created._serverTimings = timings;
     }
     return created;
   }
 
   function update(payload) {
+    var t0 = Date.now();
     if (!payload || !payload.id) throw new Error("Work order id is required.");
     var updated = WorkOrderRepository.update(payload.id, payload);
     if (!updated) throw new Error("Work order " + payload.id + " not found.");
+    var tRepo = Date.now();
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("workOrders");
+    }
+    invalidateRegisterCache_();
+    var tNotify = Date.now();
+    var timings = {
+      repositoryMs: tRepo - t0,
+      snapshotNotifyMs: tNotify - tRepo,
+      totalMs: tNotify - t0,
+    };
+    Logger.log("[WorkOrderService.update] timings " + JSON.stringify(timings));
+    if (payload && payload._auditTiming) {
+      updated._serverTimings = timings;
     }
     return updated;
   }
@@ -196,12 +261,117 @@ var WorkOrderService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("workOrders");
     }
+    invalidateRegisterCache_();
     return updated;
+  }
+
+  /**
+   * Consolidated WO filter catalogs — one invocation, column-limited projections.
+   * Does not call getAll on domain services.
+   */
+  function loadFilterCatalogFromSheets_() {
+    var t0 = Date.now();
+    var facilities = [];
+    var users = [];
+    var assets = [];
+
+    if (
+      typeof FacilityRepository !== "undefined" &&
+      FacilityRepository.listFilterCatalog
+    ) {
+      facilities = FacilityRepository.listFilterCatalog() || [];
+    }
+    if (
+      typeof UserRepository !== "undefined" &&
+      UserRepository.listFilterCatalog
+    ) {
+      users = UserRepository.listFilterCatalog() || [];
+    }
+    if (
+      typeof AssetRepository !== "undefined" &&
+      AssetRepository.listFilterCatalog
+    ) {
+      assets = AssetRepository.listFilterCatalog() || [];
+    }
+
+    return {
+      facilities: facilities,
+      users: users,
+      assets: assets,
+      sheetReadMs: Date.now() - t0,
+    };
+  }
+
+  function attachCacheDiagnostics_(target, payload, diagnostics) {
+    if (payload && payload._auditTiming && diagnostics) {
+      target._cacheDiagnostics = diagnostics;
+    }
+    return target;
+  }
+
+  function getFilterCatalog(payload) {
+    payload = payload || {};
+    var tTotal0 = Date.now();
+    var skipCache = !!payload._skipCache;
+    var cacheHit = false;
+    var cacheReadMs = 0;
+    var sheetReadMs = 0;
+    var projectionMs = 0;
+    var catalog = null;
+
+    if (!skipCache && typeof CatalogCacheService !== "undefined") {
+      var cached = CatalogCacheService.getWoFilterCatalog();
+      if (cached && cached.data) {
+        cacheHit = true;
+        cacheReadMs = cached.cacheReadMs || 0;
+        catalog = cached.data;
+      }
+    }
+
+    if (!cacheHit) {
+      var loaded = loadFilterCatalogFromSheets_();
+      sheetReadMs = loaded.sheetReadMs;
+      catalog = {
+        facilities: loaded.facilities,
+        users: loaded.users,
+        assets: loaded.assets,
+      };
+      if (typeof CatalogCacheService !== "undefined") {
+        CatalogCacheService.putWoFilterCatalog(catalog);
+      }
+    }
+
+    var totalServerMs = Date.now() - tTotal0;
+    var result = {
+      facilities: catalog.facilities || [],
+      users: catalog.users || [],
+      assets: catalog.assets || [],
+    };
+
+    Logger.log(
+      "[WorkOrderService.getFilterCatalog] cacheHit=" +
+        cacheHit +
+        " sheetReadMs=" +
+        sheetReadMs +
+        " cacheReadMs=" +
+        cacheReadMs +
+        " totalServerMs=" +
+        totalServerMs
+    );
+
+    return attachCacheDiagnostics_(result, payload, {
+      cacheHit: cacheHit,
+      cacheReadMs: cacheReadMs,
+      sheetReadMs: sheetReadMs,
+      projectionMs: projectionMs,
+      totalServerMs: totalServerMs,
+    });
   }
 
   return {
     getAll: getAll,
     getById: getById,
+    getFilterCatalog: getFilterCatalog,
     create: create,
     update: update,
     deactivate: deactivate,

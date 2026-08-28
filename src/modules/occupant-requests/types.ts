@@ -55,9 +55,11 @@ export interface IncidentRequestFormValues {
 
 export interface OccupantRequestResult {
   kind: OccupantRequestKind;
+  /** REQ-* reference returned after intake. */
   id: string;
   title: string;
   status: OccupantRequestStatus;
   facilityId: string;
   createdAt: string;
+  requestType: OccupantRequestKind;
 }

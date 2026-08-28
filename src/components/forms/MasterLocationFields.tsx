@@ -1,23 +1,57 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   FormField,
   inputClassName,
   selectClassName,
 } from "@/components/forms/FormField";
-import { MasterDataSelect } from "@/components/forms/MasterDataSelect";
-import { useFacilityOptions } from "@/hooks/useFacilityOptions";
-import { useMasterDataOptions } from "@/hooks/useMasterDataOptions";
+import { Button } from "@/components/ui/Button";
+import { useLocationCatalog } from "@/hooks/useLocationCatalog";
+import type { LocationCatalogItem } from "@/modules/master-data/types";
 
 function composeLocation(parts: Array<string | undefined>) {
   return parts.map((part) => part?.trim()).filter(Boolean).join(" · ");
 }
 
+function filterByFacility(
+  items: LocationCatalogItem[],
+  facilityId: string | undefined
+) {
+  if (!facilityId) return [];
+  return items.filter((item) => item.facilityId === facilityId);
+}
+
+function filterByBuilding(
+  items: LocationCatalogItem[],
+  facilityId: string | undefined,
+  buildingId: string | undefined
+) {
+  if (!facilityId || !buildingId) return [];
+  return items.filter(
+    (item) =>
+      item.facilityId === facilityId && item.buildingId === buildingId
+  );
+}
+
+function filterByFloor(
+  items: LocationCatalogItem[],
+  facilityId: string | undefined,
+  buildingId: string | undefined,
+  floorId: string | undefined
+) {
+  if (!facilityId || !buildingId || !floorId) return [];
+  return items.filter(
+    (item) =>
+      item.facilityId === facilityId &&
+      item.buildingId === buildingId &&
+      item.floorId === floorId
+  );
+}
+
 /**
- * Cascading Facility → Building → Floor → Room from Master Data / Facilities.
- * Each level enables the next. Empty options are "Select …", never the level name alone.
- * Composes a display string into the existing free-text location field.
+ * Cascading Facility → Building → Floor → Room from one location catalog load.
+ * Each level filters in memory — no per-level Apps Script requests.
  */
 export function MasterLocationFields({
   facilityId,
@@ -51,29 +85,29 @@ export function MasterLocationFields({
   const [detail, setDetail] = useState("");
   const [initialized, setInitialized] = useState(false);
 
-  const { facilities, loading: facilitiesLoading } = useFacilityOptions(
-    includeFacility && !disabled
-  );
+  const {
+    catalog,
+    loading: catalogLoading,
+    error: catalogError,
+    reload,
+  } = useLocationCatalog(!disabled);
 
-  const { items: buildings } = useMasterDataOptions("buildings", {
-    facilityId: facilityId || undefined,
-    enabled: Boolean(facilityId),
-  });
-  const { items: floors } = useMasterDataOptions("floors", {
-    facilityId: facilityId || undefined,
-    buildingId: buildingId || undefined,
-    enabled: Boolean(facilityId && buildingId),
-  });
-  const { items: rooms } = useMasterDataOptions("rooms", {
-    facilityId: facilityId || undefined,
-    buildingId: buildingId || undefined,
-    floorId: floorId || undefined,
-    enabled: Boolean(facilityId && buildingId && floorId),
-  });
+  const facilities = catalog.facilities;
+  const buildings = useMemo(
+    () => filterByFacility(catalog.buildings, facilityId),
+    [catalog.buildings, facilityId]
+  );
+  const floors = useMemo(
+    () => filterByBuilding(catalog.floors, facilityId, buildingId),
+    [catalog.floors, facilityId, buildingId]
+  );
+  const rooms = useMemo(
+    () => filterByFloor(catalog.rooms, facilityId, buildingId, floorId),
+    [catalog.rooms, facilityId, buildingId, floorId]
+  );
 
   useEffect(() => {
     if (initialized) return;
-    // Preserve legacy free-text in the detail field until the user rebuilds via cascade.
     setDetail(value);
     setInitialized(true);
   }, [value, initialized]);
@@ -96,12 +130,53 @@ export function MasterLocationFields({
     onChange(composeLocation([building, floor, room, nextDetail]));
   }
 
+  const catalogFailed = Boolean(catalogError);
+  const catalogEmpty =
+    !catalogLoading && !catalogFailed && facilities.length === 0;
+  const facilityDisabled =
+    disabled ||
+    catalogLoading ||
+    catalogFailed ||
+    (includeFacility && catalogEmpty);
+  const buildingDisabled =
+    disabled || catalogLoading || catalogFailed || !facilityId;
+  const floorDisabled =
+    disabled || catalogLoading || catalogFailed || !buildingId;
+  const roomDisabled =
+    disabled || catalogLoading || catalogFailed || !floorId;
+
+  function facilityPlaceholder() {
+    if (catalogLoading) return "Loading locations…";
+    if (catalogFailed) return "Unable to load locations.";
+    if (catalogEmpty) return "No facilities are currently available.";
+    return "Select facility";
+  }
+
   return (
     <div className="space-y-4 sm:col-span-2">
       <div>
         <p className="text-sm font-medium text-foreground">{label}</p>
         {hint ? <p className="mt-1 text-xs text-muted">{hint}</p> : null}
         {error ? <p className="mt-1 text-xs text-danger">{error}</p> : null}
+        {catalogFailed ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <p className="text-xs text-danger">Unable to load locations.</p>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={disabled || catalogLoading}
+              onClick={reload}
+            >
+              Retry
+            </Button>
+          </div>
+        ) : null}
+        {catalogEmpty ? (
+          <p className="mt-2 text-xs text-muted">
+            No facilities are currently available.
+          </p>
+        ) : null}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -116,7 +191,7 @@ export function MasterLocationFields({
               id="master-location-facility"
               className={selectClassName}
               value={facilityId ?? ""}
-              disabled={disabled || facilitiesLoading}
+              disabled={facilityDisabled}
               onChange={(event) => {
                 const next = event.target.value;
                 onFacilityChange?.(next);
@@ -126,9 +201,7 @@ export function MasterLocationFields({
                 emit("", "", "", detail);
               }}
             >
-              <option value="">
-                {facilitiesLoading ? "Loading facilities…" : "Select facility"}
-              </option>
+              <option value="">{facilityPlaceholder()}</option>
               {facilityId &&
               !facilities.some((item) => item.id === facilityId) ? (
                 <option value={facilityId}>{facilityId}</option>
@@ -143,67 +216,90 @@ export function MasterLocationFields({
         ) : null}
 
         <FormField label="Building" htmlFor="master-location-building">
-          <MasterDataSelect
+          <select
             id="master-location-building"
-            entity="buildings"
+            className={selectClassName}
             value={buildingId}
-            facilityId={facilityId || undefined}
-            enabled={Boolean(facilityId)}
-            disabled={disabled || !facilityId}
-            emptyOptionLabel={
-              !facilityId ? "Select facility first" : "Select building"
-            }
-            loadingPlaceholder="Loading…"
+            disabled={buildingDisabled}
             aria-label="Building"
-            onChange={(next) => {
+            onChange={(event) => {
+              const next = event.target.value;
               setBuildingId(next);
               setFloorId("");
               setRoomId("");
               emit(next, "", "", detail);
             }}
-          />
+          >
+            <option value="">
+              {!facilityId
+                ? "Select facility first"
+                : catalogLoading
+                  ? "Loading locations…"
+                  : "Select building"}
+            </option>
+            {buildings.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
         </FormField>
 
         <FormField label="Floor" htmlFor="master-location-floor">
-          <MasterDataSelect
+          <select
             id="master-location-floor"
-            entity="floors"
+            className={selectClassName}
             value={floorId}
-            facilityId={facilityId || undefined}
-            buildingId={buildingId || undefined}
-            enabled={Boolean(facilityId && buildingId)}
-            disabled={disabled || !buildingId}
-            emptyOptionLabel={
-              !buildingId ? "Select building first" : "Select floor"
-            }
-            loadingPlaceholder="Loading…"
+            disabled={floorDisabled}
             aria-label="Floor"
-            onChange={(next) => {
+            onChange={(event) => {
+              const next = event.target.value;
               setFloorId(next);
               setRoomId("");
               emit(buildingId, next, "", detail);
             }}
-          />
+          >
+            <option value="">
+              {!buildingId
+                ? "Select building first"
+                : catalogLoading
+                  ? "Loading locations…"
+                  : "Select floor"}
+            </option>
+            {floors.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
         </FormField>
 
         <FormField label="Room" htmlFor="master-location-room">
-          <MasterDataSelect
+          <select
             id="master-location-room"
-            entity="rooms"
+            className={selectClassName}
             value={roomId}
-            facilityId={facilityId || undefined}
-            buildingId={buildingId || undefined}
-            floorId={floorId || undefined}
-            enabled={Boolean(facilityId && buildingId && floorId)}
-            disabled={disabled || !floorId}
-            emptyOptionLabel={!floorId ? "Select floor first" : "Select room"}
-            loadingPlaceholder="Loading…"
+            disabled={roomDisabled}
             aria-label="Room"
-            onChange={(next) => {
+            onChange={(event) => {
+              const next = event.target.value;
               setRoomId(next);
               emit(buildingId, floorId, next, detail);
             }}
-          />
+          >
+            <option value="">
+              {!floorId
+                ? "Select floor first"
+                : catalogLoading
+                  ? "Loading locations…"
+                  : "Select room"}
+            </option>
+            {rooms.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
         </FormField>
       </div>
 

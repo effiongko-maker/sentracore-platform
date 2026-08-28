@@ -43,6 +43,7 @@ export const INCIDENT_SOURCES: IncidentSource[] = [
   "security",
   "system",
   "external",
+  "request",
 ];
 
 export const INCIDENT_CHANNELS: IncidentChannel[] = [

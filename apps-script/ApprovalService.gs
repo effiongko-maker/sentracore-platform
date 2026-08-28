@@ -96,8 +96,45 @@ var ApprovalService = (function () {
     });
   }
 
+  function loadCanonicalRows_(payload, auditCollector) {
+    payload = payload || {};
+    if (typeof OperationalRegisterCache === "undefined") {
+      return ApprovalRepository.getAll(auditCollector);
+    }
+    return OperationalRegisterCache.getCanonicalRows(
+      OperationalRegisterCache.NAMESPACES.approvals,
+      function (collector) {
+        return ApprovalRepository.getAll(collector);
+      },
+      {
+        skipCache: !!payload._skipCache,
+        auditCollector: auditCollector,
+      }
+    );
+  }
+
+  function invalidateRegisterCache_() {
+    if (typeof OperationalRegisterCache !== "undefined") {
+      OperationalRegisterCache.invalidate(
+        OperationalRegisterCache.NAMESPACES.approvals
+      );
+    }
+  }
+
   function getAll(payload) {
-    var rows = ApprovalRepository.getAll();
+    payload = payload || {};
+    if (payload._auditTiming && typeof OperationalListAudit !== "undefined") {
+      return OperationalListAudit.instrumentGetAll_(
+        payload,
+        function (auditCollector) {
+          return loadCanonicalRows_(payload, auditCollector);
+        },
+        applyFilters_,
+        sortNewestFirst_,
+        paginate_
+      );
+    }
+    var rows = loadCanonicalRows_(payload, null);
     var filtered = applyFilters_(rows, payload);
     var sorted = sortNewestFirst_(filtered);
     return paginate_(sorted, payload);
@@ -123,6 +160,7 @@ var ApprovalService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("approvals");
     }
+    invalidateRegisterCache_();
     return created;
   }
 
@@ -134,6 +172,7 @@ var ApprovalService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("approvals");
     }
+    invalidateRegisterCache_();
     return updated;
   }
 
@@ -144,6 +183,7 @@ var ApprovalService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("approvals");
     }
+    invalidateRegisterCache_();
     return updated;
   }
 

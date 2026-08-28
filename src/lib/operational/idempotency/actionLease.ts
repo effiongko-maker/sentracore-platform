@@ -277,11 +277,28 @@ export async function runExclusiveOperationalAction<T>(options: {
       return created.value;
     }
 
-    let claim = await tryClaimLease({
-      organisationId: options.organisationId,
-      scopeKey: options.scopeKey,
-      actorProfileId: options.actorProfileId,
-    });
+    let claim: "claimed" | "exists";
+    try {
+      claim = await tryClaimLease({
+        organisationId: options.organisationId,
+        scopeKey: options.scopeKey,
+        actorProfileId: options.actorProfileId,
+      });
+    } catch (leaseError) {
+      // Documented fallback: lease table / network unavailable → local gate only.
+      console.warn(
+        "[runExclusiveOperationalAction] lease unavailable; continuing with process-local gate",
+        {
+          scopeKey: options.scopeKey,
+          error:
+            leaseError instanceof Error
+              ? leaseError.message
+              : String(leaseError),
+        }
+      );
+      const created = await options.create();
+      return created.value;
+    }
 
     if (claim === "exists") {
       const waited = await waitForCompletedLease(
@@ -424,4 +441,33 @@ export function incidentWorkOrderLeaseKey(incidentId: string): string {
 
 export function maintenanceWorkOrderLeaseKey(maintenanceId: string): string {
   return `maintenance:${maintenanceId}:link_work_order`;
+}
+
+/** Per-submit key — allows multiple treatments over time; blocks double-click. */
+export function requestCreateMaintenanceLeaseKey(
+  requestId: string,
+  idempotencyKey: string
+): string {
+  return `request:${requestId}:create_maintenance:${idempotencyKey}`;
+}
+
+export function requestCreateIncidentLeaseKey(
+  requestId: string,
+  idempotencyKey: string
+): string {
+  return `request:${requestId}:create_incident:${idempotencyKey}`;
+}
+
+export function requestLinkMaintenanceLeaseKey(
+  requestId: string,
+  maintenanceId: string
+): string {
+  return `request:${requestId}:link_maintenance:${maintenanceId}`;
+}
+
+export function requestLinkIncidentLeaseKey(
+  requestId: string,
+  incidentId: string
+): string {
+  return `request:${requestId}:link_incident:${incidentId}`;
 }

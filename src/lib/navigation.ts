@@ -12,6 +12,7 @@ import {
   FileBarChart2,
   Settings2,
   MessageSquarePlus,
+  Inbox,
   Database,
   ScanSearch,
   FileCheck2,
@@ -108,11 +109,18 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Operate",
     items: [
       item({
-        label: "Requests",
+        label: "Submit request",
         href: "/occupant-requests",
         icon: MessageSquarePlus,
-        title: "Requests",
-        description: "Submit maintenance requests and incident reports",
+        title: "Submit request",
+        description: "Report a maintenance need or incident",
+      }),
+      item({
+        label: "Request Queue",
+        href: "/requests",
+        icon: Inbox,
+        title: "Request Queue",
+        description: "Incoming reports requiring facility review",
       }),
       item({
         label: "Maintenance",
@@ -228,6 +236,7 @@ const ARCHETYPE_BY_HREF: Record<string, PageArchetypeHint> = {
   "/maintenance": "operational-list",
   "/work-orders": "operational-list",
   "/approvals": "operational-list",
+  "/requests": "operational-list",
   "/facilities": "reference-admin",
   "/assets": "reference-admin",
   "/users": "reference-admin",

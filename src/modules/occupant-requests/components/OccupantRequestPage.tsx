@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 const REQUESTS_HEADER = {
   title: "Requests",
   description:
-    "Raise maintenance requests and incident reports — work entering the operational flow.",
+    "Raise maintenance requests and incident reports for the facilities team.",
 };
 
 function RequestsFrame({ children }: { children: React.ReactNode }) {
@@ -157,8 +157,8 @@ export function OccupantRequestPage() {
                 <CardTitle>Request submitted</CardTitle>
                 <CardDescription className="mt-1">
                   {result.kind === "maintenance"
-                    ? "A maintenance record has been created for the facilities team."
-                    : "An incident record has been created for the operations team."}
+                    ? "Your maintenance request has been received. The facilities team will review it shortly."
+                    : "Your incident report has been received. The operations team will review it shortly."}
                 </CardDescription>
               </div>
             </div>
@@ -189,9 +189,8 @@ export function OccupantRequestPage() {
               </div>
             </dl>
             <p className="text-sm text-muted">
-              This request now appears in the existing{" "}
-              {result.kind === "maintenance" ? "Maintenance" : "Incidents"}{" "}
-              module and contributes to operational dashboards and reports.
+              Keep this reference number if you need to follow up on your
+              report.
             </p>
             <div className="flex flex-wrap gap-2 border-t border-border/70 pt-4">
               <Button
@@ -228,8 +227,8 @@ export function OccupantRequestPage() {
             What would you like to submit?
           </h2>
           <p className="mt-1.5 text-sm text-muted">
-            Choose a request type to submit. Your request is recorded in
-            Maintenance or Incidents for the operations team.
+            Choose a request type to submit. Your report will be reviewed by the
+            facilities team.
           </p>
         </div>
 

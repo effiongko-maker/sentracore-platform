@@ -34,6 +34,10 @@ export function actionFailure(
   };
 }
 
+/**
+ * Map unknown failures to ActionFailure while preserving safe, actionable messages
+ * (ActionError, ApiError, Error with a non-empty message).
+ */
 export function actionFailureFromError(error: unknown): ActionFailure {
   const err = toActionError(error);
   return {

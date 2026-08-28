@@ -108,6 +108,8 @@ export function useWorkOrders() {
       setError(null);
 
       try {
+        const t0 =
+          typeof performance !== "undefined" ? performance.now() : Date.now();
         const result = await WorkOrderService.listWorkOrders({
           page: nextPage,
           pageSize: WORK_ORDERS_PAGE_SIZE,
@@ -120,6 +122,16 @@ export function useWorkOrders() {
           maintenanceId,
           dueDate,
           sort,
+        });
+        const elapsedMs = Math.round(
+          (typeof performance !== "undefined" ? performance.now() : Date.now()) -
+            t0
+        );
+        console.info("[wo.load.timing] list", {
+          elapsedMs,
+          page: nextPage,
+          rows: result.data.length,
+          total: result.total,
         });
 
         if (id !== requestId.current) return;

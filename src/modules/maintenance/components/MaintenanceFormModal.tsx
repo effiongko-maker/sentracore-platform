@@ -160,6 +160,13 @@ export function MaintenanceFormModal({
     if (!validate()) return;
 
     setSaving(true);
+    const submitStarted = performance.now();
+    const mark = (label: string, since = submitStarted) => {
+      console.info(`[mnt.write.timing] ${label}`, {
+        ms: Math.round(performance.now() - since),
+      });
+      return performance.now();
+    };
     try {
       const description =
         optionalString(form.description) || form.title.trim();
@@ -196,6 +203,7 @@ export function MaintenanceFormModal({
           maintenance.id,
           payload
         );
+        const afterUpdate = mark("updateMaintenanceOperational");
         if (!result.success) {
           throw new Error(result.error.message);
         }
@@ -254,6 +262,7 @@ export function MaintenanceFormModal({
             // Non-blocking — maintenance side already holds the relationship.
           }
         }
+        mark("relationshipSideEffects", afterUpdate);
 
         toast({
           type: "success",
@@ -262,6 +271,7 @@ export function MaintenanceFormModal({
         });
       } else {
         const result = await requestMaintenance(payload);
+        mark("requestMaintenance");
         if (!result.success) {
           throw new Error(result.error.message);
         }
@@ -283,9 +293,13 @@ export function MaintenanceFormModal({
         });
       }
 
+      const beforeSaved = performance.now();
       onSaved?.();
+      mark("onSaved(listRefetch)", beforeSaved);
       onClose();
+      mark("total.submit→uiComplete");
     } catch (err) {
+      mark("failed");
       toast({
         type: "error",
         title:

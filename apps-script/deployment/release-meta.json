@@ -1,29 +1,37 @@
 {
-  "release": "v0.4.5",
-  "title": "Data-access stabilization — catalogs, coalescing, WO strict persistence",
+  "release": "v0.7.0",
+  "title": "Phase 2 Request Treatment (REQ → MNT/INC)",
   "features": [
-    "Lightweight User/Asset catalogs skip workload fan-out for toolbars/modals/labels",
-    "Shared in-flight coalescing + 60s catalog TTL with mutation invalidation",
-    "Operational list in-flight dedupe; workload derive 30s TTL",
-    "WorkOrderRepository ensures Facility/Asset/Assigned To/Reported By; strict writes",
-    "ROUTER error classification (validation/timeout/transient/exception)"
+    "Create Maintenance / Incident from Request with bidirectional sourceRequestId links",
+    "Link existing Maintenance / Incident with ownership conflict rejection",
+    "Resolve / Cancel Request via server actions",
+    "Request detail Treatment hub + derived downstream Work Orders",
+    "API proxy blocks client status/relationship mutation bypass"
   ],
   "performance": [
-    "Home uses fetchUsersCatalog instead of enriched fetchAllUsers",
-    "Reporting domain fallback uses listUsersCatalog/listAssetsCatalog",
-    "WO create/update reuse loaded sheet values within one Apps Script request"
+    "Link search uses paginated facility-scoped getAll (pageSize 200 server filter)",
+    "Request detail loads linked children by id (N small)"
   ],
   "deploymentRequired": true,
   "triggerRequired": false,
-  "appsScriptRedeploy": true,
+  "appsScriptRedeploy": false,
   "smokeTests": [
     {
-      "name": "Work orders list",
-      "command": "curl -sS -X POST http://localhost:3000/api/work-orders -H 'Content-Type: application/json' -d '{\"resource\":\"work-orders\",\"action\":\"getAll\",\"payload\":{\"page\":1,\"pageSize\":5}}'"
+      "name": "Request treatment persistence contract",
+      "command": "node scripts/smoke-request-treatment-contract.cjs"
+    },
+    {
+      "name": "Location catalog Facility contract",
+      "command": "node scripts/smoke-location-catalog-contract.cjs"
+    },
+    {
+      "name": "UI treatment hub",
+      "command": "Open /requests → View → Create Maintenance → assert MNT.sourceRequestId and REQ.maintenanceIds"
     }
   ],
   "notes": [
-    "CRITICAL: Redeploy SheetFieldUtils.gs, WorkOrderRepository.gs, and ROUTER.gs from the pack.",
-    "Strict persistence remains: missing relationship headers fail loudly instead of silent drop."
+    "Auth boundary: authenticated session + facility_management module (no facility_manager role yet).",
+    "Do not invent REQ → WO treatment path.",
+    "Apps Script unchanged for Phase 2 — orchestration is Next.js."
   ]
 }

@@ -53,6 +53,13 @@ var WorkOrdersController = (function () {
             WorkOrderService.deactivate(payload)
           );
 
+        case "getFilterCatalog":
+          return jsonResponse_(
+            true,
+            "Work order filter catalog retrieved.",
+            WorkOrderService.getFilterCatalog(payload)
+          );
+
         default:
           return jsonResponse_(
             false,

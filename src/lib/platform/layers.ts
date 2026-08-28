@@ -6,6 +6,7 @@ import {
   Database,
   FileBarChart2,
   FileCheck2,
+  Inbox,
   MessageSquarePlus,
   Package,
   ScanSearch,
@@ -114,11 +115,18 @@ export const OPERATING_LAYERS: OperatingLayer[] = [
     label: "Work",
     modules: [
       fm({
-        label: "Requests",
+        label: "Submit request",
         href: "/occupant-requests",
         icon: MessageSquarePlus,
-        title: "Requests",
-        description: "Incoming requests",
+        title: "Submit request",
+        description: "Report a need or incident",
+      }),
+      fm({
+        label: "Request Queue",
+        href: "/requests",
+        icon: Inbox,
+        title: "Request Queue",
+        description: "Incoming reports for review",
       }),
       fm({
         label: "Maintenance",

@@ -6,7 +6,7 @@
  * Expected request body:
  * {
  *   resource: "master-data",
- *   action: "getAll" | "getById" | "create" | "update" | "deactivate",
+ *   action: "getAll" | "getById" | "create" | "update" | "deactivate" | "getLocationCatalog",
  *   payload: { entity: "departments"|"buildings"|"floors"|"rooms"|"vendors", ... }
  * }
  */
@@ -20,6 +20,13 @@ var MasterDataController = (function () {
             true,
             "Master data retrieved.",
             MasterDataService.getAll(payload)
+          );
+
+        case "getLocationCatalog":
+          return jsonResponse_(
+            true,
+            "Location catalog retrieved.",
+            MasterDataService.getLocationCatalog(payload)
           );
 
         case "getById":

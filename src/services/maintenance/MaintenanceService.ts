@@ -3,6 +3,8 @@ import type { PaginatedResult } from "@/types";
 import type {
   CreateMaintenanceInput,
   Maintenance,
+  MaintenanceCatalogEntry,
+  MaintenanceCatalogListParams,
   MaintenanceListParams,
   MaintenancePriority,
   MaintenanceSource,
@@ -18,6 +20,7 @@ import {
   onMaintenanceMutation,
 } from "@/services/cache/domainCache";
 import {
+  CATALOG_TTL_MS,
   sharedRequest,
   stableRequestKey,
 } from "@/services/cache/sharedRequest";
@@ -197,6 +200,11 @@ function mapRemoteMaintenance(raw: RemoteMaintenance): Maintenance {
       "parentMaintenanceId",
       "Parent Maintenance ID"
     ),
+    sourceRequestId: optionalMappedString(
+      raw,
+      "sourceRequestId",
+      "Request ID"
+    ),
     priority: priority || "medium",
     status,
     holdReason: optionalMappedString(raw, "holdReason", "Hold Reason"),
@@ -282,6 +290,73 @@ function toPaginatedMaintenance(
   };
 }
 
+function mapRemoteMaintenanceCatalogEntry(
+  raw: RemoteMaintenance
+): MaintenanceCatalogEntry {
+  return {
+    id: String(pickField(raw, "id", "Maintenance ID") ?? ""),
+    title: String(pickField(raw, "title", "Title") ?? ""),
+  };
+}
+
+function toPaginatedMaintenanceCatalog(
+  payload: unknown,
+  params: MaintenanceCatalogListParams
+): PaginatedResult<MaintenanceCatalogEntry> {
+  if (Array.isArray(payload)) {
+    const data = payload.map((row) =>
+      mapRemoteMaintenanceCatalogEntry(row as RemoteMaintenance)
+    );
+    return {
+      data,
+      page: params.page ?? 1,
+      pageSize: params.pageSize ?? data.length,
+      total: data.length,
+      totalPages: 1,
+    };
+  }
+
+  if (payload && typeof payload === "object") {
+    const page = payload as Record<string, unknown>;
+    const rows = Array.isArray(page.data) ? page.data : [];
+    return {
+      data: rows.map((row) =>
+        mapRemoteMaintenanceCatalogEntry(row as RemoteMaintenance)
+      ),
+      page: Number(page.page ?? params.page ?? 1),
+      pageSize: Number(page.pageSize ?? params.pageSize ?? rows.length),
+      total: Number(page.total ?? rows.length),
+      totalPages: Number(page.totalPages ?? 1),
+    };
+  }
+
+  return {
+    data: [],
+    page: 1,
+    pageSize: params.pageSize ?? 500,
+    total: 0,
+    totalPages: 1,
+  };
+}
+
+async function loadAllMaintenanceCatalog(): Promise<MaintenanceCatalogEntry[]> {
+  return sharedRequest(
+    `${CacheNamespaces.maintenanceCatalog}:all`,
+    async () => {
+      const response = await apiClient.post<unknown>("/maintenance", {
+        resource: "maintenance",
+        action: "listCatalog",
+        payload: { page: 1, pageSize: 500 },
+      });
+      return toPaginatedMaintenanceCatalog(response.data, {
+        page: 1,
+        pageSize: 500,
+      }).data;
+    },
+    { ttlMs: CATALOG_TTL_MS }
+  );
+}
+
 /**
  * Maintenance domain service.
  * Talks only to ApiClient. Mirrors IncidentService / WorkOrderService.
@@ -303,6 +378,18 @@ export const MaintenanceService = {
       sort: params.sort ?? "",
     });
     return sharedRequest(key, async () => {
+      if (typeof window === "undefined") {
+        const data = await postToAppsScriptData(
+          {
+            resource: "maintenance",
+            action: "getAll",
+            payload: params,
+          },
+          { resource: "maintenance", action: "getAll" },
+          "MaintenanceService.listMaintenance"
+        );
+        return toPaginatedMaintenance(data, params);
+      }
       const response = await apiClient.post<unknown>("/maintenance", {
         resource: "maintenance",
         action: "getAll",
@@ -310,6 +397,43 @@ export const MaintenanceService = {
       });
       return toPaginatedMaintenance(response.data, params);
     });
+  },
+
+  /**
+   * Lightweight id/title catalog for filter dropdowns.
+   * Uses listCatalog on Apps Script (column-limited sheet read).
+   */
+  async listMaintenanceCatalog(
+    params: MaintenanceCatalogListParams = {}
+  ): Promise<PaginatedResult<MaintenanceCatalogEntry>> {
+    const all = await loadAllMaintenanceCatalog();
+    const search = (params.search ?? "").trim().toLowerCase();
+    const filtered = search
+      ? all.filter(
+          (row) =>
+            row.id.toLowerCase().includes(search) ||
+            row.title.toLowerCase().includes(search)
+        )
+      : all;
+    const page = Math.max(1, params.page ?? 1);
+    const pageSize = Math.max(
+      1,
+      params.pageSize ?? (filtered.length || 50)
+    );
+    const total = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const start = (page - 1) * pageSize;
+    return {
+      data: filtered.slice(start, start + pageSize),
+      page,
+      pageSize,
+      total,
+      totalPages,
+    };
+  },
+
+  async fetchMaintenanceCatalog(): Promise<MaintenanceCatalogEntry[]> {
+    return loadAllMaintenanceCatalog();
   },
 
   async getMaintenance(id: string): Promise<Maintenance | null> {

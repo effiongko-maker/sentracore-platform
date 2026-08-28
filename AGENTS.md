@@ -17,3 +17,19 @@ Whenever any `apps-script/**/*.gs` file changes:
 Never require the user to ask for individual `.gs` dumps — point them at the deployment pack.
 Optional local git hook: `git config core.hooksPath .githooks`
 <!-- END:apps-script-deployment-rules -->
+
+<!-- BEGIN:cross-service-schema-contract -->
+# Cross-service schema contract verification
+
+Whenever a new service projects, consolidates, caches, or transforms data owned by another domain:
+
+SOURCE DATA → NEW SERVICE PROJECTION → API RESPONSE → FRONTEND MAPPING
+
+must be tested end-to-end. Do not assume same spreadsheet = same field names = same object shape.
+
+Permanent smoke for location catalog Facility aliases:
+
+`node scripts/smoke-location-catalog-contract.cjs`
+
+Asserts: if `facilities/getAll` total > 0 then `getLocationCatalog.facilities.length > 0`, matching IDs present, and live `FAC-0001` / `NCC Annex`.
+<!-- END:cross-service-schema-contract -->

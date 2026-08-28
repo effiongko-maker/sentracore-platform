@@ -104,22 +104,40 @@ export class ApiClient {
                   ? { endpoint: "/api/maintenance", resource: "maintenance" }
                   : path === "/approvals"
                     ? { endpoint: "/api/approvals", resource: "approvals" }
-                    : path === "/master-data"
-                      ? {
-                          endpoint: "/api/master-data",
-                          resource: "master-data",
-                        }
-                      : path === "/reporting-snapshot"
+                    : path === "/requests"
+                      ? { endpoint: "/api/requests", resource: "requests" }
+                      : path === "/master-data"
                         ? {
-                            endpoint: "/api/reporting-snapshot",
-                            resource: "reporting-snapshot",
+                            endpoint: "/api/master-data",
+                            resource: "master-data",
                           }
-                        : null;
+                        : path === "/reporting-snapshot"
+                          ? {
+                              endpoint: "/api/reporting-snapshot",
+                              resource: "reporting-snapshot",
+                            }
+                          : null;
 
     if (liveProxy) {
+      const requestBody =
+        body ?? {
+          resource: liveProxy.resource,
+          action: "getAll",
+          payload: {},
+        };
+      const action =
+        requestBody &&
+        typeof requestBody === "object" &&
+        "action" in requestBody
+          ? String((requestBody as { action?: string }).action ?? "getAll")
+          : "getAll";
+      const isWriteAction =
+        action === "create" ||
+        action === "update" ||
+        action === "deactivate";
+
       return traceRequest(`ApiClient.post ${path}`, async () => {
         let attempt = 0;
-        // attempt 0 = first try; retries up to MAX_TRANSIENT_RETRIES
         while (true) {
           try {
             const response = await fetch(liveProxy.endpoint, {
@@ -129,13 +147,7 @@ export class ApiClient {
                 Accept: "application/json",
                 ...options?.headers,
               },
-              body: JSON.stringify(
-                body ?? {
-                  resource: liveProxy.resource,
-                  action: "getAll",
-                  payload: {},
-                }
-              ),
+              body: JSON.stringify(requestBody),
               signal: options?.signal,
             });
 
@@ -148,6 +160,7 @@ export class ApiClient {
                 trimmed.slice(0, 200)
               );
               if (
+                !isWriteAction &&
                 attempt < MAX_TRANSIENT_RETRIES &&
                 isTransientHttpStatus(response.status)
               ) {
@@ -178,6 +191,7 @@ export class ApiClient {
               const status = response.status || json.status || 500;
               const meta = json.meta;
               if (
+                !isWriteAction &&
                 attempt < MAX_TRANSIENT_RETRIES &&
                 shouldRetryFailure(status, message, meta)
               ) {
@@ -197,8 +211,8 @@ export class ApiClient {
           } catch (error) {
             if (error instanceof ApiError) throw error;
             if (options?.signal?.aborted) throw error;
-            // Network / fetch throw — treat as transient.
-            if (attempt < MAX_TRANSIENT_RETRIES) {
+            // Never retry writes — retries amplify Apps Script load and duplicate side effects.
+            if (!isWriteAction && attempt < MAX_TRANSIENT_RETRIES) {
               attempt += 1;
               await sleep(RETRY_BASE_MS * attempt);
               continue;

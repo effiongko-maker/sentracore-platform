@@ -17,6 +17,7 @@ var IncidentRepository = (function () {
     "Parent Incident ID",
     "Source",
     "Title",
+    "Request ID",
   ];
 
   function normalizeEnum_(value) {
@@ -118,6 +119,10 @@ var IncidentRepository = (function () {
       maintenanceIds: maintenanceIds,
       parentIncidentId:
         SheetFieldUtils.cellText(sheetRow["Parent Incident ID"]) || undefined,
+      sourceRequestId:
+        SheetFieldUtils.hasHeader(headerMap, "Request ID")
+          ? SheetFieldUtils.cellText(sheetRow["Request ID"]) || undefined
+          : undefined,
       operationalEventId:
         SheetFieldUtils.cellText(sheetRow["Event ID"]) || undefined,
       reportedAt: reportedAt || new Date().toISOString(),
@@ -173,6 +178,7 @@ var IncidentRepository = (function () {
       "Maintenance IDs": SheetFieldUtils.formatIdList(maintenanceIds),
       "Parent Incident ID": canonical.parentIncidentId || "",
       Source: canonical.source || "manual",
+      "Request ID": canonical.sourceRequestId || "",
     };
   }
 
@@ -184,19 +190,31 @@ var IncidentRepository = (function () {
     sheet.getRange(rowIndex, 1, 1, lastCol).setValues([row]);
   }
 
-  function getAll() {
-    var sheet = getSheet_();
-    var values = sheet.getDataRange().getValues();
+  function getAll(auditCollector) {
+    var sheet;
+    var values;
+    if (auditCollector && typeof OperationalListAudit !== "undefined") {
+      var sheetPhase = OperationalListAudit.beginSheetRead_(getSheet_, auditCollector);
+      sheet = sheetPhase.sheet;
+      values = sheetPhase.values;
+    } else {
+      sheet = getSheet_();
+      values = sheet.getDataRange().getValues();
+    }
     if (values.length <= 1) return [];
 
     var headers = values[0];
     var headerMap = SheetFieldUtils.getHeaderMap(sheet);
     var rows = [];
+    var tMap0 = auditCollector ? Date.now() : 0;
     for (var r = 1; r < values.length; r++) {
       var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[r]);
       var id = SheetFieldUtils.cellText(sheetRow["Incident ID"]);
       if (!id) continue;
       rows.push(toCanonical_(sheetRow, headerMap));
+    }
+    if (auditCollector && typeof OperationalListAudit !== "undefined") {
+      OperationalListAudit.finishMapping_(auditCollector, tMap0, rows);
     }
     return rows;
   }
@@ -296,6 +314,10 @@ var IncidentRepository = (function () {
         payload.parentIncidentId != null
           ? payload.parentIncidentId
           : current.parentIncidentId,
+      sourceRequestId:
+        payload.sourceRequestId != null
+          ? payload.sourceRequestId
+          : current.sourceRequestId,
       operationalEventId:
         payload.operationalEventId != null
           ? payload.operationalEventId
@@ -350,6 +372,7 @@ var IncidentRepository = (function () {
       workOrderId: workOrderIds.length ? workOrderIds[0] : undefined,
       maintenanceIds: payload.maintenanceIds || [],
       parentIncidentId: payload.parentIncidentId || "",
+      sourceRequestId: payload.sourceRequestId || "",
       operationalEventId: payload.operationalEventId || "",
       reportedAt: reportedAt,
       severity: payload.severity || "medium",

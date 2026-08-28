@@ -88,6 +88,10 @@ var FacilityService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("facilities");
     }
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateWoFilterCatalog();
+      CatalogCacheService.invalidateLocationCatalog();
+    }
     return created;
   }
 
@@ -98,6 +102,10 @@ var FacilityService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("facilities");
     }
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateWoFilterCatalog();
+      CatalogCacheService.invalidateLocationCatalog();
+    }
     return updated;
   }
 
@@ -107,6 +115,10 @@ var FacilityService = (function () {
     if (!updated) throw new Error("Facility " + payload.id + " not found.");
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("facilities");
+    }
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateWoFilterCatalog();
+      CatalogCacheService.invalidateLocationCatalog();
     }
     return updated;
   }

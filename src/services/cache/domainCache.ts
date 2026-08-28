@@ -14,12 +14,14 @@ import { invalidateSharedRequests } from "./sharedRequest";
 export const CacheNamespaces = {
   usersCatalog: "catalog:users",
   assetsCatalog: "catalog:assets",
+  maintenanceCatalog: "catalog:maintenance",
   facilities: "catalog:facilities",
   masterData: "catalog:master-data",
   workOrdersList: "list:work-orders",
   incidentsList: "list:incidents",
   maintenanceList: "list:maintenance",
   approvalsList: "list:approvals",
+  requestsList: "list:requests",
 } as const;
 
 export function invalidateUsersCatalog(): void {
@@ -32,14 +34,24 @@ export function invalidateAssetsCatalog(): void {
   EntityResolver.invalidate(EntityKinds.asset);
 }
 
+export function invalidateMaintenanceCatalog(): void {
+  invalidateSharedRequests(CacheNamespaces.maintenanceCatalog);
+}
+
 export function invalidateFacilitiesCatalog(): void {
   invalidateSharedRequests(CacheNamespaces.facilities);
+  invalidateSharedRequests(
+    `${CacheNamespaces.masterData}:locationCatalog`
+  );
   EntityResolver.invalidate(EntityKinds.facility);
 }
 
 export function invalidateMasterDataCatalog(entity?: string): void {
   if (entity) {
     invalidateSharedRequests(`${CacheNamespaces.masterData}:${entity}`);
+    invalidateSharedRequests(
+      `${CacheNamespaces.masterData}:locationCatalog`
+    );
     const kind =
       entity === "departments"
         ? EntityKinds.department
@@ -78,6 +90,7 @@ export function invalidateIncidentsLists(): void {
 
 export function invalidateMaintenanceLists(): void {
   invalidateSharedRequests(CacheNamespaces.maintenanceList);
+  invalidateMaintenanceCatalog();
   EntityResolver.invalidate(EntityKinds.maintenance);
   invalidateOperationalWorkload();
   SnapshotService.invalidate();
@@ -86,6 +99,10 @@ export function invalidateMaintenanceLists(): void {
 export function invalidateApprovalsLists(): void {
   invalidateSharedRequests(CacheNamespaces.approvalsList);
   SnapshotService.invalidate();
+}
+
+export function invalidateRequestsLists(): void {
+  invalidateSharedRequests(CacheNamespaces.requestsList);
 }
 
 export function onWorkOrderMutation(): void {
@@ -102,6 +119,10 @@ export function onMaintenanceMutation(): void {
 
 export function onApprovalMutation(): void {
   invalidateApprovalsLists();
+}
+
+export function onRequestMutation(): void {
+  invalidateRequestsLists();
 }
 
 export function onUserMutation(): void {

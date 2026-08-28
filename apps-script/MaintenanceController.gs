@@ -18,6 +18,13 @@ var MaintenanceController = (function () {
             MaintenanceService.getAll(payload)
           );
 
+        case "listCatalog":
+          return jsonResponse_(
+            true,
+            "Maintenance catalog retrieved.",
+            MaintenanceService.listCatalog(payload)
+          );
+
         case "getById":
           return jsonResponse_(
             true,

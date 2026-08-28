@@ -1,5 +1,5 @@
 import { resolveActionContext } from "./context";
-import { ActionError, isActionError } from "./errors";
+import { ActionError } from "./errors";
 import {
   actionFailureFromError,
   actionSuccess,
@@ -34,9 +34,25 @@ export async function executeAction<TInput, TData>(
     const data = await definition.handler(context, input);
     return actionSuccess(data);
   } catch (error) {
-    if (process.env.NODE_ENV !== "production" && !isActionError(error)) {
-      console.error(`[executeAction:${definition.name}]`, error);
-    }
-    return actionFailureFromError(error);
+    const failure = actionFailureFromError(error);
+    const input =
+      definition.input && typeof definition.input === "object"
+        ? (definition.input as Record<string, unknown>)
+        : null;
+    console.error(`[executeAction:${definition.name}]`, {
+      code: failure.error.code,
+      message: failure.error.message,
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      requestId:
+        typeof input?.requestId === "string" ? input.requestId : undefined,
+      maintenanceId:
+        typeof input?.maintenanceId === "string"
+          ? input.maintenanceId
+          : undefined,
+      incidentId:
+        typeof input?.incidentId === "string" ? input.incidentId : undefined,
+    });
+    return failure;
   }
 }

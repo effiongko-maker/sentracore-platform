@@ -152,6 +152,42 @@ export interface WorkOrderListParams {
   sort?: WorkOrderSort;
 }
 
+/** Minimal rows for WO filter dropdowns (consolidated getFilterCatalog). */
+export interface WorkOrderFilterCatalogFacility {
+  id: string;
+  name: string;
+}
+
+export interface WorkOrderFilterCatalogUser {
+  id: string;
+  name: string;
+}
+
+export interface WorkOrderFilterCatalogAsset {
+  id: string;
+  name: string;
+  facility: string;
+}
+
+export interface WorkOrderFilterCatalog {
+  facilities: WorkOrderFilterCatalogFacility[];
+  users: WorkOrderFilterCatalogUser[];
+  assets: WorkOrderFilterCatalogAsset[];
+  serverTimings?: {
+    facilitiesMs: number;
+    usersMs: number;
+    assetsMs: number;
+    totalMs: number;
+  };
+  cacheDiagnostics?: {
+    cacheHit: boolean;
+    cacheReadMs: number;
+    sheetReadMs: number;
+    projectionMs: number;
+    totalServerMs: number;
+  };
+}
+
 export type WorkOrderModalState =
   | { type: "closed" }
   | { type: "create" }

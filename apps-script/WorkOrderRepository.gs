@@ -238,9 +238,17 @@ var WorkOrderRepository = (function () {
     sheet.getRange(rowIndex, 1, 1, lastCol).setValues([row]);
   }
 
-  function getAll() {
-    var sheet = getSheet_();
-    var values = sheet.getDataRange().getValues();
+  function getAll(auditCollector) {
+    var sheet;
+    var values;
+    if (auditCollector && typeof OperationalListAudit !== "undefined") {
+      var sheetPhase = OperationalListAudit.beginSheetRead_(getSheet_, auditCollector);
+      sheet = sheetPhase.sheet;
+      values = sheetPhase.values;
+    } else {
+      sheet = getSheet_();
+      values = sheet.getDataRange().getValues();
+    }
     if (values.length <= 1) return [];
 
     var headers = values[0];
@@ -248,6 +256,7 @@ var WorkOrderRepository = (function () {
       ? SheetFieldUtils.headerMapFromRow(headers)
       : SheetFieldUtils.getHeaderMap(sheet);
     var rows = [];
+    var tMap0 = auditCollector ? Date.now() : 0;
     for (var r = 1; r < values.length; r++) {
       var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[r]);
       var id = SheetFieldUtils.cellText(sheetRow["Work Order ID"]);
@@ -256,6 +265,9 @@ var WorkOrderRepository = (function () {
       delete canonical._completedBy;
       delete canonical._dateClosed;
       rows.push(canonical);
+    }
+    if (auditCollector && typeof OperationalListAudit !== "undefined") {
+      OperationalListAudit.finishMapping_(auditCollector, tMap0, rows);
     }
     return rows;
   }

@@ -58,6 +58,8 @@ export interface Maintenance {
   workOrderId?: string;
   workOrderIds?: string[];
   parentMaintenanceId?: string;
+  /** Optional parent intake Request (REQ-*). Phase 1: not auto-populated. */
+  sourceRequestId?: string;
 
   priority: MaintenancePriority;
   status: MaintenanceStatus;
@@ -98,6 +100,7 @@ export interface CreateMaintenanceInput {
   workOrderId?: string;
   workOrderIds?: string[];
   parentMaintenanceId?: string;
+  sourceRequestId?: string;
   priority: MaintenancePriority;
   status: MaintenanceStatus;
   holdReason?: string;
@@ -127,6 +130,18 @@ export interface MaintenanceListParams {
   assignedToUserId?: string | "all";
   requiresWorkOrder?: boolean | "all";
   sort?: MaintenanceSort;
+}
+
+/** Lightweight reference row for filter dropdowns — id + title only. */
+export interface MaintenanceCatalogEntry {
+  id: string;
+  title: string;
+}
+
+export interface MaintenanceCatalogListParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
 }
 
 export type MaintenanceModalState =

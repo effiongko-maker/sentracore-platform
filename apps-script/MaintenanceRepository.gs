@@ -16,6 +16,7 @@ var MaintenanceRepository = (function () {
     "Source",
     "Title",
     "Updated At",
+    "Request ID",
   ];
 
   function normalizeEnum_(value) {
@@ -115,6 +116,10 @@ var MaintenanceRepository = (function () {
       operationalEventId:
         SheetFieldUtils.cellText(sheetRow["Event ID"]) || undefined,
       incidentId: SheetFieldUtils.cellText(sheetRow["Incident ID"]) || undefined,
+      sourceRequestId:
+        SheetFieldUtils.hasHeader(headerMap, "Request ID")
+          ? SheetFieldUtils.cellText(sheetRow["Request ID"]) || undefined
+          : undefined,
       workOrderIds: workOrderIds,
       workOrderId: workOrderIds.length ? workOrderIds[0] : undefined,
       parentMaintenanceId: undefined,
@@ -166,6 +171,7 @@ var MaintenanceRepository = (function () {
       "Incident ID": canonical.incidentId || "",
       "Work Order IDs": SheetFieldUtils.formatIdList(workOrderIds),
       Source: canonical.source || "manual",
+      "Request ID": canonical.sourceRequestId || "",
     };
   }
 
@@ -177,19 +183,31 @@ var MaintenanceRepository = (function () {
     sheet.getRange(rowIndex, 1, 1, lastCol).setValues([row]);
   }
 
-  function getAll() {
-    var sheet = getSheet_();
-    var values = sheet.getDataRange().getValues();
+  function getAll(auditCollector) {
+    var sheet;
+    var values;
+    if (auditCollector && typeof OperationalListAudit !== "undefined") {
+      var sheetPhase = OperationalListAudit.beginSheetRead_(getSheet_, auditCollector);
+      sheet = sheetPhase.sheet;
+      values = sheetPhase.values;
+    } else {
+      sheet = getSheet_();
+      values = sheet.getDataRange().getValues();
+    }
     if (values.length <= 1) return [];
 
     var headers = values[0];
     var headerMap = SheetFieldUtils.getHeaderMap(sheet);
     var rows = [];
+    var tMap0 = auditCollector ? Date.now() : 0;
     for (var r = 1; r < values.length; r++) {
       var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[r]);
       var id = SheetFieldUtils.cellText(sheetRow["Maintenance ID"]);
       if (!id) continue;
       rows.push(toCanonical_(sheetRow, headerMap));
+    }
+    if (auditCollector && typeof OperationalListAudit !== "undefined") {
+      OperationalListAudit.finishMapping_(auditCollector, tMap0, rows);
     }
     return rows;
   }
@@ -286,6 +304,10 @@ var MaintenanceRepository = (function () {
           : current.operationalEventId,
       incidentId:
         payload.incidentId != null ? payload.incidentId : current.incidentId,
+      sourceRequestId:
+        payload.sourceRequestId != null
+          ? payload.sourceRequestId
+          : current.sourceRequestId,
       workOrderIds: workOrderIds,
       workOrderId: workOrderIds.length ? workOrderIds[0] : undefined,
       reportedAt:
@@ -329,6 +351,7 @@ var MaintenanceRepository = (function () {
       assignedToUserId: payload.assignedToUserId || "",
       operationalEventId: payload.operationalEventId || "",
       incidentId: payload.incidentId || "",
+      sourceRequestId: payload.sourceRequestId || "",
       workOrderIds: workOrderIds,
       workOrderId: workOrderIds.length ? workOrderIds[0] : undefined,
       reportedAt: reportedAt,
@@ -365,9 +388,80 @@ var MaintenanceRepository = (function () {
     return update(id, { status: "cancelled" });
   }
 
+  /** First display line for catalog when Title column is empty. */
+  function catalogTitleFromDescription_(text) {
+    var description = SheetFieldUtils.cellText(text);
+    if (!description) return "";
+    var blocks = description.split(/\n\n+/);
+    var i;
+    for (i = 0; i < blocks.length; i++) {
+      var block = String(blocks[i] || "").trim();
+      if (
+        block &&
+        !/^(Location|Category|Attachment|Requested by|Reported by):/i.test(
+          block
+        )
+      ) {
+        var line = block.split(/\n+/)[0];
+        return line ? String(line).trim() : "";
+      }
+    }
+    return "";
+  }
+
+  /**
+   * Lightweight id/title rows for filter dropdowns.
+   * Reads only Maintenance ID + Title (or Description fallback) columns.
+   */
+  function listCatalog() {
+    var sheet = getSheet_();
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return [];
+
+    var headerMap = SheetFieldUtils.getHeaderMap(sheet);
+    if (!SheetFieldUtils.hasHeader(headerMap, "Maintenance ID")) return [];
+
+    var idCol = headerMap["Maintenance ID"] + 1;
+    var titleCol = SheetFieldUtils.hasHeader(headerMap, "Title")
+      ? headerMap["Title"] + 1
+      : -1;
+    var descCol = SheetFieldUtils.hasHeader(headerMap, "Description")
+      ? headerMap["Description"] + 1
+      : -1;
+
+    var idValues = sheet.getRange(2, idCol, lastRow, idCol).getValues();
+    var titleValues =
+      titleCol > 0
+        ? sheet.getRange(2, titleCol, lastRow, titleCol).getValues()
+        : null;
+    var descValues =
+      !titleValues && descCol > 0
+        ? sheet.getRange(2, descCol, lastRow, descCol).getValues()
+        : null;
+
+    var rows = [];
+    var r;
+    for (r = 0; r < idValues.length; r++) {
+      var id = SheetFieldUtils.cellText(idValues[r][0]);
+      if (!id) continue;
+
+      var title = "";
+      if (titleValues) {
+        title = SheetFieldUtils.cellText(titleValues[r][0]);
+      } else if (descValues) {
+        title = catalogTitleFromDescription_(descValues[r][0]);
+      }
+      if (!title) title = id;
+
+      rows.push({ id: id, title: title });
+    }
+    return rows;
+  }
+
   return {
     getAll: getAll,
     getById: getById,
+    listCatalog: listCatalog,
     create: create,
     update: update,
     deactivate: deactivate,

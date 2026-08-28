@@ -1,21 +1,18 @@
 "use server";
 
 import { executeAction, type ActionResult } from "@/lib/actions";
-import {
-  orchestrateReportIncident,
-  orchestrateRequestMaintenance,
-} from "@/lib/operational/orchestration";
+import { RequestService } from "@/services/requests/RequestService";
 import { getOccupantActor } from "../context/OccupantSession";
-import {
-  mapIncidentToOccupantStatus,
-  mapMaintenanceToOccupantStatus,
-} from "../status";
+import { mapRequestToOccupantStatus } from "../status";
 import type {
   IncidentRequestFormValues,
   MaintenanceRequestFormValues,
   OccupantRequestResult,
 } from "../types";
-import { toCreateIncidentInput, toCreateMaintenanceInput } from "../utils";
+import {
+  toCreateRequestFromIncidentForm,
+  toCreateRequestFromMaintenanceForm,
+} from "../utils";
 
 export async function submitOccupantMaintenanceRequest(
   form: MaintenanceRequestFormValues
@@ -26,27 +23,24 @@ export async function submitOccupantMaintenanceRequest(
     input: form,
     handler: async (context, rawInput) => {
       const actor = getOccupantActor();
-      const input = toCreateMaintenanceInput(rawInput, actor);
+      const input = toCreateRequestFromMaintenanceForm(rawInput, actor);
 
-      const maintenance = await orchestrateRequestMaintenance({
-        input: {
-          ...input,
-          createdByUserId: context.userId,
-          updatedByUserId: context.userId,
-          reportedByUserId: input.reportedByUserId || context.userId,
-        },
-        intake: "occupant",
-        context,
-        sourceReference: "occupant_request",
+      const request = await RequestService.createRequest({
+        ...input,
+        createdByUserId: context.userId || input.createdByUserId,
+        updatedByUserId: context.userId || input.updatedByUserId,
+        reportedByUserId:
+          input.reportedByUserId || context.userId || actor.id,
       });
 
       return {
         kind: "maintenance",
-        id: maintenance.id,
-        title: maintenance.title,
-        status: mapMaintenanceToOccupantStatus(maintenance),
-        facilityId: maintenance.facilityId,
-        createdAt: maintenance.createdAt || maintenance.reportedAt,
+        id: request.id,
+        title: request.title,
+        status: mapRequestToOccupantStatus(request),
+        facilityId: request.facilityId,
+        createdAt: request.createdAt || request.occurredAt,
+        requestType: "maintenance",
       };
     },
   });
@@ -61,27 +55,24 @@ export async function submitOccupantIncidentReport(
     input: form,
     handler: async (context, rawInput) => {
       const actor = getOccupantActor();
-      const input = toCreateIncidentInput(rawInput, actor);
+      const input = toCreateRequestFromIncidentForm(rawInput, actor);
 
-      const incident = await orchestrateReportIncident({
-        input: {
-          ...input,
-          createdByUserId: context.userId,
-          updatedByUserId: context.userId,
-          reportedByUserId: input.reportedByUserId || context.userId,
-        },
-        intake: "occupant",
-        context,
-        sourceReference: "occupant_request",
+      const request = await RequestService.createRequest({
+        ...input,
+        createdByUserId: context.userId || input.createdByUserId,
+        updatedByUserId: context.userId || input.updatedByUserId,
+        reportedByUserId:
+          input.reportedByUserId || context.userId || actor.id,
       });
 
       return {
         kind: "incident",
-        id: incident.id,
-        title: incident.title,
-        status: mapIncidentToOccupantStatus(incident),
-        facilityId: incident.facilityId,
-        createdAt: incident.createdAt || incident.reportedAt,
+        id: request.id,
+        title: request.title,
+        status: mapRequestToOccupantStatus(request),
+        facilityId: request.facilityId,
+        createdAt: request.createdAt || request.occurredAt,
+        requestType: "incident",
       };
     },
   });

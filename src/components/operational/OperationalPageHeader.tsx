@@ -16,10 +16,12 @@ export function OperationalPageHeader({
   description: string;
   countValue: string | number;
   countLabel: string;
-  actionLabel: string;
-  onAction: () => void;
+  actionLabel?: string;
+  onAction?: () => void;
   loading?: boolean;
 }) {
+  const showAction = Boolean(actionLabel && onAction);
+
   return (
     <header className="op-header">
       <div className="op-header-copy">
@@ -31,10 +33,12 @@ export function OperationalPageHeader({
           <span className="op-count-value">{loading ? "—" : countValue}</span>
           <span className="op-count-label">{countLabel}</span>
         </div>
-        <Button onClick={onAction}>
-          <Plus className="h-4 w-4" />
-          {actionLabel}
-        </Button>
+        {showAction ? (
+          <Button onClick={onAction}>
+            <Plus className="h-4 w-4" />
+            {actionLabel}
+          </Button>
+        ) : null}
       </div>
     </header>
   );

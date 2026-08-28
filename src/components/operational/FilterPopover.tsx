@@ -177,12 +177,14 @@ export function FilterField({
   label,
   value,
   onChange,
+  onFocus,
   children,
 }: {
   id: string;
   label: string;
   value: string;
   onChange: (value: string) => void;
+  onFocus?: () => void;
   children: React.ReactNode;
 }) {
   return (
@@ -194,6 +196,7 @@ export function FilterField({
           className="op-filter-select"
           value={value}
           onChange={(event) => onChange(event.target.value)}
+          onFocus={onFocus}
         >
           {children}
         </select>

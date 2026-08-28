@@ -156,6 +156,9 @@ var AssetService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("assets");
     }
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateWoFilterCatalog();
+    }
     return created;
   }
 
@@ -166,6 +169,9 @@ var AssetService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("assets");
     }
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateWoFilterCatalog();
+    }
     return updated;
   }
 
@@ -175,6 +181,9 @@ var AssetService = (function () {
     if (!updated) throw new Error("Asset " + payload.id + " not found.");
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("assets");
+    }
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateWoFilterCatalog();
     }
     return updated;
   }

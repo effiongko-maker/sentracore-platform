@@ -60,6 +60,23 @@ export interface MasterDataListParams {
   category?: string | "all";
 }
 
+/** Lean location node for cascading Facility → Building → Floor → Room. */
+export interface LocationCatalogItem {
+  id: string;
+  name: string;
+  facilityId?: string;
+  buildingId?: string;
+  floorId?: string;
+}
+
+/** Flat location hierarchy returned by master-data/getLocationCatalog. */
+export interface LocationCatalog {
+  facilities: LocationCatalogItem[];
+  buildings: LocationCatalogItem[];
+  floors: LocationCatalogItem[];
+  rooms: LocationCatalogItem[];
+}
+
 /** Client-side list sort — matches Assets/People toolbar pattern. */
 export type MasterDataSort = "newest";
 

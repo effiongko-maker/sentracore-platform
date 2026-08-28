@@ -311,6 +311,13 @@ export function WorkOrderFormModal({
     if (!validate()) return;
 
     setSaving(true);
+    const submitStarted = performance.now();
+    const mark = (label: string, since = submitStarted) => {
+      console.info(`[wo.write.timing] ${label}`, {
+        ms: Math.round(performance.now() - since),
+      });
+      return performance.now();
+    };
     try {
       const payload: CreateWorkOrderInput = {
         ...form,
@@ -344,6 +351,7 @@ export function WorkOrderFormModal({
 
       if (mode === "edit" && workOrder) {
         const result = await updateWorkOrderOperational(workOrder.id, payload);
+        const afterMutation = mark("updateWorkOrderOperational");
         if (!result.success) {
           throw new Error(result.error.message);
         }
@@ -353,6 +361,7 @@ export function WorkOrderFormModal({
           payload.maintenanceId,
           workOrder.maintenanceId
         );
+        mark("syncMaintenanceRelationship", afterMutation);
         toast({
           type: "success",
           title: "Work order updated",
@@ -360,17 +369,19 @@ export function WorkOrderFormModal({
         });
       } else {
         const result = await createWorkOrder(payload);
+        const afterMutation = mark("createWorkOrder(serverAction+AppsScript)");
         if (!result.success) {
           throw new Error(result.error.message);
         }
         savedId = result.data.id;
         // Create orchestration already back-links when maintenanceId is present;
-        // sync is idempotent, bumps updatedAt, and covers any missed link.
+        // sync is idempotent (getById only when already linked).
         await syncMaintenanceRelationship(
           savedId,
           payload.maintenanceId,
           undefined
         );
+        mark("syncMaintenanceRelationship", afterMutation);
         toast({
           type: "success",
           title: "Work order created",
@@ -378,9 +389,13 @@ export function WorkOrderFormModal({
         });
       }
 
+      const beforeSaved = performance.now();
       onSaved?.();
+      mark("onSaved(listRefetch)", beforeSaved);
       onClose();
+      mark("total.submit→uiComplete");
     } catch (err) {
+      mark("failed");
       toast({
         type: "error",
         title:

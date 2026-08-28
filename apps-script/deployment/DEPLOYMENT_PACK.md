@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Generated: 2026-08-26T14:36:19.067Z
+Generated: 2026-08-27T14:56:26.900Z
 
 This document is the **single source of truth** for copying Apps Script
 source into the Google Apps Script project.
@@ -24,6 +24,7 @@ Then follow `DEPLOYMENT_CHECKLIST.md`.
 - AssetRepository.gs
 - AssetsController.gs
 - AssetService.gs
+- CatalogCacheService.gs
 - FacilitiesController.gs
 - FacilityRepository.gs
 - FacilityService.gs
@@ -36,10 +37,15 @@ Then follow `DEPLOYMENT_CHECKLIST.md`.
 - MasterDataController.gs
 - MasterDataRepository.gs
 - MasterDataService.gs
+- OperationalListAudit.gs
+- OperationalRegisterCache.gs
 - ReportingSnapshotController.gs
 - ReportingSnapshotRepository.gs
 - ReportingSnapshotService.gs
 - ReportingSnapshotTriggers.gs
+- RequestRepository.gs
+- RequestsController.gs
+- RequestService.gs
 - SheetFieldUtils.gs
 - UserRepository.gs
 - UsersController.gs
@@ -64,8 +70,8 @@ ROUTER.gs
  * Request envelope:
  * {
  *   resource: "users" | "facilities" | "assets" | "work-orders" |
- *             "incidents" | "maintenance" | "approvals" | "master-data" |
- *             "reporting-snapshot",
+ *             "incidents" | "maintenance" | "approvals" | "requests" |
+ *             "master-data" | "reporting-snapshot",
  *   action: string,
  *   payload: object
  * }
@@ -151,6 +157,8 @@ function doPost(e) {
       result = MaintenanceController.handle(action, payload);
     } else if (resource === "approvals") {
       result = ApprovalsController.handle(action, payload);
+    } else if (resource === "requests") {
+      result = RequestsController.handle(action, payload);
     } else if (resource === "master-data") {
       result = MasterDataController.handle(action, payload);
     } else if (resource === "reporting-snapshot") {
@@ -160,7 +168,7 @@ function doPost(e) {
         false,
         resource
           ? "Unknown module: " + resource
-          : "Missing resource. Expected users|facilities|assets|work-orders|incidents|maintenance|approvals|master-data|reporting-snapshot.",
+          : "Missing resource. Expected users|facilities|assets|work-orders|incidents|maintenance|approvals|requests|master-data|reporting-snapshot.",
         null,
         { errorClass: "validation", retryable: false }
       );
@@ -201,6 +209,7 @@ function doGet() {
       "incidents",
       "maintenance",
       "approvals",
+      "requests",
       "master-data",
       "reporting-snapshot",
     ],
@@ -556,18 +565,30 @@ var ApprovalRepository = (function () {
     sheet.getRange(rowIndex, 1, 1, lastCol).setValues([row]);
   }
 
-  function getAll() {
-    var sheet = getSheet_();
-    var values = sheet.getDataRange().getValues();
+  function getAll(auditCollector) {
+    var sheet;
+    var values;
+    if (auditCollector && typeof OperationalListAudit !== "undefined") {
+      var sheetPhase = OperationalListAudit.beginSheetRead_(getSheet_, auditCollector);
+      sheet = sheetPhase.sheet;
+      values = sheetPhase.values;
+    } else {
+      sheet = getSheet_();
+      values = sheet.getDataRange().getValues();
+    }
     if (values.length <= 1) return [];
 
     var headers = values[0];
     var rows = [];
+    var tMap0 = auditCollector ? Date.now() : 0;
     for (var r = 1; r < values.length; r++) {
       var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[r]);
       var id = SheetFieldUtils.cellText(sheetRow["Approval ID"]);
       if (!id) continue;
       rows.push(toCanonical_(sheetRow));
+    }
+    if (auditCollector && typeof OperationalListAudit !== "undefined") {
+      OperationalListAudit.finishMapping_(auditCollector, tMap0, rows);
     }
     return rows;
   }
@@ -1017,8 +1038,45 @@ var ApprovalService = (function () {
     });
   }
 
+  function loadCanonicalRows_(payload, auditCollector) {
+    payload = payload || {};
+    if (typeof OperationalRegisterCache === "undefined") {
+      return ApprovalRepository.getAll(auditCollector);
+    }
+    return OperationalRegisterCache.getCanonicalRows(
+      OperationalRegisterCache.NAMESPACES.approvals,
+      function (collector) {
+        return ApprovalRepository.getAll(collector);
+      },
+      {
+        skipCache: !!payload._skipCache,
+        auditCollector: auditCollector,
+      }
+    );
+  }
+
+  function invalidateRegisterCache_() {
+    if (typeof OperationalRegisterCache !== "undefined") {
+      OperationalRegisterCache.invalidate(
+        OperationalRegisterCache.NAMESPACES.approvals
+      );
+    }
+  }
+
   function getAll(payload) {
-    var rows = ApprovalRepository.getAll();
+    payload = payload || {};
+    if (payload._auditTiming && typeof OperationalListAudit !== "undefined") {
+      return OperationalListAudit.instrumentGetAll_(
+        payload,
+        function (auditCollector) {
+          return loadCanonicalRows_(payload, auditCollector);
+        },
+        applyFilters_,
+        sortNewestFirst_,
+        paginate_
+      );
+    }
+    var rows = loadCanonicalRows_(payload, null);
     var filtered = applyFilters_(rows, payload);
     var sorted = sortNewestFirst_(filtered);
     return paginate_(sorted, payload);
@@ -1044,6 +1102,7 @@ var ApprovalService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("approvals");
     }
+    invalidateRegisterCache_();
     return created;
   }
 
@@ -1055,6 +1114,7 @@ var ApprovalService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("approvals");
     }
+    invalidateRegisterCache_();
     return updated;
   }
 
@@ -1065,6 +1125,7 @@ var ApprovalService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("approvals");
     }
+    invalidateRegisterCache_();
     return updated;
   }
 
@@ -1363,9 +1424,55 @@ var AssetRepository = (function () {
     return update(id, { status: "inactive" });
   }
 
+  /** WO filter dropdown — id, name, facility only. */
+  function listFilterCatalog() {
+    var sheet = getSheet_();
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return [];
+
+    var headerMap = SheetFieldUtils.getHeaderMap(sheet);
+    var idHeader = FIELD_TO_HEADER.id;
+    var nameHeader = FIELD_TO_HEADER.name;
+    var facilityHeader = FIELD_TO_HEADER.facility;
+    if (!SheetFieldUtils.hasHeader(headerMap, idHeader)) return [];
+
+    var idCol = headerMap[idHeader] + 1;
+    var nameCol = SheetFieldUtils.hasHeader(headerMap, nameHeader)
+      ? headerMap[nameHeader] + 1
+      : -1;
+    var facilityCol = SheetFieldUtils.hasHeader(headerMap, facilityHeader)
+      ? headerMap[facilityHeader] + 1
+      : -1;
+    if (nameCol < 1) return [];
+
+    var idValues = sheet.getRange(2, idCol, lastRow, idCol).getValues();
+    var nameValues = sheet.getRange(2, nameCol, lastRow, nameCol).getValues();
+    var facilityValues =
+      facilityCol > 0
+        ? sheet.getRange(2, facilityCol, lastRow, facilityCol).getValues()
+        : null;
+
+    var rows = [];
+    var r;
+    for (r = 0; r < idValues.length; r++) {
+      var id = SheetFieldUtils.cellText(idValues[r][0]);
+      if (!id) continue;
+      var name = SheetFieldUtils.cellText(nameValues[r][0]) || id;
+      var facility = facilityValues
+        ? SheetFieldUtils.cellText(facilityValues[r][0])
+        : "";
+      rows.push({ id: id, name: name, facility: facility || "" });
+    }
+    rows.sort(function (a, b) {
+      return String(a.name).localeCompare(String(b.name));
+    });
+    return rows;
+  }
+
   return {
     getAll: getAll,
     getById: getById,
+    listFilterCatalog: listFilterCatalog,
     create: create,
     update: update,
     deactivate: deactivate,
@@ -1620,6 +1727,9 @@ var AssetService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("assets");
     }
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateWoFilterCatalog();
+    }
     return created;
   }
 
@@ -1629,6 +1739,9 @@ var AssetService = (function () {
     if (!updated) throw new Error("Asset " + payload.id + " not found.");
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("assets");
+    }
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateWoFilterCatalog();
     }
     return updated;
   }
@@ -1640,6 +1753,9 @@ var AssetService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("assets");
     }
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateWoFilterCatalog();
+    }
     return updated;
   }
 
@@ -1649,6 +1765,143 @@ var AssetService = (function () {
     create: create,
     update: update,
     deactivate: deactivate,
+  };
+})();
+```
+
+======================================
+FILE:
+CatalogCacheService.gs
+======================================
+
+```javascript
+/**
+ * CatalogCacheService.gs
+ *
+ * Apps Script CacheService layer for lightweight reference/catalog projections.
+ * Caches finished JSON projections — not raw full-sheet objects.
+ */
+
+var CatalogCacheService = (function () {
+  var CACHE_VERSION = "v1";
+  var KEY_WO_FILTER_CATALOG = "catalog:" + CACHE_VERSION + ":wo-filter";
+  var KEY_MAINTENANCE_CATALOG = "catalog:" + CACHE_VERSION + ":mnt-list";
+  var KEY_LOCATION_CATALOG = "catalog:" + CACHE_VERSION + ":location";
+  /** Safety-net TTL — mutations invalidate explicitly; never rely on TTL alone. */
+  var TTL_SECONDS = 600;
+
+  function cache_() {
+    return CacheService.getScriptCache();
+  }
+
+  function readJson_(key) {
+    var t0 = Date.now();
+    var raw = SheetFieldUtils.cacheGetUtf8(cache_(), key);
+    var cacheReadMs = Date.now() - t0;
+    if (raw == null || raw === "") return null;
+    try {
+      return { value: JSON.parse(raw), cacheReadMs: cacheReadMs };
+    } catch (err) {
+      try {
+        cache_().remove(key);
+      } catch (removeErr) {}
+      return null;
+    }
+  }
+
+  function writeJson_(key, value) {
+    SheetFieldUtils.cachePutUtf8(
+      cache_(),
+      key,
+      JSON.stringify(value),
+      TTL_SECONDS
+    );
+  }
+
+  function getWoFilterCatalog() {
+    var parsed = readJson_(KEY_WO_FILTER_CATALOG);
+    if (!parsed) return null;
+    return {
+      data: parsed.value,
+      cacheReadMs: parsed.cacheReadMs,
+    };
+  }
+
+  function putWoFilterCatalog(data) {
+    writeJson_(KEY_WO_FILTER_CATALOG, data);
+  }
+
+  function invalidateWoFilterCatalog() {
+    try {
+      cache_().remove(KEY_WO_FILTER_CATALOG);
+      Logger.log("[CatalogCacheService] invalidated " + KEY_WO_FILTER_CATALOG);
+    } catch (err) {
+      Logger.log("[CatalogCacheService] invalidate wo-filter failed: " + err);
+    }
+  }
+
+  function getMaintenanceCatalogRows() {
+    var parsed = readJson_(KEY_MAINTENANCE_CATALOG);
+    if (!parsed) return null;
+    return {
+      rows: parsed.value,
+      cacheReadMs: parsed.cacheReadMs,
+    };
+  }
+
+  function putMaintenanceCatalogRows(rows) {
+    writeJson_(KEY_MAINTENANCE_CATALOG, rows);
+  }
+
+  function invalidateMaintenanceCatalog() {
+    try {
+      cache_().remove(KEY_MAINTENANCE_CATALOG);
+      Logger.log(
+        "[CatalogCacheService] invalidated " + KEY_MAINTENANCE_CATALOG
+      );
+    } catch (err) {
+      Logger.log("[CatalogCacheService] invalidate mnt-list failed: " + err);
+    }
+  }
+
+  function getLocationCatalog() {
+    var parsed = readJson_(KEY_LOCATION_CATALOG);
+    if (!parsed) return null;
+    return {
+      data: parsed.value,
+      cacheReadMs: parsed.cacheReadMs,
+    };
+  }
+
+  function putLocationCatalog(data) {
+    writeJson_(KEY_LOCATION_CATALOG, data);
+  }
+
+  function invalidateLocationCatalog() {
+    try {
+      cache_().remove(KEY_LOCATION_CATALOG);
+      Logger.log("[CatalogCacheService] invalidated " + KEY_LOCATION_CATALOG);
+    } catch (err) {
+      Logger.log(
+        "[CatalogCacheService] invalidate location catalog failed: " + err
+      );
+    }
+  }
+
+  return {
+    CACHE_VERSION: CACHE_VERSION,
+    KEY_WO_FILTER_CATALOG: KEY_WO_FILTER_CATALOG,
+    KEY_MAINTENANCE_CATALOG: KEY_MAINTENANCE_CATALOG,
+    KEY_LOCATION_CATALOG: KEY_LOCATION_CATALOG,
+    getWoFilterCatalog: getWoFilterCatalog,
+    putWoFilterCatalog: putWoFilterCatalog,
+    invalidateWoFilterCatalog: invalidateWoFilterCatalog,
+    getMaintenanceCatalogRows: getMaintenanceCatalogRows,
+    putMaintenanceCatalogRows: putMaintenanceCatalogRows,
+    invalidateMaintenanceCatalog: invalidateMaintenanceCatalog,
+    getLocationCatalog: getLocationCatalog,
+    putLocationCatalog: putLocationCatalog,
+    invalidateLocationCatalog: invalidateLocationCatalog,
   };
 })();
 ```
@@ -1899,9 +2152,53 @@ var FacilityRepository = (function () {
     return update(id, { status: "inactive" });
   }
 
+  /** WO filter dropdown — id/name only. */
+  function listFilterCatalog() {
+    var sheet = getSheet_();
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return [];
+
+    var lastCol = sheet.getLastColumn();
+    if (lastCol < 1) return [];
+    var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+    var headerMap = {};
+    var h;
+    for (h = 0; h < headers.length; h++) {
+      headerMap[String(headers[h]).trim()] = h;
+    }
+
+    function col1Based(names) {
+      var n;
+      for (n = 0; n < names.length; n++) {
+        if (headerMap[names[n]] !== undefined) return headerMap[names[n]] + 1;
+      }
+      return -1;
+    }
+
+    var idCol = col1Based(["id", "Facility ID"]);
+    var nameCol = col1Based(["name", "Facility Name"]);
+    if (idCol < 1 || nameCol < 1) return [];
+
+    var idValues = sheet.getRange(2, idCol, lastRow, idCol).getValues();
+    var nameValues = sheet.getRange(2, nameCol, lastRow, nameCol).getValues();
+    var rows = [];
+    var r;
+    for (r = 0; r < idValues.length; r++) {
+      var id = SheetFieldUtils.cellText(idValues[r][0]);
+      if (!id) continue;
+      var name = SheetFieldUtils.cellText(nameValues[r][0]) || id;
+      rows.push({ id: id, name: name });
+    }
+    rows.sort(function (a, b) {
+      return String(a.name).localeCompare(String(b.name));
+    });
+    return rows;
+  }
+
   return {
     getAll: getAll,
     getById: getById,
+    listFilterCatalog: listFilterCatalog,
     create: create,
     update: update,
     deactivate: deactivate,
@@ -2005,6 +2302,10 @@ var FacilityService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("facilities");
     }
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateWoFilterCatalog();
+      CatalogCacheService.invalidateLocationCatalog();
+    }
     return created;
   }
 
@@ -2015,6 +2316,10 @@ var FacilityService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("facilities");
     }
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateWoFilterCatalog();
+      CatalogCacheService.invalidateLocationCatalog();
+    }
     return updated;
   }
 
@@ -2024,6 +2329,10 @@ var FacilityService = (function () {
     if (!updated) throw new Error("Facility " + payload.id + " not found.");
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("facilities");
+    }
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateWoFilterCatalog();
+      CatalogCacheService.invalidateLocationCatalog();
     }
     return updated;
   }
@@ -2063,6 +2372,7 @@ var IncidentRepository = (function () {
     "Parent Incident ID",
     "Source",
     "Title",
+    "Request ID",
   ];
 
   function normalizeEnum_(value) {
@@ -2164,6 +2474,10 @@ var IncidentRepository = (function () {
       maintenanceIds: maintenanceIds,
       parentIncidentId:
         SheetFieldUtils.cellText(sheetRow["Parent Incident ID"]) || undefined,
+      sourceRequestId:
+        SheetFieldUtils.hasHeader(headerMap, "Request ID")
+          ? SheetFieldUtils.cellText(sheetRow["Request ID"]) || undefined
+          : undefined,
       operationalEventId:
         SheetFieldUtils.cellText(sheetRow["Event ID"]) || undefined,
       reportedAt: reportedAt || new Date().toISOString(),
@@ -2219,6 +2533,7 @@ var IncidentRepository = (function () {
       "Maintenance IDs": SheetFieldUtils.formatIdList(maintenanceIds),
       "Parent Incident ID": canonical.parentIncidentId || "",
       Source: canonical.source || "manual",
+      "Request ID": canonical.sourceRequestId || "",
     };
   }
 
@@ -2230,19 +2545,31 @@ var IncidentRepository = (function () {
     sheet.getRange(rowIndex, 1, 1, lastCol).setValues([row]);
   }
 
-  function getAll() {
-    var sheet = getSheet_();
-    var values = sheet.getDataRange().getValues();
+  function getAll(auditCollector) {
+    var sheet;
+    var values;
+    if (auditCollector && typeof OperationalListAudit !== "undefined") {
+      var sheetPhase = OperationalListAudit.beginSheetRead_(getSheet_, auditCollector);
+      sheet = sheetPhase.sheet;
+      values = sheetPhase.values;
+    } else {
+      sheet = getSheet_();
+      values = sheet.getDataRange().getValues();
+    }
     if (values.length <= 1) return [];
 
     var headers = values[0];
     var headerMap = SheetFieldUtils.getHeaderMap(sheet);
     var rows = [];
+    var tMap0 = auditCollector ? Date.now() : 0;
     for (var r = 1; r < values.length; r++) {
       var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[r]);
       var id = SheetFieldUtils.cellText(sheetRow["Incident ID"]);
       if (!id) continue;
       rows.push(toCanonical_(sheetRow, headerMap));
+    }
+    if (auditCollector && typeof OperationalListAudit !== "undefined") {
+      OperationalListAudit.finishMapping_(auditCollector, tMap0, rows);
     }
     return rows;
   }
@@ -2342,6 +2669,10 @@ var IncidentRepository = (function () {
         payload.parentIncidentId != null
           ? payload.parentIncidentId
           : current.parentIncidentId,
+      sourceRequestId:
+        payload.sourceRequestId != null
+          ? payload.sourceRequestId
+          : current.sourceRequestId,
       operationalEventId:
         payload.operationalEventId != null
           ? payload.operationalEventId
@@ -2396,6 +2727,7 @@ var IncidentRepository = (function () {
       workOrderId: workOrderIds.length ? workOrderIds[0] : undefined,
       maintenanceIds: payload.maintenanceIds || [],
       parentIncidentId: payload.parentIncidentId || "",
+      sourceRequestId: payload.sourceRequestId || "",
       operationalEventId: payload.operationalEventId || "",
       reportedAt: reportedAt,
       severity: payload.severity || "medium",
@@ -2645,8 +2977,45 @@ var IncidentService = (function () {
     });
   }
 
+  function loadCanonicalRows_(payload, auditCollector) {
+    payload = payload || {};
+    if (typeof OperationalRegisterCache === "undefined") {
+      return IncidentRepository.getAll(auditCollector);
+    }
+    return OperationalRegisterCache.getCanonicalRows(
+      OperationalRegisterCache.NAMESPACES.incidents,
+      function (collector) {
+        return IncidentRepository.getAll(collector);
+      },
+      {
+        skipCache: !!payload._skipCache,
+        auditCollector: auditCollector,
+      }
+    );
+  }
+
+  function invalidateRegisterCache_() {
+    if (typeof OperationalRegisterCache !== "undefined") {
+      OperationalRegisterCache.invalidate(
+        OperationalRegisterCache.NAMESPACES.incidents
+      );
+    }
+  }
+
   function getAll(payload) {
-    var rows = IncidentRepository.getAll();
+    payload = payload || {};
+    if (payload._auditTiming && typeof OperationalListAudit !== "undefined") {
+      return OperationalListAudit.instrumentGetAll_(
+        payload,
+        function (auditCollector) {
+          return loadCanonicalRows_(payload, auditCollector);
+        },
+        applyFilters_,
+        sortNewestFirst_,
+        paginate_
+      );
+    }
+    var rows = loadCanonicalRows_(payload, null);
     var filtered = applyFilters_(rows, payload);
     var sorted = sortNewestFirst_(filtered);
     return paginate_(sorted, payload);
@@ -2668,6 +3037,7 @@ var IncidentService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("incidents");
     }
+    invalidateRegisterCache_();
     return created;
   }
 
@@ -2679,6 +3049,7 @@ var IncidentService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("incidents");
     }
+    invalidateRegisterCache_();
     return updated;
   }
 
@@ -2689,6 +3060,7 @@ var IncidentService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("incidents");
     }
+    invalidateRegisterCache_();
     return updated;
   }
 
@@ -2726,6 +3098,13 @@ var MaintenanceController = (function () {
             true,
             "Maintenance retrieved.",
             MaintenanceService.getAll(payload)
+          );
+
+        case "listCatalog":
+          return jsonResponse_(
+            true,
+            "Maintenance catalog retrieved.",
+            MaintenanceService.listCatalog(payload)
           );
 
         case "getById":
@@ -2802,6 +3181,7 @@ var MaintenanceRepository = (function () {
     "Source",
     "Title",
     "Updated At",
+    "Request ID",
   ];
 
   function normalizeEnum_(value) {
@@ -2901,6 +3281,10 @@ var MaintenanceRepository = (function () {
       operationalEventId:
         SheetFieldUtils.cellText(sheetRow["Event ID"]) || undefined,
       incidentId: SheetFieldUtils.cellText(sheetRow["Incident ID"]) || undefined,
+      sourceRequestId:
+        SheetFieldUtils.hasHeader(headerMap, "Request ID")
+          ? SheetFieldUtils.cellText(sheetRow["Request ID"]) || undefined
+          : undefined,
       workOrderIds: workOrderIds,
       workOrderId: workOrderIds.length ? workOrderIds[0] : undefined,
       parentMaintenanceId: undefined,
@@ -2952,6 +3336,7 @@ var MaintenanceRepository = (function () {
       "Incident ID": canonical.incidentId || "",
       "Work Order IDs": SheetFieldUtils.formatIdList(workOrderIds),
       Source: canonical.source || "manual",
+      "Request ID": canonical.sourceRequestId || "",
     };
   }
 
@@ -2963,19 +3348,31 @@ var MaintenanceRepository = (function () {
     sheet.getRange(rowIndex, 1, 1, lastCol).setValues([row]);
   }
 
-  function getAll() {
-    var sheet = getSheet_();
-    var values = sheet.getDataRange().getValues();
+  function getAll(auditCollector) {
+    var sheet;
+    var values;
+    if (auditCollector && typeof OperationalListAudit !== "undefined") {
+      var sheetPhase = OperationalListAudit.beginSheetRead_(getSheet_, auditCollector);
+      sheet = sheetPhase.sheet;
+      values = sheetPhase.values;
+    } else {
+      sheet = getSheet_();
+      values = sheet.getDataRange().getValues();
+    }
     if (values.length <= 1) return [];
 
     var headers = values[0];
     var headerMap = SheetFieldUtils.getHeaderMap(sheet);
     var rows = [];
+    var tMap0 = auditCollector ? Date.now() : 0;
     for (var r = 1; r < values.length; r++) {
       var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[r]);
       var id = SheetFieldUtils.cellText(sheetRow["Maintenance ID"]);
       if (!id) continue;
       rows.push(toCanonical_(sheetRow, headerMap));
+    }
+    if (auditCollector && typeof OperationalListAudit !== "undefined") {
+      OperationalListAudit.finishMapping_(auditCollector, tMap0, rows);
     }
     return rows;
   }
@@ -3072,6 +3469,10 @@ var MaintenanceRepository = (function () {
           : current.operationalEventId,
       incidentId:
         payload.incidentId != null ? payload.incidentId : current.incidentId,
+      sourceRequestId:
+        payload.sourceRequestId != null
+          ? payload.sourceRequestId
+          : current.sourceRequestId,
       workOrderIds: workOrderIds,
       workOrderId: workOrderIds.length ? workOrderIds[0] : undefined,
       reportedAt:
@@ -3115,6 +3516,7 @@ var MaintenanceRepository = (function () {
       assignedToUserId: payload.assignedToUserId || "",
       operationalEventId: payload.operationalEventId || "",
       incidentId: payload.incidentId || "",
+      sourceRequestId: payload.sourceRequestId || "",
       workOrderIds: workOrderIds,
       workOrderId: workOrderIds.length ? workOrderIds[0] : undefined,
       reportedAt: reportedAt,
@@ -3151,9 +3553,80 @@ var MaintenanceRepository = (function () {
     return update(id, { status: "cancelled" });
   }
 
+  /** First display line for catalog when Title column is empty. */
+  function catalogTitleFromDescription_(text) {
+    var description = SheetFieldUtils.cellText(text);
+    if (!description) return "";
+    var blocks = description.split(/\n\n+/);
+    var i;
+    for (i = 0; i < blocks.length; i++) {
+      var block = String(blocks[i] || "").trim();
+      if (
+        block &&
+        !/^(Location|Category|Attachment|Requested by|Reported by):/i.test(
+          block
+        )
+      ) {
+        var line = block.split(/\n+/)[0];
+        return line ? String(line).trim() : "";
+      }
+    }
+    return "";
+  }
+
+  /**
+   * Lightweight id/title rows for filter dropdowns.
+   * Reads only Maintenance ID + Title (or Description fallback) columns.
+   */
+  function listCatalog() {
+    var sheet = getSheet_();
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return [];
+
+    var headerMap = SheetFieldUtils.getHeaderMap(sheet);
+    if (!SheetFieldUtils.hasHeader(headerMap, "Maintenance ID")) return [];
+
+    var idCol = headerMap["Maintenance ID"] + 1;
+    var titleCol = SheetFieldUtils.hasHeader(headerMap, "Title")
+      ? headerMap["Title"] + 1
+      : -1;
+    var descCol = SheetFieldUtils.hasHeader(headerMap, "Description")
+      ? headerMap["Description"] + 1
+      : -1;
+
+    var idValues = sheet.getRange(2, idCol, lastRow, idCol).getValues();
+    var titleValues =
+      titleCol > 0
+        ? sheet.getRange(2, titleCol, lastRow, titleCol).getValues()
+        : null;
+    var descValues =
+      !titleValues && descCol > 0
+        ? sheet.getRange(2, descCol, lastRow, descCol).getValues()
+        : null;
+
+    var rows = [];
+    var r;
+    for (r = 0; r < idValues.length; r++) {
+      var id = SheetFieldUtils.cellText(idValues[r][0]);
+      if (!id) continue;
+
+      var title = "";
+      if (titleValues) {
+        title = SheetFieldUtils.cellText(titleValues[r][0]);
+      } else if (descValues) {
+        title = catalogTitleFromDescription_(descValues[r][0]);
+      }
+      if (!title) title = id;
+
+      rows.push({ id: id, title: title });
+    }
+    return rows;
+  }
+
   return {
     getAll: getAll,
     getById: getById,
+    listCatalog: listCatalog,
     create: create,
     update: update,
     deactivate: deactivate,
@@ -3300,11 +3773,122 @@ var MaintenanceService = (function () {
     });
   }
 
+  function loadCanonicalRows_(payload, auditCollector) {
+    payload = payload || {};
+    if (typeof OperationalRegisterCache === "undefined") {
+      return MaintenanceRepository.getAll(auditCollector);
+    }
+    return OperationalRegisterCache.getCanonicalRows(
+      OperationalRegisterCache.NAMESPACES.maintenance,
+      function (collector) {
+        return MaintenanceRepository.getAll(collector);
+      },
+      {
+        skipCache: !!payload._skipCache,
+        auditCollector: auditCollector,
+      }
+    );
+  }
+
+  function invalidateRegisterCache_() {
+    if (typeof OperationalRegisterCache !== "undefined") {
+      OperationalRegisterCache.invalidate(
+        OperationalRegisterCache.NAMESPACES.maintenance
+      );
+    }
+  }
+
   function getAll(payload) {
-    var rows = MaintenanceRepository.getAll();
+    payload = payload || {};
+    if (payload._auditTiming && typeof OperationalListAudit !== "undefined") {
+      return OperationalListAudit.instrumentGetAll_(
+        payload,
+        function (auditCollector) {
+          return loadCanonicalRows_(payload, auditCollector);
+        },
+        applyFilters_,
+        sortNewestFirst_,
+        paginate_
+      );
+    }
+    var rows = loadCanonicalRows_(payload, null);
     var filtered = applyFilters_(rows, payload);
     var sorted = sortNewestFirst_(filtered);
     return paginate_(sorted, payload);
+  }
+
+  function listCatalog(payload) {
+    payload = payload || {};
+    var tTotal0 = Date.now();
+    var skipCache = !!payload._skipCache;
+    var cacheHit = false;
+    var cacheReadMs = 0;
+    var sheetReadMs = 0;
+    var rows = null;
+
+    if (!skipCache && typeof CatalogCacheService !== "undefined") {
+      var cached = CatalogCacheService.getMaintenanceCatalogRows();
+      if (cached && cached.rows) {
+        cacheHit = true;
+        cacheReadMs = cached.cacheReadMs || 0;
+        rows = cached.rows;
+      }
+    }
+
+    if (!cacheHit) {
+      var tSheet0 = Date.now();
+      rows = MaintenanceRepository.listCatalog() || [];
+      sheetReadMs = Date.now() - tSheet0;
+      if (typeof CatalogCacheService !== "undefined") {
+        CatalogCacheService.putMaintenanceCatalogRows(rows);
+      }
+    }
+
+    var tProj0 = Date.now();
+    var search = String(payload.search || "")
+      .toLowerCase()
+      .trim();
+    var filtered = rows.filter(function (row) {
+      if (!search) return true;
+      return (
+        String(row.id || "")
+          .toLowerCase()
+          .indexOf(search) !== -1 ||
+        String(row.title || "")
+          .toLowerCase()
+          .indexOf(search) !== -1
+      );
+    });
+    filtered.sort(function (a, b) {
+      return String(a.title || a.id || "").localeCompare(
+        String(b.title || b.id || "")
+      );
+    });
+    var result = paginate_(filtered, payload);
+    var projectionMs = Date.now() - tProj0;
+    var totalServerMs = Date.now() - tTotal0;
+
+    Logger.log(
+      "[MaintenanceService.listCatalog] cacheHit=" +
+        cacheHit +
+        " sheetReadMs=" +
+        sheetReadMs +
+        " cacheReadMs=" +
+        cacheReadMs +
+        " totalServerMs=" +
+        totalServerMs
+    );
+
+    if (payload._auditTiming) {
+      result._cacheDiagnostics = {
+        cacheHit: cacheHit,
+        cacheReadMs: cacheReadMs,
+        sheetReadMs: sheetReadMs,
+        projectionMs: projectionMs,
+        totalServerMs: totalServerMs,
+      };
+    }
+    return result;
   }
 
   function getById(payload) {
@@ -3316,25 +3900,59 @@ var MaintenanceService = (function () {
   }
 
   function create(payload) {
+    var t0 = Date.now();
     payload = applyWorkOrderRule_(payload);
     if (!payload || (!payload.title && !payload.description)) {
       throw new Error("Maintenance title is required.");
     }
     if (!payload.facilityId) throw new Error("Facility id is required.");
+    var tValidated = Date.now();
     var created = MaintenanceRepository.create(payload);
+    var tRepo = Date.now();
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("maintenance");
+    }
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateMaintenanceCatalog();
+    }
+    invalidateRegisterCache_();
+    var tNotify = Date.now();
+    var timings = {
+      validateMs: tValidated - t0,
+      repositoryMs: tRepo - tValidated,
+      snapshotNotifyMs: tNotify - tRepo,
+      totalMs: tNotify - t0,
+    };
+    Logger.log("[MaintenanceService.create] timings " + JSON.stringify(timings));
+    if (payload && payload._auditTiming) {
+      created._serverTimings = timings;
     }
     return created;
   }
 
   function update(payload) {
+    var t0 = Date.now();
     payload = applyWorkOrderRule_(payload);
     if (!payload || !payload.id) throw new Error("Maintenance id is required.");
     var updated = MaintenanceRepository.update(payload.id, payload);
     if (!updated) throw new Error("Maintenance " + payload.id + " not found.");
+    var tRepo = Date.now();
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("maintenance");
+    }
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateMaintenanceCatalog();
+    }
+    invalidateRegisterCache_();
+    var tNotify = Date.now();
+    var timings = {
+      repositoryMs: tRepo - t0,
+      snapshotNotifyMs: tNotify - tRepo,
+      totalMs: tNotify - t0,
+    };
+    Logger.log("[MaintenanceService.update] timings " + JSON.stringify(timings));
+    if (payload && payload._auditTiming) {
+      updated._serverTimings = timings;
     }
     return updated;
   }
@@ -3346,11 +3964,16 @@ var MaintenanceService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("maintenance");
     }
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateMaintenanceCatalog();
+    }
+    invalidateRegisterCache_();
     return updated;
   }
 
   return {
     getAll: getAll,
+    listCatalog: listCatalog,
     getById: getById,
     create: create,
     update: update,
@@ -3373,7 +3996,7 @@ MasterDataController.gs
  * Expected request body:
  * {
  *   resource: "master-data",
- *   action: "getAll" | "getById" | "create" | "update" | "deactivate",
+ *   action: "getAll" | "getById" | "create" | "update" | "deactivate" | "getLocationCatalog",
  *   payload: { entity: "departments"|"buildings"|"floors"|"rooms"|"vendors", ... }
  * }
  */
@@ -3387,6 +4010,13 @@ var MasterDataController = (function () {
             true,
             "Master data retrieved.",
             MasterDataService.getAll(payload)
+          );
+
+        case "getLocationCatalog":
+          return jsonResponse_(
+            true,
+            "Location catalog retrieved.",
+            MasterDataService.getLocationCatalog(payload)
           );
 
         case "getById":
@@ -3869,7 +4499,9 @@ var MasterDataService = (function () {
     if (!payload || !payload.name) {
       throw new Error("Name is required.");
     }
-    return MasterDataRepository.create(entity, payload);
+    var created = MasterDataRepository.create(entity, payload);
+    invalidateLocationCatalogCache_();
+    return created;
   }
 
   function update(payload) {
@@ -3877,6 +4509,7 @@ var MasterDataService = (function () {
     if (!payload || !payload.id) throw new Error("Id is required.");
     var updated = MasterDataRepository.update(entity, payload.id, payload);
     if (!updated) throw new Error(entity + " " + payload.id + " not found.");
+    invalidateLocationCatalogCache_();
     return updated;
   }
 
@@ -3885,7 +4518,185 @@ var MasterDataService = (function () {
     if (!payload || !payload.id) throw new Error("Id is required.");
     var updated = MasterDataRepository.deactivate(entity, payload.id);
     if (!updated) throw new Error(entity + " " + payload.id + " not found.");
+    invalidateLocationCatalogCache_();
     return updated;
+  }
+
+  function isActiveRow_(row) {
+    var status = String((row && row.status) || "active")
+      .toLowerCase()
+      .replace(/\s+/g, "_");
+    return status === "active" || status === "" || status === "pending";
+  }
+
+  /** Facility sheet uses FacilityService aliases (Facility ID / Facility Name / Status). */
+  function facilityCell_(row, key) {
+    if (!row) return "";
+    if (row[key] != null && String(row[key]).trim() !== "") {
+      return String(row[key]).trim();
+    }
+    return "";
+  }
+
+  function isActiveFacilityRow_(row) {
+    var status = String(
+      facilityCell_(row, "status") ||
+        facilityCell_(row, "Status") ||
+        "active"
+    )
+      .toLowerCase()
+      .replace(/\s+/g, "_");
+    return status === "active" || status === "" || status === "pending";
+  }
+
+  function projectFacilityLocationItem_(row) {
+    return {
+      id:
+        facilityCell_(row, "id") || facilityCell_(row, "Facility ID"),
+      name:
+        facilityCell_(row, "name") || facilityCell_(row, "Facility Name"),
+      status:
+        facilityCell_(row, "status") ||
+        facilityCell_(row, "Status") ||
+        "active",
+    };
+  }
+
+  function projectLocationItem_(row, relations) {
+    relations = relations || {};
+    return {
+      id: String((row && row.id) || "").trim(),
+      name: String((row && row.name) || "").trim(),
+      facilityId: relations.facilityId
+        ? String(relations.facilityId).trim()
+        : undefined,
+      buildingId: relations.buildingId
+        ? String(relations.buildingId).trim()
+        : undefined,
+      floorId: relations.floorId
+        ? String(relations.floorId).trim()
+        : undefined,
+    };
+  }
+
+  function invalidateLocationCatalogCache_() {
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateLocationCatalog();
+    }
+  }
+
+  /**
+   * One-shot location hierarchy for cascading selectors.
+   * Flat catalog — client filters locally (Facility → Building → Floor → Room).
+   */
+  function getLocationCatalog(payload) {
+    payload = payload || {};
+    var t0 = Date.now();
+    var skipCache = payload._skipCache === true;
+
+    if (!skipCache && typeof CatalogCacheService !== "undefined") {
+      var cached = CatalogCacheService.getLocationCatalog();
+      if (cached && cached.data) {
+        var warm = {
+          facilities: cached.data.facilities || [],
+          buildings: cached.data.buildings || [],
+          floors: cached.data.floors || [],
+          rooms: cached.data.rooms || [],
+        };
+        if (payload._auditTiming) {
+          warm._serverTimings = {
+            cacheHit: true,
+            cacheReadMs: cached.cacheReadMs || 0,
+            sheetReadMs: 0,
+            mapMs: 0,
+            totalMs: Date.now() - t0,
+            counts: {
+              facilities: warm.facilities.length,
+              buildings: warm.buildings.length,
+              floors: warm.floors.length,
+              rooms: warm.rooms.length,
+            },
+          };
+        }
+        return warm;
+      }
+    }
+
+    var facilitiesRaw =
+      typeof FacilityRepository !== "undefined"
+        ? FacilityRepository.getAll()
+        : [];
+    var buildingsRaw = MasterDataRepository.getAll("buildings");
+    var floorsRaw = MasterDataRepository.getAll("floors");
+    var roomsRaw = MasterDataRepository.getAll("rooms");
+    var tRead = Date.now();
+
+    var facilities = [];
+    var i;
+    for (i = 0; i < facilitiesRaw.length; i++) {
+      if (!isActiveFacilityRow_(facilitiesRaw[i])) continue;
+      var facility = projectFacilityLocationItem_(facilitiesRaw[i]);
+      if (facility.id && facility.name) facilities.push(facility);
+    }
+
+    var buildings = [];
+    for (i = 0; i < buildingsRaw.length; i++) {
+      if (!isActiveRow_(buildingsRaw[i])) continue;
+      var building = projectLocationItem_(buildingsRaw[i], {
+        facilityId: buildingsRaw[i].facilityId || buildingsRaw[i].facility,
+      });
+      if (building.id && building.name) buildings.push(building);
+    }
+
+    var floors = [];
+    for (i = 0; i < floorsRaw.length; i++) {
+      if (!isActiveRow_(floorsRaw[i])) continue;
+      var floor = projectLocationItem_(floorsRaw[i], {
+        facilityId: floorsRaw[i].facilityId || floorsRaw[i].facility,
+        buildingId: floorsRaw[i].buildingId || floorsRaw[i].building,
+      });
+      if (floor.id && floor.name) floors.push(floor);
+    }
+
+    var rooms = [];
+    for (i = 0; i < roomsRaw.length; i++) {
+      if (!isActiveRow_(roomsRaw[i])) continue;
+      var room = projectLocationItem_(roomsRaw[i], {
+        facilityId: roomsRaw[i].facilityId || roomsRaw[i].facility,
+        buildingId: roomsRaw[i].buildingId || roomsRaw[i].building,
+        floorId: roomsRaw[i].floorId || roomsRaw[i].floor,
+      });
+      if (room.id && room.name) rooms.push(room);
+    }
+
+    var result = {
+      facilities: facilities,
+      buildings: buildings,
+      floors: floors,
+      rooms: rooms,
+    };
+
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.putLocationCatalog(result);
+    }
+
+    if (payload._auditTiming) {
+      result._serverTimings = {
+        cacheHit: false,
+        cacheReadMs: 0,
+        sheetReadMs: tRead - t0,
+        mapMs: Date.now() - tRead,
+        totalMs: Date.now() - t0,
+        counts: {
+          facilities: facilities.length,
+          buildings: buildings.length,
+          floors: floors.length,
+          rooms: rooms.length,
+        },
+      };
+    }
+
+    return result;
   }
 
   return {
@@ -3894,6 +4705,293 @@ var MasterDataService = (function () {
     create: create,
     update: update,
     deactivate: deactivate,
+    getLocationCatalog: getLocationCatalog,
+  };
+})();
+```
+
+======================================
+FILE:
+OperationalListAudit.gs
+======================================
+
+```javascript
+/**
+ * OperationalListAudit.gs
+ *
+ * Audit-gated timing helpers for operational register getAll paths.
+ * Active only when payload._auditTiming is true — no production behaviour change.
+ */
+
+var OperationalListAudit = (function () {
+  /**
+   * Wraps a domain getAll pipeline with measured phase boundaries.
+   * repositoryGetAll(auditCollector) must populate sheet + mapping timings on auditCollector.
+   */
+  function instrumentGetAll_(payload, repositoryGetAll, applyFilters, sortFn, paginate) {
+    var tTotal0 = Date.now();
+    var repoAudit = {};
+
+    var rows = repositoryGetAll(repoAudit);
+
+    var tFilter0 = Date.now();
+    var filtered = applyFilters(rows, payload);
+    var filterMs = Date.now() - tFilter0;
+
+    var tSort0 = Date.now();
+    var sorted = sortFn(filtered);
+    var sortMs = Date.now() - tSort0;
+
+    var rowsBeforePagination = sorted.length;
+
+    var tPage0 = Date.now();
+    var result = paginate(sorted, payload);
+    var paginationMs = Date.now() - tPage0;
+
+    var tSer0 = Date.now();
+    try {
+      JSON.stringify({
+        success: true,
+        message: "",
+        data: result,
+      });
+    } catch (serErr) {}
+    var serializationMs = Date.now() - tSer0;
+
+    var totalServerMs = Date.now() - tTotal0;
+    var rowsReturned =
+      result && result.data && result.data.length != null
+        ? result.data.length
+        : 0;
+
+    result._listDiagnostics = {
+      totalServerMs: totalServerMs,
+      spreadsheetOpenMs: repoAudit.spreadsheetOpenMs || 0,
+      sheetLookupMs: repoAudit.sheetLookupMs || 0,
+      sheetReadMs: repoAudit.sheetReadMs || 0,
+      rawRowCount: repoAudit.rawRowCount || 0,
+      rawColumnCount: repoAudit.rawColumnCount || 0,
+      canonicalMappingMs: repoAudit.canonicalMappingMs || 0,
+      filterMs: filterMs,
+      sortMs: sortMs,
+      paginationMs: paginationMs,
+      serializationMs: serializationMs,
+      rowsMapped: repoAudit.rowsMapped || rows.length,
+      rowsFiltered: filtered.length,
+      rowsSorted: sorted.length,
+      rowsBeforePagination: rowsBeforePagination,
+      rowsReturned: rowsReturned,
+      cacheHit: !!repoAudit.cacheHit,
+      cacheReadMs: repoAudit.cacheReadMs || 0,
+      cacheInteraction: repoAudit.cacheInteraction || "none",
+    };
+
+    Logger.log(
+      "[OperationalListAudit] " +
+        JSON.stringify({
+          totalServerMs: totalServerMs,
+          cacheHit: !!repoAudit.cacheHit,
+          sheetReadMs: repoAudit.sheetReadMs || 0,
+          rowsMapped: repoAudit.rowsMapped || rows.length,
+          rowsReturned: rowsReturned,
+        })
+    );
+
+    return result;
+  }
+
+  /**
+   * Optional audit collector passed to Repository.getAll(collector).
+   * Splits getSheet_ / getDataRange / getValues / mapping into measured phases.
+   */
+  function beginSheetRead_(getSheetFn, collector) {
+    var tOpen0 = Date.now();
+    var sheet = getSheetFn();
+    collector.spreadsheetOpenMs = Date.now() - tOpen0;
+
+    var tLookup0 = Date.now();
+    var dataRange = sheet.getDataRange();
+    collector.sheetLookupMs = Date.now() - tLookup0;
+
+    var tRead0 = Date.now();
+    var values = dataRange.getValues();
+    collector.sheetReadMs = Date.now() - tRead0;
+    collector.rawRowCount = values.length;
+    collector.rawColumnCount =
+      values.length > 0 && values[0] ? values[0].length : 0;
+
+    return { sheet: sheet, values: values };
+  }
+
+  function finishMapping_(collector, tMap0, rows) {
+    collector.canonicalMappingMs = Date.now() - tMap0;
+    collector.rowsMapped = rows.length;
+  }
+
+  return {
+    instrumentGetAll_: instrumentGetAll_,
+    beginSheetRead_: beginSheetRead_,
+    finishMapping_: finishMapping_,
+  };
+})();
+```
+
+======================================
+FILE:
+OperationalRegisterCache.gs
+======================================
+
+```javascript
+/**
+ * OperationalRegisterCache.gs
+ *
+ * Reusable Apps Script CacheService primitive for operational register
+ * canonical row sets (Maintenance, Incidents, Approvals, Work Orders).
+ *
+ * Caches the mapped canonical array — not raw sheet rows and not
+ * filtered/paginated page responses. Mutations invalidate explicitly;
+ * TTL is a safety net only.
+ *
+ * Domain differences are limited to:
+ *   - cache key / namespace
+ *   - TTL (shared default)
+ *   - repository loader (caller-supplied)
+ *   - invalidation namespace
+ */
+
+var OperationalRegisterCache = (function () {
+  var CACHE_VERSION = "v1";
+  /** Safety-net TTL — mutations invalidate explicitly; never rely on TTL alone. */
+  var TTL_SECONDS = 600;
+  /**
+   * CacheService ~100KB limit. UTF-8→base64 expands size; leave headroom.
+   * Oversized payloads skip put (cold path continues to work).
+   */
+  var MAX_ENCODED_CHARS = 90000;
+
+  var NAMESPACES = {
+    maintenance: "maintenance",
+    incidents: "incidents",
+    approvals: "approvals",
+    workOrders: "work-orders",
+  };
+
+  function cacheKey_(namespace) {
+    return "opreg:" + CACHE_VERSION + ":" + String(namespace || "");
+  }
+
+  function cache_() {
+    return CacheService.getScriptCache();
+  }
+
+  function getRows(namespace) {
+    var key = cacheKey_(namespace);
+    var t0 = Date.now();
+    var raw = SheetFieldUtils.cacheGetUtf8(cache_(), key);
+    var cacheReadMs = Date.now() - t0;
+    if (raw == null || raw === "") return null;
+    try {
+      var value = JSON.parse(raw);
+      if (!Array.isArray(value)) return null;
+      return { rows: value, cacheReadMs: cacheReadMs };
+    } catch (err) {
+      try {
+        cache_().remove(key);
+      } catch (removeErr) {}
+      return null;
+    }
+  }
+
+  function putRows(namespace, rows) {
+    var key = cacheKey_(namespace);
+    try {
+      var text = JSON.stringify(rows || []);
+      var encodedLen =
+        ("u8b64:").length +
+        Math.ceil((Utilities.newBlob(text).getBytes().length * 4) / 3);
+      if (encodedLen > MAX_ENCODED_CHARS) {
+        Logger.log(
+          "[OperationalRegisterCache] skip put " +
+            key +
+            " — encoded ~" +
+            encodedLen +
+            " exceeds " +
+            MAX_ENCODED_CHARS
+        );
+        return false;
+      }
+      SheetFieldUtils.cachePutUtf8(cache_(), key, text, TTL_SECONDS);
+      return true;
+    } catch (err) {
+      Logger.log(
+        "[OperationalRegisterCache] put failed " + key + ": " + err
+      );
+      return false;
+    }
+  }
+
+  function invalidate(namespace) {
+    var key = cacheKey_(namespace);
+    try {
+      cache_().remove(key);
+      Logger.log("[OperationalRegisterCache] invalidated " + key);
+    } catch (err) {
+      Logger.log(
+        "[OperationalRegisterCache] invalidate failed " + key + ": " + err
+      );
+    }
+  }
+
+  /**
+   * Load canonical rows from cache, or call loaderFn and populate cache.
+   *
+   * loaderFn(auditCollector?) → Array
+   * options: { skipCache: boolean, auditCollector: object }
+   */
+  function getCanonicalRows(namespace, loaderFn, options) {
+    options = options || {};
+    var skipCache = !!options.skipCache;
+    var auditCollector = options.auditCollector || null;
+
+    if (!skipCache) {
+      var cached = getRows(namespace);
+      if (cached && cached.rows) {
+        if (auditCollector) {
+          auditCollector.cacheHit = true;
+          auditCollector.cacheReadMs = cached.cacheReadMs || 0;
+          auditCollector.cacheInteraction = "hit";
+          auditCollector.rowsMapped = cached.rows.length;
+          auditCollector.spreadsheetOpenMs = 0;
+          auditCollector.sheetLookupMs = 0;
+          auditCollector.sheetReadMs = 0;
+          auditCollector.canonicalMappingMs = 0;
+        }
+        return cached.rows;
+      }
+    }
+
+    var rows = loaderFn(auditCollector) || [];
+    putRows(namespace, rows);
+    if (auditCollector) {
+      auditCollector.cacheHit = false;
+      if (!auditCollector.cacheInteraction) {
+        auditCollector.cacheInteraction = skipCache ? "skipped" : "miss";
+      }
+      if (auditCollector.rowsMapped == null) {
+        auditCollector.rowsMapped = rows.length;
+      }
+    }
+    return rows;
+  }
+
+  return {
+    CACHE_VERSION: CACHE_VERSION,
+    TTL_SECONDS: TTL_SECONDS,
+    NAMESPACES: NAMESPACES,
+    getRows: getRows,
+    putRows: putRows,
+    invalidate: invalidate,
+    getCanonicalRows: getCanonicalRows,
   };
 })();
 ```
@@ -5177,10 +6275,32 @@ var ReportingSnapshotService = (function () {
   function getSnapshot(payload) {
     payload = payload || {};
     var facilityId = payload.facilityId;
+    var t0 = Date.now();
+
+    // Flush dirty markers from recent CRUD (deferred off the write path).
+    var flushPlan = flushDirtyModulesUnlocked_();
+    if (flushPlan) {
+      var tFlush = Date.now();
+      if (flushPlan.mode === "rebuildAll") {
+        rebuildAll();
+      } else {
+        refreshModule(flushPlan.modules[0]);
+      }
+      Logger.log(
+        "[REPORTING_SNAPSHOT] deferred flush " +
+          flushPlan.mode +
+          " " +
+          (Date.now() - tFlush) +
+          "ms"
+      );
+    }
 
     // 1) CacheService — constant key, no sheet I/O
     var cached = readCachedSnapshot_(facilityId);
     if (cached) {
+      Logger.log(
+        "[REPORTING_SNAPSHOT] getSnapshot cache HIT " + (Date.now() - t0) + "ms"
+      );
       return markCacheStatus_(cached, "HIT");
     }
 
@@ -5188,6 +6308,9 @@ var ReportingSnapshotService = (function () {
     var existing = getSnapshotFromSheetUnlocked_(payload);
     if (existing) {
       writeCachedSnapshot_(facilityId, existing);
+      Logger.log(
+        "[REPORTING_SNAPSHOT] getSnapshot sheet MISS " + (Date.now() - t0) + "ms"
+      );
       return markCacheStatus_(existing, "MISS");
     }
 
@@ -5251,13 +6374,26 @@ var ReportingSnapshotService = (function () {
   }
 
   /**
-   * Fire-and-forget style wrapper for domain service hooks.
-   * Never throws into CRUD paths.
+   * Mark reporting snapshot stale after domain writes.
+   * MUST NOT run refreshModule synchronously — that reloads domain sheets,
+   * rewrites REPORTING_SNAPSHOT sections (row-by-row deletes), and holds
+   * LockService for tens of seconds, blocking Work Order / Maintenance CRUD.
+   *
+   * Cache is cleared immediately. Deferred refresh runs on next getSnapshot
+   * (Dashboard) or via the scheduled rebuild trigger.
    */
   function notifyModuleChanged(module) {
+    var started = Date.now();
     try {
-      // refreshModule invalidates + repopulates CacheService.
-      refreshModule(module);
+      invalidateSnapshotCache_();
+      markSnapshotDirty_(module);
+      Logger.log(
+        "[REPORTING_SNAPSHOT] notifyModuleChanged deferred module=" +
+          module +
+          " " +
+          (Date.now() - started) +
+          "ms (invalidate+dirty only)"
+      );
     } catch (err) {
       try {
         invalidateSnapshotCache_();
@@ -5269,6 +6405,58 @@ var ReportingSnapshotService = (function () {
           err
       );
     }
+  }
+
+  var DIRTY_PROP_KEY = "REPORTING_SNAPSHOT_DIRTY_MODULES";
+
+  function markSnapshotDirty_(module) {
+    var section = sectionForModule_(module);
+    var props = PropertiesService.getScriptProperties();
+    var raw = props.getProperty(DIRTY_PROP_KEY);
+    var map = {};
+    if (raw) {
+      try {
+        map = JSON.parse(raw) || {};
+      } catch (ignore) {
+        map = {};
+      }
+    }
+    map[section] = new Date().toISOString();
+    props.setProperty(DIRTY_PROP_KEY, JSON.stringify(map));
+  }
+
+  function consumeDirtyModules_() {
+    var props = PropertiesService.getScriptProperties();
+    var raw = props.getProperty(DIRTY_PROP_KEY);
+    if (!raw) return [];
+    props.deleteProperty(DIRTY_PROP_KEY);
+    try {
+      var map = JSON.parse(raw) || {};
+      return Object.keys(map);
+    } catch (ignore) {
+      return [];
+    }
+  }
+
+  /**
+   * Apply deferred module refreshes before serving a snapshot read.
+   * Keeps write path fast; Dashboard pays once when data is dirty.
+   */
+  function flushDirtyModulesUnlocked_() {
+    var dirty = consumeDirtyModules_();
+    if (!dirty.length) return null;
+    var started = Date.now();
+    // Multiple dirty modules → one full rebuild is cheaper than N partials
+    // (each partial re-reads all snapshot sections for KPI recompute).
+    if (dirty.length >= 2) {
+      Logger.log(
+        "[REPORTING_SNAPSHOT] flush dirty via rebuildAll modules=" +
+          dirty.join(",")
+      );
+      // rebuildAll takes its own lock — caller must not hold lock.
+      return { mode: "rebuildAll", modules: dirty, started: started };
+    }
+    return { mode: "refreshModule", modules: dirty, started: started };
   }
 
   return {
@@ -5344,6 +6532,709 @@ function removeReportingSnapshotTriggers() {
     }
   }
 }
+```
+
+======================================
+FILE:
+RequestRepository.gs
+======================================
+
+```javascript
+/**
+ * RequestRepository.gs
+ *
+ * Sheet: Requests (source of truth for intake records).
+ * Auto-creates the sheet with headers on first access if missing.
+ *
+ * ID format: REQ-{YYYY}-{NNNNNN}
+ */
+
+var RequestRepository = (function () {
+  var SHEET_NAME = "Requests";
+  var HEADERS = [
+    "Request ID",
+    "Title",
+    "Description",
+    "Facility ID",
+    "Occurred At",
+    "Location Detail",
+    "Reporter Name",
+    "Reporter Contact",
+    "Reported By User ID",
+    "Request Type",
+    "Status",
+    "Incident IDs",
+    "Maintenance IDs",
+    "Work Order IDs",
+    "Created At",
+    "Updated At",
+    "Created By User ID",
+    "Updated By User ID",
+  ];
+
+  var VALID_STATUSES = {
+    submitted: true,
+    under_review: true,
+    being_treated: true,
+    resolved: true,
+    closed: true,
+    cancelled: true,
+  };
+
+  var VALID_REQUEST_TYPES = {
+    maintenance: true,
+    incident: true,
+  };
+
+  function normalizeEnum_(value) {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/\s+/g, "_");
+  }
+
+  function mapStatus_(raw) {
+    var value = normalizeEnum_(raw);
+    if (VALID_STATUSES[value]) return value;
+    return "submitted";
+  }
+
+  /** Optional intake classification; empty/unknown → undefined (legacy rows). */
+  function mapRequestType_(raw) {
+    var value = normalizeEnum_(raw);
+    if (VALID_REQUEST_TYPES[value]) return value;
+    return undefined;
+  }
+
+  function getSheet_() {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName(SHEET_NAME);
+    if (!sheet) {
+      sheet = ss.insertSheet(SHEET_NAME);
+      sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+      return sheet;
+    }
+    ensureHeaders_(sheet);
+    return sheet;
+  }
+
+  function ensureHeaders_(sheet) {
+    var headerMap = SheetFieldUtils.getHeaderMap(sheet);
+    var lastCol = Math.max(1, sheet.getLastColumn());
+    var added = 0;
+    for (var i = 0; i < HEADERS.length; i++) {
+      var name = HEADERS[i];
+      if (!SheetFieldUtils.hasHeader(headerMap, name)) {
+        sheet.getRange(1, lastCol + 1 + added).setValue(name);
+        added++;
+      }
+    }
+    return SheetFieldUtils.getHeaderMap(sheet);
+  }
+
+  function coerceIdList_(value) {
+    if (value == null) return [];
+    if (Object.prototype.toString.call(value) === "[object Array]") {
+      return SheetFieldUtils.parseIdList(SheetFieldUtils.formatIdList(value));
+    }
+    return SheetFieldUtils.parseIdList(value);
+  }
+
+  function toCanonical_(sheetRow) {
+    var incidentIds = SheetFieldUtils.parseIdList(sheetRow["Incident IDs"]);
+    var maintenanceIds = SheetFieldUtils.parseIdList(
+      sheetRow["Maintenance IDs"]
+    );
+    var workOrderIds = SheetFieldUtils.parseIdList(sheetRow["Work Order IDs"]);
+    var createdAt =
+      SheetFieldUtils.cellText(sheetRow["Created At"]) ||
+      new Date().toISOString();
+    var occurredAt =
+      SheetFieldUtils.cellText(sheetRow["Occurred At"]) || createdAt;
+
+    return {
+      id: SheetFieldUtils.cellText(sheetRow["Request ID"]),
+      title: SheetFieldUtils.cellText(sheetRow["Title"]),
+      description:
+        SheetFieldUtils.cellText(sheetRow["Description"]) || undefined,
+      facilityId: SheetFieldUtils.cellText(sheetRow["Facility ID"]),
+      occurredAt: occurredAt,
+      locationDetail:
+        SheetFieldUtils.cellText(sheetRow["Location Detail"]) || undefined,
+      reporterName:
+        SheetFieldUtils.cellText(sheetRow["Reporter Name"]) || undefined,
+      reporterContact:
+        SheetFieldUtils.cellText(sheetRow["Reporter Contact"]) || undefined,
+      reportedByUserId:
+        SheetFieldUtils.cellText(sheetRow["Reported By User ID"]) || undefined,
+      requestType: mapRequestType_(sheetRow["Request Type"]),
+      status: mapStatus_(sheetRow["Status"]),
+      incidentIds: incidentIds,
+      maintenanceIds: maintenanceIds,
+      workOrderIds: workOrderIds,
+      createdAt: createdAt,
+      updatedAt:
+        SheetFieldUtils.cellText(sheetRow["Updated At"]) || createdAt,
+      createdByUserId:
+        SheetFieldUtils.cellText(sheetRow["Created By User ID"]) || undefined,
+      updatedByUserId:
+        SheetFieldUtils.cellText(sheetRow["Updated By User ID"]) || undefined,
+    };
+  }
+
+  function canonicalToFields_(canonical) {
+    return {
+      "Request ID": canonical.id || "",
+      Title: canonical.title || "",
+      Description: canonical.description || "",
+      "Facility ID": canonical.facilityId || "",
+      "Occurred At": canonical.occurredAt || "",
+      "Location Detail": canonical.locationDetail || "",
+      "Reporter Name": canonical.reporterName || "",
+      "Reporter Contact": canonical.reporterContact || "",
+      "Reported By User ID": canonical.reportedByUserId || "",
+      "Request Type": canonical.requestType || "",
+      Status: canonical.status || "submitted",
+      "Incident IDs": SheetFieldUtils.formatIdList(canonical.incidentIds || []),
+      "Maintenance IDs": SheetFieldUtils.formatIdList(
+        canonical.maintenanceIds || []
+      ),
+      "Work Order IDs": SheetFieldUtils.formatIdList(
+        canonical.workOrderIds || []
+      ),
+      "Created At": canonical.createdAt || "",
+      "Updated At": canonical.updatedAt || "",
+      "Created By User ID": canonical.createdByUserId || "",
+      "Updated By User ID": canonical.updatedByUserId || "",
+    };
+  }
+
+  function writeRow_(sheet, rowIndex, canonical) {
+    var headerMap = ensureHeaders_(sheet);
+    var lastCol = sheet.getLastColumn();
+    var fields = canonicalToFields_(canonical);
+    var row = SheetFieldUtils.buildRowFromFields(headerMap, lastCol, fields);
+    sheet.getRange(rowIndex, 1, 1, lastCol).setValues([row]);
+  }
+
+  function getAll(auditCollector) {
+    var sheet;
+    var values;
+    if (auditCollector && typeof OperationalListAudit !== "undefined") {
+      var sheetPhase = OperationalListAudit.beginSheetRead_(
+        getSheet_,
+        auditCollector
+      );
+      sheet = sheetPhase.sheet;
+      values = sheetPhase.values;
+    } else {
+      sheet = getSheet_();
+      values = sheet.getDataRange().getValues();
+    }
+    if (values.length <= 1) return [];
+
+    var headers = values[0];
+    var rows = [];
+    var tMap0 = auditCollector ? Date.now() : 0;
+    for (var r = 1; r < values.length; r++) {
+      var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[r]);
+      var id = SheetFieldUtils.cellText(sheetRow["Request ID"]);
+      if (!id) continue;
+      rows.push(toCanonical_(sheetRow));
+    }
+    if (auditCollector && typeof OperationalListAudit !== "undefined") {
+      OperationalListAudit.finishMapping_(auditCollector, tMap0, rows);
+    }
+    return rows;
+  }
+
+  function getById(id) {
+    var all = getAll();
+    for (var i = 0; i < all.length; i++) {
+      if (String(all[i].id) === String(id)) return all[i];
+    }
+    return null;
+  }
+
+  function findRowIndex_(id) {
+    var sheet = getSheet_();
+    var values = sheet.getDataRange().getValues();
+    if (values.length <= 1) return -1;
+    var headers = values[0];
+    var idCol = -1;
+    for (var c = 0; c < headers.length; c++) {
+      if (String(headers[c]).trim() === "Request ID") {
+        idCol = c;
+        break;
+      }
+    }
+    if (idCol === -1) return -1;
+    for (var r = 1; r < values.length; r++) {
+      if (String(values[r][idCol] || "").trim() === String(id)) {
+        return r + 1;
+      }
+    }
+    return -1;
+  }
+
+  function nextId_() {
+    var year = new Date().getFullYear();
+    var all = getAll();
+    var maxYear = 0;
+    for (var i = 0; i < all.length; i++) {
+      var requestId = String(all[i].id || "");
+      var yearMatch = requestId.match(/^REQ-(\d{4})-(\d+)$/i);
+      if (yearMatch && parseInt(yearMatch[1], 10) === year) {
+        maxYear = Math.max(maxYear, parseInt(yearMatch[2], 10));
+      }
+    }
+    var next = maxYear + 1;
+    var padded = ("000000" + next).slice(-6);
+    return "REQ-" + year + "-" + padded;
+  }
+
+  function mergeCanonical_(current, payload) {
+    var status =
+      payload.status != null ? mapStatus_(payload.status) : current.status;
+    if (payload.status != null && !VALID_STATUSES[normalizeEnum_(payload.status)]) {
+      throw new Error(
+        "Invalid request status: " +
+          payload.status +
+          ". Expected submitted|under_review|being_treated|resolved|closed|cancelled."
+      );
+    }
+
+    var incidentIds =
+      payload.incidentIds != null
+        ? coerceIdList_(payload.incidentIds)
+        : current.incidentIds || [];
+    var maintenanceIds =
+      payload.maintenanceIds != null
+        ? coerceIdList_(payload.maintenanceIds)
+        : current.maintenanceIds || [];
+    var workOrderIds =
+      payload.workOrderIds != null
+        ? coerceIdList_(payload.workOrderIds)
+        : current.workOrderIds || [];
+
+    return {
+      id: current.id,
+      title: payload.title != null ? payload.title : current.title,
+      description:
+        payload.description != null ? payload.description : current.description,
+      facilityId:
+        payload.facilityId != null ? payload.facilityId : current.facilityId,
+      occurredAt:
+        payload.occurredAt != null ? payload.occurredAt : current.occurredAt,
+      locationDetail:
+        payload.locationDetail != null
+          ? payload.locationDetail
+          : current.locationDetail,
+      reporterName:
+        payload.reporterName != null
+          ? payload.reporterName
+          : current.reporterName,
+      reporterContact:
+        payload.reporterContact != null
+          ? payload.reporterContact
+          : current.reporterContact,
+      reportedByUserId:
+        payload.reportedByUserId != null
+          ? payload.reportedByUserId
+          : current.reportedByUserId,
+      requestType:
+        payload.requestType != null
+          ? mapRequestType_(payload.requestType) || current.requestType
+          : current.requestType,
+      status: status,
+      incidentIds: incidentIds,
+      maintenanceIds: maintenanceIds,
+      workOrderIds: workOrderIds,
+      createdAt: current.createdAt,
+      updatedAt: new Date().toISOString(),
+      createdByUserId: current.createdByUserId,
+      updatedByUserId:
+        payload.updatedByUserId != null
+          ? payload.updatedByUserId
+          : current.updatedByUserId,
+    };
+  }
+
+  function create(payload) {
+    payload = payload || {};
+    var sheet = getSheet_();
+    var now = new Date().toISOString();
+    var id = nextId_();
+    var status = mapStatus_(payload.status || "submitted");
+    if (payload.status != null && !VALID_STATUSES[normalizeEnum_(payload.status)]) {
+      throw new Error(
+        "Invalid request status: " +
+          payload.status +
+          ". Expected submitted|under_review|being_treated|resolved|closed|cancelled."
+      );
+    }
+    if (
+      payload.requestType != null &&
+      String(payload.requestType).trim() !== "" &&
+      !VALID_REQUEST_TYPES[normalizeEnum_(payload.requestType)]
+    ) {
+      throw new Error(
+        "Invalid request type: " +
+          payload.requestType +
+          ". Expected maintenance|incident."
+      );
+    }
+
+    var canonical = {
+      id: id,
+      title: payload.title || "",
+      description: payload.description || "",
+      facilityId: payload.facilityId || "",
+      occurredAt: payload.occurredAt || now,
+      locationDetail: payload.locationDetail || "",
+      reporterName: payload.reporterName || "",
+      reporterContact: payload.reporterContact || "",
+      reportedByUserId: payload.reportedByUserId || "",
+      requestType: mapRequestType_(payload.requestType),
+      status: status,
+      incidentIds: coerceIdList_(payload.incidentIds || []),
+      maintenanceIds: coerceIdList_(payload.maintenanceIds || []),
+      workOrderIds: coerceIdList_(payload.workOrderIds || []),
+      createdAt: now,
+      updatedAt: now,
+      createdByUserId: payload.createdByUserId || "",
+      updatedByUserId: payload.updatedByUserId || payload.createdByUserId || "",
+    };
+
+    ensureHeaders_(sheet);
+    var lastCol = sheet.getLastColumn();
+    var headerMap = SheetFieldUtils.getHeaderMap(sheet);
+    var fields = canonicalToFields_(canonical);
+    var row = SheetFieldUtils.buildRowFromFields(headerMap, lastCol, fields);
+    sheet.appendRow(row);
+    return getById(id);
+  }
+
+  function update(id, payload) {
+    var sheet = getSheet_();
+    var rowIndex = findRowIndex_(id);
+    if (rowIndex === -1) return null;
+    var current = getById(id);
+    if (!current) return null;
+    var updated = mergeCanonical_(current, payload || {});
+    writeRow_(sheet, rowIndex, updated);
+    return getById(id);
+  }
+
+  function deactivate(id) {
+    return update(id, { status: "cancelled" });
+  }
+
+  return {
+    HEADERS: HEADERS,
+    getAll: getAll,
+    getById: getById,
+    create: create,
+    update: update,
+    deactivate: deactivate,
+  };
+})();
+```
+
+======================================
+FILE:
+RequestsController.gs
+======================================
+
+```javascript
+/**
+ * RequestsController.gs
+ *
+ * Entry for module/resource === "requests".
+ * Follows IncidentsController / WorkOrdersController architecture.
+ */
+
+var RequestsController = (function () {
+  function handle(action, payload) {
+    try {
+      switch (String(action || "getAll")) {
+        case "getAll":
+          return jsonResponse_(
+            true,
+            "Requests retrieved.",
+            RequestService.getAll(payload)
+          );
+
+        case "getById":
+          return jsonResponse_(
+            true,
+            "Request retrieved.",
+            RequestService.getById(payload)
+          );
+
+        case "create":
+          return jsonResponse_(
+            true,
+            "Request created.",
+            RequestService.create(payload)
+          );
+
+        case "update":
+          return jsonResponse_(
+            true,
+            "Request updated.",
+            RequestService.update(payload)
+          );
+
+        case "deactivate":
+          return jsonResponse_(
+            true,
+            "Request deactivated.",
+            RequestService.deactivate(payload)
+          );
+
+        default:
+          return jsonResponse_(
+            false,
+            "Unknown requests action: " + action,
+            null
+          );
+      }
+    } catch (error) {
+      return jsonResponse_(
+        false,
+        error.message || "Requests request failed.",
+        null
+      );
+    }
+  }
+
+  return {
+    handle: handle,
+  };
+})();
+```
+
+======================================
+FILE:
+RequestService.gs
+======================================
+
+```javascript
+/**
+ * RequestService.gs
+ *
+ * Business rules for Requests (intake layer).
+ * Never talks to the spreadsheet directly — only RequestRepository.
+ *
+ * Phase 1: no OperationalRegisterCache — measure list latency first.
+ */
+
+var RequestService = (function () {
+  var VALID_STATUSES = {
+    submitted: true,
+    under_review: true,
+    being_treated: true,
+    resolved: true,
+    closed: true,
+    cancelled: true,
+  };
+
+  var VALID_REQUEST_TYPES = {
+    maintenance: true,
+    incident: true,
+  };
+
+  function applyFilters_(rows, payload) {
+    payload = payload || {};
+    var search = String(payload.search || "")
+      .toLowerCase()
+      .trim();
+    var status = payload.status;
+    var facilityId = payload.facilityId;
+
+    return rows.filter(function (row) {
+      var matchesSearch =
+        !search ||
+        String(row.title || "")
+          .toLowerCase()
+          .indexOf(search) !== -1 ||
+        String(row.id || "")
+          .toLowerCase()
+          .indexOf(search) !== -1 ||
+        String(row.description || "")
+          .toLowerCase()
+          .indexOf(search) !== -1 ||
+        String(row.reporterName || "")
+          .toLowerCase()
+          .indexOf(search) !== -1 ||
+        String(row.reporterContact || "")
+          .toLowerCase()
+          .indexOf(search) !== -1 ||
+        String(row.facilityId || "")
+          .toLowerCase()
+          .indexOf(search) !== -1 ||
+        String(row.locationDetail || "")
+          .toLowerCase()
+          .indexOf(search) !== -1;
+
+      var matchesStatus =
+        !status ||
+        status === "all" ||
+        String(row.status).toLowerCase() === String(status).toLowerCase();
+
+      var matchesFacility =
+        !facilityId ||
+        facilityId === "all" ||
+        String(row.facilityId) === String(facilityId);
+
+      return matchesSearch && matchesStatus && matchesFacility;
+    });
+  }
+
+  function paginate_(rows, payload) {
+    payload = payload || {};
+    var page = Number(payload.page || 1);
+    var pageSize = Number(payload.pageSize || 8);
+    if (page < 1) page = 1;
+    if (pageSize < 1) pageSize = 8;
+
+    var total = rows.length;
+    var totalPages = Math.max(1, Math.ceil(total / pageSize));
+    var start = (page - 1) * pageSize;
+    var data = rows.slice(start, start + pageSize);
+
+    return {
+      data: data,
+      page: page,
+      pageSize: pageSize,
+      total: total,
+      totalPages: totalPages,
+    };
+  }
+
+  function sortNewestFirst_(rows) {
+    return rows.slice().sort(function (a, b) {
+      var aAt = String(a.createdAt || a.occurredAt || a.updatedAt || "");
+      var bAt = String(b.createdAt || b.occurredAt || b.updatedAt || "");
+      if (aAt === bAt) {
+        return String(b.id || "").localeCompare(String(a.id || ""));
+      }
+      return aAt < bAt ? 1 : -1;
+    });
+  }
+
+  function getAll(payload) {
+    payload = payload || {};
+    if (payload._auditTiming && typeof OperationalListAudit !== "undefined") {
+      return OperationalListAudit.instrumentGetAll_(
+        payload,
+        function (auditCollector) {
+          return RequestRepository.getAll(auditCollector);
+        },
+        applyFilters_,
+        sortNewestFirst_,
+        paginate_
+      );
+    }
+    var rows = RequestRepository.getAll();
+    var filtered = applyFilters_(rows, payload);
+    var sorted = sortNewestFirst_(filtered);
+    return paginate_(sorted, payload);
+  }
+
+  function getById(payload) {
+    var id = payload && payload.id;
+    if (!id) throw new Error("Request id is required.");
+    var row = RequestRepository.getById(id);
+    if (!row) throw new Error("Request " + id + " not found.");
+    return row;
+  }
+
+  function create(payload) {
+    var t0 = Date.now();
+    payload = payload || {};
+    if (!payload.title || !String(payload.title).trim()) {
+      throw new Error("Request title is required.");
+    }
+    if (!payload.facilityId || !String(payload.facilityId).trim()) {
+      throw new Error("Facility id is required.");
+    }
+    if (payload.status != null && !VALID_STATUSES[String(payload.status)]) {
+      throw new Error("Invalid request status: " + payload.status);
+    }
+    if (
+      payload.requestType != null &&
+      String(payload.requestType).trim() !== "" &&
+      !VALID_REQUEST_TYPES[String(payload.requestType)]
+    ) {
+      throw new Error(
+        "Invalid request type: " +
+          payload.requestType +
+          ". Expected maintenance|incident."
+      );
+    }
+    var tValidated = Date.now();
+    var created = RequestRepository.create(payload);
+    var tRepo = Date.now();
+    var timings = {
+      validateMs: tValidated - t0,
+      repositoryMs: tRepo - tValidated,
+      totalMs: tRepo - t0,
+    };
+    Logger.log("[RequestService.create] timings " + JSON.stringify(timings));
+    if (payload._auditTiming) {
+      created._serverTimings = timings;
+    }
+    return created;
+  }
+
+  function update(payload) {
+    var t0 = Date.now();
+    payload = payload || {};
+    if (!payload.id) throw new Error("Request id is required.");
+    if (payload.status != null && !VALID_STATUSES[String(payload.status)]) {
+      throw new Error("Invalid request status: " + payload.status);
+    }
+    if (
+      payload.requestType != null &&
+      String(payload.requestType).trim() !== "" &&
+      !VALID_REQUEST_TYPES[String(payload.requestType)]
+    ) {
+      throw new Error(
+        "Invalid request type: " +
+          payload.requestType +
+          ". Expected maintenance|incident."
+      );
+    }
+    var updated = RequestRepository.update(payload.id, payload);
+    if (!updated) throw new Error("Request " + payload.id + " not found.");
+    var tRepo = Date.now();
+    var timings = {
+      repositoryMs: tRepo - t0,
+      totalMs: tRepo - t0,
+    };
+    Logger.log("[RequestService.update] timings " + JSON.stringify(timings));
+    if (payload._auditTiming) {
+      updated._serverTimings = timings;
+    }
+    return updated;
+  }
+
+  function deactivate(payload) {
+    if (!payload || !payload.id) throw new Error("Request id is required.");
+    var updated = RequestRepository.deactivate(payload.id);
+    if (!updated) throw new Error("Request " + payload.id + " not found.");
+    return updated;
+  }
+
+  return {
+    getAll: getAll,
+    getById: getById,
+    create: create,
+    update: update,
+    deactivate: deactivate,
+  };
+})();
 ```
 
 ======================================
@@ -6111,10 +8002,44 @@ var UserRepository = (function () {
     };
   }
 
+  /** WO filter dropdown — id/name only. */
+  function listFilterCatalog() {
+    var sheet = getSheet_();
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return [];
+
+    var headerMap = SheetFieldUtils.getHeaderMap(sheet);
+    var idHeader = FIELD_TO_HEADER.id;
+    var nameHeader = FIELD_TO_HEADER.name;
+    if (!SheetFieldUtils.hasHeader(headerMap, idHeader)) return [];
+
+    var idCol = headerMap[idHeader] + 1;
+    var nameCol = SheetFieldUtils.hasHeader(headerMap, nameHeader)
+      ? headerMap[nameHeader] + 1
+      : -1;
+    if (nameCol < 1) return [];
+
+    var idValues = sheet.getRange(2, idCol, lastRow, idCol).getValues();
+    var nameValues = sheet.getRange(2, nameCol, lastRow, nameCol).getValues();
+    var rows = [];
+    var r;
+    for (r = 0; r < idValues.length; r++) {
+      var id = cellText_(idValues[r][0]);
+      if (!id) continue;
+      var name = cellText_(nameValues[r][0]) || id;
+      rows.push({ id: id, name: name });
+    }
+    rows.sort(function (a, b) {
+      return String(a.name).localeCompare(String(b.name));
+    });
+    return rows;
+  }
+
   return {
     BUILD_MARKER: BUILD_MARKER,
     getAll: getAll,
     getById: getById,
+    listFilterCatalog: listFilterCatalog,
     create: create,
     update: update,
     deactivate: deactivate,
@@ -6363,6 +8288,9 @@ var UserService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("users");
     }
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateWoFilterCatalog();
+    }
     return created;
   }
 
@@ -6373,6 +8301,9 @@ var UserService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("users");
     }
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateWoFilterCatalog();
+    }
     return updated;
   }
 
@@ -6382,6 +8313,9 @@ var UserService = (function () {
     if (!updated) throw new Error("User " + payload.id + " not found.");
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("users");
+    }
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateWoFilterCatalog();
     }
     return updated;
   }
@@ -6642,9 +8576,17 @@ var WorkOrderRepository = (function () {
     sheet.getRange(rowIndex, 1, 1, lastCol).setValues([row]);
   }
 
-  function getAll() {
-    var sheet = getSheet_();
-    var values = sheet.getDataRange().getValues();
+  function getAll(auditCollector) {
+    var sheet;
+    var values;
+    if (auditCollector && typeof OperationalListAudit !== "undefined") {
+      var sheetPhase = OperationalListAudit.beginSheetRead_(getSheet_, auditCollector);
+      sheet = sheetPhase.sheet;
+      values = sheetPhase.values;
+    } else {
+      sheet = getSheet_();
+      values = sheet.getDataRange().getValues();
+    }
     if (values.length <= 1) return [];
 
     var headers = values[0];
@@ -6652,6 +8594,7 @@ var WorkOrderRepository = (function () {
       ? SheetFieldUtils.headerMapFromRow(headers)
       : SheetFieldUtils.getHeaderMap(sheet);
     var rows = [];
+    var tMap0 = auditCollector ? Date.now() : 0;
     for (var r = 1; r < values.length; r++) {
       var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[r]);
       var id = SheetFieldUtils.cellText(sheetRow["Work Order ID"]);
@@ -6660,6 +8603,9 @@ var WorkOrderRepository = (function () {
       delete canonical._completedBy;
       delete canonical._dateClosed;
       rows.push(canonical);
+    }
+    if (auditCollector && typeof OperationalListAudit !== "undefined") {
+      OperationalListAudit.finishMapping_(auditCollector, tMap0, rows);
     }
     return rows;
   }
@@ -6985,6 +8931,13 @@ var WorkOrdersController = (function () {
             WorkOrderService.deactivate(payload)
           );
 
+        case "getFilterCatalog":
+          return jsonResponse_(
+            true,
+            "Work order filter catalog retrieved.",
+            WorkOrderService.getFilterCatalog(payload)
+          );
+
         default:
           return jsonResponse_(
             false,
@@ -7169,8 +9122,45 @@ var WorkOrderService = (function () {
     });
   }
 
+  function loadCanonicalRows_(payload, auditCollector) {
+    payload = payload || {};
+    if (typeof OperationalRegisterCache === "undefined") {
+      return WorkOrderRepository.getAll(auditCollector);
+    }
+    return OperationalRegisterCache.getCanonicalRows(
+      OperationalRegisterCache.NAMESPACES.workOrders,
+      function (collector) {
+        return WorkOrderRepository.getAll(collector);
+      },
+      {
+        skipCache: !!payload._skipCache,
+        auditCollector: auditCollector,
+      }
+    );
+  }
+
+  function invalidateRegisterCache_() {
+    if (typeof OperationalRegisterCache !== "undefined") {
+      OperationalRegisterCache.invalidate(
+        OperationalRegisterCache.NAMESPACES.workOrders
+      );
+    }
+  }
+
   function getAll(payload) {
-    var rows = WorkOrderRepository.getAll();
+    payload = payload || {};
+    if (payload._auditTiming && typeof OperationalListAudit !== "undefined") {
+      return OperationalListAudit.instrumentGetAll_(
+        payload,
+        function (auditCollector) {
+          return loadCanonicalRows_(payload, auditCollector);
+        },
+        applyFilters_,
+        sortNewestFirst_,
+        paginate_
+      );
+    }
+    var rows = loadCanonicalRows_(payload, null);
     var filtered = applyFilters_(rows, payload);
     var sorted = sortNewestFirst_(filtered);
     return paginate_(sorted, payload);
@@ -7185,21 +9175,49 @@ var WorkOrderService = (function () {
   }
 
   function create(payload) {
+    var t0 = Date.now();
     if (!payload || !payload.title) throw new Error("Work order title is required.");
     if (!payload.facilityId) throw new Error("Facility id is required.");
+    var tValidated = Date.now();
     var created = WorkOrderRepository.create(payload);
+    var tRepo = Date.now();
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("workOrders");
+    }
+    invalidateRegisterCache_();
+    var tNotify = Date.now();
+    var timings = {
+      validateMs: tValidated - t0,
+      repositoryMs: tRepo - tValidated,
+      snapshotNotifyMs: tNotify - tRepo,
+      totalMs: tNotify - t0,
+    };
+    Logger.log("[WorkOrderService.create] timings " + JSON.stringify(timings));
+    if (payload && payload._auditTiming) {
+      created._serverTimings = timings;
     }
     return created;
   }
 
   function update(payload) {
+    var t0 = Date.now();
     if (!payload || !payload.id) throw new Error("Work order id is required.");
     var updated = WorkOrderRepository.update(payload.id, payload);
     if (!updated) throw new Error("Work order " + payload.id + " not found.");
+    var tRepo = Date.now();
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("workOrders");
+    }
+    invalidateRegisterCache_();
+    var tNotify = Date.now();
+    var timings = {
+      repositoryMs: tRepo - t0,
+      snapshotNotifyMs: tNotify - tRepo,
+      totalMs: tNotify - t0,
+    };
+    Logger.log("[WorkOrderService.update] timings " + JSON.stringify(timings));
+    if (payload && payload._auditTiming) {
+      updated._serverTimings = timings;
     }
     return updated;
   }
@@ -7211,12 +9229,117 @@ var WorkOrderService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("workOrders");
     }
+    invalidateRegisterCache_();
     return updated;
+  }
+
+  /**
+   * Consolidated WO filter catalogs — one invocation, column-limited projections.
+   * Does not call getAll on domain services.
+   */
+  function loadFilterCatalogFromSheets_() {
+    var t0 = Date.now();
+    var facilities = [];
+    var users = [];
+    var assets = [];
+
+    if (
+      typeof FacilityRepository !== "undefined" &&
+      FacilityRepository.listFilterCatalog
+    ) {
+      facilities = FacilityRepository.listFilterCatalog() || [];
+    }
+    if (
+      typeof UserRepository !== "undefined" &&
+      UserRepository.listFilterCatalog
+    ) {
+      users = UserRepository.listFilterCatalog() || [];
+    }
+    if (
+      typeof AssetRepository !== "undefined" &&
+      AssetRepository.listFilterCatalog
+    ) {
+      assets = AssetRepository.listFilterCatalog() || [];
+    }
+
+    return {
+      facilities: facilities,
+      users: users,
+      assets: assets,
+      sheetReadMs: Date.now() - t0,
+    };
+  }
+
+  function attachCacheDiagnostics_(target, payload, diagnostics) {
+    if (payload && payload._auditTiming && diagnostics) {
+      target._cacheDiagnostics = diagnostics;
+    }
+    return target;
+  }
+
+  function getFilterCatalog(payload) {
+    payload = payload || {};
+    var tTotal0 = Date.now();
+    var skipCache = !!payload._skipCache;
+    var cacheHit = false;
+    var cacheReadMs = 0;
+    var sheetReadMs = 0;
+    var projectionMs = 0;
+    var catalog = null;
+
+    if (!skipCache && typeof CatalogCacheService !== "undefined") {
+      var cached = CatalogCacheService.getWoFilterCatalog();
+      if (cached && cached.data) {
+        cacheHit = true;
+        cacheReadMs = cached.cacheReadMs || 0;
+        catalog = cached.data;
+      }
+    }
+
+    if (!cacheHit) {
+      var loaded = loadFilterCatalogFromSheets_();
+      sheetReadMs = loaded.sheetReadMs;
+      catalog = {
+        facilities: loaded.facilities,
+        users: loaded.users,
+        assets: loaded.assets,
+      };
+      if (typeof CatalogCacheService !== "undefined") {
+        CatalogCacheService.putWoFilterCatalog(catalog);
+      }
+    }
+
+    var totalServerMs = Date.now() - tTotal0;
+    var result = {
+      facilities: catalog.facilities || [],
+      users: catalog.users || [],
+      assets: catalog.assets || [],
+    };
+
+    Logger.log(
+      "[WorkOrderService.getFilterCatalog] cacheHit=" +
+        cacheHit +
+        " sheetReadMs=" +
+        sheetReadMs +
+        " cacheReadMs=" +
+        cacheReadMs +
+        " totalServerMs=" +
+        totalServerMs
+    );
+
+    return attachCacheDiagnostics_(result, payload, {
+      cacheHit: cacheHit,
+      cacheReadMs: cacheReadMs,
+      sheetReadMs: sheetReadMs,
+      projectionMs: projectionMs,
+      totalServerMs: totalServerMs,
+    });
   }
 
   return {
     getAll: getAll,
     getById: getById,
+    getFilterCatalog: getFilterCatalog,
     create: create,
     update: update,
     deactivate: deactivate,

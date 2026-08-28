@@ -277,9 +277,55 @@ var AssetRepository = (function () {
     return update(id, { status: "inactive" });
   }
 
+  /** WO filter dropdown — id, name, facility only. */
+  function listFilterCatalog() {
+    var sheet = getSheet_();
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return [];
+
+    var headerMap = SheetFieldUtils.getHeaderMap(sheet);
+    var idHeader = FIELD_TO_HEADER.id;
+    var nameHeader = FIELD_TO_HEADER.name;
+    var facilityHeader = FIELD_TO_HEADER.facility;
+    if (!SheetFieldUtils.hasHeader(headerMap, idHeader)) return [];
+
+    var idCol = headerMap[idHeader] + 1;
+    var nameCol = SheetFieldUtils.hasHeader(headerMap, nameHeader)
+      ? headerMap[nameHeader] + 1
+      : -1;
+    var facilityCol = SheetFieldUtils.hasHeader(headerMap, facilityHeader)
+      ? headerMap[facilityHeader] + 1
+      : -1;
+    if (nameCol < 1) return [];
+
+    var idValues = sheet.getRange(2, idCol, lastRow, idCol).getValues();
+    var nameValues = sheet.getRange(2, nameCol, lastRow, nameCol).getValues();
+    var facilityValues =
+      facilityCol > 0
+        ? sheet.getRange(2, facilityCol, lastRow, facilityCol).getValues()
+        : null;
+
+    var rows = [];
+    var r;
+    for (r = 0; r < idValues.length; r++) {
+      var id = SheetFieldUtils.cellText(idValues[r][0]);
+      if (!id) continue;
+      var name = SheetFieldUtils.cellText(nameValues[r][0]) || id;
+      var facility = facilityValues
+        ? SheetFieldUtils.cellText(facilityValues[r][0])
+        : "";
+      rows.push({ id: id, name: name, facility: facility || "" });
+    }
+    rows.sort(function (a, b) {
+      return String(a.name).localeCompare(String(b.name));
+    });
+    return rows;
+  }
+
   return {
     getAll: getAll,
     getById: getById,
+    listFilterCatalog: listFilterCatalog,
     create: create,
     update: update,
     deactivate: deactivate,

@@ -27,7 +27,8 @@ export type IncidentSource =
   | "tenant"
   | "security"
   | "system"
-  | "external";
+  | "external"
+  | "request";
 
 export type IncidentChannel =
   | "portal"
@@ -61,6 +62,8 @@ export interface Incident {
   workOrderIds?: string[];
   maintenanceIds?: string[];
   parentIncidentId?: string;
+  /** Optional parent intake Request (REQ-*). Phase 1: not auto-populated. */
+  sourceRequestId?: string;
   /** Supabase operational_events.id when recorded. */
   operationalEventId?: string;
 
@@ -110,6 +113,7 @@ export interface CreateIncidentInput {
   workOrderIds?: string[];
   maintenanceIds?: string[];
   parentIncidentId?: string;
+  sourceRequestId?: string;
   operationalEventId?: string;
   reportedAt: string;
   discoveredAt?: string;

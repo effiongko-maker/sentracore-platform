@@ -1,23 +1,22 @@
 Release:
-v0.4.5
+v0.7.0
 
 Title:
-Data-access stabilization — catalogs, coalescing, WO strict persistence
+Phase 2 Request Treatment (REQ → MNT/INC)
 
 Generated:
-2026-08-26T14:36:19.073Z
+2026-08-27T14:56:26.910Z
 
 Features
-- Lightweight User/Asset catalogs skip workload fan-out for toolbars/modals/labels
-- Shared in-flight coalescing + 60s catalog TTL with mutation invalidation
-- Operational list in-flight dedupe; workload derive 30s TTL
-- WorkOrderRepository ensures Facility/Asset/Assigned To/Reported By; strict writes
-- ROUTER error classification (validation/timeout/transient/exception)
+- Create Maintenance / Incident from Request with bidirectional sourceRequestId links
+- Link existing Maintenance / Incident with ownership conflict rejection
+- Resolve / Cancel Request via server actions
+- Request detail Treatment hub + derived downstream Work Orders
+- API proxy blocks client status/relationship mutation bypass
 
 Performance
-- Home uses fetchUsersCatalog instead of enriched fetchAllUsers
-- Reporting domain fallback uses listUsersCatalog/listAssetsCatalog
-- WO create/update reuse loaded sheet values within one Apps Script request
+- Link search uses paginated facility-scoped getAll (pageSize 200 server filter)
+- Request detail loads linked children by id (N small)
 
 Files Changed
 - ROUTER.gs
@@ -27,6 +26,7 @@ Files Changed
 - AssetRepository.gs
 - AssetsController.gs
 - AssetService.gs
+- CatalogCacheService.gs
 - FacilitiesController.gs
 - FacilityRepository.gs
 - FacilityService.gs
@@ -39,10 +39,15 @@ Files Changed
 - MasterDataController.gs
 - MasterDataRepository.gs
 - MasterDataService.gs
+- OperationalListAudit.gs
+- OperationalRegisterCache.gs
 - ReportingSnapshotController.gs
 - ReportingSnapshotRepository.gs
 - ReportingSnapshotService.gs
 - ReportingSnapshotTriggers.gs
+- RequestRepository.gs
+- RequestsController.gs
+- RequestService.gs
 - SheetFieldUtils.gs
 - UserRepository.gs
 - UsersController.gs
@@ -58,18 +63,31 @@ Trigger Required
 NO
 
 Apps Script Redeploy
-YES
+NO
 
 Smoke Tests
 
-Work orders list:
+Request treatment persistence contract:
 
 ```bash
-curl -sS -X POST http://localhost:3000/api/work-orders -H 'Content-Type: application/json' -d '{"resource":"work-orders","action":"getAll","payload":{"page":1,"pageSize":5}}'
+node scripts/smoke-request-treatment-contract.cjs
+```
+
+Location catalog Facility contract:
+
+```bash
+node scripts/smoke-location-catalog-contract.cjs
+```
+
+UI treatment hub:
+
+```bash
+Open /requests → View → Create Maintenance → assert MNT.sourceRequestId and REQ.maintenanceIds
 ```
 
 Notes
-- CRITICAL: Redeploy SheetFieldUtils.gs, WorkOrderRepository.gs, and ROUTER.gs from the pack.
-- Strict persistence remains: missing relationship headers fail loudly instead of silent drop.
+- Auth boundary: authenticated session + facility_management module (no facility_manager role yet).
+- Do not invent REQ → WO treatment path.
+- Apps Script unchanged for Phase 2 — orchestration is Next.js.
 
 <!-- GENERATED FILE — do not edit by hand. npm run apps-script:pack -->

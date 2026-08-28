@@ -118,8 +118,45 @@ var IncidentService = (function () {
     });
   }
 
+  function loadCanonicalRows_(payload, auditCollector) {
+    payload = payload || {};
+    if (typeof OperationalRegisterCache === "undefined") {
+      return IncidentRepository.getAll(auditCollector);
+    }
+    return OperationalRegisterCache.getCanonicalRows(
+      OperationalRegisterCache.NAMESPACES.incidents,
+      function (collector) {
+        return IncidentRepository.getAll(collector);
+      },
+      {
+        skipCache: !!payload._skipCache,
+        auditCollector: auditCollector,
+      }
+    );
+  }
+
+  function invalidateRegisterCache_() {
+    if (typeof OperationalRegisterCache !== "undefined") {
+      OperationalRegisterCache.invalidate(
+        OperationalRegisterCache.NAMESPACES.incidents
+      );
+    }
+  }
+
   function getAll(payload) {
-    var rows = IncidentRepository.getAll();
+    payload = payload || {};
+    if (payload._auditTiming && typeof OperationalListAudit !== "undefined") {
+      return OperationalListAudit.instrumentGetAll_(
+        payload,
+        function (auditCollector) {
+          return loadCanonicalRows_(payload, auditCollector);
+        },
+        applyFilters_,
+        sortNewestFirst_,
+        paginate_
+      );
+    }
+    var rows = loadCanonicalRows_(payload, null);
     var filtered = applyFilters_(rows, payload);
     var sorted = sortNewestFirst_(filtered);
     return paginate_(sorted, payload);
@@ -141,6 +178,7 @@ var IncidentService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("incidents");
     }
+    invalidateRegisterCache_();
     return created;
   }
 
@@ -152,6 +190,7 @@ var IncidentService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("incidents");
     }
+    invalidateRegisterCache_();
     return updated;
   }
 
@@ -162,6 +201,7 @@ var IncidentService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("incidents");
     }
+    invalidateRegisterCache_();
     return updated;
   }
 

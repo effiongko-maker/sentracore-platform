@@ -964,10 +964,32 @@ var ReportingSnapshotService = (function () {
   function getSnapshot(payload) {
     payload = payload || {};
     var facilityId = payload.facilityId;
+    var t0 = Date.now();
+
+    // Flush dirty markers from recent CRUD (deferred off the write path).
+    var flushPlan = flushDirtyModulesUnlocked_();
+    if (flushPlan) {
+      var tFlush = Date.now();
+      if (flushPlan.mode === "rebuildAll") {
+        rebuildAll();
+      } else {
+        refreshModule(flushPlan.modules[0]);
+      }
+      Logger.log(
+        "[REPORTING_SNAPSHOT] deferred flush " +
+          flushPlan.mode +
+          " " +
+          (Date.now() - tFlush) +
+          "ms"
+      );
+    }
 
     // 1) CacheService — constant key, no sheet I/O
     var cached = readCachedSnapshot_(facilityId);
     if (cached) {
+      Logger.log(
+        "[REPORTING_SNAPSHOT] getSnapshot cache HIT " + (Date.now() - t0) + "ms"
+      );
       return markCacheStatus_(cached, "HIT");
     }
 
@@ -975,6 +997,9 @@ var ReportingSnapshotService = (function () {
     var existing = getSnapshotFromSheetUnlocked_(payload);
     if (existing) {
       writeCachedSnapshot_(facilityId, existing);
+      Logger.log(
+        "[REPORTING_SNAPSHOT] getSnapshot sheet MISS " + (Date.now() - t0) + "ms"
+      );
       return markCacheStatus_(existing, "MISS");
     }
 
@@ -1038,13 +1063,26 @@ var ReportingSnapshotService = (function () {
   }
 
   /**
-   * Fire-and-forget style wrapper for domain service hooks.
-   * Never throws into CRUD paths.
+   * Mark reporting snapshot stale after domain writes.
+   * MUST NOT run refreshModule synchronously — that reloads domain sheets,
+   * rewrites REPORTING_SNAPSHOT sections (row-by-row deletes), and holds
+   * LockService for tens of seconds, blocking Work Order / Maintenance CRUD.
+   *
+   * Cache is cleared immediately. Deferred refresh runs on next getSnapshot
+   * (Dashboard) or via the scheduled rebuild trigger.
    */
   function notifyModuleChanged(module) {
+    var started = Date.now();
     try {
-      // refreshModule invalidates + repopulates CacheService.
-      refreshModule(module);
+      invalidateSnapshotCache_();
+      markSnapshotDirty_(module);
+      Logger.log(
+        "[REPORTING_SNAPSHOT] notifyModuleChanged deferred module=" +
+          module +
+          " " +
+          (Date.now() - started) +
+          "ms (invalidate+dirty only)"
+      );
     } catch (err) {
       try {
         invalidateSnapshotCache_();
@@ -1056,6 +1094,58 @@ var ReportingSnapshotService = (function () {
           err
       );
     }
+  }
+
+  var DIRTY_PROP_KEY = "REPORTING_SNAPSHOT_DIRTY_MODULES";
+
+  function markSnapshotDirty_(module) {
+    var section = sectionForModule_(module);
+    var props = PropertiesService.getScriptProperties();
+    var raw = props.getProperty(DIRTY_PROP_KEY);
+    var map = {};
+    if (raw) {
+      try {
+        map = JSON.parse(raw) || {};
+      } catch (ignore) {
+        map = {};
+      }
+    }
+    map[section] = new Date().toISOString();
+    props.setProperty(DIRTY_PROP_KEY, JSON.stringify(map));
+  }
+
+  function consumeDirtyModules_() {
+    var props = PropertiesService.getScriptProperties();
+    var raw = props.getProperty(DIRTY_PROP_KEY);
+    if (!raw) return [];
+    props.deleteProperty(DIRTY_PROP_KEY);
+    try {
+      var map = JSON.parse(raw) || {};
+      return Object.keys(map);
+    } catch (ignore) {
+      return [];
+    }
+  }
+
+  /**
+   * Apply deferred module refreshes before serving a snapshot read.
+   * Keeps write path fast; Dashboard pays once when data is dirty.
+   */
+  function flushDirtyModulesUnlocked_() {
+    var dirty = consumeDirtyModules_();
+    if (!dirty.length) return null;
+    var started = Date.now();
+    // Multiple dirty modules → one full rebuild is cheaper than N partials
+    // (each partial re-reads all snapshot sections for KPI recompute).
+    if (dirty.length >= 2) {
+      Logger.log(
+        "[REPORTING_SNAPSHOT] flush dirty via rebuildAll modules=" +
+          dirty.join(",")
+      );
+      // rebuildAll takes its own lock — caller must not hold lock.
+      return { mode: "rebuildAll", modules: dirty, started: started };
+    }
+    return { mode: "refreshModule", modules: dirty, started: started };
   }
 
   return {

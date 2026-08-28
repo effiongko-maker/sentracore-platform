@@ -141,6 +141,9 @@ var UserService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("users");
     }
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateWoFilterCatalog();
+    }
     return created;
   }
 
@@ -151,6 +154,9 @@ var UserService = (function () {
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("users");
     }
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateWoFilterCatalog();
+    }
     return updated;
   }
 
@@ -160,6 +166,9 @@ var UserService = (function () {
     if (!updated) throw new Error("User " + payload.id + " not found.");
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("users");
+    }
+    if (typeof CatalogCacheService !== "undefined") {
+      CatalogCacheService.invalidateWoFilterCatalog();
     }
     return updated;
   }

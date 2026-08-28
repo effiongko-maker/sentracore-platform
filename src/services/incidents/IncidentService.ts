@@ -199,6 +199,11 @@ function mapRemoteIncident(raw: RemoteIncident): Incident {
       "parentIncidentId",
       "Parent Incident ID"
     ),
+    sourceRequestId: optionalMappedString(
+      raw,
+      "sourceRequestId",
+      "Request ID"
+    ),
     operationalEventId: readOperationalEventId(raw),
     reportedAt,
     discoveredAt: optionalMappedString(
@@ -334,6 +339,18 @@ export const IncidentService = {
       requiresWorkOrder: params.requiresWorkOrder ?? "all",
     });
     return sharedRequest(key, async () => {
+      if (typeof window === "undefined") {
+        const data = await postToAppsScriptData(
+          {
+            resource: "incidents",
+            action: "getAll",
+            payload: params,
+          },
+          { resource: "incidents", action: "getAll" },
+          "IncidentService.listIncidents"
+        );
+        return toPaginatedIncidents(data, params);
+      }
       const response = await apiClient.post<unknown>("/incidents", {
         resource: "incidents",
         action: "getAll",

@@ -3,11 +3,27 @@ import type {
   Maintenance,
   MaintenanceStatus,
 } from "@/modules/maintenance/types";
+import type { RequestRecord, RequestStatus } from "@/modules/requests/types";
 import type { OccupantRequestStatus } from "./types";
 
 /**
+ * Maps Request lifecycle statuses onto the occupant-facing confirmation labels.
+ */
+export function mapRequestToOccupantStatus(
+  row: Pick<RequestRecord, "status">
+): OccupantRequestStatus {
+  const status = row.status as RequestStatus;
+
+  if (status === "resolved") return "completed";
+  if (status === "closed" || status === "cancelled") return "closed";
+  if (status === "being_treated") return "in_progress";
+  if (status === "under_review") return "assigned";
+  return "submitted";
+}
+
+/**
  * Maps canonical Maintenance statuses onto the occupant-facing lifecycle.
- * Does not alter domain enums.
+ * Retained for any non-intake callers; intake no longer creates Maintenance.
  */
 export function mapMaintenanceToOccupantStatus(
   row: Pick<Maintenance, "status" | "assignedToUserId">
@@ -32,7 +48,7 @@ export function mapMaintenanceToOccupantStatus(
 
 /**
  * Maps canonical Incident statuses onto the occupant-facing lifecycle.
- * Does not alter domain enums.
+ * Retained for any non-intake callers; intake no longer creates Incidents.
  */
 export function mapIncidentToOccupantStatus(
   row: Pick<Incident, "status" | "assignedToUserId">

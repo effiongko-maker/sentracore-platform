@@ -1,6 +1,8 @@
 import type { PaginatedResult } from "@/types";
 import type {
   CreateMasterDataInput,
+  LocationCatalog,
+  LocationCatalogItem,
   MasterDataItem,
   MasterDataListParams,
   MasterDataStatus,
@@ -201,6 +203,47 @@ function extractRemoteRows(payload: unknown): RemoteItem[] {
   return [];
 }
 
+function mapLocationItem(raw: RemoteItem): LocationCatalogItem | null {
+  const id = String(pickField(raw, "id", "ID") ?? "").trim();
+  const name = String(pickField(raw, "name", "Name") ?? "").trim();
+  if (!id || !name) return null;
+  const facilityId = pickField(raw, "facilityId", "facility", "Facility");
+  const buildingId = pickField(raw, "buildingId", "building", "Building");
+  const floorId = pickField(raw, "floorId", "floor", "Floor");
+  return {
+    id,
+    name,
+    facilityId: facilityId != null ? String(facilityId).trim() : undefined,
+    buildingId: buildingId != null ? String(buildingId).trim() : undefined,
+    floorId: floorId != null ? String(floorId).trim() : undefined,
+  };
+}
+
+function mapLocationCatalog(payload: unknown): LocationCatalog {
+  const empty: LocationCatalog = {
+    facilities: [],
+    buildings: [],
+    floors: [],
+    rooms: [],
+  };
+  if (!payload || typeof payload !== "object") return empty;
+  const raw = payload as Record<string, unknown>;
+
+  function mapList(key: string): LocationCatalogItem[] {
+    const list = Array.isArray(raw[key]) ? (raw[key] as RemoteItem[]) : [];
+    return list
+      .map(mapLocationItem)
+      .filter((item): item is LocationCatalogItem => item != null);
+  }
+
+  return {
+    facilities: mapList("facilities"),
+    buildings: mapList("buildings"),
+    floors: mapList("floors"),
+    rooms: mapList("rooms"),
+  };
+}
+
 /**
  * Master Data domain service.
  *
@@ -212,6 +255,89 @@ function extractRemoteRows(payload: unknown): RemoteItem[] {
  * when the deployed Apps Script still filters only on *Id fields.
  */
 export const MasterDataService = {
+  /**
+   * One Apps Script invocation for the full Facility → Room hierarchy.
+   * Prefer this for cascading location selectors.
+   */
+  async getLocationCatalog(): Promise<LocationCatalog> {
+    const key = stableRequestKey(
+      `${CacheNamespaces.masterData}:locationCatalog`,
+      "v1"
+    );
+    return sharedRequest(
+      key,
+      async () => {
+        try {
+          const response = await apiClient.post<unknown>("/master-data", {
+            resource: "master-data",
+            action: "getLocationCatalog",
+            payload: {},
+          });
+          return mapLocationCatalog(response.data);
+        } catch (error) {
+          // Pre-deploy fallback: assemble catalog from existing list endpoints.
+          const message =
+            error instanceof Error ? error.message.toLowerCase() : "";
+          if (
+            !message.includes("unknown master-data action") &&
+            !message.includes("getlocationcatalog")
+          ) {
+            throw error;
+          }
+          const { FacilityService } = await import(
+            "@/services/facilities/FacilityService"
+          );
+          const [facilitiesPage, buildingsPage, floorsPage, roomsPage] =
+            await Promise.all([
+              FacilityService.listFacilities({ page: 1, pageSize: 500 }),
+              MasterDataService.list({
+                entity: "buildings",
+                page: 1,
+                pageSize: 500,
+                status: "all",
+              }),
+              MasterDataService.list({
+                entity: "floors",
+                page: 1,
+                pageSize: 500,
+                status: "all",
+              }),
+              MasterDataService.list({
+                entity: "rooms",
+                page: 1,
+                pageSize: 500,
+                status: "all",
+              }),
+            ]);
+          return {
+            facilities: facilitiesPage.data
+              .filter((item) => item.id && item.name)
+              .map((item) => ({ id: item.id, name: item.name })),
+            buildings: buildingsPage.data.map((item) => ({
+              id: item.id,
+              name: item.name,
+              facilityId: item.facilityId,
+            })),
+            floors: floorsPage.data.map((item) => ({
+              id: item.id,
+              name: item.name,
+              facilityId: item.facilityId,
+              buildingId: item.buildingId,
+            })),
+            rooms: roomsPage.data.map((item) => ({
+              id: item.id,
+              name: item.name,
+              facilityId: item.facilityId,
+              buildingId: item.buildingId,
+              floorId: item.floorId,
+            })),
+          };
+        }
+      },
+      { ttlMs: CATALOG_TTL_MS }
+    );
+  },
+
   async list(
     params: MasterDataListParams
   ): Promise<PaginatedResult<MasterDataItem>> {

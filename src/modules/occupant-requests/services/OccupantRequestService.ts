@@ -1,38 +1,38 @@
-import { IncidentService } from "@/services/incidents/IncidentService";
-import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
+import { RequestService } from "@/services/requests/RequestService";
 import { getOccupantActor } from "../context/OccupantSession";
-import {
-  mapIncidentToOccupantStatus,
-  mapMaintenanceToOccupantStatus,
-} from "../status";
+import { mapRequestToOccupantStatus } from "../status";
 import type {
   IncidentRequestFormValues,
   MaintenanceRequestFormValues,
   OccupantActor,
   OccupantRequestResult,
 } from "../types";
-import { toCreateIncidentInput, toCreateMaintenanceInput } from "../utils";
+import {
+  toCreateRequestFromIncidentForm,
+  toCreateRequestFromMaintenanceForm,
+} from "../utils";
 
 /**
- * Thin orchestration over existing Maintenance / Incident domain services.
- * No duplicate persistence — requests become real Maintenance / Incident rows.
+ * Client/helper path aligned with the live server-action intake boundary.
+ * Creates REQ-* only — does not create Maintenance or Incident records.
  */
 export const OccupantRequestService = {
   async submitMaintenanceRequest(
     form: MaintenanceRequestFormValues,
     actor: OccupantActor = getOccupantActor()
   ): Promise<OccupantRequestResult> {
-    const created = await MaintenanceService.createMaintenance(
-      toCreateMaintenanceInput(form, actor)
+    const created = await RequestService.createRequest(
+      toCreateRequestFromMaintenanceForm(form, actor)
     );
 
     return {
       kind: "maintenance",
       id: created.id,
       title: created.title,
-      status: mapMaintenanceToOccupantStatus(created),
+      status: mapRequestToOccupantStatus(created),
       facilityId: created.facilityId,
-      createdAt: created.createdAt || created.reportedAt,
+      createdAt: created.createdAt || created.occurredAt,
+      requestType: "maintenance",
     };
   },
 
@@ -40,17 +40,18 @@ export const OccupantRequestService = {
     form: IncidentRequestFormValues,
     actor: OccupantActor = getOccupantActor()
   ): Promise<OccupantRequestResult> {
-    const created = await IncidentService.createIncident(
-      toCreateIncidentInput(form, actor)
+    const created = await RequestService.createRequest(
+      toCreateRequestFromIncidentForm(form, actor)
     );
 
     return {
       kind: "incident",
       id: created.id,
       title: created.title,
-      status: mapIncidentToOccupantStatus(created),
+      status: mapRequestToOccupantStatus(created),
       facilityId: created.facilityId,
-      createdAt: created.createdAt || created.reportedAt,
+      createdAt: created.createdAt || created.occurredAt,
+      requestType: "incident",
     };
   },
 };
