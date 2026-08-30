@@ -38,10 +38,12 @@ import {
 } from "@/lib/operational/events/payloads";
 
 export type { LinkableSearchHit } from "@/modules/requests/treatment/types";
+export type { RequestTreatmentResult } from "@/modules/requests/treatment/resultTypes";
 export type {
   DerivedWorkOrderLink,
   RequestTreatmentDetail,
 } from "@/modules/requests/treatment/detailTypes";
+import type { RequestTreatmentResult } from "@/modules/requests/treatment/resultTypes";
 
 async function createMaintenanceChild(
   input: CreateMaintenanceInput,
@@ -116,12 +118,6 @@ async function createIncidentChild(
   }
   return created;
 }
-
-export type RequestTreatmentResult = {
-  request: RequestRecord;
-  maintenance?: Maintenance;
-  incident?: Incident;
-};
 
 async function loadRequestOrThrow(requestId: string): Promise<RequestRecord> {
   const request = await RequestService.getRequest(requestId);
@@ -424,13 +420,71 @@ export async function orchestrateLinkMaintenanceToRequest(options: {
   maintenanceId: string;
   context: ActionContext;
 }): Promise<RequestTreatmentResult> {
-  const request = await loadRequestOrThrow(options.requestId);
-  assertRequestTreatable(request);
-
   const maintenanceId = options.maintenanceId.trim();
   if (!maintenanceId) {
     throw new ActionError("VALIDATION_ERROR", "Maintenance id is required.");
   }
+
+  let appsScriptCalls = 0;
+  const getRequest = async (id: string) => {
+    appsScriptCalls += 1;
+    return loadRequestOrThrow(id);
+  };
+  const getChild = async (id: string) => {
+    appsScriptCalls += 1;
+    return MaintenanceService.getMaintenance(id);
+  };
+  const writeChild = async (
+    id: string,
+    input: Parameters<typeof MaintenanceService.updateMaintenance>[1]
+  ) => {
+    appsScriptCalls += 1;
+    return MaintenanceService.updateMaintenance(id, input);
+  };
+  const writeRequestAppend = async (
+    request: RequestRecord,
+    childId: string,
+    actorUserId: string
+  ) => {
+    appsScriptCalls += 1;
+    return appendMaintenanceLink(request, childId, actorUserId);
+  };
+
+  // Independent reads — one RTT. Establishes treatability + early idempotent/conflict.
+  const [request, primedChild] = await Promise.all([
+    getRequest(options.requestId),
+    getChild(maintenanceId),
+  ]);
+  assertRequestTreatable(request);
+  if (!primedChild) {
+    throw new ActionError(
+      "VALIDATION_ERROR",
+      `Maintenance ${maintenanceId} not found.`
+    );
+  }
+
+  // Early conflict (authoritative child from this action — not client catalogue).
+  assertChildLinkable(
+    primedChild.sourceRequestId,
+    request.id,
+    primedChild.id
+  );
+
+  if (
+    primedChild.sourceRequestId === request.id &&
+    (request.maintenanceIds ?? []).includes(maintenanceId)
+  ) {
+    return {
+      request,
+      maintenance: primedChild,
+      _appsScriptCalls: appsScriptCalls,
+    };
+  }
+
+  /** Request row returned by reverse-link write — avoids a final getById. */
+  let linkedRequest: RequestRecord | null = null;
+  /** recoverExisting invocation count inside the lease helper. */
+  let recoverPass = 0;
 
   const result = await runExclusiveOperationalAction({
     organisationId: options.context.organisation.id,
@@ -438,24 +492,44 @@ export async function orchestrateLinkMaintenanceToRequest(options: {
     actorProfileId: options.context.userId,
     entityType: "maintenance",
     recoverExisting: async () => {
-      const freshReq = await loadRequestOrThrow(request.id);
-      const child = await MaintenanceService.getMaintenance(maintenanceId);
+      recoverPass += 1;
+
+      // Pass 1 (pre-lease): reuse primed reads — 0 AS when not already linked to us.
+      if (recoverPass === 1) {
+        if (primedChild.sourceRequestId !== request.id) return null;
+        const freshReq = await getRequest(request.id);
+        if ((freshReq.maintenanceIds ?? []).includes(maintenanceId)) {
+          linkedRequest = freshReq;
+          return { entityId: primedChild.id, value: primedChild };
+        }
+        return null;
+      }
+
+      // Pass 2 (post-claim on happy path): create() does the authoritative get.
+      // Orphan/idempotent repair is handled there; skipping avoids a duplicate get.
+      if (recoverPass === 2) {
+        return null;
+      }
+
+      // Pass 3+ (wait / takeover / contention): full Sheets recover.
+      const child = await getChild(maintenanceId);
       if (!child) return null;
-      if (
-        child.sourceRequestId === request.id &&
-        (freshReq.maintenanceIds ?? []).includes(maintenanceId)
-      ) {
+      if (child.sourceRequestId !== request.id) return null;
+      const freshReq = await getRequest(request.id);
+      if ((freshReq.maintenanceIds ?? []).includes(maintenanceId)) {
+        linkedRequest = freshReq;
         return { entityId: child.id, value: child };
       }
       return null;
     },
     loadByEntityId: async (entityId) => {
-      const row = await MaintenanceService.getMaintenance(entityId);
+      const row = await getChild(entityId);
       if (!row) return null;
       return { entityId: row.id, value: row };
     },
     create: async () => {
-      const child = await MaintenanceService.getMaintenance(maintenanceId);
+      // Authoritative re-read immediately before mutation (conflict protection).
+      const child = await getChild(maintenanceId);
       if (!child) {
         throw new ActionError(
           "VALIDATION_ERROR",
@@ -463,24 +537,33 @@ export async function orchestrateLinkMaintenanceToRequest(options: {
         );
       }
 
-      const linkState = assertChildLinkable(child.sourceRequestId, request.id, child.id);
+      const linkState = assertChildLinkable(
+        child.sourceRequestId,
+        request.id,
+        child.id
+      );
+
+      // Child.sourceRequestId first — update response is authoritative (no re-get).
+      let linked = child;
       if (linkState === "linkable") {
-        await MaintenanceService.updateMaintenance(child.id, {
+        linked = await writeChild(child.id, {
           sourceRequestId: request.id,
           updatedByUserId: options.context.userId,
         });
       }
 
-      const freshReq = await loadRequestOrThrow(request.id);
+      // Fresh Request required before reverse-link (concurrent other links may append).
+      const freshReq = await getRequest(request.id);
       if (!(freshReq.maintenanceIds ?? []).includes(child.id)) {
         try {
-          await appendMaintenanceLink(
+          linkedRequest = await writeRequestAppend(
             freshReq,
             child.id,
             options.context.userId
           );
         } catch (error) {
           if (linkState === "linkable") {
+            appsScriptCalls += 1;
             await compensateClearMaintenanceSource(child.id, request.id);
           }
           throw error instanceof ActionError
@@ -491,20 +574,16 @@ export async function orchestrateLinkMaintenanceToRequest(options: {
                 { cause: error }
               );
         }
+      } else {
+        linkedRequest = freshReq;
       }
 
-      const linked = await MaintenanceService.getMaintenance(child.id);
-      if (!linked) {
-        throw new ActionError(
-          "INTERNAL_ERROR",
-          `Maintenance ${child.id} missing after link.`
-        );
-      }
       return { entityId: linked.id, value: linked };
     },
   });
 
-  const updated = await loadRequestOrThrow(request.id);
+  const updated =
+    linkedRequest ?? (await getRequest(request.id));
 
   try {
     await emitActionEvent(options.context, {
@@ -518,10 +597,20 @@ export async function orchestrateLinkMaintenanceToRequest(options: {
       },
     });
   } catch {
-    // non-blocking
+    // non-blocking — Supabase, not Apps Script
   }
 
-  return { request: updated, maintenance: result };
+  if (process.env.NODE_ENV !== "production") {
+    console.info(
+      `[link-treatment.write.timing] kind=maintenance appsScriptCalls=${appsScriptCalls} requestId=${request.id} childId=${result.id}`
+    );
+  }
+
+  return {
+    request: updated,
+    maintenance: result,
+    _appsScriptCalls: appsScriptCalls,
+  };
 }
 
 export async function orchestrateLinkIncidentToRequest(options: {
@@ -529,13 +618,63 @@ export async function orchestrateLinkIncidentToRequest(options: {
   incidentId: string;
   context: ActionContext;
 }): Promise<RequestTreatmentResult> {
-  const request = await loadRequestOrThrow(options.requestId);
-  assertRequestTreatable(request);
-
   const incidentId = options.incidentId.trim();
   if (!incidentId) {
     throw new ActionError("VALIDATION_ERROR", "Incident id is required.");
   }
+
+  let appsScriptCalls = 0;
+  const getRequest = async (id: string) => {
+    appsScriptCalls += 1;
+    return loadRequestOrThrow(id);
+  };
+  const getChild = async (id: string) => {
+    appsScriptCalls += 1;
+    return IncidentService.getIncident(id);
+  };
+  const writeChild = async (
+    id: string,
+    input: Parameters<typeof IncidentService.updateIncident>[1]
+  ) => {
+    appsScriptCalls += 1;
+    return IncidentService.updateIncident(id, input);
+  };
+  const writeRequestAppend = async (
+    request: RequestRecord,
+    childId: string,
+    actorUserId: string
+  ) => {
+    appsScriptCalls += 1;
+    return appendIncidentLink(request, childId, actorUserId);
+  };
+
+  const [request, primedChild] = await Promise.all([
+    getRequest(options.requestId),
+    getChild(incidentId),
+  ]);
+  assertRequestTreatable(request);
+  if (!primedChild) {
+    throw new ActionError(
+      "VALIDATION_ERROR",
+      `Incident ${incidentId} not found.`
+    );
+  }
+
+  assertChildLinkable(primedChild.sourceRequestId, request.id, primedChild.id);
+
+  if (
+    primedChild.sourceRequestId === request.id &&
+    (request.incidentIds ?? []).includes(incidentId)
+  ) {
+    return {
+      request,
+      incident: primedChild,
+      _appsScriptCalls: appsScriptCalls,
+    };
+  }
+
+  let linkedRequest: RequestRecord | null = null;
+  let recoverPass = 0;
 
   const result = await runExclusiveOperationalAction({
     organisationId: options.context.organisation.id,
@@ -543,24 +682,39 @@ export async function orchestrateLinkIncidentToRequest(options: {
     actorProfileId: options.context.userId,
     entityType: "incident",
     recoverExisting: async () => {
-      const freshReq = await loadRequestOrThrow(request.id);
-      const child = await IncidentService.getIncident(incidentId);
+      recoverPass += 1;
+
+      if (recoverPass === 1) {
+        if (primedChild.sourceRequestId !== request.id) return null;
+        const freshReq = await getRequest(request.id);
+        if ((freshReq.incidentIds ?? []).includes(incidentId)) {
+          linkedRequest = freshReq;
+          return { entityId: primedChild.id, value: primedChild };
+        }
+        return null;
+      }
+
+      if (recoverPass === 2) {
+        return null;
+      }
+
+      const child = await getChild(incidentId);
       if (!child) return null;
-      if (
-        child.sourceRequestId === request.id &&
-        (freshReq.incidentIds ?? []).includes(incidentId)
-      ) {
+      if (child.sourceRequestId !== request.id) return null;
+      const freshReq = await getRequest(request.id);
+      if ((freshReq.incidentIds ?? []).includes(incidentId)) {
+        linkedRequest = freshReq;
         return { entityId: child.id, value: child };
       }
       return null;
     },
     loadByEntityId: async (entityId) => {
-      const row = await IncidentService.getIncident(entityId);
+      const row = await getChild(entityId);
       if (!row) return null;
       return { entityId: row.id, value: row };
     },
     create: async () => {
-      const child = await IncidentService.getIncident(incidentId);
+      const child = await getChild(incidentId);
       if (!child) {
         throw new ActionError(
           "VALIDATION_ERROR",
@@ -568,20 +722,31 @@ export async function orchestrateLinkIncidentToRequest(options: {
         );
       }
 
-      const linkState = assertChildLinkable(child.sourceRequestId, request.id, child.id);
+      const linkState = assertChildLinkable(
+        child.sourceRequestId,
+        request.id,
+        child.id
+      );
+
+      let linked = child;
       if (linkState === "linkable") {
-        await IncidentService.updateIncident(child.id, {
+        linked = await writeChild(child.id, {
           sourceRequestId: request.id,
           updatedByUserId: options.context.userId,
         });
       }
 
-      const freshReq = await loadRequestOrThrow(request.id);
+      const freshReq = await getRequest(request.id);
       if (!(freshReq.incidentIds ?? []).includes(child.id)) {
         try {
-          await appendIncidentLink(freshReq, child.id, options.context.userId);
+          linkedRequest = await writeRequestAppend(
+            freshReq,
+            child.id,
+            options.context.userId
+          );
         } catch (error) {
           if (linkState === "linkable") {
+            appsScriptCalls += 1;
             await compensateClearIncidentSource(child.id, request.id);
           }
           throw error instanceof ActionError
@@ -592,20 +757,16 @@ export async function orchestrateLinkIncidentToRequest(options: {
                 { cause: error }
               );
         }
+      } else {
+        linkedRequest = freshReq;
       }
 
-      const linked = await IncidentService.getIncident(child.id);
-      if (!linked) {
-        throw new ActionError(
-          "INTERNAL_ERROR",
-          `Incident ${child.id} missing after link.`
-        );
-      }
       return { entityId: linked.id, value: linked };
     },
   });
 
-  const updated = await loadRequestOrThrow(request.id);
+  const updated =
+    linkedRequest ?? (await getRequest(request.id));
 
   try {
     await emitActionEvent(options.context, {
@@ -622,7 +783,17 @@ export async function orchestrateLinkIncidentToRequest(options: {
     // non-blocking
   }
 
-  return { request: updated, incident: result };
+  if (process.env.NODE_ENV !== "production") {
+    console.info(
+      `[link-treatment.write.timing] kind=incident appsScriptCalls=${appsScriptCalls} requestId=${request.id} childId=${result.id}`
+    );
+  }
+
+  return {
+    request: updated,
+    incident: result,
+    _appsScriptCalls: appsScriptCalls,
+  };
 }
 
 export async function orchestrateResolveRequest(options: {
@@ -772,6 +943,11 @@ export async function loadRequestTreatmentDetail(
   return { request, maintenance, incidents, derivedWorkOrders };
 }
 
+/**
+ * Facility-scoped linkable catalogue for Request Treatment Link UI.
+ * Search text is ignored here — the client filters locally after one fetch.
+ * Authorization / ownership is re-checked on Link submit (not trust client).
+ */
 export async function searchLinkableMaintenance(options: {
   requestId: string;
   search?: string;
@@ -779,38 +955,35 @@ export async function searchLinkableMaintenance(options: {
   pageSize?: number;
 }): Promise<{ data: LinkableSearchHit[]; total: number; page: number }> {
   const request = await loadRequestOrThrow(options.requestId);
-  const page = options.page ?? 1;
-  const pageSize = options.pageSize ?? 8;
+  const pageSize = Math.min(Math.max(options.pageSize ?? 200, 1), 500);
 
-  // Facility-scoped list with search; keep page modest — link UI pages locally.
   const listed = await MaintenanceService.listMaintenance({
     page: 1,
-    pageSize: 50,
-    search: options.search,
+    pageSize,
     facilityId: request.facilityId,
     status: "all",
   });
 
-  const linkable = listed.data.filter((row) => {
-    const src = row.sourceRequestId?.trim();
-    if (!src) return true;
-    return src === request.id;
-  });
-
-  const start = (page - 1) * pageSize;
-  const slice = linkable.slice(start, start + pageSize);
-
-  return {
-    data: slice.map((row) => ({
+  const linkable = listed.data
+    .filter((row) => row.status !== "cancelled")
+    .filter((row) => {
+      const src = row.sourceRequestId?.trim();
+      if (!src) return true;
+      return src === request.id;
+    })
+    .map((row) => ({
       id: row.id,
       title: row.title,
       status: row.status,
       facilityId: row.facilityId,
       date: row.reportedAt || row.createdAt,
       sourceRequestId: row.sourceRequestId,
-    })),
+    }));
+
+  return {
+    data: linkable,
     total: linkable.length,
-    page,
+    page: 1,
   };
 }
 
@@ -821,37 +994,36 @@ export async function searchLinkableIncidents(options: {
   pageSize?: number;
 }): Promise<{ data: LinkableSearchHit[]; total: number; page: number }> {
   const request = await loadRequestOrThrow(options.requestId);
-  const page = options.page ?? 1;
-  const pageSize = options.pageSize ?? 8;
+  const pageSize = Math.min(Math.max(options.pageSize ?? 200, 1), 500);
 
-  // Facility-scoped list with search; keep page modest — link UI pages locally.
   const listed = await IncidentService.listIncidents({
     page: 1,
-    pageSize: 50,
-    search: options.search,
+    pageSize,
     facilityId: request.facilityId,
     status: "all",
   });
 
-  const linkable = listed.data.filter((row) => {
-    const src = row.sourceRequestId?.trim();
-    if (!src) return true;
-    return src === request.id;
-  });
-
-  const start = (page - 1) * pageSize;
-  const slice = linkable.slice(start, start + pageSize);
-
-  return {
-    data: slice.map((row) => ({
+  const linkable = listed.data
+    .filter(
+      (row) => row.status !== "cancelled" && row.status !== "closed"
+    )
+    .filter((row) => {
+      const src = row.sourceRequestId?.trim();
+      if (!src) return true;
+      return src === request.id;
+    })
+    .map((row) => ({
       id: row.id,
       title: row.title,
       status: row.status,
       facilityId: row.facilityId,
       date: row.reportedAt || row.createdAt,
       sourceRequestId: row.sourceRequestId,
-    })),
+    }));
+
+  return {
+    data: linkable,
     total: linkable.length,
-    page,
+    page: 1,
   };
 }

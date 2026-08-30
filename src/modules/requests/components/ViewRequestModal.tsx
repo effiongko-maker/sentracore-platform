@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/Toast";
 import { formatDate } from "@/lib/utils";
 import { useFacilityName } from "@/hooks/useEntityLabel";
 import type { RequestTreatmentDetail } from "../treatment/detailTypes";
+import type { RequestTreatmentResult } from "../treatment/resultTypes";
 import {
   cancelRequest,
   getRequestTreatmentDetail,
@@ -152,6 +153,38 @@ export function ViewRequestModal({
   }, [open, request?.id]);
 
   function handleTreatmentChanged() {
+    if (request?.id) void reloadDetail(request.id);
+    onChanged?.();
+  }
+
+  /** Apply authoritative Link response immediately; refresh detail in background. */
+  function handleLinked(result: RequestTreatmentResult) {
+    setDetail((prev) => {
+      const base: RequestTreatmentDetail = prev ?? {
+        request: result.request,
+        maintenance: [],
+        incidents: [],
+        derivedWorkOrders: [],
+      };
+      const maintenance = result.maintenance
+        ? [
+            result.maintenance,
+            ...base.maintenance.filter((row) => row.id !== result.maintenance!.id),
+          ]
+        : base.maintenance;
+      const incidents = result.incident
+        ? [
+            result.incident,
+            ...base.incidents.filter((row) => row.id !== result.incident!.id),
+          ]
+        : base.incidents;
+      return {
+        ...base,
+        request: result.request,
+        maintenance,
+        incidents,
+      };
+    });
     if (request?.id) void reloadDetail(request.id);
     onChanged?.();
   }
@@ -477,7 +510,7 @@ export function ViewRequestModal({
         kind={panel.type === "link-incident" ? "incident" : "maintenance"}
         requestId={activeRequest.id}
         onClose={() => setPanel({ type: "closed" })}
-        onLinked={handleTreatmentChanged}
+        onLinked={handleLinked}
       />
 
       <ConfirmDialog

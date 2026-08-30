@@ -8,3 +8,5 @@ export type LinkableSearchHit = {
   date: string;
   sourceRequestId?: string;
 };
+
+export type { RequestTreatmentResult } from "./resultTypes";

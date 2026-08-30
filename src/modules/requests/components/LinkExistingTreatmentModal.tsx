@@ -1,17 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/modals/Modal";
 import { Button } from "@/components/ui/Button";
 import { FormField, inputClassName } from "@/components/forms/FormField";
 import { useToast } from "@/components/ui/Toast";
 import { formatDate } from "@/lib/utils";
 import type { LinkableSearchHit } from "../treatment/types";
+import type { RequestTreatmentResult } from "../treatment/resultTypes";
+import { filterLinkableCandidates } from "../treatment/filterLinkableCandidates";
+import { loadLinkTreatmentCatalogue } from "../treatment/loadLinkTreatmentCatalogue";
 import {
   linkIncidentToRequest,
   linkMaintenanceToRequest,
-  searchIncidentsForRequestLink,
-  searchMaintenanceForRequestLink,
 } from "../actions/treatRequest";
 
 type LinkKind = "maintenance" | "incident";
@@ -21,7 +22,7 @@ interface LinkExistingTreatmentModalProps {
   kind: LinkKind;
   requestId: string;
   onClose: () => void;
-  onLinked: () => void;
+  onLinked: (result: RequestTreatmentResult) => void;
 }
 
 export function LinkExistingTreatmentModal({
@@ -33,67 +34,94 @@ export function LinkExistingTreatmentModal({
 }: LinkExistingTreatmentModalProps) {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
-  const [query, setQuery] = useState("");
-  const [hits, setHits] = useState<LinkableSearchHit[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [candidates, setCandidates] = useState<LinkableSearchHit[]>([]);
+  const [catalogueLoading, setCatalogueLoading] = useState(false);
+  const [catalogueError, setCatalogueError] = useState<string | null>(null);
   const [linkingId, setLinkingId] = useState<string | null>(null);
+  const catalogueLoadGen = useRef(0);
+  const openStartedAt = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      catalogueLoadGen.current += 1;
+      setSearch("");
+      setCandidates([]);
+      setCatalogueLoading(false);
+      setCatalogueError(null);
+      setLinkingId(null);
+      openStartedAt.current = null;
+      return;
+    }
+
+    const gen = ++catalogueLoadGen.current;
+    openStartedAt.current = performance.now();
     setSearch("");
-    setQuery("");
-    setHits([]);
-    setTotal(0);
-    setLoading(false);
-  }, [open, kind, requestId]);
+    setCandidates([]);
+    setCatalogueError(null);
+    setCatalogueLoading(true);
 
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    setLoading(true);
-    const runner =
-      kind === "maintenance"
-        ? searchMaintenanceForRequestLink
-        : searchIncidentsForRequestLink;
-
-    runner({ requestId, search: query, page: 1, pageSize: 8 })
+    void loadLinkTreatmentCatalogue({ kind, requestId })
       .then((result) => {
-        if (cancelled) return;
+        if (gen !== catalogueLoadGen.current) return;
         if (!result.success) {
+          setCatalogueError(result.error.message);
+          setCandidates([]);
           toast({
             type: "error",
-            title: "Search failed",
+            title: "Unable to load candidates",
             description: result.error.message,
           });
-          setHits([]);
-          setTotal(0);
           return;
         }
-        setHits(result.data.data);
-        setTotal(result.data.total);
+        setCandidates(result.data.data);
+        const openMs = openStartedAt.current;
+        if (openMs != null && process.env.NODE_ENV !== "production") {
+          console.info("[link-treatment.catalogue.timing]", {
+            kind,
+            elapsedMs: Math.round(performance.now() - openMs),
+            count: result.data.data.length,
+          });
+        }
       })
       .catch((error) => {
-        if (cancelled) return;
+        if (gen !== catalogueLoadGen.current) return;
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unable to load linkable records.";
+        setCatalogueError(message);
+        setCandidates([]);
         toast({
           type: "error",
-          title: "Search failed",
-          description:
-            error instanceof Error
-              ? error.message
-              : "Unable to search linkable records.",
+          title: "Unable to load candidates",
+          description: message,
         });
-        setHits([]);
-        setTotal(0);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (gen === catalogueLoadGen.current) {
+          setCatalogueLoading(false);
+        }
       });
+  }, [open, kind, requestId, toast]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [open, kind, requestId, query, toast]);
+  const filtered = useMemo(() => {
+    const t0 = performance.now();
+    const next = filterLinkableCandidates(candidates, search);
+    if (
+      process.env.NODE_ENV !== "production" &&
+      !catalogueLoading &&
+      candidates.length > 0
+    ) {
+      console.info("[link-treatment.search.timing]", {
+        kind,
+        queryLength: search.trim().length,
+        elapsedMs: Math.round((performance.now() - t0) * 1000) / 1000,
+        resultCount: next.length,
+        remote: false,
+      });
+    }
+    return next;
+  }, [candidates, search, catalogueLoading, kind]);
 
   async function handleLink(id: string) {
     setLinkingId(id);
@@ -112,7 +140,7 @@ export function LinkExistingTreatmentModal({
         title: kind === "maintenance" ? "Maintenance linked" : "Incident linked",
         description: `${id} is now linked to this request.`,
       });
-      onLinked();
+      onLinked(result.data);
       onClose();
     } catch (err) {
       toast({
@@ -128,6 +156,19 @@ export function LinkExistingTreatmentModal({
 
   const title =
     kind === "maintenance" ? "Link existing Maintenance" : "Link existing Incident";
+  const loadingLabel =
+    kind === "maintenance" ? "Loading maintenance…" : "Loading incidents…";
+  const emptyFilterLabel =
+    kind === "maintenance"
+      ? "No matching maintenance records"
+      : "No matching incidents";
+  const searchPlaceholder =
+    kind === "maintenance" ? "Search maintenance..." : "Search incidents...";
+
+  const showEmpty =
+    !catalogueLoading &&
+    !catalogueError &&
+    filtered.length === 0;
 
   return (
     <Modal
@@ -145,65 +186,69 @@ export function LinkExistingTreatmentModal({
       }
     >
       <div className="space-y-4">
-        <form
-          className="flex gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            setQuery(search.trim());
-          }}
-        >
-          <FormField label="Search" htmlFor="link-treatment-search" className="flex-1">
-            <input
-              id="link-treatment-search"
-              className={inputClassName}
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="ID or title"
-            />
-          </FormField>
-          <div className="flex items-end">
-            <Button type="submit" variant="secondary" disabled={loading}>
-              Search
-            </Button>
-          </div>
-        </form>
+        <FormField label="Search" htmlFor="link-treatment-search">
+          <input
+            id="link-treatment-search"
+            className={inputClassName}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={searchPlaceholder}
+            disabled={catalogueLoading || Boolean(catalogueError)}
+            autoComplete="off"
+          />
+        </FormField>
 
         <p className="text-xs text-muted">
-          {loading ? "Searching…" : `${total} linkable record${total === 1 ? "" : "s"}`}
+          {catalogueLoading
+            ? loadingLabel
+            : catalogueError
+              ? "Could not load candidates."
+              : search.trim()
+                ? `${filtered.length} matching · ${candidates.length} loaded`
+                : `${candidates.length} linkable record${candidates.length === 1 ? "" : "s"}`}
         </p>
 
         <ul className="divide-y divide-border rounded-xl border border-border">
-          {hits.length === 0 && !loading ? (
+          {catalogueLoading ? (
             <li className="px-3 py-6 text-center text-sm text-muted">
-              No linkable records found.
+              {loadingLabel}
             </li>
           ) : null}
-          {hits.map((hit) => (
-            <li
-              key={hit.id}
-              className="flex flex-wrap items-center justify-between gap-3 px-3 py-3"
-            >
-              <div className="min-w-0 space-y-0.5">
-                <p className="truncate text-sm font-medium text-foreground">
-                  {hit.title}
-                </p>
-                <p className="text-xs text-muted">
-                  {hit.id} · {hit.status} · {formatDate(hit.date)}
-                  {hit.sourceRequestId
-                    ? ` · already linked to this request`
-                    : ""}
-                </p>
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                disabled={linkingId === hit.id}
-                onClick={() => void handleLink(hit.id)}
-              >
-                {linkingId === hit.id ? "Linking…" : "Link"}
-              </Button>
+          {showEmpty ? (
+            <li className="px-3 py-6 text-center text-sm text-muted">
+              {candidates.length === 0
+                ? "No linkable records found."
+                : emptyFilterLabel}
             </li>
-          ))}
+          ) : null}
+          {!catalogueLoading
+            ? filtered.map((hit) => (
+                <li
+                  key={hit.id}
+                  className="flex flex-wrap items-center justify-between gap-3 px-3 py-3"
+                >
+                  <div className="min-w-0 space-y-0.5">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {hit.title}
+                    </p>
+                    <p className="text-xs text-muted">
+                      {hit.id} · {hit.status} · {formatDate(hit.date)}
+                      {hit.sourceRequestId
+                        ? ` · already linked to this request`
+                        : ""}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={linkingId === hit.id}
+                    onClick={() => void handleLink(hit.id)}
+                  >
+                    {linkingId === hit.id ? "Linking…" : "Link"}
+                  </Button>
+                </li>
+              ))
+            : null}
         </ul>
       </div>
     </Modal>

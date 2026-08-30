@@ -1,16 +1,32 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { signIn, type SignInState } from "@/lib/auth/actions";
 
 const initialState: SignInState = {};
 
-export function LoginForm({ nextPath }: { nextPath: string }) {
+export function LoginForm({
+  nextPath,
+  resetSuccess = false,
+}: {
+  nextPath: string;
+  resetSuccess?: boolean;
+}) {
   const [state, formAction, pending] = useActionState(signIn, initialState);
 
   return (
     <form action={formAction} className="space-y-4">
       <input type="hidden" name="next" value={nextPath} />
+
+      {resetSuccess ? (
+        <p
+          role="status"
+          className="rounded-xl border border-border bg-background/60 px-3 py-2 text-sm text-foreground"
+        >
+          Your password was updated. Sign in with your new password.
+        </p>
+      ) : null}
 
       <div className="space-y-1.5">
         <label
@@ -31,12 +47,20 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
       </div>
 
       <div className="space-y-1.5">
-        <label
-          htmlFor="password"
-          className="block text-xs font-medium text-foreground"
-        >
-          Password
-        </label>
+        <div className="flex items-center justify-between gap-3">
+          <label
+            htmlFor="password"
+            className="block text-xs font-medium text-foreground"
+          >
+            Password
+          </label>
+          <Link
+            href="/forgot-password"
+            className="text-xs font-medium text-muted underline-offset-2 hover:text-primary hover:underline"
+          >
+            Forgot password?
+          </Link>
+        </div>
         <input
           id="password"
           name="password"
