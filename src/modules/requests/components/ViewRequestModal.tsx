@@ -152,13 +152,8 @@ export function ViewRequestModal({
     };
   }, [open, request?.id]);
 
-  function handleTreatmentChanged() {
-    if (request?.id) void reloadDetail(request.id);
-    onChanged?.();
-  }
-
-  /** Apply authoritative Link response immediately; refresh detail in background. */
-  function handleLinked(result: RequestTreatmentResult) {
+  /** Apply authoritative Create/Link response immediately; refresh detail in background. */
+  function handleTreatmentResult(result: RequestTreatmentResult) {
     setDetail((prev) => {
       const base: RequestTreatmentDetail = prev ?? {
         request: result.request,
@@ -185,6 +180,11 @@ export function ViewRequestModal({
         incidents,
       };
     });
+    if (request?.id) void reloadDetail(request.id);
+    onChanged?.();
+  }
+
+  function handleTreatmentChanged() {
     if (request?.id) void reloadDetail(request.id);
     onChanged?.();
   }
@@ -493,14 +493,14 @@ export function ViewRequestModal({
         open={panel.type === "create-maintenance"}
         request={activeRequest}
         onClose={() => setPanel({ type: "closed" })}
-        onCreated={handleTreatmentChanged}
+        onCreated={handleTreatmentResult}
       />
 
       <CreateIncidentFromRequestModal
         open={panel.type === "create-incident"}
         request={activeRequest}
         onClose={() => setPanel({ type: "closed" })}
-        onCreated={handleTreatmentChanged}
+        onCreated={handleTreatmentResult}
       />
 
       <LinkExistingTreatmentModal
@@ -510,7 +510,7 @@ export function ViewRequestModal({
         kind={panel.type === "link-incident" ? "incident" : "maintenance"}
         requestId={activeRequest.id}
         onClose={() => setPanel({ type: "closed" })}
-        onLinked={handleLinked}
+        onLinked={handleTreatmentResult}
       />
 
       <ConfirmDialog

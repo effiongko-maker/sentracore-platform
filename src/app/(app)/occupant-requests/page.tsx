@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { OccupantRequestPage } from "@/modules/occupant-requests";
 
 export const metadata: Metadata = {
-  title: "Requests",
+  title: "Submit Request",
 };
 
 export default function OccupantRequestsRoute() {

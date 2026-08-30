@@ -4,6 +4,8 @@
 @import "./reports-experience.css";
 @import "./dashboard-experience.css";
 @import "./operational-list.css";
+@import "./submit-request.css";
+@import "./intelligence-insights.css";
 
 /* Product aliases → OS foundation (do not fork values here) */
 :root {

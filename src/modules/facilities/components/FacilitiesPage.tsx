@@ -1,7 +1,7 @@
 "use client";
 
 import { Building2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ExploreHeader,
   ModeFrame,
@@ -10,8 +10,10 @@ import {
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
+import { useQueryRecordId } from "@/hooks/useQueryRecordId";
 import { useFacilities } from "../hooks/useFacilities";
 import type { FacilityModalState } from "../types";
+import { FacilityService } from "../services/FacilityService";
 import { FacilityFormModal } from "./FacilityFormModal";
 import { FacilitiesTable } from "./FacilitiesTable";
 import { FacilitiesToolbar } from "./FacilitiesToolbar";
@@ -19,6 +21,7 @@ import { ViewFacilityModal } from "./ViewFacilityModal";
 
 export function FacilitiesPage() {
   const { toast } = useToast();
+  const openId = useQueryRecordId();
   const {
     facilities,
     loading,
@@ -41,6 +44,21 @@ export function FacilitiesPage() {
 
   const [modal, setModal] = useState<FacilityModalState>({ type: "closed" });
   const [deactivating, setDeactivating] = useState(false);
+
+  useEffect(() => {
+    if (!openId) return;
+    let cancelled = false;
+    void FacilityService.getFacility(openId)
+      .then((facility) => {
+        if (!cancelled && facility) setModal({ type: "view", facility });
+      })
+      .catch(() => {
+        /* leave list as-is if record cannot be loaded */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openId]);
 
   async function handleDeactivate() {
     if (modal.type !== "deactivate") return;

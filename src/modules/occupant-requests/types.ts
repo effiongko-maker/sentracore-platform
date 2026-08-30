@@ -42,6 +42,24 @@ export interface MaintenanceRequestFormValues {
   priority: MaintenancePriority;
   category: string;
   attachment?: File | null;
+  /** Client intake identity — optional for legacy callers. */
+  reporterName?: string;
+  reporterPhone?: string;
+  reporterEmail?: string;
+}
+
+/** Client-facing single-request intake (maps onto maintenance REQ intake). */
+export interface ClientRequestFormValues {
+  fullName: string;
+  phone: string;
+  email: string;
+  floor: string;
+  office: string;
+  title: string;
+  description: string;
+  urgency: "low" | "medium" | "high";
+  facilityId: string;
+  attachment?: File | null;
 }
 
 export interface IncidentRequestFormValues {

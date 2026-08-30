@@ -1,15 +1,17 @@
 "use client";
 
 import { Inbox } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ModeFrame, StreamSurface } from "@/components/platform";
 import { OperationalPageHeader } from "@/components/operational";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
+import { useQueryRecordId } from "@/hooks/useQueryRecordId";
 import { cancelRequest } from "../actions/treatRequest";
 import { useRequests } from "../hooks/useRequests";
 import type { RequestModalState } from "../types";
+import { RequestService } from "../services/RequestService";
 import { RequestFormModal } from "./RequestFormModal";
 import { RequestsTable } from "./RequestsTable";
 import { RequestsToolbar } from "./RequestsToolbar";
@@ -17,6 +19,7 @@ import { ViewRequestModal } from "./ViewRequestModal";
 
 export function RequestsPage() {
   const { toast } = useToast();
+  const openId = useQueryRecordId();
   const {
     requests,
     loading,
@@ -36,6 +39,21 @@ export function RequestsPage() {
 
   const [modal, setModal] = useState<RequestModalState>({ type: "closed" });
   const [cancelling, setCancelling] = useState(false);
+
+  useEffect(() => {
+    if (!openId) return;
+    let cancelled = false;
+    void RequestService.getRequest(openId)
+      .then((request) => {
+        if (!cancelled && request) setModal({ type: "view", request });
+      })
+      .catch(() => {
+        /* leave list as-is if record cannot be loaded */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openId]);
 
   async function handleCancel() {
     if (modal.type !== "deactivate") return;

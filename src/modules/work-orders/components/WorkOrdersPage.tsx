@@ -1,7 +1,7 @@
 "use client";
 
 import { ClipboardList } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ModeFrame,
   OperateHeader,
@@ -10,6 +10,8 @@ import {
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
+import { useQueryRecordId } from "@/hooks/useQueryRecordId";
+import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
 import { useWorkOrders } from "../hooks/useWorkOrders";
 import type { WorkOrderModalState } from "../types";
 import { WorkOrderFormModal } from "./WorkOrderFormModal";
@@ -19,6 +21,7 @@ import { ViewWorkOrderModal } from "./ViewWorkOrderModal";
 
 export function WorkOrdersPage() {
   const { toast } = useToast();
+  const openId = useQueryRecordId();
   const {
     workOrders,
     loading,
@@ -53,6 +56,21 @@ export function WorkOrdersPage() {
 
   const [modal, setModal] = useState<WorkOrderModalState>({ type: "closed" });
   const [deactivating, setDeactivating] = useState(false);
+
+  useEffect(() => {
+    if (!openId) return;
+    let cancelled = false;
+    void WorkOrderService.getWorkOrder(openId)
+      .then((workOrder) => {
+        if (!cancelled && workOrder) setModal({ type: "view", workOrder });
+      })
+      .catch(() => {
+        /* leave list as-is if record cannot be loaded */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openId]);
 
   async function handleDeactivate() {
     if (modal.type !== "deactivate") return;

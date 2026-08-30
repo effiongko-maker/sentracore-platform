@@ -8,13 +8,11 @@ import {
   requestLinkMaintenanceLeaseKey,
   runExclusiveOperationalAction,
 } from "@/lib/operational/idempotency/actionLease";
-import { appendUniqueId } from "@/lib/operational/idLists";
 import {
   assertRequestCancellable,
   assertRequestResolvable,
   assertRequestTreatable,
 } from "@/modules/requests/treatment/assertStatus";
-import { statusAfterTreatment } from "@/modules/requests/treatment/status";
 import type { LinkableSearchHit } from "@/modules/requests/treatment/types";
 import type {
   DerivedWorkOrderLink,
@@ -45,80 +43,6 @@ export type {
 } from "@/modules/requests/treatment/detailTypes";
 import type { RequestTreatmentResult } from "@/modules/requests/treatment/resultTypes";
 
-async function createMaintenanceChild(
-  input: CreateMaintenanceInput,
-  context: ActionContext,
-  sourceReference: string
-): Promise<Maintenance> {
-  const created = await MaintenanceService.createMaintenance(input);
-  try {
-    const event = await emitActionEvent(context, {
-      eventType: OperationalEventTypes.FACILITY_MAINTENANCE_REQUESTED,
-      entityType: "maintenance_request",
-      entityId: String(created.id),
-      data: withIntakeMetadata(
-        maintenanceEventData(created, {
-          actor: context.userId,
-          transitionSource: "specialised_action",
-        }),
-        "staff",
-        sourceReference
-      ),
-    });
-    try {
-      await MaintenanceService.updateMaintenance(created.id, {
-        operationalEventId: event.id,
-      });
-    } catch {
-      // non-blocking
-    }
-  } catch (eventError) {
-    console.error("[requestTreatment] maintenance event failed", {
-      maintenanceId: created.id,
-      error:
-        eventError instanceof Error ? eventError.message : String(eventError),
-    });
-  }
-  return created;
-}
-
-async function createIncidentChild(
-  input: CreateIncidentInput,
-  context: ActionContext,
-  sourceReference: string
-): Promise<Incident> {
-  const created = await IncidentService.createIncident(input);
-  try {
-    const event = await emitActionEvent(context, {
-      eventType: OperationalEventTypes.FACILITY_INCIDENT_REPORTED,
-      entityType: "incident",
-      entityId: created.id,
-      data: withIntakeMetadata(
-        incidentEventData(created, {
-          actor: context.userId,
-          transitionSource: "specialised_action",
-        }),
-        "staff",
-        sourceReference
-      ),
-    });
-    try {
-      await IncidentService.updateIncident(created.id, {
-        operationalEventId: event.id,
-      });
-    } catch {
-      // non-blocking
-    }
-  } catch (eventError) {
-    console.error("[requestTreatment] incident event failed", {
-      incidentId: created.id,
-      error:
-        eventError instanceof Error ? eventError.message : String(eventError),
-    });
-  }
-  return created;
-}
-
 async function loadRequestOrThrow(requestId: string): Promise<RequestRecord> {
   const request = await RequestService.getRequest(requestId);
   if (!request) {
@@ -130,99 +54,22 @@ async function loadRequestOrThrow(requestId: string): Promise<RequestRecord> {
   return request;
 }
 
-async function appendMaintenanceLink(
-  request: RequestRecord,
-  maintenanceId: string,
-  actorUserId: string
-): Promise<RequestRecord> {
-  const maintenanceIds = appendUniqueId(
-    request.maintenanceIds ?? [],
-    maintenanceId
-  );
-  const status = statusAfterTreatment(request.status);
-  return RequestService.updateRequest({
-    id: request.id,
-    maintenanceIds,
-    status,
-    updatedByUserId: actorUserId,
-  });
-}
-
-async function appendIncidentLink(
-  request: RequestRecord,
-  incidentId: string,
-  actorUserId: string
-): Promise<RequestRecord> {
-  const incidentIds = appendUniqueId(request.incidentIds ?? [], incidentId);
-  const status = statusAfterTreatment(request.status);
-  return RequestService.updateRequest({
-    id: request.id,
-    incidentIds,
-    status,
-    updatedByUserId: actorUserId,
-  });
-}
-
-async function compensateClearMaintenanceSource(
-  maintenanceId: string,
-  expectedRequestId: string
-): Promise<void> {
-  try {
-    const child = await MaintenanceService.getMaintenance(maintenanceId);
-    if (!child) return;
-    if (child.sourceRequestId !== expectedRequestId) return;
-    await MaintenanceService.updateMaintenance(maintenanceId, {
-      sourceRequestId: "",
-    });
-  } catch (error) {
-    console.error("[requestTreatment] compensation failed (maintenance)", {
-      maintenanceId,
-      expectedRequestId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    throw new ActionError(
-      "INTERNAL_ERROR",
-      `Request link update failed after creating ${maintenanceId}. Compensation to clear sourceRequestId also failed — manual repair required.`
-    );
+function mapLinkAppsScriptError(error: unknown): never {
+  const message =
+    error instanceof Error && error.message.trim()
+      ? error.message.trim()
+      : "linkTreatment failed";
+  if (
+    /cannot receive treatment/i.test(message) ||
+    /not found/i.test(message) ||
+    /Facility mismatch/i.test(message) ||
+    /already linked/i.test(message) ||
+    /childId is required/i.test(message) ||
+    /requestId is required/i.test(message)
+  ) {
+    throw new ActionError("VALIDATION_ERROR", message, { cause: error });
   }
-}
-
-async function compensateClearIncidentSource(
-  incidentId: string,
-  expectedRequestId: string
-): Promise<void> {
-  try {
-    const child = await IncidentService.getIncident(incidentId);
-    if (!child) return;
-    if (child.sourceRequestId !== expectedRequestId) return;
-    await IncidentService.updateIncident(incidentId, {
-      sourceRequestId: "",
-    });
-  } catch (error) {
-    console.error("[requestTreatment] compensation failed (incident)", {
-      incidentId,
-      expectedRequestId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    throw new ActionError(
-      "INTERNAL_ERROR",
-      `Request link update failed after creating ${incidentId}. Compensation to clear sourceRequestId also failed — manual repair required.`
-    );
-  }
-}
-
-function assertChildLinkable(
-  sourceRequestId: string | undefined,
-  requestId: string,
-  childId: string
-): "already_linked" | "linkable" {
-  const existing = sourceRequestId?.trim();
-  if (!existing) return "linkable";
-  if (existing === requestId) return "already_linked";
-  throw new ActionError(
-    "VALIDATION_ERROR",
-    `${childId} is already linked to ${existing} and cannot be reassigned.`
-  );
+  throw new ActionError("INTERNAL_ERROR", message, { cause: error });
 }
 
 export async function orchestrateCreateMaintenanceFromRequest(options: {
@@ -231,8 +78,7 @@ export async function orchestrateCreateMaintenanceFromRequest(options: {
   idempotencyKey: string;
   context: ActionContext;
 }): Promise<RequestTreatmentResult> {
-  const request = await loadRequestOrThrow(options.requestId);
-  assertRequestTreatable(request);
+  let appsScriptCalls = 0;
 
   const idempotencyKey = options.idempotencyKey.trim();
   if (!idempotencyKey) {
@@ -245,58 +91,108 @@ export async function orchestrateCreateMaintenanceFromRequest(options: {
   const writeInput: CreateMaintenanceInput = {
     ...options.input,
     source: options.input.source ?? "request",
-    sourceRequestId: request.id,
+    sourceRequestId: options.requestId,
     createdByUserId: options.context.userId,
     updatedByUserId: options.context.userId,
   };
 
-  const maintenance = await runExclusiveOperationalAction({
+  type Bundle = {
+    request: RequestRecord;
+    maintenance: Maintenance;
+    idempotent: boolean;
+  };
+
+  const invokeCreateTreatment = async (): Promise<Bundle> => {
+    appsScriptCalls += 1;
+    try {
+      const result = await RequestService.createTreatment({
+        kind: "maintenance",
+        requestId: options.requestId,
+        childInput: writeInput,
+        idempotencyKey,
+        actorUserId: options.context.userId,
+      });
+      if (!result.maintenance) {
+        throw new ActionError(
+          "INTERNAL_ERROR",
+          "createTreatment did not return maintenance."
+        );
+      }
+      return {
+        request: result.request,
+        maintenance: result.maintenance,
+        idempotent: result.idempotent,
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message.trim()
+          : "createTreatment failed";
+      if (/cannot receive treatment/i.test(message) || /not found/i.test(message) || /Facility mismatch/i.test(message) || /idempotencyKey is required/i.test(message)) {
+        throw new ActionError("VALIDATION_ERROR", message, { cause: error });
+      }
+      throw new ActionError("INTERNAL_ERROR", message, { cause: error });
+    }
+  };
+
+  const bundle = await runExclusiveOperationalAction({
     organisationId: options.context.organisation.id,
-    scopeKey: requestCreateMaintenanceLeaseKey(request.id, idempotencyKey),
+    scopeKey: requestCreateMaintenanceLeaseKey(options.requestId, idempotencyKey),
     actorProfileId: options.context.userId,
     entityType: "maintenance",
-    recoverExisting: async () => {
-      const fresh = await loadRequestOrThrow(request.id);
-      // Lease completed previously — recover by sourceRequestId + recent match not reliable.
-      // Prefer lease result_entity_id via loadByEntityId.
-      return null;
-    },
-    loadByEntityId: async (entityId) => {
-      const row = await MaintenanceService.getMaintenance(entityId);
-      if (!row) return null;
-      return { entityId: row.id, value: row };
+    recoverExisting: async () => null,
+    loadByEntityId: async () => {
+      const recovered = await invokeCreateTreatment();
+      return { entityId: recovered.maintenance.id, value: recovered };
     },
     create: async () => {
-      const created = await createMaintenanceChild(
-        writeInput,
-        options.context,
-        request.id
-      );
-      return { entityId: created.id, value: created };
+      const created = await invokeCreateTreatment();
+      return { entityId: created.maintenance.id, value: created };
     },
   });
 
-  // Idempotent: already on request list
-  if ((request.maintenanceIds ?? []).includes(maintenance.id)) {
-    const fresh = await loadRequestOrThrow(request.id);
-    return { request: fresh, maintenance };
-  }
-
-  try {
-    const updated = await appendMaintenanceLink(
-      await loadRequestOrThrow(request.id),
-      maintenance.id,
-      options.context.userId
-    );
+  if (!bundle.idempotent) {
+    try {
+      const event = await emitActionEvent(options.context, {
+        eventType: OperationalEventTypes.FACILITY_MAINTENANCE_REQUESTED,
+        entityType: "maintenance_request",
+        entityId: String(bundle.maintenance.id),
+        data: withIntakeMetadata(
+          maintenanceEventData(bundle.maintenance, {
+            actor: options.context.userId,
+            transitionSource: "specialised_action",
+          }),
+          "staff",
+          options.requestId
+        ),
+      });
+      void MaintenanceService.updateMaintenance(bundle.maintenance.id, {
+        operationalEventId: event.id,
+      }).catch((patchError) => {
+        console.error("[requestTreatment] maintenance event id patch failed", {
+          maintenanceId: bundle.maintenance.id,
+          error:
+            patchError instanceof Error
+              ? patchError.message
+              : String(patchError),
+        });
+      });
+    } catch (eventError) {
+      console.error("[requestTreatment] maintenance event failed", {
+        maintenanceId: bundle.maintenance.id,
+        error:
+          eventError instanceof Error ? eventError.message : String(eventError),
+      });
+    }
 
     try {
       await emitActionEvent(options.context, {
         eventType: OperationalEventTypes.FACILITY_REQUEST_MAINTENANCE_CREATED,
         entityType: "request",
-        entityId: updated.id,
+        entityId: bundle.request.id,
         data: {
-          requestId: updated.id,
-          maintenanceId: maintenance.id,
+          requestId: bundle.request.id,
+          maintenanceId: bundle.maintenance.id,
           actor: options.context.userId,
         },
       });
@@ -306,21 +202,19 @@ export async function orchestrateCreateMaintenanceFromRequest(options: {
           eventError instanceof Error ? eventError.message : String(eventError),
       });
     }
+  }
 
-    return { request: updated, maintenance };
-  } catch (error) {
-    await compensateClearMaintenanceSource(maintenance.id, request.id);
-    if (error instanceof ActionError) throw error;
-    const detail =
-      error instanceof Error && error.message.trim()
-        ? error.message.trim()
-        : "unknown error";
-    throw new ActionError(
-      "INTERNAL_ERROR",
-      `Maintenance ${maintenance.id} was created but Request link failed (${detail}). Child sourceRequestId was cleared.`,
-      { cause: error }
+  if (process.env.NODE_ENV !== "production") {
+    console.info(
+      `[create-treatment.write.timing] kind=maintenance appsScriptCalls=${appsScriptCalls} requestId=${bundle.request.id} childId=${bundle.maintenance.id} idempotent=${bundle.idempotent ? 1 : 0}`
     );
   }
+
+  return {
+    request: bundle.request,
+    maintenance: bundle.maintenance,
+    _appsScriptCalls: appsScriptCalls,
+  };
 }
 
 export async function orchestrateCreateIncidentFromRequest(options: {
@@ -329,8 +223,7 @@ export async function orchestrateCreateIncidentFromRequest(options: {
   idempotencyKey: string;
   context: ActionContext;
 }): Promise<RequestTreatmentResult> {
-  const request = await loadRequestOrThrow(options.requestId);
-  assertRequestTreatable(request);
+  let appsScriptCalls = 0;
 
   const idempotencyKey = options.idempotencyKey.trim();
   if (!idempotencyKey) {
@@ -343,52 +236,108 @@ export async function orchestrateCreateIncidentFromRequest(options: {
   const writeInput: CreateIncidentInput = {
     ...options.input,
     source: options.input.source ?? "request",
-    sourceRequestId: request.id,
+    sourceRequestId: options.requestId,
     createdByUserId: options.context.userId,
     updatedByUserId: options.context.userId,
   };
 
-  const incident = await runExclusiveOperationalAction({
+  type Bundle = {
+    request: RequestRecord;
+    incident: Incident;
+    idempotent: boolean;
+  };
+
+  const invokeCreateTreatment = async (): Promise<Bundle> => {
+    appsScriptCalls += 1;
+    try {
+      const result = await RequestService.createTreatment({
+        kind: "incident",
+        requestId: options.requestId,
+        childInput: writeInput,
+        idempotencyKey,
+        actorUserId: options.context.userId,
+      });
+      if (!result.incident) {
+        throw new ActionError(
+          "INTERNAL_ERROR",
+          "createTreatment did not return incident."
+        );
+      }
+      return {
+        request: result.request,
+        incident: result.incident,
+        idempotent: result.idempotent,
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message.trim()
+          : "createTreatment failed";
+      if (/cannot receive treatment/i.test(message) || /not found/i.test(message) || /Facility mismatch/i.test(message) || /idempotencyKey is required/i.test(message)) {
+        throw new ActionError("VALIDATION_ERROR", message, { cause: error });
+      }
+      throw new ActionError("INTERNAL_ERROR", message, { cause: error });
+    }
+  };
+
+  const bundle = await runExclusiveOperationalAction({
     organisationId: options.context.organisation.id,
-    scopeKey: requestCreateIncidentLeaseKey(request.id, idempotencyKey),
+    scopeKey: requestCreateIncidentLeaseKey(options.requestId, idempotencyKey),
     actorProfileId: options.context.userId,
     entityType: "incident",
     recoverExisting: async () => null,
-    loadByEntityId: async (entityId) => {
-      const row = await IncidentService.getIncident(entityId);
-      if (!row) return null;
-      return { entityId: row.id, value: row };
+    loadByEntityId: async () => {
+      const recovered = await invokeCreateTreatment();
+      return { entityId: recovered.incident.id, value: recovered };
     },
     create: async () => {
-      const created = await createIncidentChild(
-        writeInput,
-        options.context,
-        request.id
-      );
-      return { entityId: created.id, value: created };
+      const created = await invokeCreateTreatment();
+      return { entityId: created.incident.id, value: created };
     },
   });
 
-  if ((request.incidentIds ?? []).includes(incident.id)) {
-    const fresh = await loadRequestOrThrow(request.id);
-    return { request: fresh, incident };
-  }
-
-  try {
-    const updated = await appendIncidentLink(
-      await loadRequestOrThrow(request.id),
-      incident.id,
-      options.context.userId
-    );
+  if (!bundle.idempotent) {
+    try {
+      const event = await emitActionEvent(options.context, {
+        eventType: OperationalEventTypes.FACILITY_INCIDENT_REPORTED,
+        entityType: "incident",
+        entityId: bundle.incident.id,
+        data: withIntakeMetadata(
+          incidentEventData(bundle.incident, {
+            actor: options.context.userId,
+            transitionSource: "specialised_action",
+          }),
+          "staff",
+          options.requestId
+        ),
+      });
+      void IncidentService.updateIncident(bundle.incident.id, {
+        operationalEventId: event.id,
+      }).catch((patchError) => {
+        console.error("[requestTreatment] incident event id patch failed", {
+          incidentId: bundle.incident.id,
+          error:
+            patchError instanceof Error
+              ? patchError.message
+              : String(patchError),
+        });
+      });
+    } catch (eventError) {
+      console.error("[requestTreatment] incident event failed", {
+        incidentId: bundle.incident.id,
+        error:
+          eventError instanceof Error ? eventError.message : String(eventError),
+      });
+    }
 
     try {
       await emitActionEvent(options.context, {
         eventType: OperationalEventTypes.FACILITY_REQUEST_INCIDENT_CREATED,
         entityType: "request",
-        entityId: updated.id,
+        entityId: bundle.request.id,
         data: {
-          requestId: updated.id,
-          incidentId: incident.id,
+          requestId: bundle.request.id,
+          incidentId: bundle.incident.id,
           actor: options.context.userId,
         },
       });
@@ -398,21 +347,19 @@ export async function orchestrateCreateIncidentFromRequest(options: {
           eventError instanceof Error ? eventError.message : String(eventError),
       });
     }
+  }
 
-    return { request: updated, incident };
-  } catch (error) {
-    await compensateClearIncidentSource(incident.id, request.id);
-    if (error instanceof ActionError) throw error;
-    const detail =
-      error instanceof Error && error.message.trim()
-        ? error.message.trim()
-        : "unknown error";
-    throw new ActionError(
-      "INTERNAL_ERROR",
-      `Incident ${incident.id} was created but Request link failed (${detail}). Child sourceRequestId was cleared.`,
-      { cause: error }
+  if (process.env.NODE_ENV !== "production") {
+    console.info(
+      `[create-treatment.write.timing] kind=incident appsScriptCalls=${appsScriptCalls} requestId=${bundle.request.id} childId=${bundle.incident.id} idempotent=${bundle.idempotent ? 1 : 0}`
     );
   }
+
+  return {
+    request: bundle.request,
+    incident: bundle.incident,
+    _appsScriptCalls: appsScriptCalls,
+  };
 }
 
 export async function orchestrateLinkMaintenanceToRequest(options: {
@@ -426,189 +373,84 @@ export async function orchestrateLinkMaintenanceToRequest(options: {
   }
 
   let appsScriptCalls = 0;
-  const getRequest = async (id: string) => {
-    appsScriptCalls += 1;
-    return loadRequestOrThrow(id);
-  };
-  const getChild = async (id: string) => {
-    appsScriptCalls += 1;
-    return MaintenanceService.getMaintenance(id);
-  };
-  const writeChild = async (
-    id: string,
-    input: Parameters<typeof MaintenanceService.updateMaintenance>[1]
-  ) => {
-    appsScriptCalls += 1;
-    return MaintenanceService.updateMaintenance(id, input);
-  };
-  const writeRequestAppend = async (
-    request: RequestRecord,
-    childId: string,
-    actorUserId: string
-  ) => {
-    appsScriptCalls += 1;
-    return appendMaintenanceLink(request, childId, actorUserId);
+
+  type Bundle = {
+    request: RequestRecord;
+    maintenance: Maintenance;
+    idempotent: boolean;
   };
 
-  // Independent reads — one RTT. Establishes treatability + early idempotent/conflict.
-  const [request, primedChild] = await Promise.all([
-    getRequest(options.requestId),
-    getChild(maintenanceId),
-  ]);
-  assertRequestTreatable(request);
-  if (!primedChild) {
-    throw new ActionError(
-      "VALIDATION_ERROR",
-      `Maintenance ${maintenanceId} not found.`
-    );
-  }
-
-  // Early conflict (authoritative child from this action — not client catalogue).
-  assertChildLinkable(
-    primedChild.sourceRequestId,
-    request.id,
-    primedChild.id
-  );
-
-  if (
-    primedChild.sourceRequestId === request.id &&
-    (request.maintenanceIds ?? []).includes(maintenanceId)
-  ) {
-    return {
-      request,
-      maintenance: primedChild,
-      _appsScriptCalls: appsScriptCalls,
-    };
-  }
-
-  /** Request row returned by reverse-link write — avoids a final getById. */
-  let linkedRequest: RequestRecord | null = null;
-  /** recoverExisting invocation count inside the lease helper. */
-  let recoverPass = 0;
-
-  const result = await runExclusiveOperationalAction({
-    organisationId: options.context.organisation.id,
-    scopeKey: requestLinkMaintenanceLeaseKey(request.id, maintenanceId),
-    actorProfileId: options.context.userId,
-    entityType: "maintenance",
-    recoverExisting: async () => {
-      recoverPass += 1;
-
-      // Pass 1 (pre-lease): reuse primed reads — 0 AS when not already linked to us.
-      if (recoverPass === 1) {
-        if (primedChild.sourceRequestId !== request.id) return null;
-        const freshReq = await getRequest(request.id);
-        if ((freshReq.maintenanceIds ?? []).includes(maintenanceId)) {
-          linkedRequest = freshReq;
-          return { entityId: primedChild.id, value: primedChild };
-        }
-        return null;
-      }
-
-      // Pass 2 (post-claim on happy path): create() does the authoritative get.
-      // Orphan/idempotent repair is handled there; skipping avoids a duplicate get.
-      if (recoverPass === 2) {
-        return null;
-      }
-
-      // Pass 3+ (wait / takeover / contention): full Sheets recover.
-      const child = await getChild(maintenanceId);
-      if (!child) return null;
-      if (child.sourceRequestId !== request.id) return null;
-      const freshReq = await getRequest(request.id);
-      if ((freshReq.maintenanceIds ?? []).includes(maintenanceId)) {
-        linkedRequest = freshReq;
-        return { entityId: child.id, value: child };
-      }
-      return null;
-    },
-    loadByEntityId: async (entityId) => {
-      const row = await getChild(entityId);
-      if (!row) return null;
-      return { entityId: row.id, value: row };
-    },
-    create: async () => {
-      // Authoritative re-read immediately before mutation (conflict protection).
-      const child = await getChild(maintenanceId);
-      if (!child) {
+  const invokeLinkTreatment = async (): Promise<Bundle> => {
+    appsScriptCalls += 1;
+    try {
+      const result = await RequestService.linkTreatment({
+        kind: "maintenance",
+        requestId: options.requestId,
+        childId: maintenanceId,
+        actorUserId: options.context.userId,
+      });
+      if (!result.maintenance) {
         throw new ActionError(
-          "VALIDATION_ERROR",
-          `Maintenance ${maintenanceId} not found.`
+          "INTERNAL_ERROR",
+          "linkTreatment did not return maintenance."
         );
       }
+      return {
+        request: result.request,
+        maintenance: result.maintenance,
+        idempotent: result.idempotent,
+      };
+    } catch (error) {
+      if (error instanceof ActionError) throw error;
+      mapLinkAppsScriptError(error);
+    }
+  };
 
-      const linkState = assertChildLinkable(
-        child.sourceRequestId,
-        request.id,
-        child.id
-      );
-
-      // Child.sourceRequestId first — update response is authoritative (no re-get).
-      let linked = child;
-      if (linkState === "linkable") {
-        linked = await writeChild(child.id, {
-          sourceRequestId: request.id,
-          updatedByUserId: options.context.userId,
-        });
-      }
-
-      // Fresh Request required before reverse-link (concurrent other links may append).
-      const freshReq = await getRequest(request.id);
-      if (!(freshReq.maintenanceIds ?? []).includes(child.id)) {
-        try {
-          linkedRequest = await writeRequestAppend(
-            freshReq,
-            child.id,
-            options.context.userId
-          );
-        } catch (error) {
-          if (linkState === "linkable") {
-            appsScriptCalls += 1;
-            await compensateClearMaintenanceSource(child.id, request.id);
-          }
-          throw error instanceof ActionError
-            ? error
-            : new ActionError(
-                "INTERNAL_ERROR",
-                `Failed to append ${child.id} on Request after setting sourceRequestId.`,
-                { cause: error }
-              );
-        }
-      } else {
-        linkedRequest = freshReq;
-      }
-
-      return { entityId: linked.id, value: linked };
+  const bundle = await runExclusiveOperationalAction({
+    organisationId: options.context.organisation.id,
+    scopeKey: requestLinkMaintenanceLeaseKey(
+      options.requestId,
+      maintenanceId
+    ),
+    actorProfileId: options.context.userId,
+    entityType: "maintenance",
+    recoverExisting: async () => null,
+    loadByEntityId: async () => {
+      const recovered = await invokeLinkTreatment();
+      return { entityId: recovered.maintenance.id, value: recovered };
+    },
+    create: async () => {
+      const created = await invokeLinkTreatment();
+      return { entityId: created.maintenance.id, value: created };
     },
   });
 
-  const updated =
-    linkedRequest ?? (await getRequest(request.id));
-
-  try {
-    await emitActionEvent(options.context, {
-      eventType: OperationalEventTypes.FACILITY_REQUEST_MAINTENANCE_LINKED,
-      entityType: "request",
-      entityId: updated.id,
-      data: {
-        requestId: updated.id,
-        maintenanceId: result.id,
-        actor: options.context.userId,
-      },
-    });
-  } catch {
-    // non-blocking — Supabase, not Apps Script
+  if (!bundle.idempotent) {
+    try {
+      await emitActionEvent(options.context, {
+        eventType: OperationalEventTypes.FACILITY_REQUEST_MAINTENANCE_LINKED,
+        entityType: "request",
+        entityId: bundle.request.id,
+        data: {
+          requestId: bundle.request.id,
+          maintenanceId: bundle.maintenance.id,
+          actor: options.context.userId,
+        },
+      });
+    } catch {
+      // non-blocking — Supabase, not Apps Script
+    }
   }
 
   if (process.env.NODE_ENV !== "production") {
     console.info(
-      `[link-treatment.write.timing] kind=maintenance appsScriptCalls=${appsScriptCalls} requestId=${request.id} childId=${result.id}`
+      `[link-treatment.write.timing] kind=maintenance appsScriptCalls=${appsScriptCalls} requestId=${bundle.request.id} childId=${bundle.maintenance.id} idempotent=${bundle.idempotent ? 1 : 0}`
     );
   }
 
   return {
-    request: updated,
-    maintenance: result,
+    request: bundle.request,
+    maintenance: bundle.maintenance,
     _appsScriptCalls: appsScriptCalls,
   };
 }
@@ -624,174 +466,81 @@ export async function orchestrateLinkIncidentToRequest(options: {
   }
 
   let appsScriptCalls = 0;
-  const getRequest = async (id: string) => {
-    appsScriptCalls += 1;
-    return loadRequestOrThrow(id);
-  };
-  const getChild = async (id: string) => {
-    appsScriptCalls += 1;
-    return IncidentService.getIncident(id);
-  };
-  const writeChild = async (
-    id: string,
-    input: Parameters<typeof IncidentService.updateIncident>[1]
-  ) => {
-    appsScriptCalls += 1;
-    return IncidentService.updateIncident(id, input);
-  };
-  const writeRequestAppend = async (
-    request: RequestRecord,
-    childId: string,
-    actorUserId: string
-  ) => {
-    appsScriptCalls += 1;
-    return appendIncidentLink(request, childId, actorUserId);
+
+  type Bundle = {
+    request: RequestRecord;
+    incident: Incident;
+    idempotent: boolean;
   };
 
-  const [request, primedChild] = await Promise.all([
-    getRequest(options.requestId),
-    getChild(incidentId),
-  ]);
-  assertRequestTreatable(request);
-  if (!primedChild) {
-    throw new ActionError(
-      "VALIDATION_ERROR",
-      `Incident ${incidentId} not found.`
-    );
-  }
-
-  assertChildLinkable(primedChild.sourceRequestId, request.id, primedChild.id);
-
-  if (
-    primedChild.sourceRequestId === request.id &&
-    (request.incidentIds ?? []).includes(incidentId)
-  ) {
-    return {
-      request,
-      incident: primedChild,
-      _appsScriptCalls: appsScriptCalls,
-    };
-  }
-
-  let linkedRequest: RequestRecord | null = null;
-  let recoverPass = 0;
-
-  const result = await runExclusiveOperationalAction({
-    organisationId: options.context.organisation.id,
-    scopeKey: requestLinkIncidentLeaseKey(request.id, incidentId),
-    actorProfileId: options.context.userId,
-    entityType: "incident",
-    recoverExisting: async () => {
-      recoverPass += 1;
-
-      if (recoverPass === 1) {
-        if (primedChild.sourceRequestId !== request.id) return null;
-        const freshReq = await getRequest(request.id);
-        if ((freshReq.incidentIds ?? []).includes(incidentId)) {
-          linkedRequest = freshReq;
-          return { entityId: primedChild.id, value: primedChild };
-        }
-        return null;
-      }
-
-      if (recoverPass === 2) {
-        return null;
-      }
-
-      const child = await getChild(incidentId);
-      if (!child) return null;
-      if (child.sourceRequestId !== request.id) return null;
-      const freshReq = await getRequest(request.id);
-      if ((freshReq.incidentIds ?? []).includes(incidentId)) {
-        linkedRequest = freshReq;
-        return { entityId: child.id, value: child };
-      }
-      return null;
-    },
-    loadByEntityId: async (entityId) => {
-      const row = await getChild(entityId);
-      if (!row) return null;
-      return { entityId: row.id, value: row };
-    },
-    create: async () => {
-      const child = await getChild(incidentId);
-      if (!child) {
+  const invokeLinkTreatment = async (): Promise<Bundle> => {
+    appsScriptCalls += 1;
+    try {
+      const result = await RequestService.linkTreatment({
+        kind: "incident",
+        requestId: options.requestId,
+        childId: incidentId,
+        actorUserId: options.context.userId,
+      });
+      if (!result.incident) {
         throw new ActionError(
-          "VALIDATION_ERROR",
-          `Incident ${incidentId} not found.`
+          "INTERNAL_ERROR",
+          "linkTreatment did not return incident."
         );
       }
+      return {
+        request: result.request,
+        incident: result.incident,
+        idempotent: result.idempotent,
+      };
+    } catch (error) {
+      if (error instanceof ActionError) throw error;
+      mapLinkAppsScriptError(error);
+    }
+  };
 
-      const linkState = assertChildLinkable(
-        child.sourceRequestId,
-        request.id,
-        child.id
-      );
-
-      let linked = child;
-      if (linkState === "linkable") {
-        linked = await writeChild(child.id, {
-          sourceRequestId: request.id,
-          updatedByUserId: options.context.userId,
-        });
-      }
-
-      const freshReq = await getRequest(request.id);
-      if (!(freshReq.incidentIds ?? []).includes(child.id)) {
-        try {
-          linkedRequest = await writeRequestAppend(
-            freshReq,
-            child.id,
-            options.context.userId
-          );
-        } catch (error) {
-          if (linkState === "linkable") {
-            appsScriptCalls += 1;
-            await compensateClearIncidentSource(child.id, request.id);
-          }
-          throw error instanceof ActionError
-            ? error
-            : new ActionError(
-                "INTERNAL_ERROR",
-                `Failed to append ${child.id} on Request after setting sourceRequestId.`,
-                { cause: error }
-              );
-        }
-      } else {
-        linkedRequest = freshReq;
-      }
-
-      return { entityId: linked.id, value: linked };
+  const bundle = await runExclusiveOperationalAction({
+    organisationId: options.context.organisation.id,
+    scopeKey: requestLinkIncidentLeaseKey(options.requestId, incidentId),
+    actorProfileId: options.context.userId,
+    entityType: "incident",
+    recoverExisting: async () => null,
+    loadByEntityId: async () => {
+      const recovered = await invokeLinkTreatment();
+      return { entityId: recovered.incident.id, value: recovered };
+    },
+    create: async () => {
+      const created = await invokeLinkTreatment();
+      return { entityId: created.incident.id, value: created };
     },
   });
 
-  const updated =
-    linkedRequest ?? (await getRequest(request.id));
-
-  try {
-    await emitActionEvent(options.context, {
-      eventType: OperationalEventTypes.FACILITY_REQUEST_INCIDENT_LINKED,
-      entityType: "request",
-      entityId: updated.id,
-      data: {
-        requestId: updated.id,
-        incidentId: result.id,
-        actor: options.context.userId,
-      },
-    });
-  } catch {
-    // non-blocking
+  if (!bundle.idempotent) {
+    try {
+      await emitActionEvent(options.context, {
+        eventType: OperationalEventTypes.FACILITY_REQUEST_INCIDENT_LINKED,
+        entityType: "request",
+        entityId: bundle.request.id,
+        data: {
+          requestId: bundle.request.id,
+          incidentId: bundle.incident.id,
+          actor: options.context.userId,
+        },
+      });
+    } catch {
+      // non-blocking
+    }
   }
 
   if (process.env.NODE_ENV !== "production") {
     console.info(
-      `[link-treatment.write.timing] kind=incident appsScriptCalls=${appsScriptCalls} requestId=${request.id} childId=${result.id}`
+      `[link-treatment.write.timing] kind=incident appsScriptCalls=${appsScriptCalls} requestId=${bundle.request.id} childId=${bundle.incident.id} idempotent=${bundle.idempotent ? 1 : 0}`
     );
   }
 
   return {
-    request: updated,
-    incident: result,
+    request: bundle.request,
+    incident: bundle.incident,
     _appsScriptCalls: appsScriptCalls,
   };
 }

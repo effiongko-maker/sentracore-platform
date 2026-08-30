@@ -54,3 +54,19 @@ export {
   synthesiseOperationalStories,
   type OperationalStory,
 } from "./synthesis";
+
+export type {
+  InsightConfidence,
+  InsightEvidenceItem,
+  InsightOutcomeStatus,
+  InsightReasoningType,
+  InsightRelatedEntity,
+  InsightSuggestedAction,
+  IntelligenceInsight,
+  OrganisationInsightBundle,
+} from "./insights/types";
+
+export {
+  synthesizeInsightReasoning,
+  reasoningLayersAreDistinct,
+} from "./insights/synthesizeInsightReasoning";

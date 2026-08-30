@@ -362,6 +362,11 @@ async function loadAllMaintenanceCatalog(): Promise<MaintenanceCatalogEntry[]> {
  * Talks only to ApiClient. Mirrors IncidentService / WorkOrderService.
  */
 export const MaintenanceService = {
+  /** Map an Apps Script maintenance row (shared by createTreatment). */
+  fromAppsScriptRow(raw: unknown): Maintenance {
+    return mapRemoteMaintenance(raw as RemoteMaintenance);
+  },
+
   async listMaintenance(
     params: MaintenanceListParams = {}
   ): Promise<PaginatedResult<Maintenance>> {

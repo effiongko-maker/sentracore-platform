@@ -1,5 +1,10 @@
 import { parseIdList } from "@/lib/operational/idLists";
 import type { PaginatedResult } from "@/types";
+import type { CreateIncidentInput, Incident } from "@/modules/incidents/types";
+import type {
+  CreateMaintenanceInput,
+  Maintenance,
+} from "@/modules/maintenance/types";
 import type {
   CreateRequestInput,
   RequestListParams,
@@ -16,12 +21,29 @@ import {
 } from "@/services/api/appsScriptProxy";
 import {
   CacheNamespaces,
+  onIncidentMutation,
+  onMaintenanceMutation,
   onRequestMutation,
 } from "@/services/cache/domainCache";
 import {
   sharedRequest,
   stableRequestKey,
 } from "@/services/cache/sharedRequest";
+import { IncidentService } from "@/services/incidents/IncidentService";
+import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
+
+export type CreateTreatmentKind = "maintenance" | "incident";
+
+export type CreateTreatmentResult = {
+  kind: CreateTreatmentKind;
+  idempotent: boolean;
+  idempotencyKey: string;
+  request: RequestRecord;
+  maintenance?: Maintenance;
+  incident?: Incident;
+  timings?: Record<string, unknown>;
+  buildMarker?: string;
+};
 
 type RemoteRequest = Record<string, unknown>;
 
@@ -321,5 +343,159 @@ export const RequestService = {
     });
     onRequestMutation();
     return mapRemoteRequest(response.data as RemoteRequest);
+  },
+
+  /**
+   * Consolidated Create-from-Request mutation (1 Apps Script invocation).
+   * Server-only — auth/lease/events stay in Next.js orchestration.
+   */
+  async createTreatment(input: {
+    kind: CreateTreatmentKind;
+    requestId: string;
+    childInput: CreateMaintenanceInput | CreateIncidentInput;
+    idempotencyKey: string;
+    actorUserId?: string;
+  }): Promise<CreateTreatmentResult> {
+    if (typeof window !== "undefined") {
+      throw new ApiError(
+        "createTreatment is server-only.",
+        403
+      );
+    }
+
+    const row = await postToAppsScriptData(
+      {
+        resource: "requests",
+        action: "createTreatment",
+        payload: {
+          kind: input.kind,
+          requestId: input.requestId,
+          childInput: input.childInput,
+          idempotencyKey: input.idempotencyKey,
+          actorUserId: input.actorUserId,
+        },
+      },
+      { resource: "requests", action: "createTreatment" },
+      "RequestService.createTreatment"
+    );
+
+    if (!row || typeof row !== "object") {
+      throw new ApiError("createTreatment returned empty data", 500, row);
+    }
+
+    const data = row as Record<string, unknown>;
+    const requestRaw = data.request;
+    if (!requestRaw || typeof requestRaw !== "object") {
+      throw new ApiError("createTreatment missing request", 500, row);
+    }
+
+    const request = mapRemoteRequest(requestRaw as RemoteRequest);
+    const kind = (String(data.kind || input.kind) as CreateTreatmentKind);
+    const result: CreateTreatmentResult = {
+      kind,
+      idempotent: data.idempotent === true,
+      idempotencyKey: String(data.idempotencyKey ?? input.idempotencyKey),
+      request,
+      timings:
+        data.timings && typeof data.timings === "object"
+          ? (data.timings as Record<string, unknown>)
+          : undefined,
+      buildMarker:
+        data.buildMarker != null ? String(data.buildMarker) : undefined,
+    };
+
+    if (kind === "maintenance") {
+      if (!data.maintenance || typeof data.maintenance !== "object") {
+        throw new ApiError("createTreatment missing maintenance", 500, row);
+      }
+      result.maintenance = MaintenanceService.fromAppsScriptRow(
+        data.maintenance
+      );
+      onMaintenanceMutation();
+    } else {
+      if (!data.incident || typeof data.incident !== "object") {
+        throw new ApiError("createTreatment missing incident", 500, row);
+      }
+      result.incident = IncidentService.fromAppsScriptRow(data.incident);
+      onIncidentMutation();
+    }
+
+    onRequestMutation();
+    return result;
+  },
+
+  /**
+   * Consolidated Link-to-Request mutation (1 Apps Script invocation).
+   * Server-only — auth/lease/events stay in Next.js orchestration.
+   * Idempotency is state-based in Apps Script (sourceRequestId + appendUnique).
+   */
+  async linkTreatment(input: {
+    kind: CreateTreatmentKind;
+    requestId: string;
+    childId: string;
+    actorUserId?: string;
+  }): Promise<CreateTreatmentResult> {
+    if (typeof window !== "undefined") {
+      throw new ApiError("linkTreatment is server-only.", 403);
+    }
+
+    const row = await postToAppsScriptData(
+      {
+        resource: "requests",
+        action: "linkTreatment",
+        payload: {
+          kind: input.kind,
+          requestId: input.requestId,
+          childId: input.childId,
+          actorUserId: input.actorUserId,
+        },
+      },
+      { resource: "requests", action: "linkTreatment" },
+      "RequestService.linkTreatment"
+    );
+
+    if (!row || typeof row !== "object") {
+      throw new ApiError("linkTreatment returned empty data", 500, row);
+    }
+
+    const data = row as Record<string, unknown>;
+    const requestRaw = data.request;
+    if (!requestRaw || typeof requestRaw !== "object") {
+      throw new ApiError("linkTreatment missing request", 500, row);
+    }
+
+    const request = mapRemoteRequest(requestRaw as RemoteRequest);
+    const kind = String(data.kind || input.kind) as CreateTreatmentKind;
+    const result: CreateTreatmentResult = {
+      kind,
+      idempotent: data.idempotent === true,
+      idempotencyKey: String(data.idempotencyKey ?? ""),
+      request,
+      timings:
+        data.timings && typeof data.timings === "object"
+          ? (data.timings as Record<string, unknown>)
+          : undefined,
+      buildMarker:
+        data.buildMarker != null ? String(data.buildMarker) : undefined,
+    };
+
+    if (kind === "maintenance") {
+      if (!data.maintenance || typeof data.maintenance !== "object") {
+        throw new ApiError("linkTreatment missing maintenance", 500, row);
+      }
+      result.maintenance = MaintenanceService.fromAppsScriptRow(
+        data.maintenance
+      );
+      onMaintenanceMutation();
+    } else {
+      if (!data.incident || typeof data.incident !== "object") {
+        throw new ApiError("linkTreatment missing incident", 500, row);
+      }
+      result.incident = IncidentService.fromAppsScriptRow(data.incident);
+      onIncidentMutation();
+    }
+
+    onRequestMutation();
+    return result;
   },
 };

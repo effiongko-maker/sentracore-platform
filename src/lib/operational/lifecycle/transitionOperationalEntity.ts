@@ -9,6 +9,7 @@ import {
   mapStatusToLifecycleEvent,
   type LifecycleEntityType,
 } from "@/lib/operational/lifecycle/mapStatusTransition";
+import { evaluateRequestAfterTreatmentCompletion } from "@/lib/operational/orchestration/evaluateRequestAfterTreatment";
 import { IncidentService } from "@/services/incidents/IncidentService";
 import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
@@ -122,6 +123,25 @@ export async function transitionIncident(options: {
     });
   }
 
+  if (entity.status === "resolved" && entity.sourceRequestId?.trim()) {
+    try {
+      await evaluateRequestAfterTreatmentCompletion({
+        sourceRequestId: entity.sourceRequestId,
+        context: options.context,
+      });
+    } catch (evalError) {
+      console.error(
+        "[transitionIncident] request auto-resolve evaluation failed",
+        {
+          incidentId: entity.id,
+          sourceRequestId: entity.sourceRequestId,
+          error:
+            evalError instanceof Error ? evalError.message : String(evalError),
+        }
+      );
+    }
+  }
+
   return {
     entity,
     statusChanged,
@@ -175,6 +195,25 @@ export async function transitionMaintenance(options: {
         transitionExtras(options.context, previousStatus, nextStatus, source)
       ),
     });
+  }
+
+  if (entity.status === "completed" && entity.sourceRequestId?.trim()) {
+    try {
+      await evaluateRequestAfterTreatmentCompletion({
+        sourceRequestId: entity.sourceRequestId,
+        context: options.context,
+      });
+    } catch (evalError) {
+      console.error(
+        "[transitionMaintenance] request auto-resolve evaluation failed",
+        {
+          maintenanceId: entity.id,
+          sourceRequestId: entity.sourceRequestId,
+          error:
+            evalError instanceof Error ? evalError.message : String(evalError),
+        }
+      );
+    }
   }
 
   return {

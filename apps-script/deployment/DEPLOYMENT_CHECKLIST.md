@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Release: **v0.7.0** — Phase 2 Request Treatment (REQ → MNT/INC)
+Release: **v0.7.4** — Phase 2.8 production linkTreatment (Link only)
 
 Use this checklist with `DEPLOYMENT_PACK.md` open. Someone unfamiliar
 with the project should be able to deploy from these steps alone.
@@ -54,6 +54,9 @@ Current pack file list:
 - [ ] `RequestRepository.gs`
 - [ ] `RequestsController.gs`
 - [ ] `RequestService.gs`
+- [ ] `RequestTreatmentLinkSpike.gs`
+- [ ] `RequestTreatmentMutationSpike.gs`
+- [ ] `RequestTreatmentService.gs`
 - [ ] `SheetFieldUtils.gs`
 - [ ] `UserRepository.gs`
 - [ ] `UsersController.gs`
@@ -110,6 +113,9 @@ For each file that already exists in Apps Script, **replace the entire contents*
 - [ ] Replace `RequestRepository.gs`
 - [ ] Replace `RequestsController.gs`
 - [ ] Replace `RequestService.gs`
+- [ ] Replace `RequestTreatmentLinkSpike.gs`
+- [ ] Replace `RequestTreatmentMutationSpike.gs`
+- [ ] Replace `RequestTreatmentService.gs`
 - [ ] Replace `SheetFieldUtils.gs`
 - [ ] Replace `UserRepository.gs`
 - [ ] Replace `UsersController.gs`
@@ -155,7 +161,7 @@ Trigger installation is not required for this release.
 
 ## 5. Web App deployment
 
-Web App redeploy is not required for this release.
+A **new Web App version** is REQUIRED.
 
 - [ ] Deploy → Manage deployments → Edit (pencil) → **New version** → Deploy.
 - [ ] Keep the same `/exec` URL unless intentionally rotating credentials.
@@ -168,22 +174,16 @@ Web App redeploy is not required for this release.
 
 With `npm run dev` running:
 
-### Request treatment persistence contract
+### Phase 2.8 browser link treatment
 
 ```bash
-node scripts/smoke-request-treatment-contract.cjs
+node scripts/verify-phase28-link-treatment.cjs
 ```
 
-### Location catalog Facility contract
+### Phase 2.6 browser create treatment
 
 ```bash
-node scripts/smoke-location-catalog-contract.cjs
-```
-
-### UI treatment hub
-
-```bash
-Open /requests → View → Create Maintenance → assert MNT.sourceRequestId and REQ.maintenanceIds
+node scripts/verify-phase26-create-treatment.cjs
 ```
 
 Expected checks:

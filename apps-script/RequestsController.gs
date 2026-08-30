@@ -44,6 +44,20 @@ var RequestsController = (function () {
             RequestService.deactivate(payload)
           );
 
+        case "createTreatment":
+          return jsonResponse_(
+            true,
+            "Treatment mutation completed.",
+            RequestTreatmentService.createTreatment(payload)
+          );
+
+        case "linkTreatment":
+          return jsonResponse_(
+            true,
+            "Link treatment mutation completed.",
+            RequestTreatmentService.linkTreatment(payload)
+          );
+
         default:
           return jsonResponse_(
             false,

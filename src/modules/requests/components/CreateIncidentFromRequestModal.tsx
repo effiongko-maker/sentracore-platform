@@ -17,6 +17,7 @@ import type { CreateIncidentInput } from "@/modules/incidents/types";
 import { labelize } from "@/modules/incidents/utils";
 import { createIncidentFromRequest } from "../actions/treatRequest";
 import { mapRequestToIncidentSeed } from "../treatment/mapRequestToTreatment";
+import type { RequestTreatmentResult } from "../treatment/resultTypes";
 import { toDatetimeLocalValue } from "../utils";
 import type { RequestRecord } from "../types";
 
@@ -24,7 +25,7 @@ interface CreateIncidentFromRequestModalProps {
   open: boolean;
   request: RequestRecord;
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (result: RequestTreatmentResult) => void;
 }
 
 export function CreateIncidentFromRequestModal({
@@ -89,7 +90,7 @@ export function CreateIncidentFromRequestModal({
         title: "Incident created",
         description: `${result.data.incident?.id} linked to ${request.id}.`,
       });
-      onCreated();
+      onCreated(result.data);
       onClose();
     } catch (err) {
       toast({

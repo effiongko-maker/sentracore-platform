@@ -1,6 +1,5 @@
 import {
   AlertTriangle,
-  BarChart3,
   Building2,
   ClipboardList,
   Database,
@@ -59,13 +58,6 @@ export const OPERATING_LAYERS: OperatingLayer[] = [
         icon: ScanSearch,
         title: "Intelligence",
         description: "What the organisation is telling you",
-      }),
-      fm({
-        label: "Dashboard",
-        href: "/dashboards",
-        icon: BarChart3,
-        title: "Dashboard",
-        description: "Current operational state",
       }),
       fm({
         label: "Reports",

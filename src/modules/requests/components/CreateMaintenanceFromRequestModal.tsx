@@ -17,6 +17,7 @@ import type { CreateMaintenanceInput } from "@/modules/maintenance/types";
 import { labelize } from "@/modules/maintenance/utils";
 import { createMaintenanceFromRequest } from "../actions/treatRequest";
 import { mapRequestToMaintenanceSeed } from "../treatment/mapRequestToTreatment";
+import type { RequestTreatmentResult } from "../treatment/resultTypes";
 import { toDatetimeLocalValue } from "../utils";
 import type { RequestRecord } from "../types";
 
@@ -24,7 +25,7 @@ interface CreateMaintenanceFromRequestModalProps {
   open: boolean;
   request: RequestRecord;
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (result: RequestTreatmentResult) => void;
 }
 
 export function CreateMaintenanceFromRequestModal({
@@ -85,7 +86,7 @@ export function CreateMaintenanceFromRequestModal({
         title: "Maintenance created",
         description: `${result.data.maintenance?.id} linked to ${request.id}.`,
       });
-      onCreated();
+      onCreated(result.data);
       onClose();
     } catch (err) {
       toast({

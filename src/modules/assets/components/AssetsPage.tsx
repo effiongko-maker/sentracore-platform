@@ -1,7 +1,7 @@
 "use client";
 
 import { Package } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ExploreHeader,
   ModeFrame,
@@ -10,8 +10,10 @@ import {
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
+import { useQueryRecordId } from "@/hooks/useQueryRecordId";
 import { useAssets } from "../hooks/useAssets";
 import type { AssetModalState } from "../types";
+import { AssetService } from "../services/AssetService";
 import { AssetFormModal } from "./AssetFormModal";
 import { AssetsTable } from "./AssetsTable";
 import { AssetsToolbar } from "./AssetsToolbar";
@@ -19,6 +21,7 @@ import { ViewAssetModal } from "./ViewAssetModal";
 
 export function AssetsPage() {
   const { toast } = useToast();
+  const openId = useQueryRecordId();
   const {
     assets,
     loading,
@@ -45,6 +48,21 @@ export function AssetsPage() {
 
   const [modal, setModal] = useState<AssetModalState>({ type: "closed" });
   const [deactivating, setDeactivating] = useState(false);
+
+  useEffect(() => {
+    if (!openId) return;
+    let cancelled = false;
+    void AssetService.getAsset(openId)
+      .then((asset) => {
+        if (!cancelled && asset) setModal({ type: "view", asset });
+      })
+      .catch(() => {
+        /* leave list as-is if record cannot be loaded */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openId]);
 
   async function handleDeactivate() {
     if (modal.type !== "deactivate") return;

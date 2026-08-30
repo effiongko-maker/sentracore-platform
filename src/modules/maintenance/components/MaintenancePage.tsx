@@ -10,12 +10,14 @@ import {
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
+import { useQueryRecordId } from "@/hooks/useQueryRecordId";
 import { ViewWorkOrderModal } from "@/modules/work-orders/components/ViewWorkOrderModal";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
 import type { WorkOrder } from "@/modules/work-orders/types";
 import { useMaintenance } from "../hooks/useMaintenance";
 import { displayMaintenanceTitle } from "../utils";
 import type { Maintenance, MaintenanceModalState } from "../types";
+import { MaintenanceService } from "../services/MaintenanceService";
 import { MaintenanceFormModal } from "./MaintenanceFormModal";
 import { MaintenanceTable } from "./MaintenanceTable";
 import { MaintenanceToolbar } from "./MaintenanceToolbar";
@@ -23,6 +25,7 @@ import { ViewMaintenanceModal } from "./ViewMaintenanceModal";
 
 export function MaintenancePage() {
   const { toast } = useToast();
+  const openId = useQueryRecordId();
   const {
     items,
     loading,
@@ -75,6 +78,21 @@ export function MaintenancePage() {
       cancelled = true;
     };
   }, [viewWorkOrderId]);
+
+  useEffect(() => {
+    if (!openId) return;
+    let cancelled = false;
+    void MaintenanceService.getMaintenance(openId)
+      .then((maintenance) => {
+        if (!cancelled && maintenance) setModal({ type: "view", maintenance });
+      })
+      .catch(() => {
+        /* leave list as-is if record cannot be loaded */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openId]);
 
   async function handleDeactivate() {
     if (modal.type !== "deactivate") return;

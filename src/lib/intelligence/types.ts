@@ -307,6 +307,10 @@ export type OperationalStorySummary = {
   assetIds: string[];
   findingIds: string[];
   relatedEventIds: string[];
+  /** Grounded operational record IDs from story synthesis — never invented. */
+  incidentIds: string[];
+  maintenanceIds: string[];
+  workOrderIds: string[];
   sequence: Array<{
     occurredAt: string;
     label: string;

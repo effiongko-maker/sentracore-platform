@@ -2,6 +2,7 @@ import type { CreateIncidentInput } from "@/modules/incidents/types";
 import type { CreateMaintenanceInput } from "@/modules/maintenance/types";
 import type { CreateRequestInput } from "@/modules/requests/types";
 import type {
+  ClientRequestFormValues,
   IncidentRequestFormValues,
   MaintenanceRequestFormValues,
   OccupantActor,
@@ -49,6 +50,11 @@ export function toCreateMaintenanceInput(
 ): CreateMaintenanceInput {
   const attachment = toAttachmentRef(form.attachment);
   const now = new Date().toISOString();
+  const requester =
+    form.reporterName?.trim() ||
+    actor.displayName ||
+    actor.email ||
+    actor.id;
 
   return {
     title: form.title.trim(),
@@ -61,10 +67,9 @@ export function toCreateMaintenanceInput(
           ? `${attachment.fileName} (pending upload support)`
           : undefined,
       },
-      {
-        label: "Requested by",
-        value: actor.displayName || actor.email || actor.id,
-      },
+      { label: "Requested by", value: requester },
+      { label: "Phone", value: form.reporterPhone },
+      { label: "Email", value: form.reporterEmail },
     ]),
     type: "corrective",
     source: "request",
@@ -89,6 +94,13 @@ export function toCreateRequestFromMaintenanceForm(
 ): CreateRequestInput {
   const attachment = toAttachmentRef(form.attachment);
   const now = new Date().toISOString();
+  const reporterName =
+    form.reporterName?.trim() || actor.displayName || undefined;
+  const reporterContact =
+    form.reporterEmail?.trim() ||
+    form.reporterPhone?.trim() ||
+    actor.email ||
+    undefined;
 
   return {
     title: form.title.trim(),
@@ -103,16 +115,15 @@ export function toCreateRequestFromMaintenanceForm(
           ? `${attachment.fileName} (pending upload support)`
           : undefined,
       },
-      {
-        label: "Requested by",
-        value: actor.displayName || actor.email || actor.id,
-      },
+      { label: "Requested by", value: reporterName },
+      { label: "Phone", value: form.reporterPhone },
+      { label: "Email", value: form.reporterEmail },
     ]),
     facilityId: form.facilityId,
     occurredAt: now,
     locationDetail: form.location.trim() || undefined,
-    reporterName: actor.displayName || undefined,
-    reporterContact: actor.email || undefined,
+    reporterName,
+    reporterContact,
     reportedByUserId: actor.id,
     requestType: "maintenance",
     status: "submitted",
@@ -207,6 +218,9 @@ export function emptyMaintenanceForm(): MaintenanceRequestFormValues {
     priority: "medium",
     category: "General",
     attachment: null,
+    reporterName: "",
+    reporterPhone: "",
+    reporterEmail: "",
   };
 }
 
@@ -218,5 +232,45 @@ export function emptyIncidentForm(): IncidentRequestFormValues {
     location: "",
     severity: "medium",
     attachment: null,
+  };
+}
+
+export function emptyClientRequestForm(
+  facilityId = ""
+): ClientRequestFormValues {
+  return {
+    fullName: "",
+    phone: "",
+    email: "",
+    floor: "",
+    office: "",
+    title: "",
+    description: "",
+    urgency: "medium",
+    facilityId,
+    attachment: null,
+  };
+}
+
+/** Map client intake → existing maintenance REQ create contract. */
+export function toMaintenanceFormFromClient(
+  form: ClientRequestFormValues
+): MaintenanceRequestFormValues {
+  const location = [form.floor.trim(), form.office.trim()]
+    .filter(Boolean)
+    .join(" · ");
+
+  return {
+    title: form.title.trim(),
+    description: form.description.trim(),
+    facilityId: form.facilityId,
+    location,
+    department: "",
+    priority: form.urgency,
+    category: "General",
+    attachment: form.attachment ?? null,
+    reporterName: form.fullName.trim(),
+    reporterPhone: form.phone.trim(),
+    reporterEmail: form.email.trim(),
   };
 }

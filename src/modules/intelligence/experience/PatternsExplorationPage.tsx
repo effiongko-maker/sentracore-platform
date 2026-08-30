@@ -35,7 +35,7 @@ export function PatternsExplorationPage({
       <div className="ix-explore-workspace">
         <Link href="/intelligence" className="ix-explore-back">
           <ArrowLeft className="h-4 w-4" aria-hidden />
-          Back to Intelligence briefing
+          Back to Intelligence
         </Link>
 
         <header className="ix-explore-header">

@@ -1,22 +1,19 @@
 Release:
-v0.7.0
+v0.7.4
 
 Title:
-Phase 2 Request Treatment (REQ → MNT/INC)
+Phase 2.8 production linkTreatment (Link only)
 
 Generated:
-2026-08-27T14:56:26.910Z
+2026-08-30T14:21:00.786Z
 
 Features
-- Create Maintenance / Incident from Request with bidirectional sourceRequestId links
-- Link existing Maintenance / Incident with ownership conflict rejection
-- Resolve / Cancel Request via server actions
-- Request detail Treatment hub + derived downstream Work Orders
-- API proxy blocks client status/relationship mutation bypass
+- Production requests/linkTreatment consolidated Link Maintenance/Incident
+- State-based Link idempotency (sourceRequestId + appendUnique)
+- Create Treatment path unchanged
 
 Performance
-- Link search uses paginated facility-scoped getAll (pageSize 200 server filter)
-- Request detail loads linked children by id (N small)
+- Link from Request: 6 Apps Script calls → 1
 
 Files Changed
 - ROUTER.gs
@@ -48,6 +45,9 @@ Files Changed
 - RequestRepository.gs
 - RequestsController.gs
 - RequestService.gs
+- RequestTreatmentLinkSpike.gs
+- RequestTreatmentMutationSpike.gs
+- RequestTreatmentService.gs
 - SheetFieldUtils.gs
 - UserRepository.gs
 - UsersController.gs
@@ -63,31 +63,25 @@ Trigger Required
 NO
 
 Apps Script Redeploy
-NO
+YES
 
 Smoke Tests
 
-Request treatment persistence contract:
+Phase 2.8 browser link treatment:
 
 ```bash
-node scripts/smoke-request-treatment-contract.cjs
+node scripts/verify-phase28-link-treatment.cjs
 ```
 
-Location catalog Facility contract:
+Phase 2.6 browser create treatment:
 
 ```bash
-node scripts/smoke-location-catalog-contract.cjs
-```
-
-UI treatment hub:
-
-```bash
-Open /requests → View → Create Maintenance → assert MNT.sourceRequestId and REQ.maintenanceIds
+node scripts/verify-phase26-create-treatment.cjs
 ```
 
 Notes
-- Auth boundary: authenticated session + facility_management module (no facility_manager role yet).
-- Do not invent REQ → WO treatment path.
-- Apps Script unchanged for Phase 2 — orchestration is Next.js.
+- Deploy RequestTreatmentService.gs (includes linkTreatment) + RequestsController.gs.
+- RequestTreatmentLinkSpike.gs is a thin alias only.
+- Do not modify Link search or Create Treatment.
 
 <!-- GENERATED FILE — do not edit by hand. npm run apps-script:pack -->

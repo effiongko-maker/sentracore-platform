@@ -10,14 +10,12 @@ export const OCCUPANT_REQUEST_KINDS: Array<{
   {
     id: "maintenance",
     title: "Maintenance Request",
-    description:
-      "Report a repair, service, or building issue for the facilities team.",
+    description: "Something needs repair or attention",
   },
   {
     id: "incident",
     title: "Incident Report",
-    description:
-      "Report a safety, security, or operational incident for immediate attention.",
+    description: "An unexpected event or safety concern",
   },
 ];
 
@@ -48,9 +46,9 @@ export const OCCUPANT_SEVERITIES: IncidentSeverity[] = [
 
 export const OCCUPANT_STATUS_LABELS: Record<OccupantRequestStatus, string> = {
   submitted: "Submitted",
-  assigned: "Assigned",
-  in_progress: "In Progress",
-  completed: "Completed",
+  assigned: "Being reviewed",
+  in_progress: "Being treated",
+  completed: "Resolved",
   closed: "Closed",
 };
 

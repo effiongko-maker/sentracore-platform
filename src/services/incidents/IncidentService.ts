@@ -325,6 +325,11 @@ function toPaginatedIncidents(
  * Talks only to ApiClient. Mirrors WorkOrderService.
  */
 export const IncidentService = {
+  /** Map an Apps Script incident row (shared by createTreatment). */
+  fromAppsScriptRow(raw: unknown): Incident {
+    return mapRemoteIncident(raw as RemoteIncident);
+  },
+
   async listIncidents(
     params: IncidentListParams = {}
   ): Promise<PaginatedResult<Incident>> {

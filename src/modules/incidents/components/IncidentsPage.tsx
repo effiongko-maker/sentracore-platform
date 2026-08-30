@@ -1,14 +1,16 @@
 "use client";
 
 import { AlertTriangle } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ModeFrame, StreamSurface } from "@/components/platform";
 import { OperationalPageHeader } from "@/components/operational";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
+import { useQueryRecordId } from "@/hooks/useQueryRecordId";
 import { useIncidents } from "../hooks/useIncidents";
 import type { IncidentModalState } from "../types";
+import { IncidentService } from "../services/IncidentService";
 import { IncidentFormModal } from "./IncidentFormModal";
 import { IncidentsTable } from "./IncidentsTable";
 import { IncidentsToolbar } from "./IncidentsToolbar";
@@ -17,6 +19,7 @@ import { ViewIncidentModal } from "./ViewIncidentModal";
 
 export function IncidentsPage() {
   const { toast } = useToast();
+  const openId = useQueryRecordId();
   const {
     incidents,
     loading,
@@ -43,6 +46,21 @@ export function IncidentsPage() {
 
   const [modal, setModal] = useState<IncidentModalState>({ type: "closed" });
   const [deactivating, setDeactivating] = useState(false);
+
+  useEffect(() => {
+    if (!openId) return;
+    let cancelled = false;
+    void IncidentService.getIncident(openId)
+      .then((incident) => {
+        if (!cancelled && incident) setModal({ type: "view", incident });
+      })
+      .catch(() => {
+        /* leave list as-is if record cannot be loaded */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openId]);
 
   async function handleDeactivate() {
     if (modal.type !== "deactivate") return;

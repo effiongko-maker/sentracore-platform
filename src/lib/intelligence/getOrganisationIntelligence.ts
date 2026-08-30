@@ -1350,6 +1350,9 @@ export function assembleOrganisationIntelligence(input: {
       assetIds: story.assetIds,
       findingIds: story.evidence.findingIds,
       relatedEventIds: story.evidence.eventIds,
+      incidentIds: story.incidentIds,
+      maintenanceIds: story.maintenanceIds,
+      workOrderIds: story.workOrderIds,
       sequence: story.sequence.map((step) => ({
         occurredAt: step.occurredAt,
         label: step.label,

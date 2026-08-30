@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { PlatformShellProvider } from "@/hooks/usePlatformShell";
 import { PlatformSessionProvider } from "@/hooks/usePlatformSession";
 import { ToastProvider } from "@/components/ui/Toast";
@@ -8,7 +9,17 @@ import { GlobalCommandBar } from "./GlobalCommandBar";
 import { CommandPalette } from "./CommandPalette";
 import { ModeCanvas } from "./ModeCanvas";
 
+function isClientRequestPortal(pathname: string | null): boolean {
+  return Boolean(pathname?.startsWith("/occupant-requests"));
+}
+
 function ProductShellBody({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+
+  if (isClientRequestPortal(pathname)) {
+    return <div className="sr-shell-root">{children}</div>;
+  }
+
   return (
     <div className="os-shell">
       <OrganisationalCompass />
