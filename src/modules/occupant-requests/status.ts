@@ -8,6 +8,8 @@ import type { OccupantRequestStatus } from "./types";
 
 /**
  * Maps Request lifecycle statuses onto the occupant-facing confirmation labels.
+ * Authoritative input is Request.status only — never derived from child
+ * Maintenance/Incident timestamps or statuses on the client.
  */
 export function mapRequestToOccupantStatus(
   row: Pick<RequestRecord, "status">

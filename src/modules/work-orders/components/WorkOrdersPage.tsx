@@ -80,7 +80,7 @@ export function WorkOrdersPage() {
       await deactivateWorkOrder(modal.workOrder.id);
       toast({
         type: "success",
-        title: "Work order deactivated",
+        title: "Work order cancelled",
         description: `${modal.workOrder.title} is now cancelled.`,
       });
       setModal({ type: "closed" });
@@ -88,7 +88,7 @@ export function WorkOrdersPage() {
     } catch (err) {
       toast({
         type: "error",
-        title: "Unable to deactivate work order",
+        title: "Unable to cancel work order",
         description:
           err instanceof Error ? err.message : "Please try again in a moment.",
       });
@@ -178,13 +178,13 @@ export function WorkOrdersPage() {
         open={modal.type === "deactivate"}
         onClose={() => setModal({ type: "closed" })}
         onConfirm={handleDeactivate}
-        title="Deactivate work order?"
+        title="Cancel work order?"
         description={
           modal.type === "deactivate"
             ? `${modal.workOrder.title} will be marked cancelled. Work orders are never deleted.`
             : undefined
         }
-        confirmLabel="Deactivate"
+        confirmLabel="Cancel work order"
         danger
         loading={deactivating}
       />

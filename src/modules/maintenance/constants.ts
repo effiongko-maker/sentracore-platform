@@ -25,6 +25,15 @@ export const MAINTENANCE_STATUSES: MaintenanceStatus[] = [
   "cancelled",
 ];
 
+/** Active workflow statuses — Completed/Cancelled are deliberate lifecycle actions. */
+export const MAINTENANCE_ACTIVE_WORKFLOW_STATUSES: MaintenanceStatus[] = [
+  "requested",
+  "triaged",
+  "scheduled",
+  "in_progress",
+  "on_hold",
+];
+
 export const MAINTENANCE_PRIORITIES: MaintenancePriority[] = [
   "low",
   "medium",

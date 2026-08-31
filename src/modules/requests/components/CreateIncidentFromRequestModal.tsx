@@ -109,7 +109,7 @@ export function CreateIncidentFromRequestModal({
       open={open}
       onClose={onClose}
       title="Create Incident"
-      description={`From ${request.id}`}
+      description={`From ${request.id} — for significant events only (investigation, containment, escalation). Ordinary facility problems should use Create Maintenance.`}
       size="lg"
       footer={
         <div className="flex justify-end gap-2">

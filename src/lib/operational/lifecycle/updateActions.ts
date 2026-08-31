@@ -70,6 +70,32 @@ export async function updateMaintenanceOperational(
       const { id: _omit, ...update } = raw as UpdateMaintenanceInput & {
         id?: string;
       };
+
+      const nextStatus =
+        typeof update.status === "string" ? update.status.trim() : undefined;
+      const completedAt =
+        typeof update.completedAt === "string"
+          ? update.completedAt.trim()
+          : update.completedAt;
+
+      if (nextStatus === "completed") {
+        if (!completedAt) {
+          throw new ActionError(
+            "VALIDATION_ERROR",
+            "Completed at is required when marking maintenance completed."
+          );
+        }
+      } else if (
+        nextStatus &&
+        nextStatus !== "cancelled" &&
+        completedAt
+      ) {
+        throw new ActionError(
+          "VALIDATION_ERROR",
+          "Completed at can only be set when status is completed."
+        );
+      }
+
       const result = await transitionMaintenance({
         entityId,
         update: {

@@ -9,6 +9,7 @@ import {
   MessageSquarePlus,
   Package,
   ScanSearch,
+  CircleDot,
   Users,
   Wrench,
   type LucideIcon,
@@ -119,6 +120,13 @@ export const OPERATING_LAYERS: OperatingLayer[] = [
         icon: Inbox,
         title: "Request Queue",
         description: "Incoming reports for review",
+      }),
+      fm({
+        label: "Issues",
+        href: "/issues",
+        icon: CircleDot,
+        title: "Issues",
+        description: "Operational problem lens (preview)",
       }),
       fm({
         label: "Maintenance",

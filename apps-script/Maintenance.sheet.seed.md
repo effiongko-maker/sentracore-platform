@@ -26,6 +26,7 @@ Or first sheet whose row 1 contains `Maintenance ID`.
 | Date Requested | `reportedAt` |
 | Date Completed | `completedAt` |
 | Status | `status` (`open`/`new` → `requested`) |
+| Completion Notes | `completionNotes` (added on write if missing) |
 
 ## Defaults (not on sheet)
 

@@ -426,7 +426,7 @@ export function WorkOrderFormModal({
       onClose={() => {
         if (!saving) onClose();
       }}
-      title={isEdit ? "Edit work order" : "New work order"}
+      title={isEdit ? "Treat work order" : "New work order"}
       description={
         isEdit
           ? "Update assignment, schedule, source maintenance, and resolution."

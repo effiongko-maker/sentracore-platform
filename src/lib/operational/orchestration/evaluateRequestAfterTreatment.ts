@@ -1,3 +1,7 @@
+import {
+  isIncidentSuccessfullyTerminal,
+  isMaintenanceSuccessfullyTerminal,
+} from "@/lib/operational/orchestration/treatmentTerminals";
 import { emitActionEvent, type ActionContext } from "@/lib/actions";
 import { OperationalEventTypes } from "@/lib/events/taxonomy";
 import { isRequestTerminal } from "@/modules/requests/treatment/status";
@@ -46,15 +50,10 @@ async function withRequestEvalGate<T>(
   }
 }
 
-/** Status-authoritative successful terminal for Maintenance treatments. */
-export function isMaintenanceSuccessfullyTerminal(status: string): boolean {
-  return status === "completed";
-}
-
-/** Status-authoritative successful terminal for Incident treatments. */
-export function isIncidentSuccessfullyTerminal(status: string): boolean {
-  return status === "resolved";
-}
+export {
+  isIncidentSuccessfullyTerminal,
+  isMaintenanceSuccessfullyTerminal,
+};
 
 /**
  * Pure evaluation — ALL linked treatments must be successfully terminal.

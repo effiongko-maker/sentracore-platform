@@ -87,7 +87,7 @@ export function IncidentRowActions({
             }}
           >
             <Pencil className="h-3.5 w-3.5 text-muted" />
-            Edit
+            Treat
           </button>
           <button
             type="button"
@@ -100,7 +100,7 @@ export function IncidentRowActions({
             }}
           >
             <AlertTriangle className="h-3.5 w-3.5" />
-            Deactivate
+            Cancel
           </button>
         </div>
       ) : null}

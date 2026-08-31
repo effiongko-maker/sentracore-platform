@@ -217,7 +217,7 @@ export function ViewIncidentModal({
                 onEdit(displayIncident);
               }}
             >
-              Edit incident
+              Treat incident
             </Button>
           ) : null}
         </>

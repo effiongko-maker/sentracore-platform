@@ -102,7 +102,7 @@ export function MaintenancePage() {
       await deactivateMaintenance(modal.maintenance.id);
       toast({
         type: "success",
-        title: "Maintenance deactivated",
+        title: "Maintenance cancelled",
         description: `${displayMaintenanceTitle(modal.maintenance)} is now cancelled.`,
       });
       setModal({ type: "closed" });
@@ -110,7 +110,7 @@ export function MaintenancePage() {
     } catch (err) {
       toast({
         type: "error",
-        title: "Unable to deactivate maintenance",
+        title: "Unable to cancel maintenance",
         description:
           err instanceof Error ? err.message : "Please try again in a moment.",
       });
@@ -216,13 +216,13 @@ export function MaintenancePage() {
         open={modal.type === "deactivate"}
         onClose={() => setModal({ type: "closed" })}
         onConfirm={handleDeactivate}
-        title="Deactivate maintenance?"
+        title="Cancel maintenance?"
         description={
           modal.type === "deactivate"
             ? `${displayMaintenanceTitle(modal.maintenance)} will be marked cancelled. Maintenance rows are never deleted.`
             : undefined
         }
-        confirmLabel="Deactivate"
+        confirmLabel="Cancel maintenance"
         danger
         loading={deactivating}
       />

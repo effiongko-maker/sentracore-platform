@@ -119,7 +119,7 @@ export function ViewMaintenanceModal({
                 onEdit(maintenance);
               }}
             >
-              Edit maintenance
+              Treat maintenance
             </Button>
           ) : null}
         </>
@@ -174,12 +174,31 @@ export function ViewMaintenanceModal({
         <Detail label="Department" value={maintenance.department || "—"} />
         <Detail label="Event ID" value={maintenance.eventId || "—"} />
         <Detail label="Reported at" value={formatDate(maintenance.reportedAt)} />
-        <Detail
-          label="Completed at"
-          value={
-            maintenance.completedAt ? formatDate(maintenance.completedAt) : "—"
-          }
-        />
+        {maintenance.status === "completed" ? (
+          <>
+            <Detail
+              label="Completed at"
+              value={
+                maintenance.completedAt
+                  ? formatDate(maintenance.completedAt)
+                  : "—"
+              }
+            />
+            <Detail
+              label="Completion notes"
+              value={maintenance.completionNotes || "—"}
+            />
+          </>
+        ) : (
+          <Detail
+            label="Completed at"
+            value={
+              maintenance.completedAt
+                ? formatDate(maintenance.completedAt)
+                : "—"
+            }
+          />
+        )}
         <Detail
           label="Requires work order"
           value={maintenance.requiresWorkOrder ? "Yes" : "No"}
@@ -236,10 +255,12 @@ export function ViewMaintenanceModal({
         {notes.attachment ? (
           <Detail label="Attachment" value={notes.attachment} />
         ) : null}
-        <Detail
-          label="Completion notes"
-          value={maintenance.completionNotes || "—"}
-        />
+        {maintenance.status !== "completed" ? (
+          <Detail
+            label="Completion notes"
+            value={maintenance.completionNotes || "—"}
+          />
+        ) : null}
         <Detail
           label="Work performed"
           value={maintenance.workPerformed || "—"}

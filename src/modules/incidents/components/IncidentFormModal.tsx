@@ -205,7 +205,7 @@ export function IncidentFormModal({
       onClose={() => {
         if (!saving) onClose();
       }}
-      title="Edit incident"
+      title="Treat incident"
       description="Update classification, assignment, and resolution."
       size="lg"
       footer={

@@ -70,7 +70,7 @@ export function IncidentsPage() {
       await deactivateIncident(modal.incident.id);
       toast({
         type: "success",
-        title: "Incident deactivated",
+        title: "Incident cancelled",
         description: `${modal.incident.title} is now cancelled.`,
       });
       setModal({ type: "closed" });
@@ -78,7 +78,7 @@ export function IncidentsPage() {
     } catch (err) {
       toast({
         type: "error",
-        title: "Unable to deactivate incident",
+        title: "Unable to cancel incident",
         description:
           err instanceof Error ? err.message : "Please try again in a moment.",
       });
@@ -172,13 +172,13 @@ export function IncidentsPage() {
         open={modal.type === "deactivate"}
         onClose={() => setModal({ type: "closed" })}
         onConfirm={handleDeactivate}
-        title="Deactivate incident?"
+        title="Cancel incident?"
         description={
           modal.type === "deactivate"
             ? `${modal.incident.title} will be marked cancelled. Incidents are never deleted.`
             : undefined
         }
-        confirmLabel="Deactivate"
+        confirmLabel="Cancel incident"
         danger
         loading={deactivating}
       />

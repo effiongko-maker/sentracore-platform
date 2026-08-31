@@ -77,7 +77,6 @@ export function ViewRequestModal({
   const activeRequest = detail?.request ?? request;
   const treatable =
     activeRequest != null && !isRequestTerminal(activeRequest.status);
-  const preferMaintenance = activeRequest?.requestType !== "incident";
 
   async function reloadDetail(requestId: string) {
     const gen = ++detailLoadGen.current;
@@ -334,10 +333,17 @@ export function ViewRequestModal({
             ) : null}
 
             {treatable ? (
-              <div className="flex flex-wrap gap-2">
+              <div className="space-y-2">
+                <p className="text-xs text-muted">
+                  Ordinary facility problems: create or link Maintenance.
+                  Use Incident only for significant events (safety, security,
+                  flood/fire/environmental, major disruption, serious equipment
+                  failure) — not as a second way to log routine problems.
+                </p>
+                <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
-                  variant={preferMaintenance ? "primary" : "secondary"}
+                  variant="primary"
                   size="sm"
                   onClick={() => setPanel({ type: "create-maintenance" })}
                 >
@@ -345,7 +351,7 @@ export function ViewRequestModal({
                 </Button>
                 <Button
                   type="button"
-                  variant={!preferMaintenance ? "primary" : "secondary"}
+                  variant="secondary"
                   size="sm"
                   onClick={() => setPanel({ type: "create-incident" })}
                 >
@@ -367,6 +373,7 @@ export function ViewRequestModal({
                 >
                   Link Incident
                 </Button>
+                </div>
               </div>
             ) : (
               <p className="text-sm text-muted">

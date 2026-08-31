@@ -71,7 +71,7 @@ export function ViewWorkOrderModal({
                 onEdit(workOrder);
               }}
             >
-              Edit work order
+              Treat work order
             </Button>
           ) : null}
         </>

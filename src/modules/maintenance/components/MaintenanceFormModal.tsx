@@ -19,9 +19,9 @@ import type { Asset } from "@/modules/assets/types";
 import type { User } from "@/modules/users/types";
 import type { WorkOrder } from "@/modules/work-orders/types";
 import {
+  MAINTENANCE_ACTIVE_WORKFLOW_STATUSES,
   MAINTENANCE_PRIORITIES,
   MAINTENANCE_SOURCES,
-  MAINTENANCE_STATUSES,
   MAINTENANCE_TYPES,
 } from "../constants";
 import { requestMaintenance } from "../actions/requestMaintenance";
@@ -81,11 +81,13 @@ export function MaintenanceFormModal({
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [creatingWorkOrder, setCreatingWorkOrder] = useState(false);
   const [linkMode, setLinkMode] = useState<"choose" | "link">("choose");
+  const [completing, setCompleting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setForm(toCreateFormValues(mode === "edit" ? maintenance : null));
     setErrors({});
+    setCompleting(false);
     setLinkMode(
       mode === "edit" && maintenance?.workOrderId ? "link" : "choose"
     );
@@ -155,9 +157,18 @@ export function MaintenanceFormModal({
     return Object.keys(next).length === 0;
   }
 
+  const isEdit = mode === "edit";
+  const recordStatus =
+    isEdit && maintenance ? maintenance.status : form.status;
+  const isCompleted = recordStatus === "completed";
+  const isCancelled = recordStatus === "cancelled";
+  const isTerminalLifecycle = isCompleted || isCancelled;
+  const busy = saving || completing;
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (!validate()) return;
+    if (isCancelled) return;
 
     setSaving(true);
     const submitStarted = performance.now();
@@ -190,12 +201,27 @@ export function MaintenanceFormModal({
         scheduledEndAt: toIsoOrUndefined(form.scheduledEndAt),
         dueAt: toIsoOrUndefined(form.dueAt),
         startedAt: toIsoOrUndefined(form.startedAt),
-        completedAt: toIsoOrUndefined(form.completedAt),
         holdReason: optionalString(form.holdReason),
-        completionNotes: optionalString(form.completionNotes),
         workPerformed: optionalString(form.workPerformed),
         createdByUserId: optionalString(form.createdByUserId),
         updatedByUserId: optionalString(form.updatedByUserId),
+        ...(isCompleted
+          ? {
+              status: "completed" as const,
+              completedAt:
+                toIsoOrUndefined(form.completedAt) ||
+                maintenance?.completedAt ||
+                undefined,
+              completionNotes:
+                optionalString(form.completionNotes) ||
+                maintenance?.completionNotes ||
+                "",
+            }
+          : {
+              status: form.status,
+              completedAt: "",
+              completionNotes: "",
+            }),
       });
 
       if (mode === "edit" && maintenance) {
@@ -270,7 +296,12 @@ export function MaintenanceFormModal({
           description: `${payload.title} has been saved.`,
         });
       } else {
-        const result = await requestMaintenance(payload);
+        const result = await requestMaintenance({
+          ...payload,
+          status: form.status,
+          completedAt: undefined,
+          completionNotes: undefined,
+        });
         mark("requestMaintenance");
         if (!result.success) {
           throw new Error(result.error.message);
@@ -314,6 +345,86 @@ export function MaintenanceFormModal({
     }
   }
 
+  async function handleMarkCompleted() {
+    if (!isEdit || !maintenance || isTerminalLifecycle) return;
+
+    const nextErrors: Partial<Record<keyof CreateMaintenanceInput, string>> =
+      {};
+    if (!form.title.trim()) nextErrors.title = "Title is required";
+    if (!form.facilityId.trim()) nextErrors.facilityId = "Facility is required";
+    if (!form.reportedAt) nextErrors.reportedAt = "Reported at is required";
+    if (!form.completedAt?.trim()) {
+      nextErrors.completedAt = "Completed at is required";
+    }
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+
+    const completedAtIso = toIsoOrUndefined(form.completedAt);
+    if (!completedAtIso) {
+      setErrors((current) => ({
+        ...current,
+        completedAt: "Enter a valid completion date and time",
+      }));
+      return;
+    }
+
+    setCompleting(true);
+    try {
+      const description =
+        optionalString(form.description) || form.title.trim();
+      const payload = applyWorkOrderRule({
+        ...form,
+        title: form.title.trim(),
+        description,
+        categoryId: optionalString(form.categoryId),
+        department: optionalString(form.department),
+        facilityId: form.facilityId.trim(),
+        assetId: optionalString(form.assetId),
+        reportedByUserId: optionalString(form.reportedByUserId),
+        assignedToUserId: optionalString(form.assignedToUserId),
+        assignedGroupId: optionalString(form.assignedGroupId),
+        eventId: optionalString(form.eventId),
+        incidentId: optionalString(form.incidentId),
+        workOrderId: optionalString(form.workOrderId),
+        parentMaintenanceId: optionalString(form.parentMaintenanceId),
+        reportedAt: new Date(form.reportedAt).toISOString(),
+        scheduledStartAt: toIsoOrUndefined(form.scheduledStartAt),
+        scheduledEndAt: toIsoOrUndefined(form.scheduledEndAt),
+        dueAt: toIsoOrUndefined(form.dueAt),
+        startedAt: toIsoOrUndefined(form.startedAt),
+        holdReason: optionalString(form.holdReason),
+        workPerformed: optionalString(form.workPerformed),
+        createdByUserId: optionalString(form.createdByUserId),
+        updatedByUserId: optionalString(form.updatedByUserId),
+        status: "completed" as MaintenanceStatus,
+        completedAt: completedAtIso,
+        completionNotes: optionalString(form.completionNotes) ?? "",
+      }) as CreateMaintenanceInput;
+
+      const result = await updateMaintenanceOperational(maintenance.id, payload);
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
+
+      toast({
+        type: "success",
+        title: "Maintenance completed",
+        description: `${displayMaintenanceTitle(result.data)} marked as completed.`,
+      });
+      onSaved?.();
+      onClose();
+    } catch (err) {
+      toast({
+        type: "error",
+        title: "Unable to complete maintenance",
+        description:
+          err instanceof Error ? err.message : "Please try again in a moment.",
+      });
+    } finally {
+      setCompleting(false);
+    }
+  }
+
   async function handleCreateWorkOrder() {
     if (mode !== "edit" || !maintenance?.id) {
       toast({
@@ -321,6 +432,15 @@ export function MaintenanceFormModal({
         title: "Save maintenance first",
         description:
           "Create the maintenance record, then you can generate a work order from it.",
+      });
+      return;
+    }
+    if (isTerminalLifecycle) {
+      toast({
+        type: "info",
+        title: "Maintenance is closed",
+        description:
+          "Work orders cannot be created from completed or cancelled maintenance.",
       });
       return;
     }
@@ -352,12 +472,13 @@ export function MaintenanceFormModal({
         scheduledEndAt: toIsoOrUndefined(form.scheduledEndAt),
         dueAt: toIsoOrUndefined(form.dueAt),
         startedAt: toIsoOrUndefined(form.startedAt),
-        completedAt: toIsoOrUndefined(form.completedAt),
         holdReason: optionalString(form.holdReason),
-        completionNotes: optionalString(form.completionNotes),
         workPerformed: optionalString(form.workPerformed),
         createdByUserId: optionalString(form.createdByUserId),
         updatedByUserId: optionalString(form.updatedByUserId),
+        status: form.status,
+        completedAt: "",
+        completionNotes: "",
       });
 
       const saveResult = await updateMaintenanceOperational(
@@ -399,7 +520,6 @@ export function MaintenanceFormModal({
     }
   }
 
-  const isEdit = mode === "edit";
   const requiresWo = Boolean(form.requiresWorkOrder);
   const linkedWorkOrderId = optionalString(form.workOrderId);
   const linkedWorkOrder = linkedWorkOrderId
@@ -411,23 +531,34 @@ export function MaintenanceFormModal({
     <Modal
       open={open}
       onClose={() => {
-        if (!saving) onClose();
+        if (!busy) onClose();
       }}
-      title={isEdit ? "Edit maintenance" : "New maintenance"}
+      title={isEdit ? "Treat maintenance" : "New maintenance"}
       description={
         isEdit
-          ? "Update request details, ownership, work order links, and resolution."
+          ? isCompleted
+            ? "This maintenance is completed. Completion details are read-only."
+            : isCancelled
+              ? "This maintenance is cancelled."
+              : "Update treatment details and workflow status. Complete the work using the section below."
           : "Direct operational entry — create a maintenance record for authorized users."
       }
       size="lg"
       footer={
         <>
-          <Button variant="outline" onClick={onClose} disabled={saving}>
-            Cancel
+          <Button variant="outline" onClick={onClose} disabled={busy}>
+            Close
           </Button>
-          <Button type="submit" form="maintenance-form" loading={saving}>
-            {isEdit ? "Save changes" : "Create maintenance"}
-          </Button>
+          {!isCancelled ? (
+            <Button
+              type="submit"
+              form="maintenance-form"
+              loading={saving}
+              disabled={busy}
+            >
+              {isEdit ? "Save changes" : "Create maintenance"}
+            </Button>
+          ) : null}
         </>
       }
     >
@@ -547,20 +678,34 @@ export function MaintenanceFormModal({
         </FormField>
 
         <FormField label="Status" htmlFor="mnt-status" required>
-          <select
-            id="mnt-status"
-            className={selectClassName}
-            value={form.status}
-            onChange={(event) =>
-              updateField("status", event.target.value as MaintenanceStatus)
-            }
-          >
-            {MAINTENANCE_STATUSES.map((value) => (
-              <option key={value} value={value}>
-                {labelize(value)}
-              </option>
-            ))}
-          </select>
+          {isTerminalLifecycle ? (
+            <input
+              id="mnt-status"
+              className={inputClassName}
+              value={labelize(recordStatus)}
+              readOnly
+              disabled
+            />
+          ) : (
+            <select
+              id="mnt-status"
+              className={selectClassName}
+              value={
+                MAINTENANCE_ACTIVE_WORKFLOW_STATUSES.includes(form.status)
+                  ? form.status
+                  : "requested"
+              }
+              onChange={(event) =>
+                updateField("status", event.target.value as MaintenanceStatus)
+              }
+            >
+              {MAINTENANCE_ACTIVE_WORKFLOW_STATUSES.map((value) => (
+                <option key={value} value={value}>
+                  {labelize(value)}
+                </option>
+              ))}
+            </select>
+          )}
         </FormField>
 
         <FormField label="Assigned to" htmlFor="mnt-assignee">
@@ -711,7 +856,12 @@ export function MaintenanceFormModal({
                   size="sm"
                   className="sm:flex-1"
                   loading={creatingWorkOrder}
-                  disabled={!isEdit || creatingWorkOrder || saving}
+                  disabled={
+                    !isEdit ||
+                    creatingWorkOrder ||
+                    busy ||
+                    isTerminalLifecycle
+                  }
                   onClick={() => void handleCreateWorkOrder()}
                 >
                   Create new work order
@@ -721,7 +871,7 @@ export function MaintenanceFormModal({
                   variant="outline"
                   size="sm"
                   className="sm:flex-1"
-                  disabled={creatingWorkOrder || saving}
+                  disabled={creatingWorkOrder || busy || isTerminalLifecycle}
                   onClick={() => setLinkMode("link")}
                 >
                   Link existing work order
@@ -769,34 +919,65 @@ export function MaintenanceFormModal({
           />
         </FormField>
 
-        <section className="sm:col-span-2 space-y-3 border-t border-border/70 pt-4">
-          <div className="space-y-1">
-            <h3 className="text-sm font-semibold text-foreground">Resolution</h3>
-            <p className="text-xs text-muted">
-              Capture completion details once the maintenance work has been
-              resolved.
-            </p>
-          </div>
-          <FormField
-            label="Completed at"
-            htmlFor="mnt-completed-at"
-            hint={
-              form.status === "completed" || form.status === "cancelled"
-                ? undefined
-                : "Usually set when status moves to Completed."
-            }
-          >
-            <input
-              id="mnt-completed-at"
-              type="datetime-local"
-              className={inputClassName}
-              value={form.completedAt ?? ""}
-              onChange={(event) =>
-                updateField("completedAt", event.target.value)
-              }
-            />
-          </FormField>
-        </section>
+        {isEdit && !isCancelled ? (
+          <section className="sm:col-span-2 space-y-3 border-t border-border/70 pt-4">
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold text-foreground">
+                Complete maintenance
+              </h3>
+              <p className="text-xs text-muted">
+                When the work has been completed, record the completion details.
+              </p>
+            </div>
+            <FormField
+              label="Completed at"
+              htmlFor="mnt-completed-at"
+              required={!isCompleted}
+              error={errors.completedAt}
+            >
+              <input
+                id="mnt-completed-at"
+                type="datetime-local"
+                className={inputClassName}
+                value={form.completedAt ?? ""}
+                readOnly={isCompleted}
+                disabled={isCompleted || busy}
+                onChange={(event) =>
+                  updateField("completedAt", event.target.value)
+                }
+              />
+            </FormField>
+            <FormField
+              label="Completion notes"
+              htmlFor="mnt-completion-notes"
+              className="sm:col-span-2"
+            >
+              <textarea
+                id="mnt-completion-notes"
+                className={`${inputClassName} h-auto min-h-[72px] py-2.5`}
+                rows={2}
+                value={form.completionNotes ?? ""}
+                readOnly={isCompleted}
+                disabled={isCompleted || busy}
+                onChange={(event) =>
+                  updateField("completionNotes", event.target.value)
+                }
+              />
+            </FormField>
+            {!isCompleted ? (
+              <div>
+                <Button
+                  type="button"
+                  onClick={() => void handleMarkCompleted()}
+                  loading={completing}
+                  disabled={busy}
+                >
+                  Mark as completed
+                </Button>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
       </form>
     </Modal>
   );

@@ -17,6 +17,7 @@ var MaintenanceRepository = (function () {
     "Title",
     "Updated At",
     "Request ID",
+    "Completion Notes",
   ];
 
   function normalizeEnum_(value) {
@@ -133,7 +134,10 @@ var MaintenanceRepository = (function () {
       dueAt: undefined,
       startedAt: undefined,
       completedAt: completedAt || undefined,
-      completionNotes: undefined,
+      completionNotes:
+        SheetFieldUtils.hasHeader(headerMap, "Completion Notes")
+          ? SheetFieldUtils.cellText(sheetRow["Completion Notes"]) || undefined
+          : undefined,
       workPerformed: undefined,
       createdAt: reported,
       updatedAt: updatedAt || reported,
@@ -172,6 +176,7 @@ var MaintenanceRepository = (function () {
       "Work Order IDs": SheetFieldUtils.formatIdList(workOrderIds),
       Source: canonical.source || "manual",
       "Request ID": canonical.sourceRequestId || "",
+      "Completion Notes": canonical.completionNotes || "",
     };
   }
 
@@ -316,6 +321,10 @@ var MaintenanceRepository = (function () {
           : current.reportedAt || current.createdAt,
       completedAt:
         payload.completedAt != null ? payload.completedAt : current.completedAt,
+      completionNotes:
+        payload.completionNotes != null
+          ? payload.completionNotes
+          : current.completionNotes,
       priority:
         payload.priority != null ? payload.priority : current.priority,
       status: payload.status != null ? payload.status : current.status,
@@ -356,6 +365,7 @@ var MaintenanceRepository = (function () {
       workOrderId: workOrderIds.length ? workOrderIds[0] : undefined,
       reportedAt: reportedAt,
       completedAt: payload.completedAt || "",
+      completionNotes: payload.completionNotes || "",
       priority: payload.priority || "medium",
       status: payload.status || "requested",
       createdAt: reportedAt,
