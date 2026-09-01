@@ -35,6 +35,7 @@ import { createWorkOrderFromMaintenance } from "@/modules/work-orders/actions/cr
 import {
   applyWorkOrderRule,
   displayMaintenanceTitle,
+  isMaintenanceFormDirty,
   labelize,
   optionalString,
   toCreateFormValues,
@@ -53,7 +54,7 @@ interface MaintenanceFormModalProps {
   mode: "create" | "edit";
   maintenance?: Maintenance | null;
   onClose: () => void;
-  onSaved?: () => void;
+  onSaved?: (updated: Maintenance) => void;
 }
 
 function toIsoOrUndefined(value?: string) {
@@ -224,6 +225,8 @@ export function MaintenanceFormModal({
             }),
       });
 
+      let savedMaintenance: Maintenance | undefined;
+
       if (mode === "edit" && maintenance) {
         const result = await updateMaintenanceOperational(
           maintenance.id,
@@ -290,6 +293,7 @@ export function MaintenanceFormModal({
         }
         mark("relationshipSideEffects", afterUpdate);
 
+        savedMaintenance = result.data;
         toast({
           type: "success",
           title: "Maintenance updated",
@@ -317,6 +321,7 @@ export function MaintenanceFormModal({
           }
         }
 
+        savedMaintenance = result.data;
         toast({
           type: "success",
           title: "Maintenance created",
@@ -325,8 +330,10 @@ export function MaintenanceFormModal({
       }
 
       const beforeSaved = performance.now();
-      onSaved?.();
-      mark("onSaved(listRefetch)", beforeSaved);
+      if (savedMaintenance) {
+        onSaved?.(savedMaintenance);
+      }
+      mark("onSaved(patch)", beforeSaved);
       onClose();
       mark("total.submit→uiComplete");
     } catch (err) {
@@ -411,7 +418,7 @@ export function MaintenanceFormModal({
         title: "Maintenance completed",
         description: `${displayMaintenanceTitle(result.data)} marked as completed.`,
       });
-      onSaved?.();
+      onSaved?.(result.data);
       onClose();
     } catch (err) {
       toast({
@@ -447,46 +454,50 @@ export function MaintenanceFormModal({
 
     setCreatingWorkOrder(true);
     try {
-      // Persist current form so requiresWorkOrder / context are current.
       if (!validate()) return;
-      const description =
-        optionalString(form.description) || form.title.trim();
-      const payload = applyWorkOrderRule({
-        ...form,
-        title: form.title.trim(),
-        description,
-        categoryId: optionalString(form.categoryId),
-        department: optionalString(form.department),
-        facilityId: form.facilityId.trim(),
-        assetId: optionalString(form.assetId),
-        reportedByUserId: optionalString(form.reportedByUserId),
-        assignedToUserId: optionalString(form.assignedToUserId),
-        assignedGroupId: optionalString(form.assignedGroupId),
-        eventId: optionalString(form.eventId),
-        incidentId: optionalString(form.incidentId),
-        workOrderId: optionalString(form.workOrderId),
-        parentMaintenanceId: optionalString(form.parentMaintenanceId),
-        requiresWorkOrder: true,
-        reportedAt: new Date(form.reportedAt).toISOString(),
-        scheduledStartAt: toIsoOrUndefined(form.scheduledStartAt),
-        scheduledEndAt: toIsoOrUndefined(form.scheduledEndAt),
-        dueAt: toIsoOrUndefined(form.dueAt),
-        startedAt: toIsoOrUndefined(form.startedAt),
-        holdReason: optionalString(form.holdReason),
-        workPerformed: optionalString(form.workPerformed),
-        createdByUserId: optionalString(form.createdByUserId),
-        updatedByUserId: optionalString(form.updatedByUserId),
-        status: form.status,
-        completedAt: "",
-        completionNotes: "",
-      });
 
-      const saveResult = await updateMaintenanceOperational(
-        maintenance.id,
-        payload
-      );
-      if (!saveResult.success) {
-        throw new Error(saveResult.error.message);
+      let formDirty = isMaintenanceFormDirty(maintenance, form);
+
+      if (formDirty) {
+        const description =
+          optionalString(form.description) || form.title.trim();
+        const payload = applyWorkOrderRule({
+          ...form,
+          title: form.title.trim(),
+          description,
+          categoryId: optionalString(form.categoryId),
+          department: optionalString(form.department),
+          facilityId: form.facilityId.trim(),
+          assetId: optionalString(form.assetId),
+          reportedByUserId: optionalString(form.reportedByUserId),
+          assignedToUserId: optionalString(form.assignedToUserId),
+          assignedGroupId: optionalString(form.assignedGroupId),
+          eventId: optionalString(form.eventId),
+          incidentId: optionalString(form.incidentId),
+          workOrderId: optionalString(form.workOrderId),
+          parentMaintenanceId: optionalString(form.parentMaintenanceId),
+          requiresWorkOrder: true,
+          reportedAt: new Date(form.reportedAt).toISOString(),
+          scheduledStartAt: toIsoOrUndefined(form.scheduledStartAt),
+          scheduledEndAt: toIsoOrUndefined(form.scheduledEndAt),
+          dueAt: toIsoOrUndefined(form.dueAt),
+          startedAt: toIsoOrUndefined(form.startedAt),
+          holdReason: optionalString(form.holdReason),
+          workPerformed: optionalString(form.workPerformed),
+          createdByUserId: optionalString(form.createdByUserId),
+          updatedByUserId: optionalString(form.updatedByUserId),
+          status: form.status,
+          completedAt: "",
+          completionNotes: "",
+        });
+
+        const saveResult = await updateMaintenanceOperational(
+          maintenance.id,
+          payload
+        );
+        if (!saveResult.success) {
+          throw new Error(saveResult.error.message);
+        }
       }
 
       const result = await createWorkOrderFromMaintenance(maintenance.id);
@@ -507,7 +518,7 @@ export function MaintenanceFormModal({
         title: "Work order created",
         description: `${created.id} linked to ${displayMaintenanceTitle(result.data.maintenance)}.`,
       });
-      onSaved?.();
+      onSaved?.(result.data.maintenance);
     } catch (err) {
       toast({
         type: "error",

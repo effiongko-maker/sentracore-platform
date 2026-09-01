@@ -18,6 +18,21 @@ var MaintenanceService = (function () {
     return payload;
   }
 
+  function matchesWorkOrderSearch_(row, search) {
+    if (!search) return false;
+    var primary = String(row.workOrderId || "").toLowerCase();
+    if (primary && primary.indexOf(search) !== -1) return true;
+    var ids = row.workOrderIds;
+    if (ids && ids.length) {
+      for (var i = 0; i < ids.length; i++) {
+        if (String(ids[i] || "").toLowerCase().indexOf(search) !== -1) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   function applyFilters_(rows, payload) {
     payload = payload || {};
     var search = String(payload.search || "")
@@ -47,7 +62,8 @@ var MaintenanceService = (function () {
           .indexOf(search) !== -1 ||
         String(row.department || "")
           .toLowerCase()
-          .indexOf(search) !== -1;
+          .indexOf(search) !== -1 ||
+        matchesWorkOrderSearch_(row, search);
 
       var matchesPriority =
         !priority ||
@@ -305,8 +321,15 @@ var MaintenanceService = (function () {
     var t0 = Date.now();
     payload = applyWorkOrderRule_(payload);
     if (!payload || !payload.id) throw new Error("Maintenance id is required.");
-    var updated = MaintenanceRepository.update(payload.id, payload);
+    var repoResult = MaintenanceRepository.update(payload.id, payload);
+    if (!repoResult) throw new Error("Maintenance " + payload.id + " not found.");
+    var updated = repoResult.canonical;
+    var previousStatus = repoResult.previousStatus;
     if (!updated) throw new Error("Maintenance " + payload.id + " not found.");
+    if (payload._returnPreviousStatus && previousStatus != null) {
+      updated._previousStatus = previousStatus;
+      updated._buildMarker = "2026-09-01-phase32-maintenance-update-v1";
+    }
     var tRepo = Date.now();
     if (typeof ReportingSnapshotService !== "undefined") {
       ReportingSnapshotService.notifyModuleChanged("maintenance");

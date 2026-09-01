@@ -188,7 +188,7 @@ export function WorkToolbar({
       <OperationalListToolbar
         search={search}
         onSearchChange={onSearchChange}
-        searchPlaceholder="Search work, location, assignee, request…"
+        searchPlaceholder="Search work, location, Work Order…"
         filterOpen={filterOpen}
         onFilterOpenChange={setFilterOpen}
         activeFilterCount={activeFilterCount}

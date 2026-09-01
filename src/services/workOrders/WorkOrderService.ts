@@ -1,5 +1,6 @@
 import { parseIdList, primaryId } from "@/lib/operational/idLists";
 import type { PaginatedResult } from "@/types";
+import type { Maintenance } from "@/modules/maintenance/types";
 import type {
   CreateWorkOrderInput,
   UpdateWorkOrderInput,
@@ -12,10 +13,12 @@ import type {
   WorkOrderStatus,
   WorkOrderType,
 } from "@/modules/work-orders/types";
+import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
 import {
   CacheNamespaces,
+  onMaintenanceMutation,
   onWorkOrderMutation,
 } from "@/services/cache/domainCache";
 import {
@@ -487,6 +490,89 @@ export const WorkOrderService = {
     );
     onWorkOrderMutation();
     return deactivated;
+  },
+
+  /**
+   * Consolidated Create-from-Maintenance mutation (1 Apps Script invocation).
+   * Server-only — auth/lease/events stay in Next.js orchestration.
+   */
+  async createWorkOrderFromMaintenance(input: {
+    maintenanceId: string;
+    title?: string;
+    requestedAt?: string;
+    createdByUserId?: string;
+    updatedByUserId?: string;
+    actorUserId?: string;
+  }): Promise<{
+    maintenance: Maintenance;
+    workOrder: WorkOrder;
+    created: boolean;
+    timings?: Record<string, unknown>;
+    buildMarker?: string;
+  }> {
+    if (typeof window !== "undefined") {
+      throw new ApiError(
+        "createWorkOrderFromMaintenance is server-only.",
+        403
+      );
+    }
+
+    const row = await postToAppsScriptData(
+      {
+        resource: "work-orders",
+        action: "createFromMaintenance",
+        payload: {
+          maintenanceId: input.maintenanceId,
+          title: input.title,
+          requestedAt: input.requestedAt,
+          createdByUserId: input.createdByUserId,
+          updatedByUserId: input.updatedByUserId,
+          actorUserId: input.actorUserId,
+        },
+      },
+      { resource: "work-orders", action: "createFromMaintenance" },
+      "WorkOrderService.createWorkOrderFromMaintenance"
+    );
+
+    if (!row || typeof row !== "object") {
+      throw new ApiError(
+        "createWorkOrderFromMaintenance returned empty data",
+        500,
+        row
+      );
+    }
+
+    const data = row as Record<string, unknown>;
+    if (!data.maintenance || typeof data.maintenance !== "object") {
+      throw new ApiError(
+        "createWorkOrderFromMaintenance missing maintenance",
+        500,
+        row
+      );
+    }
+    if (!data.workOrder || typeof data.workOrder !== "object") {
+      throw new ApiError(
+        "createWorkOrderFromMaintenance missing workOrder",
+        500,
+        row
+      );
+    }
+
+    const result = {
+      maintenance: MaintenanceService.fromAppsScriptRow(data.maintenance),
+      workOrder: mapRemoteWorkOrder(data.workOrder as RemoteWorkOrder),
+      created: data.created === true,
+      timings:
+        data.timings && typeof data.timings === "object"
+          ? (data.timings as Record<string, unknown>)
+          : undefined,
+      buildMarker:
+        data.buildMarker != null ? String(data.buildMarker) : undefined,
+    };
+
+    onWorkOrderMutation();
+    onMaintenanceMutation();
+    return result;
   },
 
   async getOpenWorkOrders(): Promise<WorkOrder[]> {

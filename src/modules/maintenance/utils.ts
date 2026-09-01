@@ -244,3 +244,54 @@ export function toCreateFormValues(
     updatedByUserId: maintenance?.updatedByUserId ?? "",
   };
 }
+
+const FORM_DIRTY_KEYS: (keyof CreateMaintenanceInput)[] = [
+  "title",
+  "description",
+  "type",
+  "source",
+  "categoryId",
+  "department",
+  "facilityId",
+  "assetId",
+  "reportedByUserId",
+  "assignedToUserId",
+  "assignedGroupId",
+  "incidentId",
+  "workOrderId",
+  "parentMaintenanceId",
+  "priority",
+  "status",
+  "holdReason",
+  "requiresWorkOrder",
+  "reportedAt",
+  "scheduledStartAt",
+  "scheduledEndAt",
+  "dueAt",
+  "startedAt",
+  "workPerformed",
+  "completionNotes",
+];
+
+function normalizeFormCompareValue(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  return String(value).trim();
+}
+
+/** True when Treat form differs from the loaded Maintenance entity. */
+export function isMaintenanceFormDirty(
+  maintenance: Maintenance,
+  form: CreateMaintenanceInput
+): boolean {
+  const baseline = toCreateFormValues(maintenance);
+  for (const key of FORM_DIRTY_KEYS) {
+    if (
+      normalizeFormCompareValue(form[key]) !==
+      normalizeFormCompareValue(baseline[key])
+    ) {
+      return true;
+    }
+  }
+  return false;
+}

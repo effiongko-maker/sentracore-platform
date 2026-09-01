@@ -1,30 +1,30 @@
 {
-  "release": "v0.7.4",
-  "title": "Phase 2.8 production linkTreatment (Link only)",
+  "release": "v0.7.8",
+  "title": "Phase 32 status transition read elimination",
   "features": [
-    "Production requests/linkTreatment consolidated Link Maintenance/Incident",
-    "State-based Link idempotency (sourceRequestId + appendUnique)",
-    "Create Treatment path unchanged"
+    "Maintenance update returns _previousStatus + buildMarker for single-round-trip status transitions",
+    "Next.js transition path removes pre-update getMaintenance when status changes"
   ],
   "performance": [
-    "Link from Request: 6 Apps Script calls → 1"
+    "Status transition: 2 GAS round-trips → 1 (eliminates pre-read when v0.7.8 live)",
+    "Simple field save: unchanged at 1 read + 1 write inside update()"
   ],
   "deploymentRequired": true,
   "triggerRequired": false,
   "appsScriptRedeploy": true,
   "smokeTests": [
     {
-      "name": "Phase 2.8 browser link treatment",
-      "command": "node scripts/verify-phase28-link-treatment.cjs"
+      "name": "Phase 32 status transition read elimination",
+      "command": "npx tsx --tsconfig tsconfig.json scripts/verify-phase32-status-transition-read-elimination.mts"
     },
     {
-      "name": "Phase 2.6 browser create treatment",
-      "command": "node scripts/verify-phase26-create-treatment.cjs"
+      "name": "Phase 31 browser smoke",
+      "command": "node scripts/verify-phase31-browser-smoke.cjs"
     }
   ],
   "notes": [
-    "Deploy RequestTreatmentService.gs (includes linkTreatment) + RequestsController.gs.",
-    "RequestTreatmentLinkSpike.gs is a thin alias only.",
-    "Do not modify Link search or Create Treatment."
+    "Deploy MaintenanceRepository.gs, MaintenanceService.gs, and WorkOrderMaintenanceMutationService.gs.",
+    "WorkOrderMaintenanceMutationService must unwrap MaintenanceRepository.update() { canonical, previousStatus }.",
+    "Live marker: _buildMarker 2026-09-01-phase32-maintenance-update-v1 on update with _returnPreviousStatus."
   ]
 }

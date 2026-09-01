@@ -13,6 +13,7 @@ var MaintenanceRepository = (function () {
   var RELATIONSHIP_HEADERS = [
     "Incident ID",
     "Work Order IDs",
+    "Requires Work Order",
     "Source",
     "Title",
     "Updated At",
@@ -82,6 +83,24 @@ var MaintenanceRepository = (function () {
     return single ? [single] : [];
   }
 
+  function readRequiresWorkOrder_(sheetRow, headerMap, workOrderIds) {
+    if (SheetFieldUtils.hasHeader(headerMap, "Requires Work Order")) {
+      var raw = SheetFieldUtils.cellText(sheetRow["Requires Work Order"]);
+      if (raw) {
+        var lower = raw.toLowerCase();
+        if (lower === "true" || lower === "yes" || lower === "1") return true;
+        if (lower === "false" || lower === "no" || lower === "0") return false;
+      }
+    }
+    return workOrderIds.length > 0 ? true : undefined;
+  }
+
+  function formatRequiresWorkOrder_(value) {
+    if (value === true) return "Yes";
+    if (value === false) return "No";
+    return "";
+  }
+
   function toCanonical_(sheetRow, headerMap) {
     var description = SheetFieldUtils.cellText(sheetRow["Description"]);
     var title =
@@ -127,7 +146,7 @@ var MaintenanceRepository = (function () {
       priority: priority,
       status: status,
       holdReason: undefined,
-      requiresWorkOrder: workOrderIds.length > 0 ? true : undefined,
+      requiresWorkOrder: readRequiresWorkOrder_(sheetRow, headerMap, workOrderIds),
       reportedAt: reported,
       scheduledStartAt: undefined,
       scheduledEndAt: undefined,
@@ -174,6 +193,7 @@ var MaintenanceRepository = (function () {
       Status: canonical.status || "requested",
       "Incident ID": canonical.incidentId || "",
       "Work Order IDs": SheetFieldUtils.formatIdList(workOrderIds),
+      "Requires Work Order": formatRequiresWorkOrder_(canonical.requiresWorkOrder),
       Source: canonical.source || "manual",
       "Request ID": canonical.sourceRequestId || "",
       "Completion Notes": canonical.completionNotes || "",
@@ -218,9 +238,27 @@ var MaintenanceRepository = (function () {
   }
 
   function getById(id) {
-    var all = getAll();
-    for (var i = 0; i < all.length; i++) {
-      if (String(all[i].id) === String(id)) return all[i];
+    var sheet = getSheet_();
+    var values = sheet.getDataRange().getValues();
+    if (values.length <= 1) return null;
+
+    var headers = values[0];
+    var headerMap = SheetFieldUtils.headerMapFromRow
+      ? SheetFieldUtils.headerMapFromRow(headers)
+      : SheetFieldUtils.getHeaderMap(sheet);
+    var idCol = -1;
+    for (var c = 0; c < headers.length; c++) {
+      if (String(headers[c]).trim() === "Maintenance ID") {
+        idCol = c;
+        break;
+      }
+    }
+    if (idCol === -1) return null;
+
+    for (var r = 1; r < values.length; r++) {
+      if (String(values[r][idCol]) !== String(id)) continue;
+      var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[r]);
+      return toCanonical_(sheetRow, headerMap);
     }
     return null;
   }
@@ -328,6 +366,10 @@ var MaintenanceRepository = (function () {
       priority:
         payload.priority != null ? payload.priority : current.priority,
       status: payload.status != null ? payload.status : current.status,
+      requiresWorkOrder:
+        payload.requiresWorkOrder != null
+          ? payload.requiresWorkOrder
+          : current.requiresWorkOrder,
       createdAt: current.createdAt,
       updatedAt: new Date().toISOString(),
     };
@@ -368,6 +410,9 @@ var MaintenanceRepository = (function () {
       completionNotes: payload.completionNotes || "",
       priority: payload.priority || "medium",
       status: payload.status || "requested",
+      requiresWorkOrder: payload.requiresWorkOrder != null
+        ? payload.requiresWorkOrder === true
+        : undefined,
       createdAt: reportedAt,
       updatedAt: reportedAt,
     };
@@ -378,24 +423,52 @@ var MaintenanceRepository = (function () {
     var fields = canonicalToFields_(canonical);
     var row = SheetFieldUtils.buildRowFromFields(headerMap, lastCol, fields);
     sheet.appendRow(row);
-    return getById(id);
+    return canonical;
   }
 
   function update(id, payload) {
     var sheet = getSheet_();
-    var rowIndex = findRowIndex_(id);
-    if (rowIndex === -1) return null;
+    var values = sheet.getDataRange().getValues();
+    if (values.length <= 1) return null;
 
-    var current = getById(id);
-    if (!current) return null;
+    var headers = values[0];
+    var headerMap = SheetFieldUtils.headerMapFromRow
+      ? SheetFieldUtils.headerMapFromRow(headers)
+      : SheetFieldUtils.getHeaderMap(sheet);
+    var idCol = -1;
+    for (var c = 0; c < headers.length; c++) {
+      if (String(headers[c]).trim() === "Maintenance ID") {
+        idCol = c;
+        break;
+      }
+    }
+    if (idCol === -1) return null;
 
+    var rowIndex = -1;
+    var current = null;
+    for (var r = 1; r < values.length; r++) {
+      if (String(values[r][idCol]) !== String(id)) {
+        continue;
+      }
+      rowIndex = r + 1;
+      var sheetRow = SheetFieldUtils.rowToSheetObject(headers, values[r]);
+      current = toCanonical_(sheetRow, headerMap);
+      break;
+    }
+    if (rowIndex === -1 || !current) return null;
+
+    var previousStatus = current.status;
     var updated = mergeCanonical_(current, payload);
     writeRow_(sheet, rowIndex, updated);
-    return getById(id);
+    return {
+      canonical: updated,
+      previousStatus: previousStatus,
+    };
   }
 
   function deactivate(id) {
-    return update(id, { status: "cancelled" });
+    var result = update(id, { status: "cancelled" });
+    return result ? result.canonical : null;
   }
 
   /** First display line for catalog when Title column is empty. */

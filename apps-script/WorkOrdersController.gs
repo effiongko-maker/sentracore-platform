@@ -46,6 +46,13 @@ var WorkOrdersController = (function () {
             WorkOrderService.update(payload)
           );
 
+        case "createFromMaintenance":
+          return jsonResponse_(
+            true,
+            "Work order created from maintenance.",
+            WorkOrderMaintenanceMutationService.createFromMaintenance(payload)
+          );
+
         case "deactivate":
           return jsonResponse_(
             true,

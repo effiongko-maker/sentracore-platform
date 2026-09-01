@@ -11,6 +11,7 @@ import type {
   MaintenanceStatus,
 } from "@/modules/maintenance/types";
 import { DEFAULT_WORK_LIST_STATUS, DEFAULT_WORK_SORT, WORK_PAGE_SIZE } from "../constants";
+import { matchesWorkListFilters } from "../utils/matchesWorkListFilters";
 
 type WorkListStatus = MaintenanceStatus | "all" | "active";
 
@@ -183,12 +184,59 @@ export function useWork() {
     await fetchWork(1);
   }, [fetchWork, page]);
 
-  /** Optimistic list patch after Treat/complete without full refetch when possible. */
+  /** Patch or remove a row after mutation — avoids full list reload when filters allow. */
+  const reconcileItem = useCallback(
+    (next: Maintenance) => {
+      const filters = {
+        search: debouncedSearch,
+        priority,
+        status,
+        facilityId,
+        assignedToUserId,
+        requiresWorkOrder,
+      };
+      const stillVisible = matchesWorkListFilters(next, filters);
+
+      setItems((prev) => {
+        const exists = prev.some((row) => row.id === next.id);
+
+        if (!stillVisible) {
+          if (!exists) return prev;
+          setTotal((t) => Math.max(0, t - 1));
+          return sortMaintenance(
+            prev.filter((row) => row.id !== next.id),
+            sort
+          );
+        }
+
+        if (exists) {
+          return sortMaintenance(
+            prev.map((row) => (row.id === next.id ? next : row)),
+            sort
+          );
+        }
+
+        if (page !== 1) return prev;
+        setTotal((t) => t + 1);
+        return sortMaintenance([next, ...prev].slice(0, WORK_PAGE_SIZE), sort);
+      });
+    },
+    [
+      debouncedSearch,
+      priority,
+      status,
+      facilityId,
+      assignedToUserId,
+      requiresWorkOrder,
+      sort,
+      page,
+    ]
+  );
+
+  /** @deprecated Prefer reconcileItem — blind patch ignores active filters. */
   const patchItem = useCallback((next: Maintenance) => {
-    setItems((prev) =>
-      prev.map((row) => (row.id === next.id ? next : row))
-    );
-  }, []);
+    reconcileItem(next);
+  }, [reconcileItem]);
 
   return {
     items,
@@ -217,5 +265,6 @@ export function useWork() {
     reloadFirstPage,
     cancelWork,
     patchItem,
+    reconcileItem,
   };
 }

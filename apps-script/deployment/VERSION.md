@@ -1,19 +1,19 @@
 Release:
-v0.7.4
+v0.7.8
 
 Title:
-Phase 2.8 production linkTreatment (Link only)
+Phase 32 status transition read elimination
 
 Generated:
-2026-09-01T09:12:24.330Z
+2026-09-01T15:13:37.951Z
 
 Features
-- Production requests/linkTreatment consolidated Link Maintenance/Incident
-- State-based Link idempotency (sourceRequestId + appendUnique)
-- Create Treatment path unchanged
+- Maintenance update returns _previousStatus + buildMarker for single-round-trip status transitions
+- Next.js transition path removes pre-update getMaintenance when status changes
 
 Performance
-- Link from Request: 6 Apps Script calls → 1
+- Status transition: 2 GAS round-trips → 1 (eliminates pre-read when v0.7.8 live)
+- Simple field save: unchanged at 1 read + 1 write inside update()
 
 Files Changed
 - ROUTER.gs
@@ -52,6 +52,7 @@ Files Changed
 - UserRepository.gs
 - UsersController.gs
 - UserService.gs
+- WorkOrderMaintenanceMutationService.gs
 - WorkOrderRepository.gs
 - WorkOrdersController.gs
 - WorkOrderService.gs
@@ -67,21 +68,20 @@ YES
 
 Smoke Tests
 
-Phase 2.8 browser link treatment:
+Phase 32 status transition read elimination:
 
 ```bash
-node scripts/verify-phase28-link-treatment.cjs
+npx tsx --tsconfig tsconfig.json scripts/verify-phase32-status-transition-read-elimination.mts
 ```
 
-Phase 2.6 browser create treatment:
+Phase 31 browser smoke:
 
 ```bash
-node scripts/verify-phase26-create-treatment.cjs
+node scripts/verify-phase31-browser-smoke.cjs
 ```
 
 Notes
-- Deploy RequestTreatmentService.gs (includes linkTreatment) + RequestsController.gs.
-- RequestTreatmentLinkSpike.gs is a thin alias only.
-- Do not modify Link search or Create Treatment.
+- Deploy MaintenanceRepository.gs and MaintenanceService.gs.
+- Live marker: _buildMarker 2026-09-01-phase32-maintenance-update-v1 on update with _returnPreviousStatus.
 
 <!-- GENERATED FILE — do not edit by hand. npm run apps-script:pack -->

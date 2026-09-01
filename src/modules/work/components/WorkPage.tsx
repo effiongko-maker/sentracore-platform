@@ -60,9 +60,9 @@ export function WorkPage() {
     totalPages,
     total,
     reload,
-    reloadFirstPage,
     cancelWork,
     patchItem,
+    reconcileItem,
   } = useWork();
 
   const [modal, setModal] = useState<WorkModalState>({ type: "closed" });
@@ -129,9 +129,32 @@ export function WorkPage() {
     }
   }
 
+  /** List rows can lag behind persisted fields (e.g. requiresWorkOrder). Refresh on open. */
+  function openWorkView(row: Maintenance) {
+    setModal({ type: "view", work: row });
+    void MaintenanceService.getMaintenance(row.id)
+      .then((fresh) => {
+        if (!fresh) return;
+        reconcileItem(fresh);
+        setModal((current) =>
+          current.type === "view" && current.work.id === row.id
+            ? { type: "view", work: fresh }
+            : current
+        );
+      })
+      .catch(() => {
+        /* keep list-row snapshot if refresh fails */
+      });
+  }
+
   function handleWorkUpdated(next: Maintenance) {
-    patchItem(next);
+    reconcileItem(next);
     setModal({ type: "view", work: next });
+  }
+
+  function handleTreatSaved(updated: Maintenance) {
+    reconcileItem(updated);
+    setModal({ type: "closed" });
   }
 
   return (
@@ -188,7 +211,7 @@ export function WorkPage() {
             totalPages={totalPages}
             total={total}
             onPageChange={setPage}
-            onView={(row) => setModal({ type: "view", work: row })}
+            onView={openWorkView}
             onTreat={(row) => setModal({ type: "treat", work: row })}
             onCancel={(row) => setModal({ type: "cancel", work: row })}
           />
@@ -211,9 +234,7 @@ export function WorkPage() {
         mode="edit"
         maintenance={modal.type === "treat" ? modal.work : null}
         onClose={() => setModal({ type: "closed" })}
-        onSaved={async () => {
-          await reloadFirstPage();
-        }}
+        onSaved={handleTreatSaved}
       />
 
       <ViewWorkOrderModal

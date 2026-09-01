@@ -215,12 +215,22 @@ export async function orchestrateRequestMaintenance(options: {
   };
 }
 
+export type OrchestrateCreateWorkOrderResult = {
+  workOrder: WorkOrder;
+  /** Present when maintenanceId was linked during create. */
+  linkedMaintenance?: Maintenance;
+};
+
 export async function orchestrateCreateWorkOrder(options: {
   input: CreateWorkOrderInput;
   context: ActionContext;
   intake?: OperationalIntakeSource;
-}): Promise<WorkOrder> {
+  sideEffectMode?: OperationalSideEffectMode;
+  /** Skip back-link read when the Maintenance row is already loaded. */
+  maintenanceSnapshot?: Maintenance;
+}): Promise<OrchestrateCreateWorkOrderResult> {
   const workOrder = await WorkOrderService.createWorkOrder(options.input);
+  let linkedMaintenance: Maintenance | undefined;
 
   if (options.input.incidentId) {
     const incident = await IncidentService.getIncident(options.input.incidentId);
@@ -238,83 +248,87 @@ export async function orchestrateCreateWorkOrder(options: {
   }
 
   if (options.input.maintenanceId) {
-    const maintenance = await MaintenanceService.getMaintenance(
-      options.input.maintenanceId
-    );
+    const maintenance =
+      options.maintenanceSnapshot ??
+      (await MaintenanceService.getMaintenance(options.input.maintenanceId));
     if (maintenance) {
       const rel = linkWorkOrderToMaintenance(
         normalizeMaintenanceRelationships(maintenance),
         workOrder.id
       );
-      await MaintenanceService.updateMaintenance(maintenance.id, {
-        workOrderIds: rel.workOrderIds,
-        workOrderId: rel.workOrderId,
-        requiresWorkOrder: true,
-      });
+      linkedMaintenance = await MaintenanceService.updateMaintenance(
+        maintenance.id,
+        {
+          workOrderIds: rel.workOrderIds,
+          workOrderId: rel.workOrderId,
+          requiresWorkOrder: true,
+        }
+      );
     }
   }
 
-  try {
-    const event = await emitActionEvent(options.context, {
-      eventType: OperationalEventTypes.FACILITY_WORK_ORDER_CREATED,
-      entityType: "work_order",
-      entityId: workOrder.id,
-      data: withIntakeMetadata(
-        workOrderEventData(workOrder, {
-          actor: options.context.userId,
-          transitionSource: "specialised_action",
-        }),
-        options.intake ?? "staff"
-      ),
-    });
-    await persistOperationalEventId("work_order", workOrder.id, event.id);
-  } catch (eventError) {
-    console.error("[orchestrateCreateWorkOrder] event emission failed", {
-      workOrderId: workOrder.id,
-      error:
-        eventError instanceof Error ? eventError.message : String(eventError),
-    });
-  }
+  const sideEffectMode = options.sideEffectMode ?? "after";
+  await runOperationalSideEffects({
+    mode: sideEffectMode,
+    label: "orchestrateCreateWorkOrder",
+    task: async () => {
+      try {
+        const event = await emitActionEvent(options.context, {
+          eventType: OperationalEventTypes.FACILITY_WORK_ORDER_CREATED,
+          entityType: "work_order",
+          entityId: workOrder.id,
+          data: withIntakeMetadata(
+            workOrderEventData(workOrder, {
+              actor: options.context.userId,
+              transitionSource: "specialised_action",
+            }),
+            options.intake ?? "staff"
+          ),
+        });
+        await persistOperationalEventId("work_order", workOrder.id, event.id);
+      } catch (eventError) {
+        console.error("[orchestrateCreateWorkOrder] event emission failed", {
+          workOrderId: workOrder.id,
+          error:
+            eventError instanceof Error
+              ? eventError.message
+              : String(eventError),
+        });
+      }
+    },
+  });
 
-  return workOrder;
+  return { workOrder, linkedMaintenance };
 }
 
 /**
  * Create a Work Order from an existing Maintenance record, copying context and
  * linking both sides (maintenance.workOrderId ↔ workOrder.maintenanceId).
+ *
+ * Phase 28D: single consolidated Apps Script mutation + deferred event bookkeeping.
  */
 export async function orchestrateCreateWorkOrderFromMaintenance(options: {
   maintenanceId: string;
   context: ActionContext;
   title?: string;
 }): Promise<{ maintenance: Maintenance; workOrder: WorkOrder }> {
-  const maintenance = await MaintenanceService.getMaintenance(
-    options.maintenanceId
-  );
-  if (!maintenance) {
-    throw new Error("Maintenance not found");
-  }
-
-  const existingId = maintenance.workOrderId ?? maintenance.workOrderIds?.[0];
-  if (existingId) {
-    const existing = await WorkOrderService.getWorkOrder(existingId);
-    if (existing) {
-      return { maintenance, workOrder: existing };
-    }
-  }
+  let linkedMaintenance: Maintenance | undefined;
 
   const workOrder = await runExclusiveOperationalAction({
     organisationId: options.context.organisation.id,
-    scopeKey: maintenanceWorkOrderLeaseKey(maintenance.id),
+    scopeKey: maintenanceWorkOrderLeaseKey(options.maintenanceId),
     actorProfileId: options.context.profile.id,
     entityType: "work_order",
     recoverExisting: async () => {
-      const fresh = await MaintenanceService.getMaintenance(maintenance.id);
+      const fresh = await MaintenanceService.getMaintenance(
+        options.maintenanceId
+      );
       if (!fresh) return null;
       const linkedId = fresh.workOrderId ?? fresh.workOrderIds?.[0];
       if (!linkedId) return null;
       const existing = await WorkOrderService.getWorkOrder(linkedId);
       if (!existing) return null;
+      linkedMaintenance = fresh;
       return { entityId: existing.id, value: existing };
     },
     loadByEntityId: async (entityId) => {
@@ -323,76 +337,64 @@ export async function orchestrateCreateWorkOrderFromMaintenance(options: {
       return { entityId: existing.id, value: existing };
     },
     create: async () => {
-      const {
-        displayMaintenanceTitle,
-        parseMaintenanceDescriptionNotes,
-      } = await import("@/modules/maintenance/utils");
-      const title = (
-        options.title?.trim() || displayMaintenanceTitle(maintenance)
-      ).slice(0, 200);
-      const notes = parseMaintenanceDescriptionNotes(maintenance.description);
-      const descriptionParts = [
-        notes.body || undefined,
-        notes.location ? `Location: ${notes.location}` : undefined,
-        maintenance.department
-          ? `Department: ${maintenance.department}`
-          : undefined,
-        notes.category ? `Category: ${notes.category}` : undefined,
-        `Source maintenance: ${maintenance.id}`,
-      ].filter(Boolean);
-
-      const typeMap: Record<string, WorkOrder["type"]> = {
-        preventive: "preventive",
-        corrective: "corrective",
-        inspection: "inspection",
-        predictive: "preventive",
-        routine: "preventive",
-        other: "other",
-      };
-
-      const created = await orchestrateCreateWorkOrder({
-        input: {
-          title,
-          description: descriptionParts.join("\n\n") || undefined,
-          type: typeMap[maintenance.type] ?? "corrective",
-          maintenanceType:
-            maintenance.type === "preventive" ||
-            maintenance.type === "routine" ||
-            maintenance.type === "predictive"
-              ? "planned"
-              : "unplanned",
-          source:
-            maintenance.source === "request" ||
-            maintenance.source === "incident"
-              ? maintenance.source === "incident"
-                ? "incident"
-                : "request"
-              : "manual",
-          categoryId: maintenance.categoryId,
-          facilityId: maintenance.facilityId,
-          assetId: maintenance.assetId,
-          maintenanceId: maintenance.id,
-          incidentId: maintenance.incidentId,
-          reportedByUserId: maintenance.reportedByUserId,
-          assignedToUserId: maintenance.assignedToUserId,
-          priority: maintenance.priority,
-          status: "open",
+      const consolidated =
+        await WorkOrderService.createWorkOrderFromMaintenance({
+          maintenanceId: options.maintenanceId,
+          title: options.title,
           requestedAt: options.context.now,
           createdByUserId: options.context.userId,
           updatedByUserId: options.context.userId,
-        },
-        context: options.context,
-        intake: "staff",
-      });
-
-      return { entityId: created.id, value: created };
+          actorUserId: options.context.userId,
+        });
+      linkedMaintenance = consolidated.maintenance;
+      return {
+        entityId: consolidated.workOrder.id,
+        value: consolidated.workOrder,
+      };
     },
   });
 
-  const refreshed =
-    (await MaintenanceService.getMaintenance(maintenance.id)) ?? maintenance;
+  const resolvedMaintenance =
+    linkedMaintenance ??
+    (await MaintenanceService.getMaintenance(options.maintenanceId));
+  if (!resolvedMaintenance) {
+    throw new Error("Maintenance not found after Work Order create");
+  }
 
-  return { maintenance: refreshed, workOrder };
+  await runOperationalSideEffects({
+    mode: "after",
+    label: "orchestrateCreateWorkOrderFromMaintenance",
+    task: async () => {
+      try {
+        const event = await emitActionEvent(options.context, {
+          eventType: OperationalEventTypes.FACILITY_WORK_ORDER_CREATED,
+          entityType: "work_order",
+          entityId: workOrder.id,
+          data: withIntakeMetadata(
+            workOrderEventData(workOrder, {
+              actor: options.context.userId,
+              transitionSource: "specialised_action",
+            }),
+            "staff"
+          ),
+        });
+        await persistOperationalEventId("work_order", workOrder.id, event.id);
+      } catch (eventError) {
+        console.error(
+          "[orchestrateCreateWorkOrderFromMaintenance] event emission failed",
+          {
+            workOrderId: workOrder.id,
+            error:
+              eventError instanceof Error
+                ? eventError.message
+                : String(eventError),
+          }
+        );
+      }
+    },
+  });
+
+  return { maintenance: resolvedMaintenance, workOrder };
 }
 
 export type TriageResponse =
@@ -572,19 +574,21 @@ export async function orchestrateTriageIncident(options: {
             updatedByUserId: options.context.userId,
           },
           context: options.context,
+          maintenanceSnapshot: maintenance ?? undefined,
+          sideEffectMode: "after",
         });
         const fresh = await IncidentService.getIncident(current.id);
         if (fresh) current = fresh;
         const rel = linkWorkOrderToIncident(
           normalizeIncidentRelationships(current),
-          created.id
+          created.workOrder.id
         );
         current = await IncidentService.updateIncident(current.id, {
           workOrderIds: rel.workOrderIds,
           workOrderId: rel.workOrderId,
           requiresWorkOrder: true,
         });
-        return { entityId: created.id, value: created };
+        return { entityId: created.workOrder.id, value: created.workOrder };
       },
     });
   }

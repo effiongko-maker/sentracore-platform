@@ -357,6 +357,22 @@ async function loadAllMaintenanceCatalog(): Promise<MaintenanceCatalogEntry[]> {
   );
 }
 
+/** Phase 32 — previous status comes from authoritative GAS update, not a pre-read. */
+function resolvePreviousStatus(
+  raw: { _previousStatus?: string; status?: string },
+  statusInUpdate: boolean
+): string {
+  if (raw._previousStatus != null && String(raw._previousStatus).trim()) {
+    return String(raw._previousStatus);
+  }
+  if (!statusInUpdate) {
+    return String(raw.status ?? "requested");
+  }
+  throw new Error(
+    "Maintenance update did not return _previousStatus. Deploy Apps Script v0.7.8 (MaintenanceRepository + MaintenanceService)."
+  );
+}
+
 /**
  * Maintenance domain service.
  * Talks only to ApiClient. Mirrors IncidentService / WorkOrderService.
@@ -529,7 +545,31 @@ export const MaintenanceService = {
     id: string,
     input: UpdateMaintenanceInput
   ): Promise<Maintenance> {
-    const payload = applyWorkOrderRule({ ...input, id });
+    const { entity } = await MaintenanceService.updateMaintenanceWithMeta(
+      id,
+      input
+    );
+    return entity;
+  },
+
+  /**
+   * Single GAS round-trip update that returns pre-merge status for lifecycle transitions.
+   * Avoids a separate getMaintenance read before updateMaintenance.
+   */
+  async updateMaintenanceWithMeta(
+    id: string,
+    input: UpdateMaintenanceInput
+  ): Promise<{ entity: Maintenance; previousStatus: string }> {
+    const statusInUpdate = input.status !== undefined && input.status !== null;
+
+    const payload = applyWorkOrderRule({
+      ...input,
+      id,
+      _returnPreviousStatus: true,
+    } as UpdateMaintenanceInput & {
+      id: string;
+      _returnPreviousStatus: boolean;
+    });
 
     if (typeof window === "undefined") {
       const row = await postToAppsScriptData(
@@ -539,23 +579,27 @@ export const MaintenanceService = {
           payload,
         },
         { resource: "maintenance", action: "update" },
-        "MaintenanceService.updateMaintenance"
+        "MaintenanceService.updateMaintenanceWithMeta"
       );
-      const updated = mapRemoteMaintenance(row as RemoteMaintenance);
+      const raw = row as RemoteMaintenance & { _previousStatus?: string };
+      const previousStatus = resolvePreviousStatus(raw, statusInUpdate);
+      const updated = mapRemoteMaintenance(raw);
       onMaintenanceMutation();
-      return updated;
+      return { entity: updated, previousStatus };
     }
 
-    const response = await apiClient.post<Maintenance>("/maintenance", {
+    const response = await apiClient.post<
+      Maintenance & { _previousStatus?: string }
+    >("/maintenance", {
       resource: "maintenance",
       action: "update",
       payload,
     });
-    const updated = mapRemoteMaintenance(
-      response.data as unknown as RemoteMaintenance
-    );
+    const raw = response.data as Maintenance & { _previousStatus?: string };
+    const previousStatus = resolvePreviousStatus(raw, statusInUpdate);
+    const updated = mapRemoteMaintenance(raw as unknown as RemoteMaintenance);
     onMaintenanceMutation();
-    return updated;
+    return { entity: updated, previousStatus };
   },
 
   /** Soft-cancel — maintenance rows are never deleted. */

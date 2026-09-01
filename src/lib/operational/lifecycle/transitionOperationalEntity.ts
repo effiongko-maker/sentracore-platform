@@ -158,15 +158,16 @@ export async function transitionMaintenance(options: {
   context: ActionContext;
   options?: TransitionOptions;
 }): Promise<TransitionOperationalEntityResult<Maintenance>> {
-  const existing = await MaintenanceService.getMaintenance(options.entityId);
-  if (!existing) {
-    throw new Error("Maintenance not found");
-  }
-
-  const previousStatus = existing.status;
-  const nextStatus = options.update.status ?? existing.status;
-  const statusChanged = previousStatus !== nextStatus;
   const source = options.options?.transitionSource ?? "form_update";
+
+  const { entity, previousStatus } =
+    await MaintenanceService.updateMaintenanceWithMeta(
+      options.entityId,
+      options.update
+    );
+
+  const nextStatus = entity.status;
+  const statusChanged = previousStatus !== nextStatus;
 
   const mapped =
     options.options?.forceEventType !== undefined
@@ -177,11 +178,6 @@ export async function transitionMaintenance(options: {
     statusChanged &&
     mapped != null &&
     options.options?.suppressLifecycleEvent !== true;
-
-  const entity = await MaintenanceService.updateMaintenance(
-    options.entityId,
-    options.update
-  );
 
   let eventEmitted = false;
   if (shouldEmit && mapped) {

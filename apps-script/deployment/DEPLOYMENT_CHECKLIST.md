@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Release: **v0.7.4** — Phase 2.8 production linkTreatment (Link only)
+Release: **v0.7.8** — Phase 32 status transition read elimination
 
 Use this checklist with `DEPLOYMENT_PACK.md` open. Someone unfamiliar
 with the project should be able to deploy from these steps alone.
@@ -61,6 +61,7 @@ Current pack file list:
 - [ ] `UserRepository.gs`
 - [ ] `UsersController.gs`
 - [ ] `UserService.gs`
+- [ ] `WorkOrderMaintenanceMutationService.gs`
 - [ ] `WorkOrderRepository.gs`
 - [ ] `WorkOrdersController.gs`
 - [ ] `WorkOrderService.gs`
@@ -120,6 +121,7 @@ For each file that already exists in Apps Script, **replace the entire contents*
 - [ ] Replace `UserRepository.gs`
 - [ ] Replace `UsersController.gs`
 - [ ] Replace `UserService.gs`
+- [ ] Replace `WorkOrderMaintenanceMutationService.gs`
 - [ ] Replace `WorkOrderRepository.gs`
 - [ ] Replace `WorkOrdersController.gs`
 - [ ] Replace `WorkOrderService.gs`
@@ -174,16 +176,16 @@ A **new Web App version** is REQUIRED.
 
 With `npm run dev` running:
 
-### Phase 2.8 browser link treatment
+### Phase 32 status transition read elimination
 
 ```bash
-node scripts/verify-phase28-link-treatment.cjs
+npx tsx --tsconfig tsconfig.json scripts/verify-phase32-status-transition-read-elimination.mts
 ```
 
-### Phase 2.6 browser create treatment
+### Phase 31 browser smoke
 
 ```bash
-node scripts/verify-phase26-create-treatment.cjs
+node scripts/verify-phase31-browser-smoke.cjs
 ```
 
 Expected checks:

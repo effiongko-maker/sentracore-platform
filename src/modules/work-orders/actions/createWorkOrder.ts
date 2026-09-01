@@ -24,7 +24,7 @@ export async function createWorkOrder(
         throw new ActionError("VALIDATION_ERROR", "Facility is required.");
       }
 
-      return orchestrateCreateWorkOrder({
+      const { workOrder } = await orchestrateCreateWorkOrder({
         input: {
           ...rawInput,
           title,
@@ -34,7 +34,9 @@ export async function createWorkOrder(
         },
         context,
         intake: "staff",
+        sideEffectMode: "after",
       });
+      return workOrder;
     },
   });
 }
