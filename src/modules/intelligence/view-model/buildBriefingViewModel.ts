@@ -119,7 +119,7 @@ function deriveAffectedArea(p: IntelligencePriority): string | undefined {
 function deriveBasedOn(p: IntelligencePriority, evidence: number | null): string {
   const count = evidence ?? p.relatedEventIds?.length ?? 0;
   if (p.category === "incident_pattern" && count > 0) {
-    return `${count} related incident${count === 1 ? "" : "s"}`;
+    return `${count} related activit${count === 1 ? "y" : "ies"}`;
   }
   if (p.category === "recommendation_response" && count > 0) {
     return `${count} recommendation response${count === 1 ? "" : "s"}`;
@@ -270,6 +270,7 @@ export function buildBriefingViewModel(
   const processing = status.state === "processing";
   const partial = status.state === "partial";
   const hasActivity =
+    operationalContext.recentWorkCount30d > 0 ||
     operationalContext.recentIncidentCount30d > 0 ||
     recommendationHealth.totalDecisions > 0;
 

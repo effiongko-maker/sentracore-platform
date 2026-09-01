@@ -10,8 +10,9 @@ import {
   WORKSPACE_ASSIGNED_WORK_ORDER_STATUSES,
 } from "@/lib/operational/workload";
 import { toIsoUtc } from "@/services/reporting/normalize";
+import { isCriticalOpenWork } from "@/services/reporting/kpis";
 
-/** Same rule as organisational pulse criticalIncidents. */
+/** Legacy incident statuses — historical compatibility only. */
 export const ATTENTION_OPEN_INCIDENT = ACTIVE_INCIDENT_STATUSES;
 
 export const ATTENTION_CRITICAL_SEVERITY = new Set(["critical", "high"]);
@@ -201,10 +202,10 @@ function fromOverdueMaintenance(
       severity: row.priority === "critical" ? "critical" : "high",
       title: row.title?.trim() || row.id,
       location: facilityLabel(row.facilityId, facilityNameById),
-      entityLabel: "Maintenance",
-      reason: `Overdue maintenance${row.dueAt ? ` (due ${dayKey(row.dueAt)})` : ""} — schedule or complete follow-up.`,
-      actionLabel: "Review maintenance →",
-      href: "/maintenance",
+      entityLabel: "Work",
+      reason: `Overdue work${row.dueAt ? ` (due ${dayKey(row.dueAt)})` : ""} — schedule or complete follow-up.`,
+      actionLabel: "Review work →",
+      href: "/work",
       entityId: row.id,
     });
   }
@@ -229,17 +230,17 @@ function fromPriorityMaintenance(
     if (!priorityHit && !holdHit && !needsWo) continue;
 
     seenMntIds.add(row.id);
-    let reason = "Elevated maintenance requires prompt operational review.";
+    let reason = "Elevated work requires prompt operational review.";
     if (holdHit) {
       reason = row.holdReason?.trim()
         ? `On hold — ${row.holdReason.trim()}`
-        : "Maintenance is on hold — unblock or reschedule.";
+        : "Work is on hold — unblock or reschedule.";
     } else if (needsWo) {
       reason = "Work order still required — create or link follow-up work.";
     } else if (row.priority === "critical") {
-      reason = "Critical priority maintenance in active flow.";
+      reason = "Critical priority work in active flow.";
     } else {
-      reason = "High priority maintenance awaiting progress.";
+      reason = "High priority work awaiting progress.";
     }
 
     matters.push({
@@ -247,10 +248,10 @@ function fromPriorityMaintenance(
       severity: row.priority === "critical" || holdHit ? "critical" : "high",
       title: row.title?.trim() || row.id,
       location: facilityLabel(row.facilityId, facilityNameById),
-      entityLabel: "Maintenance",
+      entityLabel: "Work",
       reason,
-      actionLabel: needsWo ? "Create work order →" : "Review maintenance →",
-      href: needsWo ? "/work-orders" : "/maintenance",
+      actionLabel: needsWo ? "Create work order →" : "Review work →",
+      href: needsWo ? "/work-orders" : "/work",
       entityId: row.id,
     });
   }
@@ -435,9 +436,9 @@ function fromAssignedToMe(
         facilityNameById,
         row.locationDetail
       ),
-      entityLabel: "Incident",
-      reason: "Assigned to you — triage or update status.",
-      actionLabel: "Review incident →",
+      entityLabel: "Legacy incident",
+      reason: "Assigned legacy incident — triage or update status.",
+      actionLabel: "View legacy incident →",
       href: "/incidents",
       entityId: row.id,
     });
@@ -464,14 +465,14 @@ function fromAssignedToMe(
       severity: row.status === "on_hold" ? "critical" : "high",
       title: row.title?.trim() || row.id,
       location: facilityLabel(row.facilityId, facilityNameById),
-      entityLabel: "Maintenance",
+      entityLabel: "Work",
       reason: dueToday
         ? "Assigned to you and due today."
         : row.status === "on_hold"
-          ? "Assigned maintenance is on hold — unblock it."
+          ? "Assigned work is on hold — unblock it."
           : "Assigned to you — advance or schedule the work.",
-      actionLabel: "Review maintenance →",
-      href: "/maintenance",
+      actionLabel: "Review work →",
+      href: "/work",
       entityId: row.id,
     });
   }
@@ -534,7 +535,7 @@ function resolveViewAll(matters: AttentionMatter[]): {
     hrefCounts.set(matter.href, (hrefCounts.get(matter.href) ?? 0) + 1);
   }
 
-  let bestHref = "/incidents";
+  let bestHref = "/work";
   let bestCount = 0;
   for (const [href, count] of hrefCounts) {
     if (count > bestCount) {
@@ -551,7 +552,7 @@ function resolveViewAll(matters: AttentionMatter[]): {
 
 /**
  * Home attention model from the ripple matrix:
- * critical/high incidents, overdue WO/MNT, priority/hold maintenance,
+ * critical/high Work, overdue WO/MNT, priority/hold work,
  * approval queues, assigned-to-me pressure, WO awaiting approval package.
  *
  * Not a chronological activity feed — current-state actionable matters only.
@@ -574,11 +575,7 @@ export function buildAttentionModel(
 
   const seenWoIds = new Set<string>();
   const seenMntIds = new Set<string>();
-  const incidentMatters = fromIncidents(
-    inputNormalized.incidents,
-    inputNormalized.facilityNameById
-  );
-  const seenIncIds = new Set(incidentMatters.map((m) => m.entityId));
+  const seenIncIds = new Set<string>();
 
   // Overdue follow-ups first so they win over generic approval queue rows.
   const overdueApprovalMatters = fromOverdueApprovalFollowUps(
@@ -593,7 +590,6 @@ export function buildAttentionModel(
   ).filter((m) => !seenAprIds.has(m.entityId));
 
   const matters = sortMatters([
-    ...incidentMatters,
     ...fromOverdueWorkOrders(
       inputNormalized.workOrders,
       inputNormalized.asOf,
@@ -644,13 +640,23 @@ export function buildAttentionModel(
   };
 }
 
-/** Keep pulse critical count aligned with critical/high open incidents only. */
-export function countCriticalMatters(incidents: Incident[]): number {
+/** Live critical Work count — high/critical priority open Work. */
+export function countCriticalWork(maintenance: Maintenance[]): number {
+  return maintenance.filter(isCriticalOpenWork).length;
+}
+
+/** Legacy critical/high open Incidents — historical compatibility only. */
+export function countLegacyCriticalIncidents(incidents: Incident[]): number {
   return incidents.filter(
     (row) =>
       ATTENTION_OPEN_INCIDENT.has(row.status) &&
       ATTENTION_CRITICAL_SEVERITY.has(row.severity)
   ).length;
+}
+
+/** @deprecated Use countLegacyCriticalIncidents — historical Incidents only. */
+export function countCriticalMatters(incidents: Incident[]): number {
+  return countLegacyCriticalIncidents(incidents);
 }
 
 export function severityLabel(severity: AttentionMatter["severity"]): string {

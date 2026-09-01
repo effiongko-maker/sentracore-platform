@@ -43,9 +43,9 @@ export function buildAnnualReportDocument(
     health.band === "healthy"
       ? "Stable operations confirm the value of proactive maintenance and clear ownership."
       : "Elevated risk signals reinforce the need for earlier escalation and backlog control.",
-    kpis.criticalIncidents > 0
-      ? "Critical incidents remain a leading indicator for resource prioritisation."
-      : "Low critical-incident volume supports current response playbooks.",
+    kpis.criticalWork > 0
+      ? "Critical work remains a leading indicator for resource prioritisation."
+      : "Low critical-work volume supports current response playbooks.",
     "Consistent KPI monitoring through ReportingSnapshot enables comparable year-on-year reporting.",
   ];
 
@@ -60,7 +60,7 @@ export function buildAnnualReportDocument(
     openWorkOrders: kpis.openWorkOrders,
     closureRate: `${closedPct}%`,
     maintenanceBacklog: kpis.maintenanceBacklog,
-    criticalIncidents: kpis.criticalIncidents,
+    criticalWork: kpis.criticalWork,
     workforce: kpis.activeWorkforce,
     operationalScore: health.score,
     majorRisks: challenges.join(" | "),
@@ -100,8 +100,8 @@ export function buildAnnualReportDocument(
           },
           {
             key: "critical",
-            label: "Critical incidents",
-            value: kpis.criticalIncidents,
+            label: "Critical work",
+            value: kpis.criticalWork,
           },
           { key: "workforce", label: "Workforce", value: kpis.activeWorkforce },
           { key: "score", label: "Operational score", value: health.score },

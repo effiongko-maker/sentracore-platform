@@ -2,7 +2,9 @@ import type { BriefingViewModel } from "../view-model/buildBriefingViewModel";
 
 export function BriefingContextStrip({ vm }: { vm: BriefingViewModel }) {
   const { recommendationHealth, operationalContext, windowDays } = vm;
-  const showActivity = operationalContext.recentIncidentCount30d > 0;
+  const showActivity =
+    operationalContext.recentWorkCount30d > 0 ||
+    operationalContext.recentIncidentCount30d > 0;
   const showResponse = recommendationHealth.totalDecisions > 0;
 
   if (!showActivity && !showResponse) return null;
@@ -43,10 +45,18 @@ export function BriefingContextStrip({ vm }: { vm: BriefingViewModel }) {
           <div className="ix-context-stats">
             <div>
               <p className="ix-context-stat-value">
+                {operationalContext.recentWorkCount30d}
+              </p>
+              <p className="ix-context-stat-label">Work</p>
+            </div>
+            {operationalContext.recentIncidentCount30d > 0 ? (
+            <div>
+              <p className="ix-context-stat-value">
                 {operationalContext.recentIncidentCount30d}
               </p>
-              <p className="ix-context-stat-label">Incidents</p>
+              <p className="ix-context-stat-label">Legacy incidents</p>
             </div>
+            ) : null}
             <div>
               <p className="ix-context-stat-value">
                 {operationalContext.highOrCriticalRiskCount}

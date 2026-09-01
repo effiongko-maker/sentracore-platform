@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ModeFrame, StreamSurface } from "@/components/platform";
 import { OperationalPageHeader } from "@/components/operational";
@@ -14,10 +15,10 @@ import { IncidentService } from "../services/IncidentService";
 import { IncidentFormModal } from "./IncidentFormModal";
 import { IncidentsTable } from "./IncidentsTable";
 import { IncidentsToolbar } from "./IncidentsToolbar";
-import { ReportIncidentModal } from "./ReportIncidentModal";
 import { ViewIncidentModal } from "./ViewIncidentModal";
 
 export function IncidentsPage() {
+  const router = useRouter();
   const { toast } = useToast();
   const openId = useQueryRecordId();
   const {
@@ -92,11 +93,11 @@ export function IncidentsPage() {
       <div className="op-page">
         <OperationalPageHeader
           title="Incidents"
-          description="Reported events and issues requiring review, response, or follow-up."
+          description="Legacy incident records — view and manage historical events. Log new issues from Issues."
           countValue={total}
-          countLabel="In view"
-          actionLabel="Report incident"
-          onAction={() => setModal({ type: "create" })}
+          countLabel="Active events"
+          actionLabel="Log issue"
+          onAction={() => router.push("/issues")}
           loading={loading}
         />
 
@@ -143,12 +144,6 @@ export function IncidentsPage() {
           </StreamSurface>
         )}
       </div>
-
-      <ReportIncidentModal
-        open={modal.type === "create"}
-        onClose={() => setModal({ type: "closed" })}
-        onSaved={reload}
-      />
 
       <IncidentFormModal
         open={modal.type === "edit"}

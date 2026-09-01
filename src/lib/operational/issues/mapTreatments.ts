@@ -6,13 +6,17 @@ import {
 } from "./status";
 import type { IssueTreatmentRef, IssueWorkOrderRef } from "./types";
 
+/**
+ * Map Maintenance row → Work treatment ref (Phase 15).
+ * Kind is "work"; persistence remains Maintenance.
+ */
 export function mapMaintenanceToTreatmentRef(row: {
   id: string;
   title: string;
   status: string;
 }): IssueTreatmentRef {
   return {
-    kind: "maintenance",
+    kind: "work",
     id: row.id,
     status: row.status,
     title: row.title,
@@ -21,10 +25,12 @@ export function mapMaintenanceToTreatmentRef(row: {
   };
 }
 
+/** @deprecated Prefer mapMaintenanceToTreatmentRef (emits kind work). */
+export const mapWorkToTreatmentRef = mapMaintenanceToTreatmentRef;
+
 /**
- * Incident as treatment/handling activity when it is the linked treatment path.
- * Conceptually Incident is also Issue classification — both views are valid;
- * this ref does not create a second persistence universe.
+ * Legacy Incident handling — only when an Incident record already exists.
+ * Not used for new FM Log Issue / canonical Treat → Work flows.
  */
 export function mapIncidentToTreatmentRef(row: {
   id: string;
@@ -49,16 +55,17 @@ export function mapWorkOrderToIssueRef(
     maintenanceId?: string;
     incidentId?: string;
   },
-  options?: { viaTreatmentId?: string; viaTreatmentKind?: "maintenance" | "incident_handling" }
+  options?: {
+    viaTreatmentId?: string;
+    viaTreatmentKind?: "work" | "maintenance" | "incident_handling";
+  }
 ): IssueWorkOrderRef {
   const viaTreatmentId =
-    options?.viaTreatmentId ||
-    row.maintenanceId ||
-    row.incidentId;
+    options?.viaTreatmentId || row.maintenanceId || row.incidentId;
   const viaTreatmentKind =
     options?.viaTreatmentKind ||
     (row.maintenanceId
-      ? "maintenance"
+      ? "work"
       : row.incidentId
         ? "incident_handling"
         : undefined);

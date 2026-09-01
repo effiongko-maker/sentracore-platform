@@ -1,8 +1,12 @@
 /**
- * Issue operational model (Phase 6).
+ * Issue operational model (Phase 15).
  *
- * Conceptual primary operational object composed over existing domains.
- * No Issue sheet/table; no second status store; no Job Order/payment engines.
+ * ISSUE → TREAT → WORK → EXECUTION → OUTCOME → COST/PAYMENT
+ *
+ * Work persistence (compatibility) = Maintenance sheet.
+ * Incident = legacy compatibility only.
+ * Financial foundation: `@/lib/operational/finance`.
+ * Work domain: `@/lib/operational/work`.
  */
 
 export type {
@@ -38,7 +42,21 @@ export type {
   CostSubmissionStatus,
 } from "./costSubmission";
 
+export type {
+  IssueOperationalStage,
+  IssueRootKind,
+} from "./model";
+
 export { ISSUE_MODEL_PHASE } from "./phase";
+
+export {
+  FM_LOG_ISSUE_SIDE_EFFECT_MODE,
+  ISSUE_EXECUTION_IMPLEMENTATIONS,
+  ISSUE_MODEL_OPEN_DECISIONS,
+  ISSUE_OPERATIONAL_CHAIN,
+  ISSUE_ROOT_KINDS,
+  ISSUE_TREATMENT_IMPLEMENTATIONS,
+} from "./model";
 
 export {
   ISSUE_AUTHORITY_NOTES,
@@ -73,6 +91,7 @@ export {
   mapIncidentToTreatmentRef,
   mapMaintenanceToTreatmentRef,
   mapWorkOrderToIssueRef,
+  mapWorkToTreatmentRef,
 } from "./mapTreatments";
 
 export { composeIssueFromRequest } from "./composeIssueFromRequest";
@@ -91,7 +110,7 @@ export {
   mapWorkOrderToExecutionRef,
 } from "./execution";
 
-export { deriveIssueActions, getIssueAction } from "./actions";
+export { deriveIssueActions, getIssueAction, isSignificantIssue } from "./actions";
 
 export { buildIssueOperationalView } from "./buildOperationalView";
 

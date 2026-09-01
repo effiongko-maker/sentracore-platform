@@ -130,12 +130,155 @@ function inWindow(
 }
 
 /**
+ * Deterministic signal analysis for canonical Work root events (Phase 19).
+ * Uses facility.maintenance_requested history — the backing event for Log Issue → Work.
+ */
+async function analyzeWorkRootSignals(
+  ctx: Parameters<OperationalEventConsumer>[0]
+): Promise<ActionOutcome> {
+  const { event, organisationId, actionKey } = ctx;
+  const data = event.data ?? {};
+  const facilityId = asNonEmptyString(data.facilityId);
+
+  if (!facilityId) {
+    return actionOutcomeSucceeded(
+      "Skipped work signal analysis: facilityId missing from event payload.",
+      {
+        actionKey,
+        skipped: true,
+        reason: "missing_facility_id",
+        eventId: event.id,
+        entityId: event.entityId,
+        organisationId,
+        canonicalRoot: "work",
+      },
+      { signals: [], recommendations: [] }
+    );
+  }
+
+  const occurredAt = new Date(event.occurredAt);
+  const occurredAtMs = occurredAt.getTime();
+  const lookbackSince = daysAgoIso(occurredAt, INCIDENT_SIGNAL_RULES.lookbackDays);
+
+  const priorWork = await loadFacilityHistory({
+    organisationId,
+    facilityId,
+    eventType: OperationalEventTypes.FACILITY_MAINTENANCE_REQUESTED,
+    sinceIso: lookbackSince,
+    excludeEventId: event.id,
+    excludeEntityId: event.entityId,
+  });
+
+  const since7dMs = occurredAtMs - 7 * 24 * 60 * 60 * 1000;
+  const since30dMs = occurredAtMs - 30 * 24 * 60 * 60 * 1000;
+  const prior7d = inWindow(priorWork, since7dMs);
+  const prior30d = inWindow(priorWork, since30dMs);
+
+  const signals: ActionSignal[] = [];
+  const recommendations: ActionRecommendation[] = [];
+
+  const freq7 = severityForCount(
+    prior7d.length,
+    INCIDENT_SIGNAL_RULES.frequency7d.warningAt,
+    INCIDENT_SIGNAL_RULES.frequency7d.criticalAt
+  );
+  if (freq7) {
+    signals.push({
+      key: "work.facility_frequency_7d",
+      severity: freq7,
+      summary: `${prior7d.length} prior work item(s) at facility ${facilityId} within 7 days.`,
+      evidence: {
+        rule: "work.facility_frequency_7d",
+        organisationId,
+        facilityId,
+        windowDays: 7,
+        priorCount: prior7d.length,
+        currentEventId: event.id,
+        currentEntityId: event.entityId,
+        priorRefs: prior7d.slice(0, 10).map((row) => ({
+          eventId: row.id,
+          entityId: row.entity_id,
+          occurredAt: row.occurred_at,
+          maintenanceId:
+            asNonEmptyString(row.data?.maintenanceId) ?? row.entity_id,
+        })),
+      },
+    });
+    if (freq7 === "critical") {
+      recommendations.push({
+        key: "review_facility_work_pattern",
+        title: "Review recent work pattern at this facility",
+        description: `Critical 7-day frequency: ${prior7d.length} prior work items at facility ${facilityId}.`,
+        suggestedAction: "issue.review_work",
+        reasoning:
+          "Deterministic rule work.facility_frequency_7d fired at critical threshold.",
+      });
+    }
+  }
+
+  const freq30 = severityForCount(
+    prior30d.length,
+    INCIDENT_SIGNAL_RULES.frequency30d.warningAt,
+    INCIDENT_SIGNAL_RULES.frequency30d.criticalAt
+  );
+  if (freq30) {
+    signals.push({
+      key: "work.facility_frequency_30d",
+      severity: freq30,
+      summary: `${prior30d.length} prior work item(s) at facility ${facilityId} within 30 days.`,
+      evidence: {
+        rule: "work.facility_frequency_30d",
+        organisationId,
+        facilityId,
+        windowDays: 30,
+        priorCount: prior30d.length,
+        currentEventId: event.id,
+        currentEntityId: event.entityId,
+        priorRefs: prior30d.slice(0, 10).map((row) => ({
+          eventId: row.id,
+          entityId: row.entity_id,
+          occurredAt: row.occurred_at,
+          maintenanceId:
+            asNonEmptyString(row.data?.maintenanceId) ?? row.entity_id,
+        })),
+      },
+    });
+  }
+
+  return actionOutcomeSucceeded(
+    signals.length === 0
+      ? `No deterministic work signals for facility ${facilityId}.`
+      : `Detected ${signals.length} deterministic work signal(s) for facility ${facilityId}.`,
+    {
+      actionKey,
+      analyzed: true,
+      canonicalRoot: "work",
+      eventId: event.id,
+      entityId: event.entityId,
+      organisationId,
+      facilityId,
+      maintenanceId: asNonEmptyString(data.maintenanceId) ?? event.entityId,
+    },
+    { signals, recommendations }
+  );
+}
+
+/**
  * Deterministic incident signal analysis (Action Engine v1.2).
  * Uses operational_events history only — no Apps Script / domain reads.
+ *
+ * Phase 19: `facility.maintenance_requested` is the canonical Work root for new FM
+ * activity. `facility.incident_reported` remains for historical Incident records.
  */
 export const analyzeIncidentSignalsConsumer: OperationalEventConsumer = async (
   ctx
 ) => {
+  if (
+    ctx.event.eventType === OperationalEventTypes.FACILITY_MAINTENANCE_REQUESTED
+  ) {
+    return analyzeWorkRootSignals(ctx);
+  }
+
   const { event, organisationId, actionKey } = ctx;
   const payload = readIncidentPayload(event.data ?? {});
 

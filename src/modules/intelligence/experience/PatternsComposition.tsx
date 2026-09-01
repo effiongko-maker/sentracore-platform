@@ -4,16 +4,16 @@ import type { BriefingFinding } from "../view-model/buildBriefingViewModel";
 
 function relatedModules(finding: BriefingFinding): string[] {
   const title = finding.title.toLowerCase();
-  if (title.includes("maintenance") || title.includes("defer")) {
-    return ["Maintenance", "Incidents", "Facilities"];
+  if (title.includes("maintenance") || title.includes("defer") || title.includes("work")) {
+    return ["Work", "Issues", "Facilities"];
   }
   if (title.includes("water") || title.includes("leak")) {
-    return ["Incidents", "Maintenance", "Facilities"];
+    return ["Issues", "Work", "Facilities"];
   }
   if (title.includes("risk") || title.includes("critical")) {
-    return ["Incidents", "Assets", "Work Orders"];
+    return ["Issues", "Assets", "Work Orders"];
   }
-  return ["Incidents", "Maintenance", "Work Orders"];
+  return ["Issues", "Work", "Work Orders"];
 }
 
 export function PatternsComposition({

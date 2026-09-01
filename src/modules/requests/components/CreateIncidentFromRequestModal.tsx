@@ -1,3 +1,8 @@
+/**
+ * @deprecated Phase 23 — not reachable from FM Request treatment UI.
+ * Preserved for legacy compatibility reference only. New FM treatment uses
+ * Create Work via `CreateMaintenanceFromRequestModal`.
+ */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";

@@ -6,6 +6,7 @@ export type DashboardModuleRef =
   | "assets"
   | "incidents"
   | "maintenance"
+  | "work"
   | "work-orders";
 
 export type DashboardCardTone =
@@ -58,6 +59,9 @@ export interface DashboardPulse {
   criticalIncidents: number;
   criticalIncidentsUnassigned: number;
   incidentsNeedingWorkOrder: number;
+  criticalWork: number;
+  criticalWorkUnassigned: number;
+  workNeedingWorkOrder: number;
   maintenanceBacklog: number;
   overdueMaintenance: number;
   maintenanceOnHold: number;

@@ -1,6 +1,7 @@
 import { emitActionEvent, type ActionContext } from "@/lib/actions";
 import { ActionError } from "@/lib/actions/errors";
 import { OperationalEventTypes } from "@/lib/events/taxonomy";
+import { assertNewIncidentCreateAllowed } from "@/lib/operational/work/incidentWriteFreeze";
 import {
   requestCreateIncidentLeaseKey,
   requestCreateMaintenanceLeaseKey,
@@ -217,12 +218,26 @@ export async function orchestrateCreateMaintenanceFromRequest(options: {
   };
 }
 
+/**
+ * Phase 15 canonical alias: Request → Treat → Work (Maintenance backing).
+ * Prefer this name in new call sites; persistence unchanged.
+ */
+export const orchestrateCreateWorkFromRequest =
+  orchestrateCreateMaintenanceFromRequest;
+
 export async function orchestrateCreateIncidentFromRequest(options: {
   requestId: string;
   input: CreateIncidentInput;
   idempotencyKey: string;
   context: ActionContext;
 }): Promise<RequestTreatmentResult> {
+  assertNewIncidentCreateAllowed("orchestrateCreateIncidentFromRequest");
+
+  /**
+   * LEGACY: creates Incident from Request.
+   * Phase 15 canonical path is orchestrateCreateWorkFromRequest.
+   * Frozen Phase 18 — no new FM Request → Incident creation.
+   */
   let appsScriptCalls = 0;
 
   const idempotencyKey = options.idempotencyKey.trim();

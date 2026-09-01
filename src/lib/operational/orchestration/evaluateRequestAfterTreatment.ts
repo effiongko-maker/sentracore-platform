@@ -1,3 +1,11 @@
+/**
+ * After Work (Maintenance) reaches `completed`, or a legacy Incident reaches
+ * `resolved`, evaluate whether the parent Request can auto-resolve.
+ *
+ * Phase 15: canonical terminal is Work/Maintenance completed.
+ * Incident resolved remains supported for existing Incident-linked Requests.
+ */
+
 import {
   isIncidentSuccessfullyTerminal,
   isMaintenanceSuccessfullyTerminal,

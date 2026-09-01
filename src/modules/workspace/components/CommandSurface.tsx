@@ -21,7 +21,7 @@ import type {
 } from "../types";
 
 const PRIMARY_ACTION_IDS = [
-  "report-incident",
+  "log-issue",
   "request-maintenance",
   "create-work-order",
   "manage-facilities",
@@ -31,7 +31,7 @@ const ACTION_VISUAL: Record<
   (typeof PRIMARY_ACTION_IDS)[number],
   { icon: LucideIcon; tone: "blue" | "green" | "amber" | "violet" }
 > = {
-  "report-incident": { icon: Plus, tone: "blue" },
+  "log-issue": { icon: Plus, tone: "blue" },
   "request-maintenance": { icon: Wrench, tone: "green" },
   "create-work-order": { icon: ClipboardList, tone: "amber" },
   "manage-facilities": { icon: Building2, tone: "violet" },
@@ -80,8 +80,8 @@ function buildHeroCopy(snapshot: WorkspaceSnapshot): {
           : `${attentionTotal} matters require action across your facilities.`,
       line2:
         critical > 0
-          ? `${critical} critical · ${pulse.openIncidents} open incidents · ${pulse.openWorkOrders} work orders · ${pulse.openMaintenance} maintenance.`
-          : `${pulse.openIncidents} open incidents · ${pulse.openWorkOrders} work orders · ${pulse.openMaintenance} maintenance.`,
+          ? `${critical} critical · ${pulse.openWork} open work · ${pulse.openWorkOrders} work orders.`
+          : `${pulse.openWork} open work · ${pulse.openWorkOrders} work orders.`,
     };
   }
 
@@ -91,7 +91,7 @@ function buildHeroCopy(snapshot: WorkspaceSnapshot): {
       line1: operationalState.statement,
       line2:
         operationalState.subtext ??
-        `${pulse.openIncidents} open incidents · ${pulse.openMaintenance} maintenance · ${pulse.openWorkOrders} work orders.`,
+        `${pulse.openWork} open work · ${pulse.openWorkOrders} work orders.`,
     };
   }
 
@@ -99,10 +99,10 @@ function buildHeroCopy(snapshot: WorkspaceSnapshot): {
     heading: "Your operations are stable",
     line1: "No matters require intervention across your facilities.",
     line2:
-      pulse.openIncidents > 0
-        ? `${pulse.openIncidents} open incident${
-            pulse.openIncidents === 1 ? "" : "s"
-          } ${pulse.openIncidents === 1 ? "is" : "are"} being tracked with no urgent escalation.`
+      pulse.openWork > 0
+        ? `${pulse.openWork} open work item${
+            pulse.openWork === 1 ? "" : "s"
+          } ${pulse.openWork === 1 ? "is" : "are"} in flow with no urgent escalation.`
         : "Facility Management is calm. Continue with scheduled work.",
   };
 }
@@ -222,12 +222,12 @@ function CommandHero({ snapshot }: { snapshot: WorkspaceSnapshot }) {
           </div>
 
           <div className="sc-fm-hero-metric">
-            <p className="sc-fm-hero-metric-value">{pulse.openIncidents}</p>
-            <p className="sc-fm-hero-metric-label">Open incidents</p>
+            <p className="sc-fm-hero-metric-value">{pulse.openWork}</p>
+            <p className="sc-fm-hero-metric-label">Open work</p>
           </div>
           <div className="sc-fm-hero-metric">
-            <p className="sc-fm-hero-metric-value">{pulse.openMaintenance}</p>
-            <p className="sc-fm-hero-metric-label">Maintenance</p>
+            <p className="sc-fm-hero-metric-value">{pulse.criticalWork}</p>
+            <p className="sc-fm-hero-metric-label">Critical work</p>
           </div>
           <div className="sc-fm-hero-metric">
             <p className="sc-fm-hero-metric-value">{pulse.openWorkOrders}</p>
@@ -309,30 +309,22 @@ function RequiresAttention({ attention }: { attention: AttentionModel }) {
 function OperationalPicture({ pulse }: { pulse: OrganisationalPulse }) {
   const rows = [
     {
-      value: pulse.criticalIncidents,
-      label: "Critical",
+      value: pulse.criticalWork,
+      label: "Critical work",
       detail:
-        pulse.criticalIncidents > 0
+        pulse.criticalWork > 0
           ? "Require immediate intervention"
           : "None requiring intervention",
-      href: "/incidents",
+      href: "/work",
       tone: "critical" as const,
       icon: AlertTriangle,
     },
     {
-      value: pulse.openIncidents,
-      label: "Open incidents",
-      detail: "Active and being tracked",
-      href: "/incidents",
+      value: pulse.openWork,
+      label: "Open work",
+      detail: "Active work in operational flow",
+      href: "/work",
       tone: "blue" as const,
-      icon: ClipboardList,
-    },
-    {
-      value: pulse.openMaintenance,
-      label: "Maintenance",
-      detail: "Requests in operational flow",
-      href: "/maintenance",
-      tone: "amber" as const,
       icon: Wrench,
     },
     {
@@ -344,6 +336,17 @@ function OperationalPicture({ pulse }: { pulse: OrganisationalPulse }) {
       icon: ClipboardList,
     },
   ];
+
+  if (pulse.legacyOpenIncidents > 0) {
+    rows.push({
+      value: pulse.legacyOpenIncidents,
+      label: "Legacy incidents",
+      detail: "Historical records — compatibility only",
+      href: "/incidents",
+      tone: "blue" as const,
+      icon: ClipboardList,
+    });
+  }
 
   return (
     <section

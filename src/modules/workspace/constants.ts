@@ -2,11 +2,11 @@ import type { WorkspaceQuickAction } from "./types";
 
 export const WORKSPACE_QUICK_ACTIONS: WorkspaceQuickAction[] = [
   {
-    id: "report-incident",
-    title: "Report an incident",
-    description: "Record and route a new incident",
-    href: "/occupant-requests?type=incident",
-    icon: "incident",
+    id: "log-issue",
+    title: "Log an issue",
+    description: "Record what needs attention",
+    href: "/issues",
+    icon: "issue",
   },
   {
     id: "request-maintenance",

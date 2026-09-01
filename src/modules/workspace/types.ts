@@ -2,6 +2,8 @@ export type WorkspaceModuleRef =
   | "incidents"
   | "maintenance"
   | "work-orders"
+  | "work"
+  | "issues"
   | "assets"
   | "facilities"
   | "dashboards";
@@ -17,6 +19,7 @@ export interface WorkspaceQuickAction {
   description: string;
   href: string;
   icon:
+    | "issue"
     | "incident"
     | "maintenance"
     | "workOrder"
@@ -84,10 +87,17 @@ export interface AttentionModel {
 }
 
 export interface OrganisationalPulse {
-  openIncidents: number;
-  criticalIncidents: number;
-  openMaintenance: number;
+  /** Live — open Work in operational flow (maintenance backlog). */
+  openWork: number;
+  /** Live — high/critical priority open Work. */
+  criticalWork: number;
   openWorkOrders: number;
+  /** Same value as openWork — retained for transitional consumers. */
+  openMaintenance: number;
+  /** Historical — open legacy Incident records (compatibility only). */
+  legacyOpenIncidents: number;
+  /** Historical — critical/high open legacy Incidents (compatibility only). */
+  legacyCriticalIncidents: number;
   recentActivity: number;
 }
 
@@ -99,7 +109,7 @@ export interface WorkspaceSnapshot {
     name?: string;
   };
   operationalState: OperationalState;
-  /** Matters behind critical headline — same source as pulse.criticalIncidents */
+  /** Matters behind critical headline — Work/Issue operational queue. */
   attention: AttentionModel;
   pulse: OrganisationalPulse;
   quickActions: WorkspaceQuickAction[];

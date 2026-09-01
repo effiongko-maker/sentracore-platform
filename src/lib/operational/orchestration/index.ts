@@ -29,6 +29,7 @@ import {
   mapIntakeToIncidentSource,
   mapIntakeToMaintenanceSource,
 } from "@/lib/operational/intake";
+import { assertNewIncidentCreateAllowed } from "@/lib/operational/work/incidentWriteFreeze";
 import { IncidentService } from "@/services/incidents/IncidentService";
 import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
@@ -47,6 +48,13 @@ import type {
   UpdateWorkOrderInput,
   WorkOrder,
 } from "@/modules/work-orders/types";
+
+/**
+ * When "after", emit + consumers + operationalEventId stamp run via Next.js
+ * `after()` so they do not block the user-facing create response.
+ * Default "await" preserves existing Treat / create semantics elsewhere.
+ */
+export type OperationalSideEffectMode = "await" | "after";
 
 async function persistOperationalEventId(
   entity: "incident" | "maintenance" | "work_order",
@@ -75,12 +83,55 @@ async function persistOperationalEventId(
   }
 }
 
+/**
+ * Schedule operational side effects without dropping integrity.
+ * Uses Next.js `after()` when mode is "after" and a request scope exists;
+ * otherwise awaits (scripts / missing after scope).
+ * Failures are always logged — never silently swallowed.
+ */
+async function runOperationalSideEffects(options: {
+  mode: OperationalSideEffectMode;
+  label: string;
+  task: () => Promise<void>;
+}): Promise<void> {
+  const execute = async () => {
+    try {
+      await options.task();
+    } catch (error) {
+      console.error(`[${options.label}] side effects failed`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  if (options.mode !== "after") {
+    await execute();
+    return;
+  }
+
+  try {
+    const { after } = await import("next/server");
+    after(() => execute());
+  } catch (error) {
+    console.error(
+      `[${options.label}] after() unavailable — awaiting side effects`,
+      {
+        error: error instanceof Error ? error.message : String(error),
+      }
+    );
+    await execute();
+  }
+}
+
 export async function orchestrateReportIncident(options: {
   input: CreateIncidentInput;
   intake: OperationalIntakeSource;
   context: ActionContext;
   sourceReference?: string;
+  sideEffectMode?: OperationalSideEffectMode;
 }): Promise<Incident> {
+  assertNewIncidentCreateAllowed("orchestrateReportIncident");
+
   const writeInput: CreateIncidentInput = {
     ...options.input,
     source:
@@ -88,29 +139,28 @@ export async function orchestrateReportIncident(options: {
   };
 
   const incident = await IncidentService.createIncident(writeInput);
+  const mode = options.sideEffectMode ?? "await";
 
-  try {
-    const event = await emitActionEvent(options.context, {
-      eventType: OperationalEventTypes.FACILITY_INCIDENT_REPORTED,
-      entityType: "incident",
-      entityId: incident.id,
-      data: withIntakeMetadata(
-        incidentEventData(incident, {
-          actor: options.context.userId,
-          transitionSource: "specialised_action",
-        }),
-        options.intake,
-        options.sourceReference
-      ),
-    });
-    await persistOperationalEventId("incident", incident.id, event.id);
-  } catch (eventError) {
-    console.error("[orchestrateReportIncident] event emission failed", {
-      incidentId: incident.id,
-      error:
-        eventError instanceof Error ? eventError.message : String(eventError),
-    });
-  }
+  await runOperationalSideEffects({
+    mode,
+    label: "orchestrateReportIncident",
+    task: async () => {
+      const event = await emitActionEvent(options.context, {
+        eventType: OperationalEventTypes.FACILITY_INCIDENT_REPORTED,
+        entityType: "incident",
+        entityId: incident.id,
+        data: withIntakeMetadata(
+          incidentEventData(incident, {
+            actor: options.context.userId,
+            transitionSource: "specialised_action",
+          }),
+          options.intake,
+          options.sourceReference
+        ),
+      });
+      await persistOperationalEventId("incident", incident.id, event.id);
+    },
+  });
 
   return incident;
 }
@@ -120,6 +170,7 @@ export async function orchestrateRequestMaintenance(options: {
   intake: OperationalIntakeSource;
   context: ActionContext;
   sourceReference?: string;
+  sideEffectMode?: OperationalSideEffectMode;
 }): Promise<Maintenance> {
   const writeInput: CreateMaintenanceInput = {
     ...options.input,
@@ -128,36 +179,35 @@ export async function orchestrateRequestMaintenance(options: {
   };
 
   const maintenance = await MaintenanceService.createMaintenance(writeInput);
+  const mode = options.sideEffectMode ?? "await";
 
-  try {
-    const event = await emitActionEvent(options.context, {
-      eventType: OperationalEventTypes.FACILITY_MAINTENANCE_REQUESTED,
-      entityType: "maintenance_request",
-      entityId: String(maintenance.id),
-      data: withIntakeMetadata(
-        maintenanceEventData(
-          {
-            ...maintenance,
-            // Preserve link even when Sheets does not yet echo Incident ID.
-            incidentId: maintenance.incidentId ?? writeInput.incidentId,
-          },
-          {
-            actor: options.context.userId,
-            transitionSource: "specialised_action",
-          }
+  await runOperationalSideEffects({
+    mode,
+    label: "orchestrateRequestMaintenance",
+    task: async () => {
+      const event = await emitActionEvent(options.context, {
+        eventType: OperationalEventTypes.FACILITY_MAINTENANCE_REQUESTED,
+        entityType: "maintenance_request",
+        entityId: String(maintenance.id),
+        data: withIntakeMetadata(
+          maintenanceEventData(
+            {
+              ...maintenance,
+              // Preserve link even when Sheets does not yet echo Incident ID.
+              incidentId: maintenance.incidentId ?? writeInput.incidentId,
+            },
+            {
+              actor: options.context.userId,
+              transitionSource: "specialised_action",
+            }
+          ),
+          options.intake,
+          options.sourceReference
         ),
-        options.intake,
-        options.sourceReference
-      ),
-    });
-    await persistOperationalEventId("maintenance", maintenance.id, event.id);
-  } catch (eventError) {
-    console.error("[orchestrateRequestMaintenance] event emission failed", {
-      maintenanceId: maintenance.id,
-      error:
-        eventError instanceof Error ? eventError.message : String(eventError),
-    });
-  }
+      });
+      await persistOperationalEventId("maintenance", maintenance.id, event.id);
+    },
+  });
 
   return {
     ...maintenance,

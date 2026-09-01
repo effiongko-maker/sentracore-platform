@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/Card";
 import type { WorkspaceQuickAction } from "../types";
 
 const icons: Record<WorkspaceQuickAction["icon"], LucideIcon> = {
+  issue: ClipboardList,
   incident: AlertTriangle,
   maintenance: Wrench,
   workOrder: ClipboardList,
@@ -23,6 +24,7 @@ const icons: Record<WorkspaceQuickAction["icon"], LucideIcon> = {
 };
 
 const accent: Record<WorkspaceQuickAction["icon"], string> = {
+  issue: "bg-accent-soft text-accent",
   incident: "bg-red-50 text-danger",
   maintenance: "bg-amber-50 text-amber-700",
   workOrder: "bg-sky-50 text-sky-700",

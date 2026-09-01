@@ -44,14 +44,14 @@ export const PLATFORM_WORKSPACES: PlatformWorkspace[] = [
     status: "active",
     statusLabel: "Active",
     description:
-      "Manage facilities, assets, maintenance, incidents and operational work from one connected environment.",
+      "Manage facilities, assets, issues, work and operational execution from one connected environment.",
     href: OPERATIONS_HOME.href,
     capabilities: [
       "Facilities",
       "Assets",
-      "Maintenance",
+      "Issues",
+      "Work",
       "Work Orders",
-      "Incidents",
     ],
   },
   {
@@ -130,6 +130,8 @@ export function isOperationsPath(pathname: string): boolean {
     pathname.startsWith("/master-data") ||
     pathname.startsWith("/occupant-requests") ||
     pathname.startsWith("/requests") ||
+    pathname.startsWith("/issues") ||
+    pathname.startsWith("/work") ||
     pathname.startsWith("/maintenance") ||
     pathname.startsWith("/work-orders") ||
     pathname.startsWith("/approvals") ||

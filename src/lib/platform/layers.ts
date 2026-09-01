@@ -5,7 +5,6 @@ import {
   Database,
   FileBarChart2,
   FileCheck2,
-  Inbox,
   MessageSquarePlus,
   Package,
   ScanSearch,
@@ -112,28 +111,21 @@ export const OPERATING_LAYERS: OperatingLayer[] = [
         href: "/occupant-requests",
         icon: MessageSquarePlus,
         title: "Submit request",
-        description: "Report a need or incident",
-      }),
-      fm({
-        label: "Request Queue",
-        href: "/requests",
-        icon: Inbox,
-        title: "Request Queue",
-        description: "Incoming reports for review",
+        description: "Report a facility need",
       }),
       fm({
         label: "Issues",
         href: "/issues",
         icon: CircleDot,
         title: "Issues",
-        description: "Operational problem lens (preview)",
+        description: "Manage what needs attention",
       }),
       fm({
-        label: "Maintenance",
-        href: "/maintenance",
+        label: "Work",
+        href: "/work",
         icon: Wrench,
-        title: "Maintenance",
-        description: "Maintenance in progress",
+        title: "Work",
+        description: "What we are doing about Issues",
       }),
       fm({
         label: "Work Orders",
@@ -141,6 +133,13 @@ export const OPERATING_LAYERS: OperatingLayer[] = [
         icon: ClipboardList,
         title: "Work Orders",
         description: "Work moving through the organisation",
+      }),
+      fm({
+        label: "Maintenance",
+        href: "/maintenance",
+        icon: Wrench,
+        title: "Maintenance",
+        description: "Compatibility work surface",
       }),
       fm({
         label: "Approvals",
@@ -151,19 +150,17 @@ export const OPERATING_LAYERS: OperatingLayer[] = [
       }),
     ],
   },
-  {
-    id: "execute",
-    label: "Operations",
-    modules: [
-      fm({
-        label: "Incidents",
-        href: "/incidents",
-        icon: AlertTriangle,
-        title: "Incidents",
-        description: "Active operational events",
-      }),
-    ],
-  },
+];
+
+/** Routable legacy modules — excluded from command palette / primary layers. */
+const LEGACY_LAYER_MODULES: LayerModule[] = [
+  fm({
+    label: "Legacy Incidents",
+    href: "/incidents",
+    icon: AlertTriangle,
+    title: "Legacy Incidents",
+    description: "Historical incident records (compatibility access)",
+  }),
 ];
 
 export const COMMAND_HOME = {
@@ -209,7 +206,13 @@ export function resolveLayerByPath(
     }
   }
 
-  return "execute";
+  for (const mod of LEGACY_LAYER_MODULES) {
+    if (mod.href !== "/" && pathname.startsWith(mod.href)) {
+      return "act";
+    }
+  }
+
+  return "act";
 }
 
 export function resolveModuleByPath(pathname: string): LayerModule | null {
@@ -227,6 +230,12 @@ export function resolveModuleByPath(pathname: string): LayerModule | null {
       if (mod.href !== "/" && pathname.startsWith(mod.href)) {
         return mod;
       }
+    }
+  }
+
+  for (const mod of LEGACY_LAYER_MODULES) {
+    if (mod.href !== "/" && pathname.startsWith(mod.href)) {
+      return mod;
     }
   }
 

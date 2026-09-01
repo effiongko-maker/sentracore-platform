@@ -77,10 +77,10 @@ export function IntelligenceFooterZone({
           <dl className="sc-intel-context-metrics">
             <div>
               <dd className="sc-intel-response-stat-value">
-                {context.recentIncidentCount30d}
+                {context.recentWorkCount30d}
               </dd>
               <dt className="sc-intel-response-stat-label mt-1">
-                Incidents
+                Work
               </dt>
             </div>
             <div>

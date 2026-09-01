@@ -2,8 +2,8 @@ import type { Issue, IssueOutcome } from "./types";
 
 /**
  * Derive Issue outcome from the composed Issue lens.
- * Does not invent resolution — mirrors Issue.status which is itself
- * derived from Request.status for staff_request Issues.
+ * No second resolution engine. Mirrors Issue.status, which is itself derived
+ * from the authoritative root (Request / Maintenance / Incident).
  */
 export function deriveIssueOutcome(issue: Issue): IssueOutcome {
   if (issue.status === "cancelled") {

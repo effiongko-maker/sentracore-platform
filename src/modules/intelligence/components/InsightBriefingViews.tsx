@@ -28,9 +28,11 @@ function kindLabel(kind: ActionableItem["kind"]): string {
     case "request":
       return "Request";
     case "maintenance":
-      return "Maintenance";
+      return "Work";
+    case "work":
+      return "Work";
     case "incident":
-      return "Incident";
+      return "Legacy incident";
     case "work_order":
       return "Work order";
     case "asset":
@@ -64,9 +66,9 @@ export function InsightHero({
         <div className="ix-ref-hero-stats">
           <div className="ix-ref-stat">
             <span className="ix-ref-stat-value">
-              {ctx.recentIncidentCount30d}
+              {ctx.recentWorkCount30d}
             </span>
-            <span className="ix-ref-stat-label">Incidents analysed</span>
+            <span className="ix-ref-stat-label">Work analysed</span>
           </div>
           <div className="ix-ref-stat">
             <span className="ix-ref-stat-value">
@@ -379,17 +381,17 @@ export function InsightInvestigationPanel({
   const related = insight.relatedEntities.filter(
     (e) => e.kind === "facility" || e.kind === "asset"
   );
-  const investigation = insight.suggestedActions.filter(
-    (a) => a.kind === "investigate"
-  );
+  const relatedEvents = insight.relatedEntities.filter((e) => e.kind === "event");
+  const evidenceItems = insight.evidence;
+  const hasEvidenceList = evidenceItems.length > 0 || relatedEvents.length > 0;
 
   return (
-    <aside className="ix-ref-detail-panel" aria-label="Investigation">
+    <aside className="ix-ref-detail-panel" aria-label="Evidence review">
       <div className="ix-ref-detail-inner">
         <button type="button" className="ix-ref-detail-back" onClick={onClose}>
-          ← Intelligence
+          ← Back to briefing
         </button>
-        <p className="ix-ref-kicker">Finding</p>
+        <p className="ix-ref-kicker">Evidence review</p>
         <h2 className="ix-ref-detail-title">{insight.title}</h2>
         <p
           className={`ix-ref-confidence is-${insight.confidence.toLowerCase()}`}
@@ -397,6 +399,37 @@ export function InsightInvestigationPanel({
           {confidenceLabel(insight.confidence)}
           {insight.confidenceBasis ? ` — ${insight.confidenceBasis}` : ""}
         </p>
+
+        <section className="ix-ref-reason-block">
+          <h3>Evidence</h3>
+          <p className="ix-ref-detail-muted">{evidenceSummary}</p>
+          {hasEvidenceList ? (
+            <ul className="ix-ref-evidence-list">
+              {evidenceItems.map((item) => (
+                <li key={`${item.label}-${item.value}`}>
+                  <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span>
+                    <strong>{item.label}</strong>: {item.value}
+                  </span>
+                </li>
+              ))}
+              {relatedEvents.map((entity) => (
+                <li key={`event-${entity.id}`}>
+                  <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span>
+                    <strong>Related activity</strong>:{" "}
+                    {entity.label || entity.id}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="ix-ref-detail-muted">
+              No detailed evidence items were attached to this finding. The
+              summary above is what Intelligence has for review.
+            </p>
+          )}
+        </section>
 
         <section className="ix-ref-reason-block">
           <h3>What we know</h3>
@@ -419,54 +452,9 @@ export function InsightInvestigationPanel({
           </section>
         ) : null}
 
-        {investigation.length > 0 ? (
+        {related.length > 0 ? (
           <section className="ix-ref-reason-block">
-            <h3>Things to investigate</h3>
-            <ul className="ix-ref-investigate-list">
-              {investigation.map((item) => (
-                <li key={item.label}>{item.label}</li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-
-        <section className="ix-ref-reason-block">
-          <h3>Evidence</h3>
-          <p className="ix-ref-detail-muted">{evidenceSummary}</p>
-          {insight.evidence.length > 0 ? (
-            <ul className="ix-ref-evidence-list">
-              {insight.evidence.map((item) => (
-                <li key={`${item.label}-${item.value}`}>
-                  <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  <span>
-                    <strong>{item.label}</strong>: {item.value}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </section>
-
-        <section className="ix-ref-reason-block">
-          <h3>Related operations</h3>
-          <ul className="ix-ref-ops-list">
-            <li>
-              <Link href="/requests">Requests</Link>
-            </li>
-            <li>
-              <Link href="/maintenance">Maintenance</Link>
-            </li>
-            <li>
-              <Link href="/incidents">Incidents</Link>
-            </li>
-            <li>
-              <Link href="/work-orders">Work Orders</Link>
-            </li>
-            <li>
-              <Link href="/assets">Assets</Link>
-            </li>
-          </ul>
-          {related.length > 0 ? (
+            <h3>Related places & assets</h3>
             <ul className="ix-ref-entity-list">
               {related.map((entity) => (
                 <li key={`${entity.kind}-${entity.id}`}>
@@ -475,9 +463,30 @@ export function InsightInvestigationPanel({
                 </li>
               ))}
             </ul>
-          ) : null}
+          </section>
+        ) : null}
+
+        <section className="ix-ref-reason-block">
+          <h3>Open related work</h3>
+          <ul className="ix-ref-ops-list">
+            <li>
+              <Link href="/issues">Issues</Link>
+            </li>
+            <li>
+              <Link href="/work">Work</Link>
+            </li>
+            <li>
+              <Link href="/incidents">Legacy incidents</Link>
+            </li>
+            <li>
+              <Link href="/work-orders">Work Orders</Link>
+            </li>
+            <li>
+              <Link href="/assets">Assets</Link>
+            </li>
+          </ul>
           <Link href="/operations" className="ix-ref-text-action">
-            Open in Operations
+            Open Facility Management home
             <ArrowRight className="h-4 w-4" aria-hidden />
           </Link>
         </section>

@@ -1,10 +1,11 @@
 import type { BriefingViewModel } from "./buildBriefingViewModel";
 
 export type ExploreModule =
-  | "Incidents"
-  | "Maintenance"
+  | "Issues"
+  | "Work"
   | "Work Orders"
-  | "Facilities";
+  | "Facilities"
+  | "Legacy incidents";
 
 export type ExploreResponse = {
   answer: string;
@@ -14,7 +15,7 @@ export type ExploreResponse = {
 };
 
 const SUGGESTED_QUESTIONS = [
-  "Why are critical incidents increasing?",
+  "What work needs attention?",
   "What changed this month?",
   "Where is the highest risk concentrated?",
   "What should we look at next?",
@@ -34,28 +35,38 @@ export function buildExploreResponse(
 ): ExploreResponse {
   const q = matchQuestion(query);
 
-  if (q.includes("incident") || q.includes("increasing")) {
-    const change = vm.changeFindings.find((f) =>
-      f.title.toLowerCase().includes("incident")
+  if (
+    q.includes("incident") ||
+    q.includes("increasing") ||
+    q.includes("work") ||
+    q.includes("issue")
+  ) {
+    const change = vm.changeFindings.find(
+      (f) =>
+        f.title.toLowerCase().includes("incident") ||
+        f.title.toLowerCase().includes("work") ||
+        f.title.toLowerCase().includes("activit")
     );
-    const priority = vm.attentionFindings.find((f) =>
-      f.title.toLowerCase().includes("incident")
+    const priority = vm.attentionFindings.find(
+      (f) =>
+        f.title.toLowerCase().includes("incident") ||
+        f.title.toLowerCase().includes("work")
     );
     return {
       answer:
         change?.summary ??
         priority?.summary ??
-        "Incident activity is concentrated in specific places rather than rising evenly across the organisation.",
+        "Operational activity is concentrated in specific places rather than rising evenly across the organisation.",
       found:
         change?.title ??
         priority?.title ??
-        "Incident activity is uneven across facilities",
+        "Operational activity is uneven across facilities",
       evidence: [
         ...(change ? [change.summary] : []),
         ...(priority ? [priority.summary] : []),
         vm.statementSupport,
       ].filter(Boolean),
-      modules: ["Incidents", "Facilities", "Maintenance"],
+      modules: ["Issues", "Work", "Facilities"],
     };
   }
 
@@ -69,7 +80,7 @@ export function buildExploreResponse(
       found:
         top[0]?.title ?? "Attention looks steady",
       evidence: top.map((f) => f.summary),
-      modules: ["Incidents", "Work Orders", "Maintenance"],
+      modules: ["Issues", "Work Orders", "Work"],
     };
   }
 
@@ -82,7 +93,7 @@ export function buildExploreResponse(
           : "Things look steady. Check What changed for recent shifts.",
       found: top[0]?.title ?? "Organisation-wide review",
       evidence: top.map((f) => f.summary),
-      modules: ["Incidents", "Maintenance", "Work Orders", "Facilities"],
+      modules: ["Issues", "Work", "Work Orders", "Facilities"],
     };
   }
 
@@ -105,7 +116,7 @@ export function buildExploreResponse(
       evidence: [risk?.summary, pattern?.summary, vm.statementSupport].filter(
         Boolean
       ) as string[],
-      modules: ["Facilities", "Incidents", "Work Orders"],
+      modules: ["Facilities", "Issues", "Work Orders"],
     };
   }
 
@@ -118,7 +129,7 @@ export function buildExploreResponse(
           : "No meaningful organisation-wide shifts showed up in this review period.",
       found: changes[0]?.title ?? "A steady period",
       evidence: changes.map((f) => f.summary),
-      modules: ["Incidents", "Maintenance", "Work Orders", "Facilities"],
+      modules: ["Issues", "Work", "Work Orders", "Facilities"],
     };
   }
 
@@ -126,9 +137,9 @@ export function buildExploreResponse(
   return {
     answer:
       fallback?.summary ??
-      "SentraCore is reviewing activity across incidents, maintenance, work orders, and facilities to surface what matters.",
+      "SentraCore is reviewing activity across issues, work, work orders, and facilities to surface what matters.",
     found: fallback?.title ?? "Organisation-wide view",
     evidence: vm.statementSupport ? [vm.statementSupport] : [],
-    modules: ["Incidents", "Maintenance", "Work Orders", "Facilities"],
+    modules: ["Issues", "Work", "Work Orders", "Facilities"],
   };
 }

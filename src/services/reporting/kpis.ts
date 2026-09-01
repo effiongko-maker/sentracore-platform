@@ -8,6 +8,7 @@ import {
   isActiveEntityStatus,
   isClosedIncidentStatus,
   isCriticalSeverity,
+  isHighOrCriticalPriority,
   isMaintenanceBacklogStatus,
   isOnHoldStatus,
   isOpenWorkOrderStatus,
@@ -47,6 +48,15 @@ export function isCriticalOpenIncident(incident: Incident) {
   );
 }
 
+/** Live operational pressure — high/critical priority Work still in backlog. */
+export function isCriticalOpenWork(row: Maintenance) {
+  return isMaintenanceBacklog(row) && isHighOrCriticalPriority(row.priority);
+}
+
+function workOrderLinked(row: Maintenance) {
+  return Boolean(row.workOrderId || (row.workOrderIds && row.workOrderIds.length));
+}
+
 /**
  * Authoritative KPI computation for the platform.
  * Dashboard, Reports, and snapshot rebuilds must all derive from this.
@@ -76,6 +86,7 @@ export function computeReportingKpis(input: {
   const openWorkOrders = workOrders.filter(isOpenWorkOrder);
   const backlog = maintenance.filter(isMaintenanceBacklog);
   const criticalOpen = incidents.filter(isCriticalOpenIncident);
+  const criticalWorkOpen = maintenance.filter(isCriticalOpenWork);
 
   const assetsOperationalPercent =
     assets.length > 0
@@ -117,6 +128,16 @@ export function computeReportingKpis(input: {
         !String(incident.workOrderId || "").trim()
       );
     }).length,
+    criticalWork: criticalWorkOpen.length,
+    criticalWorkUnassigned: criticalWorkOpen.filter(
+      (row) => !String(row.assignedToUserId || "").trim()
+    ).length,
+    workNeedingWorkOrder: maintenance.filter((row) => {
+      const requires =
+        row.requiresWorkOrder === true ||
+        normalizeToken(row.requiresWorkOrder) === "true";
+      return isMaintenanceBacklog(row) && requires && !workOrderLinked(row);
+    }).length,
     maintenanceBacklog: backlog.length,
     overdueMaintenance: backlog.filter((row) => isBeforeDay(row.dueAt, asOf))
       .length,
@@ -130,11 +151,11 @@ export function computeReportingKpis(input: {
 export function computeReportingHealth(kpis: ReportingKpis): ReportingHealth {
   let score = 100;
 
-  score -= Math.min(40, kpis.criticalIncidents * 15);
+  score -= Math.min(40, kpis.criticalWork * 15);
   score -= Math.min(25, kpis.overdueWorkOrders * 5);
   score -= Math.min(20, kpis.overdueMaintenance * 4);
   score -= Math.min(10, kpis.assetsInPoorCondition * 2);
-  score -= Math.min(10, kpis.incidentsNeedingWorkOrder * 3);
+  score -= Math.min(10, kpis.workNeedingWorkOrder * 3);
 
   score = Math.max(0, Math.min(100, score));
 
@@ -146,7 +167,7 @@ export function computeReportingHealth(kpis: ReportingKpis): ReportingHealth {
       ? "Here's what's happening across your facilities today."
       : band === "watch"
         ? "Some items need attention before end of day."
-        : "Critical pressure detected — review open incidents and overdue work.";
+        : "Critical pressure detected — review critical work and overdue jobs.";
 
   return { band, score, summary };
 }
@@ -190,14 +211,23 @@ export function kpiInsightLabels(kpis: ReportingKpis) {
               ? `${kpis.workOrdersDueToday} due today`
               : "No overdue work",
 
+    criticalWork:
+      kpis.criticalWork === 0
+        ? "No outstanding critical work"
+        : kpis.criticalWorkUnassigned > 0
+          ? `${kpis.criticalWorkUnassigned} awaiting assignment`
+          : kpis.workNeedingWorkOrder > 0
+            ? `${kpis.workNeedingWorkOrder} need a work order`
+            : "Under active review",
+
     criticalIncidents:
       kpis.criticalIncidents === 0
-        ? "No outstanding issues"
+        ? "No legacy critical incidents"
         : kpis.criticalIncidentsUnassigned > 0
-          ? `${kpis.criticalIncidentsUnassigned} awaiting assignment`
+          ? `${kpis.criticalIncidentsUnassigned} legacy unassigned`
           : kpis.incidentsNeedingWorkOrder > 0
-            ? `${kpis.incidentsNeedingWorkOrder} need a work order`
-            : "Under active review",
+            ? `${kpis.incidentsNeedingWorkOrder} legacy need work order`
+            : "Historical records only",
 
     maintenanceBacklog:
       kpis.maintenanceBacklog === 0

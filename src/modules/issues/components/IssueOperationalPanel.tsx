@@ -1,9 +1,17 @@
 "use client";
 
 import type { IssueAction, IssueOperationalView } from "@/lib/operational/issues";
+import { originLabel } from "../lib/buildUnifiedIssueList";
 
 function StatusPill({ label }: { label: string }) {
   return <span className="op-pill">{label.replace(/_/g, " ")}</span>;
+}
+
+function treatmentLabel(kind: string): string {
+  if (kind === "work" || kind === "maintenance") return "Work";
+  if (kind === "incident_handling") return "Legacy investigation";
+  if (kind === "work_order") return "Work order";
+  return kind.replace(/_/g, " ");
 }
 
 export function IssueOperationalPanel({
@@ -25,22 +33,20 @@ export function IssueOperationalPanel({
     return (
       <div className="op-panel rounded-lg border border-[var(--sc-border)] bg-[var(--sc-surface)] p-5">
         <p className="text-sm text-[var(--sc-muted)]">
-          Select an Issue to inspect the operational lens.
+          Select an Issue to review details and next steps.
         </p>
       </div>
     );
   }
 
-  const { issue, outcome, executions, actions, limitations } = view;
+  const { issue, outcome, executions, actions } = view;
   const primaryActions = actions.filter(
     (a) =>
       a.available &&
+      a.href &&
       (a.id === "treat" ||
-        a.id === "resolve" ||
-        a.id === "investigate" ||
         a.id === "create_work" ||
         a.id === "view_treatment" ||
-        a.id === "view_related_work" ||
         a.id === "cancel")
   );
 
@@ -48,11 +54,11 @@ export function IssueOperationalPanel({
     <div className="space-y-4 rounded-lg border border-[var(--sc-border)] bg-[var(--sc-surface)] p-5">
       <header className="space-y-1">
         <p className="text-xs uppercase tracking-wide text-[var(--sc-muted)]">
-          Issue lens
+          Issue
         </p>
         <h2 className="text-lg font-semibold text-[var(--sc-fg)]">{issue.title}</h2>
         <p className="text-sm text-[var(--sc-muted)]">
-          {issue.reference} · {issue.source.replace(/_/g, " ")}
+          {issue.reference} · {originLabel(issue)}
         </p>
       </header>
 
@@ -90,8 +96,12 @@ export function IssueOperationalPanel({
           </dd>
         </div>
         <div>
-          <dt className="text-[var(--sc-muted)]">Classification</dt>
-          <dd>{issue.classification || "—"}</dd>
+          <dt className="text-[var(--sc-muted)]">Type</dt>
+          <dd>
+            {issue.classification
+              ? issue.classification.replace(/_/g, " ")
+              : "—"}
+          </dd>
         </div>
       </dl>
 
@@ -100,14 +110,15 @@ export function IssueOperationalPanel({
       ) : null}
 
       <section>
-        <h3 className="mb-2 text-sm font-medium">Treatments</h3>
+        <h3 className="mb-2 text-sm font-medium">Treatment</h3>
         {issue.treatments.length === 0 ? (
-          <p className="text-sm text-[var(--sc-muted)]">No treatments yet.</p>
+          <p className="text-sm text-[var(--sc-muted)]">No treatment yet.</p>
         ) : (
           <ul className="space-y-1 text-sm">
             {issue.treatments.map((t) => (
               <li key={`${t.kind}:${t.id}`}>
-                <span className="font-medium">{t.kind}</span> {t.id} — {t.status}
+                <span className="font-medium">{treatmentLabel(t.kind)}</span>{" "}
+                {t.id} — {t.status.replace(/_/g, " ")}
                 {t.title ? ` · ${t.title}` : ""}
               </li>
             ))}
@@ -116,28 +127,32 @@ export function IssueOperationalPanel({
       </section>
 
       <section>
-        <h3 className="mb-2 text-sm font-medium">Execution</h3>
+        <h3 className="mb-2 text-sm font-medium">Work</h3>
         {executions.length === 0 ? (
           <p className="text-sm text-[var(--sc-muted)]">
-            No Work Orders. Job Orders are not implemented.
+            No formal Work Orders linked.
           </p>
         ) : (
           <ul className="space-y-1 text-sm">
-            {executions.map((e) => (
-              <li key={`${e.kind}:${e.id}`}>
-                {e.kind} {e.id} — {e.status}
-                {e.title ? ` · ${e.title}` : ""}
-              </li>
-            ))}
+            {executions
+              .filter((e) => e.kind === "work_order")
+              .map((e) => (
+                <li key={`${e.kind}:${e.id}`}>
+                  Work Order {e.id} — {e.status.replace(/_/g, " ")}
+                  {e.title ? ` · ${e.title}` : ""}
+                </li>
+              ))}
           </ul>
         )}
       </section>
 
       <section>
         <h3 className="mb-2 text-sm font-medium">Actions</h3>
-        <div className="flex flex-wrap gap-2">
-          {primaryActions.map((action: IssueAction) =>
-            action.href ? (
+        {primaryActions.length === 0 ? (
+          <p className="text-sm text-[var(--sc-muted)]">No actions available.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {primaryActions.map((action: IssueAction) => (
               <a
                 key={action.id}
                 href={action.href}
@@ -146,28 +161,10 @@ export function IssueOperationalPanel({
               >
                 {action.label}
               </a>
-            ) : null
-          )}
-        </div>
-        <ul className="mt-3 space-y-1 text-xs text-[var(--sc-muted)]">
-          {actions
-            .filter((a) => !a.available)
-            .map((a) => (
-              <li key={a.id}>
-                {a.label}
-                {a.future ? " (future)" : ""}: {a.reasonUnavailable}
-              </li>
             ))}
-        </ul>
+          </div>
+        )}
       </section>
-
-      {limitations.length > 0 ? (
-        <section className="rounded-md border border-dashed border-[var(--sc-border)] p-3 text-xs text-[var(--sc-muted)]">
-          {limitations.map((line) => (
-            <p key={line}>{line}</p>
-          ))}
-        </section>
-      ) : null}
     </div>
   );
 }

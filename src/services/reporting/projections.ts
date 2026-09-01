@@ -3,6 +3,7 @@ import type { Maintenance } from "@/modules/maintenance/types";
 import type { WorkOrder } from "@/modules/work-orders/types";
 import {
   isCriticalOpenIncident,
+  isCriticalOpenWork,
   isMaintenanceBacklog,
   isOpenWorkOrder,
 } from "./kpis";
@@ -150,6 +151,13 @@ export function computeReportingProjections(input: {
     )
       .slice(0, LIST_LIMIT)
       .map(projectIncident),
+    criticalWork: sortByDateDesc(
+      maintenance.filter(isCriticalOpenWork),
+      (row) => row.dueAt || row.reportedAt || row.createdAt,
+      (row) => row.id
+    )
+      .slice(0, LIST_LIMIT)
+      .map(projectMaintenanceRow),
     overdueWorkOrders,
     maintenanceAttention,
     blockedItems,

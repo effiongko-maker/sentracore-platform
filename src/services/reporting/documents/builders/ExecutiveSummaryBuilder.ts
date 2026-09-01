@@ -31,6 +31,9 @@ export function buildExecutiveSummaryDocument(
     openWorkOrders: kpis.openWorkOrders,
     overdueWorkOrders: kpis.overdueWorkOrders,
     maintenanceBacklog: kpis.maintenanceBacklog,
+    criticalWork: kpis.criticalWork,
+    criticalWorkUnassigned: kpis.criticalWorkUnassigned,
+    workNeedingWorkOrder: kpis.workNeedingWorkOrder,
     criticalIncidents: kpis.criticalIncidents,
     workforce: kpis.activeWorkforce,
     majorRisks: riskBullets(snapshot).join(" | "),
@@ -48,7 +51,7 @@ export function buildExecutiveSummaryDocument(
       highlights: [
         `Operational score ${health.score} (${health.band})`,
         `${kpis.openWorkOrders} open work orders`,
-        `${kpis.criticalIncidents} critical incidents`,
+        `${kpis.criticalWork} critical work items`,
       ],
     }),
     fields,
@@ -71,8 +74,8 @@ export function buildExecutiveSummaryDocument(
           },
           {
             key: "critical",
-            label: "Critical Incidents",
-            value: kpis.criticalIncidents,
+            label: "Critical Work",
+            value: kpis.criticalWork,
           },
           {
             key: "workforce",
@@ -122,22 +125,46 @@ export function buildExecutiveSummaryDocument(
         ],
       },
       {
-        id: "incident_overview",
-        title: "Incident overview",
+        id: "work_overview",
+        title: "Work overview",
         metrics: [
           {
             key: "critical",
-            label: "Critical incidents",
-            value: kpis.criticalIncidents,
+            label: "Critical work",
+            value: kpis.criticalWork,
           },
           {
             key: "unassigned",
             label: "Critical unassigned",
-            value: kpis.criticalIncidentsUnassigned,
+            value: kpis.criticalWorkUnassigned,
           },
           {
             key: "needs_wo",
             label: "Needing work order",
+            value: kpis.workNeedingWorkOrder,
+          },
+        ],
+        bullets: snapshot.projections.criticalWork
+          .slice(0, 8)
+          .map((i) => i.title),
+      },
+      {
+        id: "incident_overview",
+        title: "Legacy incident history",
+        metrics: [
+          {
+            key: "critical",
+            label: "Legacy critical incidents",
+            value: kpis.criticalIncidents,
+          },
+          {
+            key: "unassigned",
+            label: "Legacy critical unassigned",
+            value: kpis.criticalIncidentsUnassigned,
+          },
+          {
+            key: "needs_wo",
+            label: "Legacy needing work order",
             value: kpis.incidentsNeedingWorkOrder,
           },
         ],

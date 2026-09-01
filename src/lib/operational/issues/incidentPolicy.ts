@@ -1,9 +1,9 @@
 /**
- * Incident policy guidance (Phase 6) — copy/routing hints only.
- * Does not hard-block existing Create/Link Incident capability.
+ * Treatment-path guidance — Phase 15.
+ * Canonical path: Treat → Work. Incident is legacy compatibility only.
  */
 
-/** Significant-event Incident types (conceptual). Ordinary problems use Maintenance. */
+/** @deprecated Not used for Log Issue classification. */
 export const SIGNIFICANT_INCIDENT_TYPES = [
   "safety",
   "security",
@@ -13,14 +13,16 @@ export const SIGNIFICANT_INCIDENT_TYPES = [
 ] as const;
 
 export const INCIDENT_POLICY = {
-  ordinaryDefault: "maintenance" as const,
+  /** Canonical Treat path: Work (Maintenance sheet as temporary backing store). */
+  ordinaryDefault: "work" as const,
+  /** @deprecated Legacy Incident path — not used for new FM Log Issue. */
   significantHandling: "incident_handling" as const,
-  treatGuidance:
-    "Ordinary facility problems: create or link Maintenance. Incident is for significant events requiring investigation, containment, escalation, or event-specific handling.",
+  incidentMandatoryForIssues: false as const,
+  treatGuidance: "Start or continue work on this Issue.",
   investigateGuidance:
-    "Use Incident only for significant operational events (safety, security, flood/fire/environmental, major disruption, serious equipment failure). Do not use Incident as a second way to log ordinary facility problems.",
+    "Legacy investigation records remain accessible; new Issues use Treat → Work.",
   createWorkGuidance:
-    "Work Order is optional formal execution — not required for every treatment. Create a Work Order only when formal executable scope must be tracked separately. Job Orders are a future path (EVC/HQ + Procurement).",
+    "Work Order is optional formal execution — not Work itself. Create a Work Order only when formal executable scope must be tracked separately.",
 } as const;
 
 export function isSignificantIncidentType(type?: string): boolean {

@@ -336,8 +336,8 @@ export function ReportIncidentModal({
       onClose={() => {
         if (!saving) onClose();
       }}
-      title="New incident"
-      description="Tell us what happened and where."
+      title="Report event"
+      description="Log a significant operational event that needs investigation or containment."
       size="lg"
       footer={
         <>

@@ -113,8 +113,8 @@ export function NowComposition({
       <footer className="ix-attention-evidence" aria-label="Underlying evidence">
         <span className="ix-attention-evidence-label">Connected across</span>
         <div className="ix-attention-evidence-modules">
-          <span>Incidents</span>
-          <span>Maintenance</span>
+          <span>Issues</span>
+          <span>Work</span>
           <span>Work Orders</span>
           <span>Facilities</span>
         </div>

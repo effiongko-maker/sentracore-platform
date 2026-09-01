@@ -115,8 +115,8 @@ export function registerKpiWidgets() {
   registerDashboardWidget(
     kpi({
       id: "kpi.critical_incidents",
-      title: "Critical Incidents",
-      module: "incidents",
+      title: "Critical Work",
+      module: "work",
       order: 50,
       resolve: (report) => {
         const insights = kpiInsightLabels(report.kpis);
@@ -124,11 +124,11 @@ export function registerKpiWidgets() {
           id: "card.kpi.critical_incidents",
           widgetId: "kpi.critical_incidents",
           kind: "kpi_stat",
-          tone: report.kpis.criticalIncidents > 0 ? "danger" : "success",
-          title: "Critical Incidents",
-          primaryValue: report.kpis.criticalIncidents,
-          secondaryLabel: insights.criticalIncidents,
-          module: "incidents",
+          tone: report.kpis.criticalWork > 0 ? "danger" : "success",
+          title: "Critical Work",
+          primaryValue: report.kpis.criticalWork,
+          secondaryLabel: insights.criticalWork,
+          module: "work",
           trend: "neutral",
           trendIsPositive: false,
         };

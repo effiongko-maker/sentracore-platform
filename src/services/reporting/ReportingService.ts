@@ -109,6 +109,9 @@ async function buildReportingSnapshotFromDomain(
       criticalIncidents: 0,
       criticalIncidentsUnassigned: 0,
       incidentsNeedingWorkOrder: 0,
+      criticalWork: 0,
+      criticalWorkUnassigned: 0,
+      workNeedingWorkOrder: 0,
       maintenanceBacklog: 0,
       overdueMaintenance: 0,
       maintenanceOnHold: 0,
@@ -116,6 +119,7 @@ async function buildReportingSnapshotFromDomain(
     },
     projections: {
       criticalIncidents: [],
+      criticalWork: [],
       overdueWorkOrders: [],
       maintenanceAttention: [],
       blockedItems: [],

@@ -97,9 +97,9 @@ export function registerHealthAndActionWidgets() {
     order: number;
   }> = [
     {
-      id: "create-incident",
-      title: "Create Incident",
-      description: "Log a new operational event",
+      id: "log-issue",
+      title: "Log Issue",
+      description: "Record what needs attention",
       order: 10,
     },
     {

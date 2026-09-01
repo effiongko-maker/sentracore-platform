@@ -178,6 +178,19 @@ var ReportingSnapshotService = (function () {
     );
   }
 
+  function isCriticalOpenWork_(row) {
+    return (
+      isMaintenanceBacklog_(row) && isHighOrCritical_(fieldValue_(row, "priority"))
+    );
+  }
+
+  function workOrderLinked_(row) {
+    var woId = fieldValue_(row, "workOrderId");
+    if (String(woId || "").trim()) return true;
+    var woIds = fieldValue_(row, "workOrderIds");
+    return Array.isArray(woIds) && woIds.length > 0;
+  }
+
   function isOnHold_(status) {
     return normalizeToken_(status) === "on_hold";
   }
@@ -400,6 +413,7 @@ var ReportingSnapshotService = (function () {
     var openWorkOrders = workOrders.filter(isOpenWorkOrder_);
     var backlog = maintenance.filter(isMaintenanceBacklog_);
     var criticalOpen = incidents.filter(isCriticalOpenIncident_);
+    var criticalWorkOpen = maintenance.filter(isCriticalOpenWork_);
 
     var assetsOperationalPercent =
       assets.length > 0
@@ -447,6 +461,18 @@ var ReportingSnapshotService = (function () {
           !String(fieldValue_(incident, "workOrderId") || "").trim()
         );
       }).length,
+      criticalWork: criticalWorkOpen.length,
+      criticalWorkUnassigned: criticalWorkOpen.filter(function (row) {
+        return !String(fieldValue_(row, "assignedToUserId") || "").trim();
+      }).length,
+      workNeedingWorkOrder: maintenance.filter(function (row) {
+        var requiresRaw = fieldValue_(row, "requiresWorkOrder");
+        var requires =
+          requiresRaw === true || normalizeToken_(requiresRaw) === "true";
+        return (
+          isMaintenanceBacklog_(row) && requires && !workOrderLinked_(row)
+        );
+      }).length,
       maintenanceBacklog: backlog.length,
       overdueMaintenance: backlog.filter(function (row) {
         return isBeforeDay_(fieldValue_(row, "dueAt"), asOf);
@@ -462,11 +488,11 @@ var ReportingSnapshotService = (function () {
 
   function computeHealth_(kpis) {
     var score = 100;
-    score -= Math.min(40, (kpis.criticalIncidents || 0) * 15);
+    score -= Math.min(40, (kpis.criticalWork || 0) * 15);
     score -= Math.min(25, (kpis.overdueWorkOrders || 0) * 5);
     score -= Math.min(20, (kpis.overdueMaintenance || 0) * 4);
     score -= Math.min(10, (kpis.assetsInPoorCondition || 0) * 2);
-    score -= Math.min(10, (kpis.incidentsNeedingWorkOrder || 0) * 3);
+    score -= Math.min(10, (kpis.workNeedingWorkOrder || 0) * 3);
     score = Math.max(0, Math.min(100, score));
 
     var band =
@@ -476,7 +502,7 @@ var ReportingSnapshotService = (function () {
         ? "Here's what's happening across your facilities today."
         : band === "watch"
           ? "Some items need attention before end of day."
-          : "Critical pressure detected — review open incidents and overdue work.";
+          : "Critical pressure detected — review critical work and overdue jobs.";
 
     return { band: band, score: score, summary: summary };
   }
@@ -663,6 +689,21 @@ var ReportingSnapshotService = (function () {
       )
         .slice(0, LIST_LIMIT)
         .map(projectIncident_),
+      criticalWork: sortByDateDesc_(
+        maintenance.filter(isCriticalOpenWork_),
+        function (row) {
+          return (
+            fieldValue_(row, "dueAt") ||
+            fieldValue_(row, "reportedAt") ||
+            fieldValue_(row, "createdAt")
+          );
+        },
+        function (row) {
+          return row.id;
+        }
+      )
+        .slice(0, LIST_LIMIT)
+        .map(projectMaintenance_),
       overdueWorkOrders: overdueWorkOrders,
       maintenanceAttention: maintenanceAttention,
       blockedItems: blockedItems,

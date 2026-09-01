@@ -47,12 +47,12 @@ export function WelcomeCard({ user }: WelcomeCardProps) {
               <ArrowRight className="h-4 w-4" />
             </Button>
           </Link>
-          <Link href="/incidents">
+          <Link href="/issues">
             <Button
               variant="outline"
               className="border-white/20 bg-white/5 text-white hover:bg-white/10"
             >
-              View incidents
+              Review issues
             </Button>
           </Link>
         </div>

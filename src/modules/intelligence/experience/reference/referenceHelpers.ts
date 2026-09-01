@@ -203,29 +203,42 @@ export function buildRecentActivityFromContext(
 
   const candidates: ActivityItem[] = [];
 
-  if (ctx.recentIncidentCount7d > 0) {
+  if (ctx.recentWorkCount7d > 0) {
     candidates.push({
-      id: "activity-incident-7d",
+      id: "activity-work-7d",
       label: locationHint
-        ? `Incident reported — ${locationHint}`
-        : `${ctx.recentIncidentCount7d} incident${
-            ctx.recentIncidentCount7d === 1 ? "" : "s"
-          } reported this week`,
+        ? `Work logged — ${locationHint}`
+        : `${ctx.recentWorkCount7d} work item${
+            ctx.recentWorkCount7d === 1 ? "" : "s"
+          } logged this week`,
       tone: ctx.criticalRiskCount > 0 ? "critical" : "warning",
       time: relativeTimeLabel(candidates.length),
     });
-  } else if (ctx.recentIncidentCount30d > 0) {
+  } else if (ctx.recentWorkCount30d > 0) {
     candidates.push({
-      id: "activity-incident-30d",
+      id: "activity-work-30d",
       label: locationHint
-        ? `Incident reported — ${locationHint}`
-        : "Incident reported across the organisation",
+        ? `Work logged — ${locationHint}`
+        : "Work logged across the organisation",
       tone: ctx.criticalRiskCount > 0 ? "critical" : "warning",
       time: relativeTimeLabel(candidates.length),
     });
   }
 
-  if (ctx.maintenanceRequestedCount30d > 0) {
+  if (ctx.recentIncidentCount7d > 0) {
+    candidates.push({
+      id: "activity-legacy-incident-7d",
+      label: locationHint
+        ? `Legacy incident record — ${locationHint}`
+        : `${ctx.recentIncidentCount7d} legacy incident${
+            ctx.recentIncidentCount7d === 1 ? "" : "s"
+          } in history`,
+      tone: "warning",
+      time: relativeTimeLabel(candidates.length),
+    });
+  }
+
+  if (ctx.maintenanceRequestedCount30d > 0 && ctx.recentWorkCount30d === 0) {
     candidates.push({
       id: "activity-maintenance",
       label: locationHint

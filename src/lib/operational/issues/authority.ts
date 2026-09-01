@@ -36,11 +36,11 @@ export const ISSUE_AUTHORITY_ROLES: readonly IssueAuthorityRole[] = [
 
 export const ISSUE_AUTHORITY_NOTES = {
   annex_director:
-    "Annex Director — local authorisation; may be sufficient for Work Order path where applicable. Not implemented as a software gate.",
+    "Annex Director — internal/local authorisation; may be sufficient for Work Order path where applicable. Not a payment status. Not implemented as a software gate.",
   hq_evc:
-    "HQ/EVC — escalated approval chain for Job Order path. Not implemented.",
+    "HQ/EVC — escalated organisational approval chain for Job Order path. Distinct from Client/NCC reimbursement authority. Not implemented.",
   client_ncc:
-    "Client/NCC — existing optional Client Approval (APR) package on Work Orders; non-blocking today; not the foundation for Annex/HQ/JO.",
+    "Client/NCC — external client authority. Existing optional Client Approval (APR) on Work Orders is commercial packaging and is NOT the universal financial approval object, NOT payment status, and NOT Annex/HQ/JO foundation.",
   procurement:
-    "Procurement — issues Job Orders after required approvals. Not implemented.",
+    "Procurement — issues Job Orders after required approvals. Not implemented. Not a reimbursement payment function.",
 } as const satisfies Record<IssueAuthorityRole, string>;

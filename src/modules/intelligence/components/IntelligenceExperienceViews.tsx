@@ -218,13 +218,13 @@ export function FindingInvestigationPanel({
           <h3>Related operations</h3>
           <ul className="ix-exp-related-ops">
             <li>
-              <Link href="/requests">Requests</Link>
+              <Link href="/issues">Issues</Link>
             </li>
             <li>
-              <Link href="/maintenance">Maintenance</Link>
+              <Link href="/work">Work</Link>
             </li>
             <li>
-              <Link href="/incidents">Incidents</Link>
+              <Link href="/incidents">Legacy incidents</Link>
             </li>
             <li>
               <Link href="/work-orders">Work Orders</Link>

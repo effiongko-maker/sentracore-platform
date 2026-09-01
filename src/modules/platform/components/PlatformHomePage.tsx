@@ -4,10 +4,10 @@ import { useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import {
-  AlertTriangle,
   ArrowRight,
   Building2,
   CalendarDays,
+  CircleDot,
   ClipboardList,
   HardHat,
   Headphones,
@@ -41,19 +41,19 @@ const ACTIVE_CAPABILITIES: {
     icon: Package,
   },
   {
-    label: "Maintenance",
-    detail: "Planned, preventive and reactive work",
+    label: "Issues",
+    detail: "What needs attention across the estate",
+    icon: CircleDot,
+  },
+  {
+    label: "Work",
+    detail: "Active work in progress",
     icon: Wrench,
   },
   {
     label: "Work Orders",
     detail: "Assigned and in-progress work",
     icon: ClipboardList,
-  },
-  {
-    label: "Incidents",
-    detail: "Active operational events",
-    icon: AlertTriangle,
   },
 ];
 

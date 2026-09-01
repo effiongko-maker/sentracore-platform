@@ -6,20 +6,15 @@ import { Button } from "@/components/ui/Button";
 import { FormField, inputClassName } from "@/components/forms/FormField";
 import { useToast } from "@/components/ui/Toast";
 import { formatDate } from "@/lib/utils";
+import { workHref } from "@/lib/operational/work";
 import type { LinkableSearchHit } from "../treatment/types";
 import type { RequestTreatmentResult } from "../treatment/resultTypes";
 import { filterLinkableCandidates } from "../treatment/filterLinkableCandidates";
 import { loadLinkTreatmentCatalogue } from "../treatment/loadLinkTreatmentCatalogue";
-import {
-  linkIncidentToRequest,
-  linkMaintenanceToRequest,
-} from "../actions/treatRequest";
-
-type LinkKind = "maintenance" | "incident";
+import { linkMaintenanceToRequest } from "../actions/treatRequest";
 
 interface LinkExistingTreatmentModalProps {
   open: boolean;
-  kind: LinkKind;
   requestId: string;
   onClose: () => void;
   onLinked: (result: RequestTreatmentResult) => void;
@@ -27,7 +22,6 @@ interface LinkExistingTreatmentModalProps {
 
 export function LinkExistingTreatmentModal({
   open,
-  kind,
   requestId,
   onClose,
   onLinked,
@@ -60,7 +54,7 @@ export function LinkExistingTreatmentModal({
     setCatalogueError(null);
     setCatalogueLoading(true);
 
-    void loadLinkTreatmentCatalogue({ kind, requestId })
+    void loadLinkTreatmentCatalogue({ requestId })
       .then((result) => {
         if (gen !== catalogueLoadGen.current) return;
         if (!result.success) {
@@ -77,7 +71,6 @@ export function LinkExistingTreatmentModal({
         const openMs = openStartedAt.current;
         if (openMs != null && process.env.NODE_ENV !== "production") {
           console.info("[link-treatment.catalogue.timing]", {
-            kind,
             elapsedMs: Math.round(performance.now() - openMs),
             count: result.data.data.length,
           });
@@ -102,7 +95,7 @@ export function LinkExistingTreatmentModal({
           setCatalogueLoading(false);
         }
       });
-  }, [open, kind, requestId, toast]);
+  }, [open, requestId, toast]);
 
   const filtered = useMemo(() => {
     const t0 = performance.now();
@@ -113,7 +106,6 @@ export function LinkExistingTreatmentModal({
       candidates.length > 0
     ) {
       console.info("[link-treatment.search.timing]", {
-        kind,
         queryLength: search.trim().length,
         elapsedMs: Math.round((performance.now() - t0) * 1000) / 1000,
         resultCount: next.length,
@@ -121,15 +113,12 @@ export function LinkExistingTreatmentModal({
       });
     }
     return next;
-  }, [candidates, search, catalogueLoading, kind]);
+  }, [candidates, search, catalogueLoading]);
 
   async function handleLink(id: string) {
     setLinkingId(id);
     try {
-      const result =
-        kind === "maintenance"
-          ? await linkMaintenanceToRequest({ requestId, maintenanceId: id })
-          : await linkIncidentToRequest({ requestId, incidentId: id });
+      const result = await linkMaintenanceToRequest({ requestId, maintenanceId: id });
 
       if (!result.success) {
         throw new Error(result.error.message);
@@ -137,7 +126,7 @@ export function LinkExistingTreatmentModal({
 
       toast({
         type: "success",
-        title: kind === "maintenance" ? "Maintenance linked" : "Incident linked",
+        title: "Work linked",
         description: `${id} is now linked to this request.`,
       });
       onLinked(result.data);
@@ -154,16 +143,10 @@ export function LinkExistingTreatmentModal({
     }
   }
 
-  const title =
-    kind === "maintenance" ? "Link existing Maintenance" : "Link existing Incident";
-  const loadingLabel =
-    kind === "maintenance" ? "Loading maintenance…" : "Loading incidents…";
-  const emptyFilterLabel =
-    kind === "maintenance"
-      ? "No matching maintenance records"
-      : "No matching incidents";
-  const searchPlaceholder =
-    kind === "maintenance" ? "Search maintenance..." : "Search incidents...";
+  const title = "Link Work";
+  const loadingLabel = "Loading work…";
+  const emptyFilterLabel = "No matching work records";
+  const searchPlaceholder = "Search work…";
 
   const showEmpty =
     !catalogueLoading &&

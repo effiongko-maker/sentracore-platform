@@ -8,18 +8,21 @@ export function IntelligenceOperationalContext({
   context: OrganisationOperationalContext;
   windowDays: number;
 }) {
-  if (context.recentIncidentCount30d === 0) {
+  const hasActivity =
+    context.recentWorkCount30d > 0 || context.recentIncidentCount30d > 0;
+
+  if (!hasActivity) {
     return null;
   }
 
   const metrics = [
     {
-      value: context.recentIncidentCount30d,
-      label: "Incidents reported",
+      value: context.recentWorkCount30d,
+      label: "Work logged",
     },
     {
       value: context.highOrCriticalRiskCount,
-      label: "Higher-risk incidents",
+      label: "Elevated-risk activity",
     },
     {
       value: context.facilitiesWithRecentActivity,
@@ -27,13 +30,20 @@ export function IntelligenceOperationalContext({
     },
   ];
 
+  if (context.recentIncidentCount30d > 0) {
+    metrics.push({
+      value: context.recentIncidentCount30d,
+      label: "Legacy incidents (historical)",
+    });
+  }
+
   return (
     <BriefingSection
       emphasis="context"
       title="The bigger picture"
       description={`Supporting numbers for the last ${windowDays} days.`}
     >
-      <dl className="grid max-w-md grid-cols-3 gap-x-5">
+      <dl className="grid max-w-2xl grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-4">
         {metrics.map((metric) => (
           <div key={metric.label}>
             <dd className="sc-text-stat">{metric.value}</dd>

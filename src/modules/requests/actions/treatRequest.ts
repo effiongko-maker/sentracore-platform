@@ -17,6 +17,7 @@ import {
   type RequestTreatmentDetail,
   type RequestTreatmentResult,
 } from "@/lib/operational/orchestration/requestTreatment";
+import { assertNewIncidentCreateAllowed } from "@/lib/operational/work/incidentWriteFreeze";
 import {
   MAINTENANCE_PRIORITIES,
   MAINTENANCE_SOURCES,
@@ -225,6 +226,9 @@ export async function createMaintenanceFromRequest(input: {
   });
 }
 
+/** Phase 15/18 canonical alias — Request → Treat → Work. */
+export const createWorkFromRequest = createMaintenanceFromRequest;
+
 export async function createIncidentFromRequest(input: {
   requestId: string;
   incident: CreateIncidentInput;
@@ -235,6 +239,8 @@ export async function createIncidentFromRequest(input: {
     module: "facility_management",
     input,
     handler: async (context, raw) => {
+      assertNewIncidentCreateAllowed("createIncidentFromRequest");
+
       const validated = validateIncidentInput(
         raw.incident,
         context.userId,

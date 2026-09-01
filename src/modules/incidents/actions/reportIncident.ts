@@ -8,6 +8,7 @@ import {
 import {
   orchestrateReportIncident,
 } from "@/lib/operational/orchestration";
+import { assertNewIncidentCreateAllowed } from "@/lib/operational/work/incidentWriteFreeze";
 import {
   INCIDENT_CHANNELS,
   INCIDENT_SEVERITIES,
@@ -152,6 +153,8 @@ export async function reportIncident(
     input,
     departmentId: options.departmentId,
     handler: async (context, rawInput) => {
+      assertNewIncidentCreateAllowed("reportIncident");
+
       const writeInput = enrichReportIncidentInput(
         rawInput,
         context.userId,

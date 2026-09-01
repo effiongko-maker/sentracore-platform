@@ -9,7 +9,9 @@ import type { WorkspaceActivityItem } from "../types";
 
 const modulePath: Record<WorkspaceActivityItem["module"], string> = {
   incidents: "/incidents",
-  maintenance: "/maintenance",
+  work: "/work",
+  issues: "/issues",
+  maintenance: "/work",
   "work-orders": "/work-orders",
   assets: "/assets",
   facilities: "/facilities",
@@ -35,7 +37,7 @@ export function RecentActivity({ items }: { items: WorkspaceActivityItem[] }) {
               icon={Activity}
               className="border-0 bg-transparent py-10"
               title="No recent activity"
-              description="Newly reported incidents, maintenance requests, and work orders will show up here."
+              description="New work, work orders, and legacy incident activity will show up here."
             />
           ) : (
             items.map((item) => (

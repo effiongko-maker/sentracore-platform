@@ -96,10 +96,10 @@ function nextActionSummary(incident: Incident): string | null {
     (incident.workOrderIds?.length ?? 0) > 0 || Boolean(incident.workOrderId);
 
   if (hasMaintenance && hasWorkOrder) {
-    return "Maintenance request and work order created";
+    return "Maintenance work and work order linked";
   }
-  if (hasMaintenance) return "Maintenance request created";
-  if (hasWorkOrder) return "Work order created";
+  if (hasMaintenance) return "Maintenance work linked";
+  if (hasWorkOrder) return "Work order linked";
   return null;
 }
 
@@ -217,7 +217,7 @@ export function ViewIncidentModal({
                 onEdit(displayIncident);
               }}
             >
-              Treat incident
+              Investigate
             </Button>
           ) : null}
         </>

@@ -7,19 +7,19 @@ import { Sparkline } from "../visuals/Sparkline";
 
 function relatedModules(finding: BriefingFinding): string[] {
   const title = finding.title.toLowerCase();
-  if (title.includes("maintenance")) {
-    return ["Maintenance", "Incidents", "Facilities"];
+  if (title.includes("maintenance") || title.includes("work")) {
+    return ["Work", "Issues", "Facilities"];
   }
   if (title.includes("asset")) {
-    return ["Assets", "Incidents", "Work Orders"];
+    return ["Assets", "Work", "Work Orders"];
   }
   if (title.includes("work order") || title.includes("delayed")) {
-    return ["Work Orders", "Incidents", "Maintenance"];
+    return ["Work Orders", "Work", "Issues"];
   }
   if (title.includes("backlog")) {
-    return ["Maintenance", "Work Orders", "Facilities"];
+    return ["Work", "Work Orders", "Facilities"];
   }
-  return ["Incidents", "Maintenance", "Work Orders"];
+  return ["Issues", "Work", "Work Orders"];
 }
 
 export function ReferencePatternsPreview({

@@ -83,7 +83,7 @@ export function CreateMaintenanceFromRequestModal({
 
       toast({
         type: "success",
-        title: "Maintenance created",
+        title: "Work created",
         description: `${result.data.maintenance?.id} linked to ${request.id}.`,
       });
       onCreated(result.data);
@@ -91,7 +91,7 @@ export function CreateMaintenanceFromRequestModal({
     } catch (err) {
       toast({
         type: "error",
-        title: "Unable to create maintenance",
+        title: "Unable to create work",
         description:
           err instanceof Error ? err.message : "Please try again in a moment.",
       });
@@ -104,7 +104,7 @@ export function CreateMaintenanceFromRequestModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="Create Maintenance"
+      title="Create Work"
       description={`From ${request.id}`}
       size="lg"
       footer={
@@ -113,7 +113,7 @@ export function CreateMaintenanceFromRequestModal({
             Cancel
           </Button>
           <Button type="submit" form="create-mnt-from-req" disabled={saving}>
-            {saving ? "Creating…" : "Create Maintenance"}
+            {saving ? "Creating…" : "Create Work"}
           </Button>
         </div>
       }

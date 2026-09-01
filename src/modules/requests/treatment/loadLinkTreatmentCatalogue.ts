@@ -6,12 +6,7 @@
 
 import type { ActionResult } from "@/lib/actions";
 import type { LinkableSearchHit } from "./types";
-import {
-  searchIncidentsForRequestLink,
-  searchMaintenanceForRequestLink,
-} from "../actions/treatRequest";
-
-export type LinkTreatmentKind = "maintenance" | "incident";
+import { searchMaintenanceForRequestLink } from "../actions/treatRequest";
 
 type CataloguePayload = {
   data: LinkableSearchHit[];
@@ -23,28 +18,22 @@ const inflight = new Map<
   Promise<ActionResult<CataloguePayload>>
 >();
 
-function catalogueKey(kind: LinkTreatmentKind, requestId: string): string {
-  return `link-treatment-catalogue:${kind}:${requestId}`;
+function catalogueKey(requestId: string): string {
+  return `link-treatment-catalogue:work:${requestId}`;
 }
 
 /**
- * One remote catalogue fetch per (kind, requestId) while in flight.
+ * One remote catalogue fetch per requestId while in flight.
  * Search text is intentionally not part of the key — filtering is local.
  */
 export function loadLinkTreatmentCatalogue(options: {
-  kind: LinkTreatmentKind;
   requestId: string;
 }): Promise<ActionResult<CataloguePayload>> {
-  const key = catalogueKey(options.kind, options.requestId);
+  const key = catalogueKey(options.requestId);
   const existing = inflight.get(key);
   if (existing) return existing;
 
-  const runner =
-    options.kind === "maintenance"
-      ? searchMaintenanceForRequestLink
-      : searchIncidentsForRequestLink;
-
-  const run = runner({
+  const run = searchMaintenanceForRequestLink({
     requestId: options.requestId,
     // Empty search → server returns full facility-scoped linkable catalogue.
     search: "",

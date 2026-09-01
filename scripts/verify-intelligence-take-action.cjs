@@ -145,7 +145,7 @@ async function main() {
       const href = await recordLink.getAttribute("href");
       assert(href && /\?id=/.test(href), `expected specific ?id= href, got ${href}`);
       assert(
-        !/^\/(incidents|maintenance|work-orders|requests)$/.test(href || ""),
+        !/^\/(incidents|maintenance|work|work-orders|requests)$/.test(href || ""),
         "generic module href without id"
       );
       results.push(`PASS specific record href (${href})`);
@@ -167,7 +167,7 @@ async function main() {
       });
       const dest = pathOf(page);
       assert(
-        ["/incidents", "/maintenance", "/work-orders", "/requests", "/assets"].includes(
+        ["/incidents", "/maintenance", "/work", "/work-orders", "/requests", "/assets"].includes(
           dest
         ),
         `unexpected dest ${dest} from ${href}`

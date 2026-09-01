@@ -119,7 +119,7 @@ export function ViewMaintenanceModal({
                 onEdit(maintenance);
               }}
             >
-              Treat maintenance
+              Treat work
             </Button>
           ) : null}
         </>

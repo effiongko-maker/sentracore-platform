@@ -80,9 +80,9 @@ export function riskBullets(snapshot: ReportingSnapshot): string[] {
     bullets.push(`Operational health is on watch (score ${health.score}).`);
   }
 
-  if (kpis.criticalIncidents > 0) {
+  if (kpis.criticalWork > 0) {
     bullets.push(
-      `${kpis.criticalIncidents} critical incident(s) require ongoing attention.`
+      `${kpis.criticalWork} critical work item(s) require ongoing attention.`
     );
   }
   if (kpis.overdueWorkOrders > 0) {
@@ -110,8 +110,8 @@ export function recommendationBullets(snapshot: ReportingSnapshot): string[] {
   const { kpis, health } = snapshot;
   const out: string[] = [];
 
-  if (kpis.criticalIncidentsUnassigned > 0) {
-    out.push("Assign owners to all unassigned critical incidents.");
+  if (kpis.criticalWorkUnassigned > 0) {
+    out.push("Assign owners to all unassigned critical work items.");
   }
   if (kpis.overdueWorkOrders > 0) {
     out.push("Clear overdue work orders and reconfirm SLA dates.");
@@ -125,8 +125,8 @@ export function recommendationBullets(snapshot: ReportingSnapshot): string[] {
   if (health.band !== "healthy") {
     out.push("Review operational health drivers with the facility management team.");
   }
-  if (kpis.incidentsNeedingWorkOrder > 0) {
-    out.push("Raise work orders for incidents still requiring corrective action.");
+  if (kpis.workNeedingWorkOrder > 0) {
+    out.push("Raise work orders for work items still requiring corrective action.");
   }
 
   return out.length

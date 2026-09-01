@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/Badge";
 import { DataTable, type Column } from "@/components/tables/DataTable";
 import { formatDate } from "@/lib/utils";
 import {
-  useAssetName,
   useFacilityName,
   useUserName,
 } from "@/hooks/useEntityLabel";
@@ -46,11 +45,6 @@ function FacilityCell({ row }: { row: Maintenance }) {
   );
 }
 
-function AssetLabel({ id }: { id?: string }) {
-  const name = useAssetName(id);
-  return <>{id ? name || "—" : "—"}</>;
-}
-
 function AssigneeLabel({ id }: { id?: string }) {
   const name = useUserName(id);
   return <>{id ? name || "—" : "—"}</>;
@@ -71,29 +65,30 @@ export function MaintenanceTable({
     () => [
       {
         key: "title",
-        header: "Maintenance",
-        render: (row) => (
-          <div>
-            <span className="font-medium text-foreground">
-              {displayMaintenanceTitle(row)}
-            </span>
-            <p className="text-xs text-muted">{row.id}</p>
-          </div>
-        ),
+        header: "Work",
+        render: (row) => {
+          const related = row.sourceRequestId
+            ? `Request ${row.sourceRequestId}`
+            : row.incidentId
+              ? `Event ${row.incidentId}`
+              : null;
+          return (
+            <div>
+              <span className="font-medium text-foreground">
+                {displayMaintenanceTitle(row)}
+              </span>
+              <p className="text-xs text-muted">{row.id}</p>
+              {related ? (
+                <p className="text-xs text-muted">{related}</p>
+              ) : null}
+            </div>
+          );
+        },
       },
       {
         key: "facilityId",
-        header: "Facility",
+        header: "Location",
         render: (row) => <FacilityCell row={row} />,
-      },
-      {
-        key: "assetId",
-        header: "Asset",
-        render: (row) => (
-          <span className="text-muted">
-            <AssetLabel id={row.assetId} />
-          </span>
-        ),
       },
       {
         key: "priority",
@@ -119,15 +114,33 @@ export function MaintenanceTable({
         render: (row) => (
           <span className="text-muted">
             <AssigneeLabel id={row.assignedToUserId} />
+            {row.department ? (
+              <span className="block text-xs">{row.department}</span>
+            ) : null}
           </span>
         ),
       },
       {
         key: "reportedAt",
-        header: "Reported At",
-        render: (row) => (
-          <span className="text-muted">{formatDate(row.reportedAt)}</span>
-        ),
+        header: "Schedule / Done",
+        render: (row) => {
+          const when =
+            row.status === "completed" && row.completedAt
+              ? row.completedAt
+              : row.scheduledStartAt || row.reportedAt;
+          const label =
+            row.status === "completed" && row.completedAt
+              ? "Completed"
+              : row.scheduledStartAt
+                ? "Scheduled"
+                : "Reported";
+          return (
+            <div>
+              <span className="text-muted">{formatDate(when)}</span>
+              <p className="text-xs text-muted">{label}</p>
+            </div>
+          );
+        },
       },
       {
         key: "actions",
@@ -158,7 +171,7 @@ export function MaintenanceTable({
       total={total}
       onPageChange={onPageChange}
       emptyIcon={Wrench}
-      emptyTitle="No maintenance records match your filters"
+      emptyTitle="No maintenance work matches your filters"
       emptyDescription="Clear search or adjust priority, status, type, facility, and assignee filters."
       className="min-w-0"
     />

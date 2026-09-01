@@ -143,9 +143,9 @@ function riskBullets(scoped: ReportingSnapshot): string[] {
     bullets.push(`Operational health is on watch (score ${health.score}/100).`);
   }
 
-  if (kpis.criticalIncidents > 0) {
+  if (kpis.criticalWork > 0) {
     bullets.push(
-      `${kpis.criticalIncidents} critical incident(s) require ongoing attention.`
+      `${kpis.criticalWork} critical work item(s) require ongoing attention.`
     );
   }
   if (kpis.overdueWorkOrders > 0) {
@@ -173,8 +173,8 @@ function recommendationBullets(scoped: ReportingSnapshot): string[] {
   const { kpis, health } = scoped;
   const out: string[] = [];
 
-  if (kpis.criticalIncidentsUnassigned > 0) {
-    out.push("Assign owners to all unassigned critical incidents.");
+  if (kpis.criticalWorkUnassigned > 0) {
+    out.push("Assign owners to all unassigned critical work items.");
   }
   if (kpis.overdueWorkOrders > 0) {
     out.push("Clear overdue work orders and reconfirm SLA commitment dates.");
@@ -192,9 +192,9 @@ function recommendationBullets(scoped: ReportingSnapshot): string[] {
       "Review operational health drivers with the facility management team."
     );
   }
-  if (kpis.incidentsNeedingWorkOrder > 0) {
+  if (kpis.workNeedingWorkOrder > 0) {
     out.push(
-      "Raise work orders for incidents still requiring corrective action."
+      "Raise work orders for work items still requiring corrective action."
     );
   }
 
@@ -229,8 +229,8 @@ function highlightBullets(
   return [
     `Operational health score: ${scoped.health.score}/100 (${scoped.health.band}).`,
     `${kpis.openWorkOrders} open work order(s); ${kpis.overdueWorkOrders} overdue.`,
-    `${kpis.maintenanceBacklog} maintenance backlog item(s); ${kpis.overdueMaintenance} overdue.`,
-    `${kpis.criticalIncidents} critical open incident(s).`,
+    `${kpis.maintenanceBacklog} work backlog item(s); ${kpis.overdueMaintenance} overdue.`,
+    `${kpis.criticalWork} critical open work item(s).`,
   ];
 }
 
@@ -311,8 +311,8 @@ function operationalBars(scoped: ReportingSnapshot): ReportChartBar[] {
       tone: "danger" as const,
     },
     {
-      label: "Critical incidents",
-      value: kpis.criticalIncidents,
+      label: "Critical work",
+      value: kpis.criticalWork,
       tone: "danger" as const,
     },
     {
@@ -433,9 +433,9 @@ export function buildClientReport(input: {
       ),
       metric(
         "critical",
-        "Critical incidents",
-        kpis.criticalIncidents,
-        `${kpis.criticalIncidentsUnassigned} unassigned`
+        "Critical work",
+        kpis.criticalWork,
+        `${kpis.criticalWorkUnassigned} unassigned`
       ),
       metric(
         "assets",
@@ -497,43 +497,49 @@ export function buildClientReport(input: {
     },
     maintenance: {
       narrative:
-        `The maintenance backlog stands at ${kpis.maintenanceBacklog} item(s), ` +
+        `${kpis.criticalWork} critical work item(s) are open, with a total backlog of ${kpis.maintenanceBacklog} ` +
         `including ${kpis.overdueMaintenance} overdue and ${kpis.maintenanceOnHold} on hold.`,
       metrics: [
+        metric("critical", "Critical work", kpis.criticalWork),
+        metric(
+          "unassigned",
+          "Unassigned critical",
+          kpis.criticalWorkUnassigned
+        ),
+        metric("needs_wo", "Needs work order", kpis.workNeedingWorkOrder),
         metric("backlog", "Backlog", kpis.maintenanceBacklog),
         metric("overdue", "Overdue", kpis.overdueMaintenance),
         metric("on_hold", "On hold", kpis.maintenanceOnHold),
-        metric(
-          "attention",
-          "Attention items",
-          projections.maintenanceAttention.length
-        ),
       ],
       table: listTable(
-        ["Maintenance item", "Status", "Priority", "Notes"],
-        projectionRows(projections.maintenanceAttention),
-        "No maintenance attention items in the current snapshot."
+        ["Work item", "Status", "Priority", "Notes"],
+        projectionRows(projections.criticalWork),
+        "No critical work items in the current snapshot."
       ),
     },
     incidents: {
       narrative:
-        `${kpis.criticalIncidents} critical incident(s) are open. ` +
+        `Legacy incident records (historical): ${kpis.criticalIncidents} critical incident(s) remain open in the legacy register. ` +
         `${kpis.criticalIncidentsUnassigned} remain unassigned and ` +
         `${kpis.incidentsNeedingWorkOrder} still require a work order.`,
       metrics: [
-        metric("critical", "Critical open", kpis.criticalIncidents),
+        metric("critical", "Legacy critical open", kpis.criticalIncidents),
         metric(
           "unassigned",
-          "Unassigned critical",
+          "Legacy unassigned critical",
           kpis.criticalIncidentsUnassigned
         ),
-        metric("needs_wo", "Needs work order", kpis.incidentsNeedingWorkOrder),
-        metric("open_total", "Open incidents (all)", openIncidents.length),
+        metric(
+          "needs_wo",
+          "Legacy needs work order",
+          kpis.incidentsNeedingWorkOrder
+        ),
+        metric("open_total", "Legacy open incidents (all)", openIncidents.length),
       ],
       table: listTable(
-        ["Incident", "Status", "Severity", "Notes"],
+        ["Legacy incident", "Status", "Severity", "Notes"],
         projectionRows(projections.criticalIncidents),
-        "No critical incidents in the current snapshot."
+        "No legacy critical incidents in the historical register."
       ),
     },
     assets: {

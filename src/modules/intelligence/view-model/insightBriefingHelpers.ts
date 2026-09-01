@@ -2,7 +2,7 @@ import type { IntelligenceInsight } from "@/lib/intelligence/insights/types";
 import type { ClassifiedFinding } from "../view-model/buildIntelligenceExperience";
 
 export type ActionableItem = {
-  kind: "request" | "maintenance" | "incident" | "work_order" | "asset";
+  kind: "request" | "work" | "maintenance" | "incident" | "work_order" | "asset";
   id: string;
   label: string;
   href: string;
@@ -13,6 +13,7 @@ export type ActionableItem = {
 /** Action destinations only — Facilities stay insight/evidence context, not actions. */
 const GROUP_ORDER: ActionableItem["kind"][] = [
   "request",
+  "work",
   "maintenance",
   "incident",
   "work_order",
@@ -24,7 +25,7 @@ const ID_PATTERNS: Array<{
   re: RegExp;
 }> = [
   { kind: "request", re: /\b(REQ-\d{4}-\d+)\b/gi },
-  { kind: "maintenance", re: /\b(MNT-\d{4}-\d+)\b/gi },
+  { kind: "work", re: /\b(MNT-\d{4}-\d+)\b/gi },
   { kind: "incident", re: /\b(INC-\d{4}-\d+)\b/gi },
   { kind: "work_order", re: /\b(WO-\d{4}-\d+)\b/gi },
 ];
@@ -35,8 +36,9 @@ function hrefFor(kind: ActionableItem["kind"], id: string): string {
   switch (kind) {
     case "request":
       return `/requests?id=${encodeURIComponent(id)}`;
+    case "work":
     case "maintenance":
-      return `/maintenance?id=${encodeURIComponent(id)}`;
+      return `/work?id=${encodeURIComponent(id)}`;
     case "incident":
       return `/incidents?id=${encodeURIComponent(id)}`;
     case "work_order":
@@ -59,6 +61,20 @@ function facilityContext(insight: IntelligenceInsight): string | undefined {
   return facility?.label || facility?.id;
 }
 
+function normalizeEntityKind(
+  kind: IntelligenceInsight["relatedEntities"][number]["kind"]
+): ActionableItem["kind"] | null {
+  if (kind === "maintenance") return "work";
+  if (
+    kind === "asset" ||
+    kind === "incident" ||
+    kind === "work_order"
+  ) {
+    return kind;
+  }
+  return null;
+}
+
 /**
  * Build actionable operational destinations from grounded Insight entities
  * and evidence text. Never fabricates IDs. Never falls back to generic module lists.
@@ -70,17 +86,13 @@ export function buildActionableItems(
   const context = facilityContext(insight);
 
   for (const entity of insight.relatedEntities) {
-    if (
-      entity.kind === "asset" ||
-      entity.kind === "incident" ||
-      entity.kind === "maintenance" ||
-      entity.kind === "work_order"
-    ) {
+    const kind = normalizeEntityKind(entity.kind);
+    if (kind) {
       pushUnique(map, {
-        kind: entity.kind,
+        kind,
         id: entity.id,
         label: entity.label || entity.id,
-        href: hrefFor(entity.kind, entity.id),
+        href: hrefFor(kind, entity.id),
         context,
       });
     }
@@ -135,10 +147,12 @@ export function groupHeading(kind: ActionableItem["kind"]): string {
   switch (kind) {
     case "request":
       return "Requests";
+    case "work":
+      return "Work";
     case "maintenance":
-      return "Maintenance";
+      return "Work";
     case "incident":
-      return "Incidents";
+      return "Legacy incidents";
     case "work_order":
       return "Work Orders";
     case "asset":

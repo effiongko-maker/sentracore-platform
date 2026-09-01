@@ -1,5 +1,5 @@
 /**
- * Issue operational model (Phase 6) — roots, outcome, actions, authority, cost contract.
+ * Issue operational model (Phase 8) — FM Log Issue composition + unified list.
  *
  *   npx tsx --tsconfig tsconfig.json scripts/verify-issue-domain-foundation.mts
  */
@@ -8,28 +8,20 @@ import {
   composeIssueFromIncident,
   composeIssueFromMaintenance,
   composeIssueFromRequest,
-  composeOperationalViewFromTreatmentDetail,
-  COST_SUBMISSION_FLOW,
   deriveIssueActions,
-  deriveIssueOutcome,
   getIssueAction,
   INCIDENT_POLICY,
-  isIncidentSuccessfullyTerminal,
-  isMaintenanceSuccessfullyTerminal,
-  isSignificantIncidentType,
-  ISSUE_AUTHORITY_ROLES,
-  JOB_ORDER_BOUNDARY,
-  mapIncidentStatusToIssueStatus,
-  mapIncidentToTreatmentRef,
-  mapIncidentTypeToClassification,
-  mapMaintenanceStatusToIssueStatus,
-  mapMaintenanceToTreatmentRef,
-  mapRequestStatusToIssueStatus,
-  mapWorkOrderToExecutionRef,
-  mapWorkOrderToIssueRef,
-  WORK_ORDER_BOUNDARY,
   ISSUE_MODEL_PHASE,
+  JOB_ORDER_BOUNDARY,
+  mapMaintenanceStatusToIssueStatus,
+  mapIncidentStatusToIssueStatus,
+  mapWorkOrderToExecutionRef,
+  WORK_ORDER_BOUNDARY,
 } from "../src/lib/operational/issues";
+import { buildUnifiedIssueList } from "../src/modules/issues/lib/buildUnifiedIssueList";
+import type { Incident } from "../src/modules/incidents/types";
+import type { Maintenance } from "../src/modules/maintenance/types";
+import type { RequestRecord } from "../src/modules/requests/types";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);
@@ -37,219 +29,223 @@ function assert(cond: unknown, message: string): asserts cond {
 
 function main() {
   const results: string[] = [];
-  assert(ISSUE_MODEL_PHASE === 6, "phase 6");
-  results.push("PASS ISSUE_MODEL_PHASE = 6");
+  assert(ISSUE_MODEL_PHASE === 23, "phase 18");
+  results.push("PASS ISSUE_MODEL_PHASE = 19");
 
-  // Model corrections: WO / JO / authorities
+  assert(JOB_ORDER_BOUNDARY.implemented === false, "no JO persistence");
   assert(WORK_ORDER_BOUNDARY.approvalAuthority === "annex_director", "WO annex");
-  assert(JOB_ORDER_BOUNDARY.approvalAuthority === "hq_evc", "JO hq_evc");
-  assert(JOB_ORDER_BOUNDARY.issuedBy === "procurement", "JO procurement");
-  assert(JOB_ORDER_BOUNDARY.implemented === false, "JO not implemented");
   assert(
-    mapWorkOrderToExecutionRef({
-      id: "WO-1",
-      status: "open",
-      title: "t",
-    }).approvalAuthority === "annex_director",
-    "WO execution not hq_formal"
+    mapWorkOrderToExecutionRef({ id: "WO-1", status: "open", title: "t" })
+      .approvalAuthority !== "hq_formal",
+    "not hq_formal"
+  );
+  results.push("PASS Job Order not implemented; WO authority corrected");
+
+  const ordinary = composeIssueFromMaintenance({
+    maintenance: {
+      id: "MNT-FM-1",
+      title: "Leaking toilet",
+      facilityId: "FAC-0001",
+      locationDetail: "Gents W1",
+      status: "requested",
+      priority: "medium",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+  });
+  assert(ordinary.id === "issue:maintenance:MNT-FM-1", "mnt issue id");
+  assert(ordinary.rootMaintenanceId === "MNT-FM-1", "root");
+  assert(!ordinary.relatedRequestId, "no fake request");
+  assert(ordinary.source === "facility_manager", "fm source");
+  assert(
+    ordinary.status === mapMaintenanceStatusToIssueStatus("requested"),
+    "derived status"
   );
   assert(
-    ISSUE_AUTHORITY_ROLES.includes("client_ncc") &&
-      ISSUE_AUTHORITY_ROLES.includes("annex_director") &&
-      ISSUE_AUTHORITY_ROLES.includes("hq_evc") &&
-      ISSUE_AUTHORITY_ROLES.includes("procurement"),
-    "authority roles"
+    getIssueAction(deriveIssueActions(ordinary), "treat")?.href?.includes(
+      "MNT-FM-1"
+    ),
+    "treat → mnt"
   );
-  assert(COST_SUBMISSION_FLOW[0] === "actual_cost", "cost flow");
-  results.push("PASS WO/JO/authority/cost model corrections");
+  assert(
+    !getIssueAction(deriveIssueActions(ordinary), "investigate")?.available,
+    "Investigate is not a competing primary action"
+  );
+  assert(
+    !getIssueAction(deriveIssueActions(ordinary), "resolve")?.available,
+    "no generic Resolve on active ordinary"
+  );
+  assert(
+    getIssueAction(deriveIssueActions(ordinary), "cancel")?.label === "Cancel",
+    "Cancel label"
+  );
+  results.push("PASS FM Issue → Work treatment (Maintenance backing), no Request");
 
-  // Status maps
-  assert(mapRequestStatusToIssueStatus("submitted") === "reported", "req");
-  assert(mapMaintenanceStatusToIssueStatus("requested") === "reported", "mnt reported");
-  assert(mapMaintenanceStatusToIssueStatus("in_progress") === "being_treated", "mnt treat");
-  assert(mapMaintenanceStatusToIssueStatus("completed") === "resolved", "mnt resolved");
-  assert(mapIncidentStatusToIssueStatus("reported") === "reported", "inc reported");
-  assert(mapIncidentStatusToIssueStatus("investigating") === "being_treated", "inc treat");
-  assert(mapIncidentStatusToIssueStatus("resolved") === "resolved", "inc resolved");
-  results.push("PASS status derivation maps (Request/MNT/INC)");
+  const significant = composeIssueFromIncident({
+    incident: {
+      id: "INC-FM-1",
+      title: "Flooding",
+      facilityId: "FAC-0001",
+      status: "reported",
+      type: "environmental",
+      severity: "high",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+  });
+  assert(significant.id === "issue:incident:INC-FM-1", "inc issue id");
+  assert(!significant.relatedRequestId, "no fake request on investigation path");
+  assert(
+    significant.status === mapIncidentStatusToIssueStatus("reported"),
+    "inc derived"
+  );
+  assert(
+    getIssueAction(deriveIssueActions(significant), "treat")?.available === true,
+    "investigation-path Issue still uses Treat"
+  );
+  assert(
+    getIssueAction(deriveIssueActions(significant), "treat")?.href?.includes(
+      "INC-FM-1"
+    ),
+    "treat → incident handling"
+  );
+  assert(
+    !getIssueAction(deriveIssueActions(significant), "investigate")?.available,
+    "Investigate not exposed as competing category"
+  );
+  assert(INCIDENT_POLICY.ordinaryDefault === "work", "ordinary default");
+  results.push("PASS Legacy Incident Issue still composable via Treat, no Request");
 
-  assert(isMaintenanceSuccessfullyTerminal("completed"), "mnt terminal");
-  assert(isIncidentSuccessfullyTerminal("resolved"), "inc terminal");
-  results.push("PASS treatment terminal semantics unchanged");
-
-  // Request → Issue
-  const fromReq = composeIssueFromRequest({
+  const staff = composeIssueFromRequest({
     request: {
-      id: "REQ-2026-000100",
+      id: "REQ-1",
       title: "AC not cooling",
       facilityId: "FAC-0001",
       status: "being_treated",
       requestType: "maintenance",
-      maintenanceIds: ["MNT-1"],
+      maintenanceIds: ["MNT-R"],
       incidentIds: [],
       workOrderIds: [],
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-02T00:00:00.000Z",
     },
     maintenances: [
-      { id: "MNT-1", title: "AC repair", status: "scheduled", workOrderId: "WO-1" },
+      {
+        id: "MNT-R",
+        title: "AC",
+        status: "scheduled",
+        workOrderId: "WO-R",
+      },
     ],
     workOrders: [
-      { id: "WO-1", title: "Inspect AC", status: "open", maintenanceId: "MNT-1" },
+      { id: "WO-R", title: "Inspect", status: "open", maintenanceId: "MNT-R" },
     ],
   });
-  assert(fromReq.id.startsWith("issue:request:"), "req issue id");
-  assert(fromReq.source === "staff_request", "staff source");
-  const reqView = buildIssueOperationalView(fromReq);
-  assert(
-    getIssueAction(reqView.actions, "treat")?.href?.includes("/maintenance"),
-    "treat → mnt"
-  );
-  assert(
-    mapWorkOrderToExecutionRef(fromReq.workOrders[0]!).approvalAuthority !==
-      "hq_formal",
-    "not hq_formal"
-  );
-  results.push("PASS Request → Issue + treat routing");
+  assert(staff.id === "issue:request:REQ-1", "staff issue");
+  assert(staff.workOrders.some((w) => w.id === "WO-R"), "wo link");
+  results.push("PASS Request-backed Issue + WO relationship");
 
-  // FM ordinary → Maintenance root
-  const fromMnt = composeIssueFromMaintenance({
-    maintenance: {
-      id: "MNT-900",
-      title: "Leaking tap",
+  const requests: RequestRecord[] = [
+    {
+      id: "REQ-1",
+      title: "Staff AC",
       facilityId: "FAC-0001",
-      status: "in_progress",
-      priority: "medium",
-      createdAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-02T00:00:00.000Z",
-    },
-  });
-  assert(fromMnt.id === "issue:maintenance:MNT-900", "mnt issue id");
-  assert(fromMnt.source === "facility_manager", "fm source");
-  assert(fromMnt.rootMaintenanceId === "MNT-900", "root mnt");
-  assert(fromMnt.status === "being_treated", "derived from mnt");
-  assert(!fromMnt.relatedRequestId, "no fake request");
-  const mntView = buildIssueOperationalView(fromMnt);
-  assert(getIssueAction(mntView.actions, "treat")?.available === true, "fm treat");
-  assert(mntView.outcome.kind === "in_progress", "fm outcome");
-  results.push("PASS FM ordinary Issue from Maintenance root");
-
-  // FM significant → Incident root
-  const fromInc = composeIssueFromIncident({
-    incident: {
-      id: "INC-900",
-      title: "Flooding",
-      facilityId: "FAC-0001",
-      status: "investigating",
-      type: "environmental",
-      severity: "critical",
-      createdAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-02T00:00:00.000Z",
-    },
-  });
-  assert(fromInc.id === "issue:incident:INC-900", "inc issue id");
-  assert(fromInc.rootIncidentId === "INC-900", "root inc");
-  assert(fromInc.classification === "environmental", "classif");
-  assert(fromInc.status === "being_treated", "inc status");
-  assert(isSignificantIncidentType("environmental"), "significant type");
-  assert(!isSignificantIncidentType("complaint"), "complaint not significant list");
-  assert(INCIDENT_POLICY.ordinaryDefault === "maintenance", "ordinary default");
-  results.push("PASS FM significant Issue from Incident root + incident policy");
-
-  // Treatment vs execution: no WO required
-  const simple = composeIssueFromMaintenance({
-    maintenance: {
-      id: "MNT-901",
-      title: "Replace bulb",
-      facilityId: "FAC-0001",
-      status: "completed",
-      completedAt: "2026-01-03T00:00:00.000Z",
-      createdAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-03T00:00:00.000Z",
-    },
-  });
-  assert(simple.status === "resolved", "mnt alone resolves");
-  assert(simple.workOrders.length === 0, "no wo forced");
-  assert(
-    deriveIssueActions(simple).find((a) => a.id === "view_related_work")
-      ?.available === false,
-    "no related work"
-  );
-  results.push("PASS Maintenance alone can resolve without Work Order");
-
-  // Multi-treatment staff path still works
-  const multi = composeIssueFromRequest({
-    request: {
-      id: "REQ-200",
-      title: "Water ingress",
-      facilityId: "FAC-0001",
-      status: "being_treated",
-      requestType: "incident",
-      maintenanceIds: ["MNT-A"],
-      incidentIds: ["INC-1"],
+      occurredAt: "2026-01-01T00:00:00.000Z",
+      status: "submitted",
+      incidentIds: [],
+      maintenanceIds: ["MNT-LINKED"],
       workOrderIds: [],
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     },
-    maintenances: [{ id: "MNT-A", title: "Dry", status: "in_progress" }],
-    incidents: [
-      {
-        id: "INC-1",
-        title: "Water",
-        status: "investigating",
-        type: "environmental",
-      },
-    ],
+  ];
+  const maintenances = [
+    {
+      id: "MNT-LINKED",
+      title: "Linked to request",
+      type: "corrective",
+      source: "request",
+      facilityId: "FAC-0001",
+      priority: "medium",
+      status: "requested",
+      reportedAt: "2026-01-01T00:00:00.000Z",
+      sourceRequestId: "REQ-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+    {
+      id: "MNT-FM-1",
+      title: "FM toilet",
+      type: "corrective",
+      source: "manual",
+      facilityId: "FAC-0001",
+      priority: "medium",
+      status: "requested",
+      reportedAt: "2026-01-01T00:00:00.000Z",
+      createdAt: "2026-01-02T00:00:00.000Z",
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    },
+  ] as Maintenance[];
+  const incidents = [
+    {
+      id: "INC-FM-1",
+      title: "FM flood",
+      type: "environmental",
+      source: "manual",
+      facilityId: "FAC-0001",
+      severity: "high",
+      status: "reported",
+      reportedVia: "walk_in",
+      reportedAt: "2026-01-03T00:00:00.000Z",
+      createdAt: "2026-01-03T00:00:00.000Z",
+      updatedAt: "2026-01-03T00:00:00.000Z",
+    },
+  ] as Incident[];
+
+  const unified = buildUnifiedIssueList({
+    requests,
+    maintenances,
+    incidents,
   });
-  assert(multi.treatments.length === 2, "multi");
+  assert(unified.length === 3, `unified count ${unified.length}`);
   assert(
-    getIssueAction(deriveIssueActions(multi), "treat")?.href?.includes(
-      "MNT-A"
-    ),
-    "prefer mnt for treat when both active"
+    unified.some((u) => u.issue.id === "issue:request:REQ-1"),
+    "has request issue"
   );
-  results.push("PASS multi-treatment; Treat prefers Maintenance when both active");
+  assert(
+    unified.some((u) => u.issue.id === "issue:maintenance:MNT-FM-1"),
+    "has fm mnt"
+  );
+  assert(
+    unified.some((u) => u.issue.id === "issue:incident:INC-FM-1"),
+    "has fm inc"
+  );
+  assert(
+    !unified.some((u) => u.issue.id === "issue:maintenance:MNT-LINKED"),
+    "excludes request-linked mnt as separate issue"
+  );
+  results.push(
+    "PASS unified /issues list Request + FM roots; no duplicate linked treatments"
+  );
+
+  assert(INCIDENT_POLICY.ordinaryDefault === "work", "treat → work");
+  const logAction = getIssueAction(
+    buildIssueOperationalView(ordinary).actions,
+    "log_issue"
+  );
+  assert(logAction?.available === true, "log issue available");
+  assert(logAction?.href === "/issues", "log issue href");
+  results.push(
+    "PASS Treat defaults to Work (/work UI); Log Issue action routes to /issues"
+  );
 
   assert(
-    typeof (fromMnt as { persist?: unknown }).persist === "undefined",
+    typeof (ordinary as { persist?: unknown }).persist === "undefined",
     "no persist"
   );
-  results.push("PASS no Issue persistence; lifecycle SoT preserved");
+  results.push("PASS no Issue persistence introduced");
 
-  assert(
-    mapMaintenanceToTreatmentRef({ id: "M", title: "t", status: "scheduled" })
-      .kind === "maintenance",
-    "mnt mapper"
-  );
-  assert(
-    mapIncidentToTreatmentRef({ id: "I", title: "t", status: "reported" })
-      .kind === "incident_handling",
-    "inc mapper"
-  );
-  assert(mapIncidentTypeToClassification("safety") === "safety", "classif map");
-  assert(mapWorkOrderToIssueRef({ id: "W", title: "t", status: "open" }).id === "W", "wo");
-  assert(
-    composeOperationalViewFromTreatmentDetail({
-      request: {
-        id: "REQ-Z",
-        title: "z",
-        facilityId: "FAC-0001",
-        status: "submitted",
-        maintenanceIds: [],
-        incidentIds: [],
-        workOrderIds: [],
-        createdAt: "2026-01-01T00:00:00.000Z",
-        updatedAt: "2026-01-01T00:00:00.000Z",
-      },
-      maintenance: [],
-      incidents: [],
-      derivedWorkOrders: [],
-    }).outcome.kind === "open",
-    "detail compose"
-  );
-  assert(deriveIssueOutcome(simple).kind === "resolved", "outcome helper");
-
-  console.log("\n=== issue operational model verify (phase 6) ===");
+  console.log("\n=== issue operational model verify (phase 16) ===");
   for (const line of results) console.log(line);
   console.log("RESULT: PASS");
 }

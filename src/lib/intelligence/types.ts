@@ -196,6 +196,10 @@ export type OrganisationRecommendationHealth = {
 };
 
 export type OrganisationOperationalContext = {
+  /** Canonical Work root activity (facility.maintenance_requested). */
+  recentWorkCount30d: number;
+  recentWorkCount7d: number;
+  /** Legacy historical Incident reports — not the canonical FM path. */
   recentIncidentCount30d: number;
   recentIncidentCount7d: number;
   highOrCriticalRiskCount: number;

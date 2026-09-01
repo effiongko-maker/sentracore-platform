@@ -112,7 +112,7 @@ function healthSummary(
       ? "Operations are tracking steadily across the estate."
       : band === "watch"
         ? "Some items need attention before end of day."
-        : "Critical pressure detected — review open incidents and overdue work.");
+        : "Critical pressure detected — review critical work and overdue jobs.");
 
   if (band === "healthy") {
     return base.includes("facilities")
@@ -126,7 +126,7 @@ function healthSummary(
   }
   return base.includes("Address")
     ? base
-    : `${base} Address critical incidents and overdue work first.`;
+    : `${base} Address critical work and overdue jobs first.`;
 }
 
 function buildAttention(
@@ -140,26 +140,26 @@ function buildAttention(
   const blocked = byWidget.get("list.blocked_items");
   const rows: OverviewAttentionRow[] = [];
 
-  const criticalCount = pulse?.criticalIncidents ?? criticalList?.items?.length ?? 0;
+  const criticalCount = pulse?.criticalWork ?? criticalList?.items?.length ?? 0;
   if (criticalCount > 0) {
-    const unassigned = pulse?.criticalIncidentsUnassigned ?? 0;
+    const unassigned = pulse?.criticalWorkUnassigned ?? 0;
     rows.push({
-      id: "attention.critical_incidents",
+      id: "attention.critical_work",
       title:
         unassigned > 0
-          ? `${criticalCount} critical incident${criticalCount === 1 ? "" : "s"} awaiting assignment`
-          : `${criticalCount} critical incident${criticalCount === 1 ? "" : "s"} open`,
+          ? `${criticalCount} critical work item${criticalCount === 1 ? "" : "s"} awaiting assignment`
+          : `${criticalCount} critical work item${criticalCount === 1 ? "" : "s"} open`,
       context: facilityContext(
         uniqueFacilities(criticalList),
         unassigned > 0
           ? `${unassigned} awaiting assignment`
-          : "Open critical severity events"
+          : "Open critical severity work items"
       ),
       count: criticalCount,
       severity: "critical",
       severityLabel: `${criticalCount} Critical`,
-      href: resolveModulePath("incidents"),
-      module: "incidents",
+      href: resolveModulePath("work"),
+      module: "work",
     });
   }
 
@@ -261,9 +261,9 @@ function buildDrivers(pulse: DashboardPulse | undefined): OverviewHealthDriver[]
   const drivers: OverviewHealthDriver[] = [
     {
       id: "driver.critical",
-      label: "Critical incidents",
-      value: pulse.criticalIncidents,
-      tone: pulse.criticalIncidents > 0 ? "danger" : "success",
+      label: "Critical work",
+      value: pulse.criticalWork,
+      tone: pulse.criticalWork > 0 ? "danger" : "success",
     },
     {
       id: "driver.overdue_wo",
@@ -358,12 +358,12 @@ function buildMotion(pulse: DashboardPulse | undefined): OverviewMotionRow[] {
     });
   }
 
-  if (pulse.criticalIncidentsUnassigned > 0) {
+  if (pulse.criticalWorkUnassigned > 0) {
     rows.push({
       id: "motion.unassigned",
       title: "Awaiting assignment",
-      count: pulse.criticalIncidentsUnassigned,
-      href: resolveModulePath("incidents"),
+      count: pulse.criticalWorkUnassigned,
+      href: resolveModulePath("work"),
     });
   }
 
@@ -405,11 +405,11 @@ export function buildDashboardOverview(
       band,
       bandLabel: bandLabel(band),
       summary: healthSummary(band, snapshot.health?.summary),
-      detailHref: resolveModulePath("incidents"),
+      detailHref: resolveModulePath("work"),
     },
     drivers: buildDrivers(pulse),
     attention: buildAttention(pulse, needsAttention),
-    attentionHref: resolveModulePath("incidents"),
+    attentionHref: resolveModulePath("work"),
     metrics,
     recentActivity: buildRecentActivity(snapshot),
     motion: buildMotion(pulse),

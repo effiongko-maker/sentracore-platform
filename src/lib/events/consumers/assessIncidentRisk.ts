@@ -48,6 +48,14 @@ function asNonEmptyString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+/** Map Work/Maintenance priority to incident-style severity for risk scoring. */
+function maintenancePriorityAsSeverity(priority: string | null): string | null {
+  if (!priority) return null;
+  if (priority === "critical") return "critical";
+  if (priority === "high") return "high";
+  return null;
+}
+
 function riskLevelForScore(score: number): IncidentRiskLevel {
   if (score >= 80) return "critical";
   if (score >= 50) return "high";
@@ -156,7 +164,9 @@ export const assessIncidentRiskConsumer: OperationalEventConsumer = async (
   const incidentId =
     asNonEmptyString(eventData.incidentId) ?? event.entityId ?? null;
   const facilityId = asNonEmptyString(eventData.facilityId);
-  const severity = asNonEmptyString(eventData.severity);
+  const severity =
+    asNonEmptyString(eventData.severity) ??
+    maintenancePriorityAsSeverity(asNonEmptyString(eventData.priority));
   const isEmergency = asBoolean(eventData.isEmergency);
   const requiresWorkOrder = asBoolean(eventData.requiresWorkOrder);
 

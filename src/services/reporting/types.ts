@@ -27,6 +27,10 @@ export interface ReportingKpis {
   criticalIncidents: number;
   criticalIncidentsUnassigned: number;
   incidentsNeedingWorkOrder: number;
+  /** Live operational — high/critical Work in backlog. */
+  criticalWork: number;
+  criticalWorkUnassigned: number;
+  workNeedingWorkOrder: number;
   maintenanceBacklog: number;
   overdueMaintenance: number;
   maintenanceOnHold: number;
@@ -52,7 +56,10 @@ export interface ReportingListItem {
 }
 
 export interface ReportingProjections {
+  /** Historical legacy incidents — compatibility only. */
   criticalIncidents: ReportingListItem[];
+  /** Live operational — high/critical Work in backlog. */
+  criticalWork: ReportingListItem[];
   overdueWorkOrders: ReportingListItem[];
   maintenanceAttention: ReportingListItem[];
   blockedItems: ReportingListItem[];

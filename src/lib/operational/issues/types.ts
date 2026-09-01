@@ -1,29 +1,34 @@
 /**
- * Issue operational model — Phase 6 application abstraction.
+ * Issue operational model — Phase 11 application abstraction.
  *
- * Chain: ISSUE → TREATMENT → EXECUTION → OUTCOME → (Intelligence later)
+ * Canonical chain:
+ *   ISSUE → TREATMENT → EXECUTION (optional) → OUTCOME → COST / PAYMENT (future)
  *
- * Persistence remains on existing authoritative domains:
- *   Request | Maintenance | Incident | Work Order
+ * Issue = something that needs attention (composed lens — never a second status store).
+ * Treatment = what the facility team is doing (existing domain capabilities).
+ * Execution = formal instrument when required (Work Order today; Job Order future).
+ * Outcome = derived from authoritative operational records.
  *
- * FM Log Issue (composition only): ordinary → Maintenance root; significant → Incident root.
- * No Issue sheet. No second status store. No Job Order / payment persistence.
+ * Persistence remains on: Request | Maintenance | Incident | Work Order
+ * No Issue sheet. No Job Order / payment persistence.
  *
- * @see MODEL.md in this folder for the multi-record reality map.
+ * Maintenance and Incident are existing capabilities — not mandatory categories of every Issue.
+ *
+ * @see MODEL.md · model.ts
  */
 
 /** How the Issue entered SentraCore. */
 export type IssueSource =
   /** Staff/occupant portal — backed by a Request intake record. */
   | "staff_request"
-  /** Facility manager discovered/logged the problem directly (future UI). */
+  /** Facility manager logged the problem directly (no fake Request). */
   | "facility_manager"
   | "system"
   | "api";
 
 /**
- * Conceptual Issue lifecycle — deliberately simpler than Maintenance/Incident.
- * Underlying treatment domains keep their richer statuses.
+ * Conceptual Issue lifecycle — simpler than underlying domain statuses.
+ * Derived only; underlying treatment domains keep their richer statuses.
  */
 export type IssueStatus =
   | "reported"
@@ -32,8 +37,8 @@ export type IssueStatus =
   | "cancelled";
 
 /**
- * Optional classification of the Issue as a significant event.
- * Not a parallel operational workflow — an attribute of the Issue.
+ * Optional classification attribute on an Issue.
+ * Not a parallel operational workflow and not a Maintenance-vs-Incident fork.
  */
 export type IssueClassification =
   | "routine"
@@ -46,20 +51,44 @@ export type IssueClassification =
 
 export type IssuePriority = "low" | "medium" | "high" | "critical";
 
-/** How treatment is currently implemented under an Issue. */
+/**
+ * How treatment activity is represented under an Issue.
+ *
+ * Phase 15 canonical implementation:
+ *   - work — Work activity (backed by Maintenance persistence)
+ *
+ * Legacy:
+ *   - incident_handling — existing Incident records only (do not create via Log Issue)
+ *   - maintenance — deprecated alias for work (prefer "work")
+ *
+ * Work Order is EXECUTION — do not emit as treatment.
+ */
 export type IssueTreatmentKind =
+  | "work"
+  /**
+   * @deprecated Prefer "work". Same backing store (Maintenance). Retained for older refs.
+   */
   | "maintenance"
+  /**
+   * Legacy Incident records only. Not a current FM operating category.
+   */
   | "incident_handling"
+  /**
+   * @deprecated Not a treatment. Use IssueExecutionRef / workOrders.
+   */
   | "work_order"
+  /**
+   * @deprecated Reserved; not used by composers.
+   */
   | "direct";
 
 /**
- * A treatment/work activity linked to an Issue.
+ * A treatment activity linked to an Issue.
  * Backed by an existing domain record — never a duplicate row.
  */
 export type IssueTreatmentRef = {
   kind: IssueTreatmentKind;
-  /** Authoritative domain id (e.g. MNT-*, INC-*, WO-*). */
+  /** Authoritative domain id (e.g. MNT-*, INC-*). */
   id: string;
   /** Authoritative domain status string — not remapped here. */
   status: string;
@@ -71,8 +100,8 @@ export type IssueTreatmentRef = {
 };
 
 /**
- * Work Order related to an Issue (formal executable work).
- * Distinct from the Issue itself: Issue = what is wrong; WO = what work to execute.
+ * Work Order related to an Issue (formal executable work = EXECUTION).
+ * Distinct from Treatment: Issue = what needs attention; WO = formal execution instrument.
  */
 export type IssueWorkOrderRef = {
   id: string;
@@ -80,7 +109,10 @@ export type IssueWorkOrderRef = {
   title?: string;
   /** Parent maintenance/incident that linked this WO, when known. */
   viaTreatmentId?: string;
-  viaTreatmentKind?: Extract<IssueTreatmentKind, "maintenance" | "incident_handling">;
+  viaTreatmentKind?: Extract<
+    IssueTreatmentKind,
+    "work" | "maintenance" | "incident_handling"
+  >;
 };
 
 /**
@@ -122,7 +154,10 @@ export type IssueExecutionRef = {
    */
   approvalAuthority: IssueApprovalAuthority;
   viaTreatmentId?: string;
-  viaTreatmentKind?: Extract<IssueTreatmentKind, "maintenance" | "incident_handling">;
+  viaTreatmentKind?: Extract<
+    IssueTreatmentKind,
+    "work" | "maintenance" | "incident_handling"
+  >;
   /** True when this kind is documented but not implemented. */
   isFutureCapability?: boolean;
 };
@@ -140,6 +175,7 @@ export type IssueOutcome = {
 /**
  * Conceptual FM actions. Only `available` actions are routable today.
  * `future` marks capabilities that must not be faked.
+ * Resolve is not a required operator action — outcome follows authoritative terminals.
  */
 export type IssueActionId =
   | "view"
@@ -181,13 +217,14 @@ export type IssueOperationalView = {
 
 /**
  * Application-level Issue view composed from authoritative domain records.
- * Not persisted as its own sheet/table in Phase 1.
+ * Not persisted as its own sheet/table.
  */
 export type Issue = {
   /**
    * Stable application id for this composition.
-   * Request-backed: `issue:request:${requestId}`
-   * FM/treatment-backed (future): `issue:maintenance:${id}` etc.
+   * - Request-backed: `issue:request:{REQ-*}`
+   * - Maintenance-root: `issue:maintenance:{MNT-*}`
+   * - Incident-root: `issue:incident:{INC-*}`
    */
   id: string;
   /** Public/staff-facing reference when intake is a Request (REQ-*). */
@@ -206,11 +243,12 @@ export type Issue = {
   priority?: IssuePriority;
   classification?: IssueClassification;
   /**
-   * Conceptual Issue status — DERIVED only:
-   * - staff_request → Request.status
-   * - FM ordinary → Maintenance.status (root)
-   * - FM significant → Incident.status (root)
+   * Conceptual Issue status — DERIVED only from the authoritative root:
+   * - issue:request:* → Request.status
+   * - issue:maintenance:* → Maintenance.status
+   * - issue:incident:* → Incident.status
    * Never written as a competing store.
+   * OPEN: multi-root precedence when both MNT+INC exist without Request.
    */
   status: IssueStatus;
   /** Summary of treatment activity (derived). */
@@ -221,13 +259,14 @@ export type Issue = {
   };
   /** Intake Request when source is staff_request. */
   relatedRequestId?: string;
-  /** Root Maintenance id when Issue is FM ordinary (issue:maintenance:*). */
+  /** Root Maintenance id when Issue is `issue:maintenance:*`. */
   rootMaintenanceId?: string;
-  /** Root Incident id when Issue is FM significant (issue:incident:*). */
+  /** Root Incident id when Issue is `issue:incident:*`. */
   rootIncidentId?: string;
   treatments: IssueTreatmentRef[];
-  /** Significant-event / classification records (Incident domain). */
+  /** Linked Incident ids when Incident handling is present. */
   relatedIncidentIds: string[];
+  /** Related Work Orders (execution), not treatments. */
   workOrders: IssueWorkOrderRef[];
   createdAt: string;
   updatedAt: string;
@@ -295,7 +334,7 @@ export type ComposeIssueWorkOrderInput = {
   incidentId?: string;
 };
 
-/** Ordinary FM Issue — Maintenance is the authoritative root (no fake Request). */
+/** FM Issue with Maintenance as authoritative root (no fake Request). */
 export type ComposeIssueFromMaintenanceInput = {
   maintenance: {
     id: string;
@@ -317,7 +356,7 @@ export type ComposeIssueFromMaintenanceInput = {
     createdByUserId?: string;
   };
   workOrders?: Array<ComposeIssueWorkOrderInput | null>;
-  /** Optional linked Incident (e.g. created from Incident triage) — not the root. */
+  /** Optional linked Incident handling — not the root; specialised capability when present. */
   relatedIncident?: {
     id: string;
     title: string;
@@ -327,7 +366,7 @@ export type ComposeIssueFromMaintenanceInput = {
   } | null;
 };
 
-/** Significant-event FM Issue — Incident is the authoritative root (no fake Request). */
+/** FM Issue with Incident as authoritative root (no fake Request). */
 export type ComposeIssueFromIncidentInput = {
   incident: {
     id: string;

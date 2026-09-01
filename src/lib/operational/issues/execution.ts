@@ -26,8 +26,8 @@ export function deriveIssueExecutions(issue: Issue): IssueExecutionRef[] {
 }
 
 /**
- * Job Order boundary — Phase 5/6 corrected model.
- * Not implemented. Do not collapse into Work Order.
+ * Job Order boundary — future execution path.
+ * Not implemented. Do not collapse into Work Order. Do not treat as Treatment.
  */
 export const JOB_ORDER_BOUNDARY = {
   kind: "job_order" as const,

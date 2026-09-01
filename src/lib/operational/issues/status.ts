@@ -41,8 +41,8 @@ export function isIncidentCancelled(status: string): boolean {
 }
 
 /**
- * Map authoritative Maintenance.status → IssueStatus for FM ordinary roots.
- * OPEN: multi-treatment override when both MNT+INC exist without Request.
+ * Map authoritative Maintenance.status → IssueStatus for Maintenance-root Issues.
+ * OPEN: multi-root precedence when both MNT+INC exist without Request.
  */
 export function mapMaintenanceStatusToIssueStatus(
   maintenanceStatus: string
@@ -64,8 +64,8 @@ export function mapMaintenanceStatusToIssueStatus(
 }
 
 /**
- * Map authoritative Incident.status → IssueStatus for FM significant roots.
- * OPEN: multi-treatment override when both MNT+INC exist without Request.
+ * Map authoritative Incident.status → IssueStatus for Incident-root Issues.
+ * OPEN: multi-root precedence when both MNT+INC exist without Request.
  */
 export function mapIncidentStatusToIssueStatus(
   incidentStatus: string
@@ -101,8 +101,8 @@ export function mapSeverityToIssuePriority(
 }
 
 /**
- * Map Incident type → Issue classification.
- * Incident remains an existing domain; classification is conceptual only.
+ * Map Incident type → Issue classification attribute (conceptual only).
+ * Does not imply every Issue must use Incident handling.
  */
 export function mapIncidentTypeToClassification(
   type?: string

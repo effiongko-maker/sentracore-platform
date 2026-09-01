@@ -131,7 +131,7 @@ export function DashboardOverview({
           <div className="db-empty">
             <p className="db-empty-title">Nothing needs immediate attention</p>
             <p className="db-empty-copy">
-              Critical incidents, overdue work, and blocked items will appear
+              Critical work, overdue work, and blocked items will appear
               here.
             </p>
           </div>
@@ -221,7 +221,7 @@ export function DashboardOverview({
             <div className="db-empty" style={{ borderStyle: "solid" }}>
               <p className="db-empty-title">No recent operational activity</p>
               <p className="db-empty-copy">
-                Work order, maintenance, and incident updates will appear here as
+                Work order, maintenance, and work updates will appear here as
                 they occur.
               </p>
             </div>

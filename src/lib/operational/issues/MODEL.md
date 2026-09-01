@@ -1,83 +1,152 @@
-# Issue operational model (Phase 6)
+# Issue operational model (Phase 15)
 
-Issue is the conceptual primary operational object.
+Issue is the universal operational concept: **something that has happened or requires attention**.
+
+**Decided:** There is **no** operational Maintenance-vs-Incident distinction.
 
 ```
-ISSUE → TREATMENT → EXECUTION → OUTCOME → INTELLIGENCE
+ISSUE → TREAT → WORK → EXECUTION (optional) → OUTCOME → COST / PAYMENT
 ```
 
-Persistence remains on existing domains. No Issue sheet/table. No second status store.
+| Stage | Meaning | Authoritative store |
+|-------|---------|---------------------|
+| **Issue** | Something that needs attention | Application lens only — **not** persisted |
+| **Work** | What we are doing about it | **Maintenance sheet** (Phase 15 compatibility backing) |
+| **Execution** | Formal instrument when required | Work Order today; Job Order **future** |
+| **Outcome** | Resulting state of the Issue | **Derived** from Work / Request / legacy Incident |
+| **Cost / Payment** | Financial flows | Phase 12 foundation |
+| **Incident** | Legacy compatibility domain | Incidents sheet — readable; not a new FM category |
 
-## Roles
+See also: `../work/MODEL.md`.
 
-| Concept | Meaning | Authoritative store |
-|---------|---------|---------------------|
-| **Issue** | Operational problem requiring attention | Application lens only |
-| **Request** | Staff/external intake + Track Request | Request sheet |
-| **Treatment** | What FM does about the Issue | Maintenance and/or Incident handling |
-| **Maintenance** | Treatment/work activity (ordinary default) | Maintenance sheet |
-| **Incident** | Significant event: investigation, containment, escalation | Incident sheet |
-| **Work Order** | Formal executable work; Annex approval may apply | Work Order sheet |
-| **Job Order** | Future: EVC/HQ approval + Procurement issues JO | **Not implemented** |
-| **Client/NCC APR** | Optional commercial package on WO; non-blocking | Approval sheet |
-| **Cost submission** | Future: actual → markup → submitted → paid | **Not implemented** |
-| **Outcome** | Derived from root/treatment terminals | Derived lens |
 
-## Issue identity / roots
+---
+
+## Mental model (operator)
+
+Something happens / needs attention  
+→ it is logged  
+→ someone determines what needs to be done  
+→ treatment/work happens  
+→ formal execution may be required  
+→ evidence/completion is recorded  
+→ cost/payment may follow (future)
+
+Examples (all Issues): leaking toilet, AC not cooling, elevator fault, generator servicing, repair/replacement, cleaning/fumigation, larger facility project, fire or other significant event.
+
+---
+
+## Existing sources of truth
+
+| Origin | Authoritative status |
+|--------|----------------------|
+| Staff Submit Request | `Request.status` (Track Request) |
+| FM Log Issue → Maintenance root | `Maintenance.status` |
+| Existing Incident record as root | `Incident.status` |
+| Work Order | `WorkOrder.status` |
+
+Issue status is always **derived** from the root record for that composition.
+
+---
+
+## Issue identity (implementation roots)
+
+These are composition identities — **not** different kinds of operational problems:
 
 | Entry | Root SoT | Issue id |
 |-------|----------|----------|
 | Staff Submit Request | Request.status | `issue:request:{REQ-*}` |
-| FM ordinary Log Issue | Maintenance.status | `issue:maintenance:{MNT-*}` |
-| FM significant Log Issue | Incident.status | `issue:incident:{INC-*}` |
+| FM Log Issue (Maintenance root) | Maintenance.status | `issue:maintenance:{MNT-*}` |
+| FM Log Issue / existing Incident root | Incident.status | `issue:incident:{INC-*}` |
 
-Do **not** fake a Request for FM entry. Log Issue UI is future; compose adapters exist.
+Do **not** invent a Request for FM entry. Do **not** persist Issue.
 
-## Ordinary vs significant
+---
 
-Ordinary (“AC isn’t cooling”):
+## Treatment
 
-`Issue → Treat → Maintenance → (optional Work Order) → Resolve`
+Treatment = activity/capability under an Issue.
 
-Significant event (safety / flood / fire alarm):
+```
+Issue
+  └── treatments[]
+        ├── maintenance          (valid existing implementation)
+        └── incident_handling    (only where an Incident record exists)
+```
 
-`Issue → Treat → Incident investigation/handling → (optional Maintenance / Work Order) → Resolve`
+- **Maintenance** may represent corrective, preventive, routine, or other facility work — including treatment that resolves an Issue without a Work Order. It is **not** “the other half” of Incident.
+- **Incident handling** is a **specialised operational capability used where required**. Do not assume every significant event must become an Incident. Do not force ordinary problems into Incident. Do not invent new Incident behaviour in this phase.
+- Do **not** treat Work Order as a treatment type. Work Order is **Execution**.
 
-Do **not** route ordinary problems through Incident by default.
+Multi-treatment is allowed (e.g. Incident handling + Maintenance + Work Order execution).  
+**OPEN:** multi-root status precedence when both Maintenance and Incident exist without a Request — retain root-authoritative behaviour; do not invent a new algorithm silently.
 
-## Work Order vs Job Order
+---
 
-| | Work Order | Job Order (future) |
-|--|------------|--------------------|
-| Purpose | Formal executable work | Distinct execution + procurement instrument |
-| Approval (product) | Annex-level may be sufficient where applicable | EVC/HQ chain; Procurement **issues** JO |
-| Client/NCC APR | Optional package; **not** HQ/EVC; non-blocking today | Separate from Client APR |
-| Status | Implemented (`WO-*`) | **Not implemented — do not collapse into WO** |
-| ₦1m rule | **Not adopted** without ops evidence | OPEN |
+## Execution
 
-## Authorities (conceptual only — no gates in Phase 6)
+```
+Issue → optional execution → Work Order
+```
 
-- **Annex Director** — WO path where applicable  
-- **HQ/EVC** — Job Order path  
-- **Client/NCC** — existing APR package  
-- **Procurement** — issues Job Orders  
+- Job Order = **not implemented** (future EVC/HQ + Procurement). Do not collapse into WO.
+- Approval gates are **not** introduced in this phase.
+- Conceptual authorities (Phase 6): Annex Director · HQ/EVC · Client/NCC · Procurement — documentation only.
 
-## Cost submission (contract only)
+---
 
-`actual cost → markup → submitted amount → approval/submission → payment received`
+## Outcome
 
-Financial SoT = future cost submission package (references WO/JO). **Not** WO/JO status.
+`deriveIssueOutcome()` mirrors derived Issue status. No second resolution engine. No required “Resolve” action solely because Issue has an outcome.
 
-## Action routing
+Terminal behaviour remains on existing lifecycles:
 
-- Treat → Maintenance / Incident (not WO)
-- Create work → Work Order only when formal execution is needed (optional)
-- Job Order action — not offered yet
+- Request → existing request auto-resolution  
+- Maintenance → existing maintenance completion  
+- Incident → existing incident resolution  
+
+---
+
+## FM Log Issue
+
+`Issues → Log Issue`
+
+- Operator describes **what needs attention** (no Maintenance-vs-Incident taxonomy required)
+- Default treatment path → Maintenance root → `issue:maintenance:{MNT-*}`
+- Optional specialised investigation → Incident handling root → `issue:incident:{INC-*}`
+- **No Request** invented. **No Issue sheet.**
+- **Phase 9:** user-facing create returns after root create + Issue composition. Operational event emission, Intelligence consumers, and `operationalEventId` stamp run via Next.js `after()` (non-blocking). Client inserts the returned Issue view without a full Requests/Maintenance/Incidents refetch.
+
+Primary Issue action is **Treat** (routes into the existing treatment capability for that Issue).
+
+---
+
+## Cost / Payment (Phase 12 foundation)
+
+Three commercial flows — see `../finance/MODEL.md`:
+
+1. **Non-reimbursable cost** — PayChex contractual burden (`CostRecord`, `non_reimbursable`)
+2. **Reimbursable cost** — actual → markup → submitted → approval → payment (`CostSubmission`)
+3. **Contract payment** — monthly payment owed to PayChex (`ContractPaymentRecord`)
+
+**ACTUAL ≠ SUBMITTED ≠ APPROVED ≠ RECEIVED**
+
+Financial SoT is independent of Request / Maintenance / Incident / WorkOrder / Issue status.
+
+No Finance UI or persistence in Phase 12.
+
+---
 
 ## OPEN product decisions
 
-- Exact multi-root status when both MNT+INC without Request  
+- Exact treatment-selection UX refinements (beyond default Log Issue + optional investigation)
+- Whether Maintenance / Incidents should eventually leave primary navigation  
+- Multi-root status when both MNT+INC without Request  
+- Multi-treatment presentation  
 - Mandatory WO triggers  
 - Full JO approval sequence  
-- Payment entity naming / markup rules  
-- Whether Issue sheet is ever required  
+- Financial workflow / payment entity naming  
+
+**Decided (do not reopen):** Issue is the universal object; FM does not operate via Maintenance-vs-Incident taxonomy; Treat is the primary action; Maintenance and Incident handling are capabilities; Work Order is execution; Issues is the primary workspace.
+
+Phase 13 aligns operational UX with that decided model. Financial domain remains Phase 12 foundation (types/docs only).

@@ -19,8 +19,8 @@ import type {
  * Compose a Request-backed Issue from authoritative domain records.
  *
  * - Issue.status ← Request.status (Track Request SoT unchanged)
- * - Treatments ← Maintenance / Incident rows linked on the Request
- * - Work Orders ← related WO rows (and ids on Request / children)
+ * - Treatments ← Maintenance / Incident handling rows linked on the Request
+ * - Work Orders ← related WO rows as EXECUTION (not treatment)
  *
  * Does not write Sheets, mutate Request, or invent statuses.
  */

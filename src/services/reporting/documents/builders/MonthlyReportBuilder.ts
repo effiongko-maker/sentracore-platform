@@ -31,7 +31,7 @@ export function buildMonthlyFacilityReportDocument(
     openWorkOrders: kpis.openWorkOrders,
     closureRate: `${closedPct}%`,
     assetAvailability: formatPercent(kpis.assetsOperationalPercent),
-    criticalIncidents: kpis.criticalIncidents,
+    criticalWork: kpis.criticalWork,
     maintenanceBacklog: kpis.maintenanceBacklog,
     operationalScore: health.score,
     healthSummary: health.summary,
@@ -94,8 +94,8 @@ export function buildMonthlyFacilityReportDocument(
           },
           {
             key: "critical",
-            label: "Critical incidents",
-            value: kpis.criticalIncidents,
+            label: "Critical work",
+            value: kpis.criticalWork,
           },
           {
             key: "workforce",

@@ -51,7 +51,7 @@ export function buildQuarterlyReportDocument(
     assetAvailability: formatPercent(kpis.assetsOperationalPercent),
     workOrdersRaised: snapshot.workOrders.length,
     closureRate: `${closedPct}%`,
-    criticalIncidents: kpis.criticalIncidents,
+    criticalWork: kpis.criticalWork,
     maintenanceBacklog: kpis.maintenanceBacklog,
     majorRisks: riskBullets(snapshot).join(" | "),
     recommendations: recommendationBullets(snapshot).join(" | "),
@@ -102,8 +102,8 @@ export function buildQuarterlyReportDocument(
           },
           {
             key: "critical",
-            label: "Critical incidents",
-            value: kpis.criticalIncidents,
+            label: "Critical work",
+            value: kpis.criticalWork,
           },
           {
             key: "availability",

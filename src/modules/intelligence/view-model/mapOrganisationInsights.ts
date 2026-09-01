@@ -272,8 +272,13 @@ function actionsForInsight(input: {
   }
   actions.push({
     kind: "investigate",
-    label: "Review incidents",
-    href: "/incidents",
+    label: "Review issues",
+    href: "/issues",
+  });
+  actions.push({
+    kind: "investigate",
+    label: "Review work",
+    href: "/work",
   });
   if (input.facilityId) {
     actions.push({

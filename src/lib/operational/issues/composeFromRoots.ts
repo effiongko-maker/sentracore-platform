@@ -17,8 +17,9 @@ import type {
 } from "./types";
 
 /**
- * Compose an FM ordinary Issue with Maintenance as authoritative root.
- * No Request invented. Issue.status ← Maintenance.status.
+ * Compose an FM Issue with Work as authoritative root (Maintenance backing).
+ * Implementation identity: issue:maintenance:{MNT-*}.
+ * No Request invented. Issue.status ← Maintenance.status (Work SoT).
  */
 export function composeIssueFromMaintenance(
   input: ComposeIssueFromMaintenanceInput
@@ -47,7 +48,7 @@ export function composeIssueFromMaintenance(
         id,
         status: "unknown",
         viaTreatmentId: m.id,
-        viaTreatmentKind: "maintenance",
+        viaTreatmentKind: "work",
       });
     }
   }
@@ -97,8 +98,9 @@ export function composeIssueFromMaintenance(
 }
 
 /**
- * Compose an FM significant-event Issue with Incident as authoritative root.
- * No Request invented. Issue.status ← Incident.status.
+ * Compose an FM Issue with a legacy Incident root (compatibility).
+ * Implementation identity: issue:incident:{INC-*}.
+ * Not used for new FM Log Issue creates. Issue.status ← Incident.status.
  */
 export function composeIssueFromIncident(
   input: ComposeIssueFromIncidentInput
@@ -143,7 +145,7 @@ export function composeIssueFromIncident(
           id,
           status: "unknown",
           viaTreatmentId: m.id,
-          viaTreatmentKind: "maintenance",
+          viaTreatmentKind: "work",
         });
       }
     }

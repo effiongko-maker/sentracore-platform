@@ -73,6 +73,7 @@ export function IntelligenceExperience({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panelMode, setPanelMode] = useState<PanelMode>(null);
   const actionFocusRef = useRef<HTMLDivElement | null>(null);
+  const evidenceFocusRef = useRef<HTMLDivElement | null>(null);
   const insightAnchorRef = useRef<HTMLDivElement | null>(null);
   const skipHashSync = useRef(false);
 
@@ -193,6 +194,17 @@ export function IntelligenceExperience({
         block: "start",
       });
       actionFocusRef.current?.focus({ preventScroll: true });
+    });
+  }, [panelMode, selectedId]);
+
+  useEffect(() => {
+    if (panelMode !== "evidence") return;
+    requestAnimationFrame(() => {
+      evidenceFocusRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      evidenceFocusRef.current?.focus({ preventScroll: true });
     });
   }, [panelMode, selectedId]);
 
@@ -351,10 +363,12 @@ export function IntelligenceExperience({
         </div>
 
         {selected && panelMode === "evidence" ? (
-          <InsightInvestigationPanel
-            finding={selected}
-            onClose={closePanel}
-          />
+          <div ref={evidenceFocusRef} tabIndex={-1}>
+            <InsightInvestigationPanel
+              finding={selected}
+              onClose={closePanel}
+            />
+          </div>
         ) : null}
       </div>
     </ModeFrame>

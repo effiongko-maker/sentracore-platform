@@ -35,12 +35,14 @@ export const SIGNAL_RECOMMENDATION_PRIORITY_FLOOR: Record<
   RecommendationPriority
 > = {
   review_facility_incident_pattern: "urgent",
+  review_facility_work_pattern: "urgent",
   inspect_repeated_asset: "high",
 };
 
 /** Link recommendation keys to supporting signal keys when present. */
 export const RECOMMENDATION_SIGNAL_EVIDENCE: Record<string, string[]> = {
   review_facility_incident_pattern: ["incident.facility_frequency_7d"],
+  review_facility_work_pattern: ["work.facility_frequency_7d"],
   inspect_repeated_asset: ["incident.repeated_asset"],
 };
 

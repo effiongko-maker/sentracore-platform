@@ -62,6 +62,9 @@ type SignalPatternCount = {
 
 type ComparisonInput = {
   windowTo: string;
+  /** Canonical Work root events. */
+  workEvents?: EventRow[];
+  /** Legacy historical Incident root events. */
   incidentEvents: EventRow[];
   signalRunsByEventId: Map<string, ActionRunRow>;
   riskRunsByEventId: Map<string, ActionRunRow>;
@@ -90,7 +93,9 @@ function isOrgScopedSignalKey(signalKey: string): boolean {
   return (
     signalKey === "incident.facility_frequency_7d" ||
     signalKey === "incident.facility_frequency_30d" ||
-    signalKey === "incident.recent_maintenance_at_facility"
+    signalKey === "incident.recent_maintenance_at_facility" ||
+    signalKey === "work.facility_frequency_7d" ||
+    signalKey === "work.facility_frequency_30d"
   );
 }
 
@@ -134,6 +139,9 @@ function signalFindingKey(
     case "incident.repeated_location":
       return `signal:${signalKey}:${subject?.toUpperCase() ?? "ORG"}`;
     case "incident.recent_maintenance_at_facility":
+      return `signal:${signalKey}`;
+    case "work.facility_frequency_7d":
+    case "work.facility_frequency_30d":
       return `signal:${signalKey}`;
     default:
       return `signal:${signalKey}:${facility}`;
@@ -248,6 +256,8 @@ const COMPARABLE_SIGNAL_KEYS = new Set([
   "incident.repeated_asset",
   "incident.repeated_location",
   "incident.recent_maintenance_at_facility",
+  "work.facility_frequency_7d",
+  "work.facility_frequency_30d",
 ]);
 
 function collectPeriodCounts(
@@ -262,7 +272,10 @@ function collectPeriodCounts(
   let criticalIncidents = 0;
   let highRiskIncidents = 0;
 
-  for (const event of input.incidentEvents) {
+  for (const event of [
+    ...(input.workEvents ?? []),
+    ...input.incidentEvents,
+  ]) {
     if (!eventInSlice(event.occurred_at, slice, bounds)) continue;
 
     incidentsInPeriod += 1;

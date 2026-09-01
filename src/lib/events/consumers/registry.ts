@@ -19,26 +19,39 @@ export function bootstrapOperationalEventConsumers(): void {
 
   registerOperationalEventConsumer({
     actionKey: "system.acknowledge_event",
-    eventTypes: [OperationalEventTypes.FACILITY_INCIDENT_REPORTED],
+    eventTypes: [
+      OperationalEventTypes.FACILITY_INCIDENT_REPORTED,
+      OperationalEventTypes.FACILITY_MAINTENANCE_REQUESTED,
+    ],
     handler: acknowledgeEventConsumer,
   });
 
   registerOperationalEventConsumer({
     actionKey: "facility.analyze_incident_signals",
-    eventTypes: [OperationalEventTypes.FACILITY_INCIDENT_REPORTED],
+    eventTypes: [
+      OperationalEventTypes.FACILITY_INCIDENT_REPORTED,
+      /** Phase 19 — canonical Work root (Log Issue → Work). */
+      OperationalEventTypes.FACILITY_MAINTENANCE_REQUESTED,
+    ],
     handler: analyzeIncidentSignalsConsumer,
   });
 
   registerOperationalEventConsumer({
     actionKey: "facility.assess_incident_risk",
-    eventTypes: [OperationalEventTypes.FACILITY_INCIDENT_REPORTED],
+    eventTypes: [
+      OperationalEventTypes.FACILITY_INCIDENT_REPORTED,
+      OperationalEventTypes.FACILITY_MAINTENANCE_REQUESTED,
+    ],
     dependsOn: ["facility.analyze_incident_signals"],
     handler: assessIncidentRiskConsumer,
   });
 
   registerOperationalEventConsumer({
     actionKey: "facility.generate_incident_recommendations",
-    eventTypes: [OperationalEventTypes.FACILITY_INCIDENT_REPORTED],
+    eventTypes: [
+      OperationalEventTypes.FACILITY_INCIDENT_REPORTED,
+      OperationalEventTypes.FACILITY_MAINTENANCE_REQUESTED,
+    ],
     dependsOn: [
       "facility.analyze_incident_signals",
       "facility.assess_incident_risk",

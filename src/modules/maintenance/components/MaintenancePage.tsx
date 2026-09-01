@@ -128,9 +128,9 @@ export function MaintenancePage() {
     <ModeFrame mode="execute">
       <OperateHeader
         title="Maintenance"
-        description="Operational flow — requests, assignments, and work moving through your facilities."
+        description="Work and treatment activity for Issues — from treatment through completion."
         signalValue={loading ? "—" : total}
-        signalLabel="In flow"
+        signalLabel="Active work"
       />
 
       <MaintenanceToolbar

@@ -9,7 +9,8 @@ import {
 } from "@/modules/workspace/constants";
 import {
   buildAttentionModel,
-  countCriticalMatters,
+  countCriticalWork,
+  countLegacyCriticalIncidents,
 } from "@/modules/workspace/attention";
 import type {
   WorkspaceActivityItem,
@@ -61,20 +62,27 @@ function buildMyWork(
         (row) => row.assignedToUserId === userId && OPEN_WO.has(row.status)
       )
     : [];
-  const assignedIncidents = userId
-    ? incidents.filter(
-        (row) =>
-          row.assignedToUserId === userId && OPEN_INCIDENT.has(row.status)
-      )
-    : [];
-  const pendingMaintenance = userId
+  const assignedWork = userId
     ? maintenance.filter(
         (row) =>
           row.assignedToUserId === userId && OPEN_MAINTENANCE.has(row.status)
       )
     : [];
+  const assignedLegacyIncidents = userId
+    ? incidents.filter(
+        (row) =>
+          row.assignedToUserId === userId && OPEN_INCIDENT.has(row.status)
+      )
+    : [];
 
-  return [
+  const rows: WorkspaceWorkSummary[] = [
+    {
+      id: "assigned-work",
+      label: "Assigned Work",
+      count: assignedWork.length,
+      href: "/work",
+      emptyLabel: "You're all caught up.",
+    },
     {
       id: "assigned-work-orders",
       label: "Assigned Work Orders",
@@ -82,21 +90,19 @@ function buildMyWork(
       href: "/work-orders",
       emptyLabel: "You're all caught up.",
     },
-    {
-      id: "assigned-incidents",
-      label: "Assigned Incidents",
-      count: assignedIncidents.length,
+  ];
+
+  if (assignedLegacyIncidents.length > 0) {
+    rows.push({
+      id: "assigned-legacy-incidents",
+      label: "Legacy Incidents Assigned",
+      count: assignedLegacyIncidents.length,
       href: "/incidents",
       emptyLabel: "You're all caught up.",
-    },
-    {
-      id: "pending-maintenance",
-      label: "Pending Maintenance",
-      count: pendingMaintenance.length,
-      href: "/maintenance",
-      emptyLabel: "You're all caught up.",
-    },
-  ];
+    });
+  }
+
+  return rows;
 }
 
 function buildSchedule(
@@ -105,17 +111,17 @@ function buildSchedule(
   incidents: Incident[],
   maintenance: Maintenance[]
 ): WorkspaceScheduleItem[] {
-  const dueMaintenance = maintenance
+  const dueWork = maintenance
     .filter(
       (row) => OPEN_MAINTENANCE.has(row.status) && isSameDay(row.dueAt, asOf)
     )
     .map(
       (row): WorkspaceScheduleItem => ({
         id: `schedule-mnt-${row.id}`,
-        module: "maintenance",
+        module: "work",
         entityId: row.id,
         title: row.title || row.id,
-        meta: `Maintenance · ${labelize(row.priority)} · due today`,
+        meta: `Work · ${labelize(row.priority)} · due today`,
         at: row.dueAt || row.reportedAt || asOf,
       })
     );
@@ -133,7 +139,7 @@ function buildSchedule(
       })
     );
 
-  const reportedToday = incidents
+  const legacyReportedToday = incidents
     .filter((row) => isSameDay(row.reportedAt, asOf))
     .map(
       (row): WorkspaceScheduleItem => ({
@@ -141,13 +147,13 @@ function buildSchedule(
         module: "incidents",
         entityId: row.id,
         title: row.title || row.id,
-        meta: `Incident · ${labelize(row.severity)} · reported today`,
+        meta: `Legacy incident · ${labelize(row.severity)} · reported today`,
         at: row.reportedAt || row.createdAt || asOf,
       })
     );
 
   return sortByDateDesc(
-    [...dueMaintenance, ...dueWorkOrders, ...reportedToday],
+    [...dueWork, ...dueWorkOrders, ...legacyReportedToday],
     (item) => item.at
   ).slice(0, WORKSPACE_SCHEDULE_LIMIT);
 }
@@ -158,22 +164,13 @@ function buildActivity(
   maintenance: Maintenance[]
 ): WorkspaceActivityItem[] {
   const items: WorkspaceActivityItem[] = [
-    ...incidents.map((row) => ({
-      id: `activity-inc-${row.id}`,
-      kind: "incident_reported" as const,
-      module: "incidents" as const,
-      entityId: row.id,
-      title: row.title || row.id,
-      summary: "Incident reported",
-      at: row.reportedAt || row.createdAt || "",
-    })),
     ...maintenance.map((row) => ({
       id: `activity-mnt-${row.id}`,
       kind: "maintenance_requested" as const,
-      module: "maintenance" as const,
+      module: "work" as const,
       entityId: row.id,
       title: row.title || row.id,
-      summary: "Maintenance requested",
+      summary: "Work requested",
       at: row.reportedAt || row.createdAt || "",
     })),
     ...workOrders.map((row) => ({
@@ -184,6 +181,15 @@ function buildActivity(
       title: row.title || row.id,
       summary: "Work Order created",
       at: row.createdAt || row.requestedAt || "",
+    })),
+    ...incidents.map((row) => ({
+      id: `activity-inc-${row.id}`,
+      kind: "incident_reported" as const,
+      module: "incidents" as const,
+      entityId: row.id,
+      title: row.title || row.id,
+      summary: "Legacy incident recorded",
+      at: row.reportedAt || row.createdAt || "",
     })),
   ].filter((item) => Boolean(item.at));
 
@@ -199,20 +205,22 @@ function buildPulse(
   workOrders: WorkOrder[],
   activity: WorkspaceActivityItem[]
 ): OrganisationalPulse {
-  const openIncidents = incidents.filter((r) =>
+  const openWork = maintenance.filter((r) => OPEN_MAINTENANCE.has(r.status))
+    .length;
+  const criticalWork = countCriticalWork(maintenance);
+  const openWorkOrders = workOrders.filter((r) => OPEN_WO.has(r.status)).length;
+  const legacyOpenIncidents = incidents.filter((r) =>
     OPEN_INCIDENT.has(r.status)
   ).length;
-  const criticalIncidents = countCriticalMatters(incidents);
-  const openMaintenance = maintenance.filter((r) =>
-    OPEN_MAINTENANCE.has(r.status)
-  ).length;
-  const openWorkOrders = workOrders.filter((r) => OPEN_WO.has(r.status)).length;
+  const legacyCriticalIncidents = countLegacyCriticalIncidents(incidents);
 
   return {
-    openIncidents,
-    criticalIncidents,
-    openMaintenance,
+    openWork,
+    criticalWork,
     openWorkOrders,
+    openMaintenance: openWork,
+    legacyOpenIncidents,
+    legacyCriticalIncidents,
     recentActivity: activity.length,
   };
 }
@@ -221,8 +229,8 @@ function buildOperationalState(
   pulse: OrganisationalPulse,
   attention: AttentionModel
 ): OperationalState {
-  if (pulse.criticalIncidents > 0 || attention.criticalCount > 0) {
-    const n = Math.max(pulse.criticalIncidents, attention.criticalCount);
+  if (pulse.criticalWork > 0 || attention.criticalCount > 0) {
+    const n = Math.max(pulse.criticalWork, attention.criticalCount);
     return {
       tone: "critical",
       statement:
@@ -232,7 +240,7 @@ function buildOperationalState(
       subtext:
         attention.total > n
           ? `${attention.total} total items in the attention queue.`
-          : `${pulse.openIncidents} open incident${pulse.openIncidents === 1 ? "" : "s"} across the operation.`,
+          : `${pulse.openWork} open work item${pulse.openWork === 1 ? "" : "s"} across the operation.`,
     };
   }
 
@@ -247,19 +255,17 @@ function buildOperationalState(
     };
   }
 
-  const pressure = pulse.openMaintenance + pulse.openWorkOrders;
-  if (pressure >= 12 || pulse.openIncidents >= 5) {
+  const pressure = pulse.openWork + pulse.openWorkOrders;
+  if (pressure >= 12 || pulse.openWork >= 5) {
     return {
       tone: "attention",
       statement: "Operational pressure is increasing across the organisation.",
-      subtext: `${pulse.openMaintenance} maintenance and ${pulse.openWorkOrders} work orders in flow.`,
+      subtext: `${pulse.openWork} work items and ${pulse.openWorkOrders} work orders in flow.`,
     };
   }
 
   const attentionAreas =
-    (pulse.openIncidents > 0 ? 1 : 0) +
-    (pulse.openMaintenance > 4 ? 1 : 0) +
-    (pulse.openWorkOrders > 4 ? 1 : 0);
+    (pulse.openWork > 4 ? 1 : 0) + (pulse.openWorkOrders > 4 ? 1 : 0);
 
   if (attentionAreas > 0) {
     return {

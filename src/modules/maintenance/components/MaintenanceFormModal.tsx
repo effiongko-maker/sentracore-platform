@@ -533,15 +533,15 @@ export function MaintenanceFormModal({
       onClose={() => {
         if (!busy) onClose();
       }}
-      title={isEdit ? "Treat maintenance" : "New maintenance"}
+      title={isEdit ? "Treat work" : "New maintenance"}
       description={
         isEdit
           ? isCompleted
-            ? "This maintenance is completed. Completion details are read-only."
+            ? "This work is completed. Completion details are read-only."
             : isCancelled
-              ? "This maintenance is cancelled."
-              : "Update treatment details and workflow status. Complete the work using the section below."
-          : "Direct operational entry — create a maintenance record for authorized users."
+              ? "This maintenance work is cancelled."
+              : "Update work details and status. Mark complete when the work is done."
+          : "Create maintenance work for this facility."
       }
       size="lg"
       footer={

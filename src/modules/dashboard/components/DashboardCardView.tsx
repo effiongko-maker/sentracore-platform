@@ -274,7 +274,7 @@ export function NeedsAttentionEmpty() {
           Everything looks good. No items require immediate attention.
         </p>
         <p className="mt-1 text-xs text-muted">
-          Critical incidents, overdue work, and blocked items will appear here.
+          Critical work, overdue work, and blocked items will appear here.
         </p>
       </CardContent>
     </Card>

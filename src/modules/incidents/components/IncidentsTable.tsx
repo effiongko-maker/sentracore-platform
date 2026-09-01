@@ -7,7 +7,6 @@ import { OperationalTone } from "@/components/operational";
 import { DataTable, type Column } from "@/components/tables/DataTable";
 import { formatDate } from "@/lib/utils";
 import {
-  useAssetName,
   useFacilityName,
   useUserName,
 } from "@/hooks/useEntityLabel";
@@ -28,13 +27,18 @@ interface IncidentsTableProps {
   onDeactivate: (incident: Incident) => void;
 }
 
-function FacilityLabel({ id }: { id: string }) {
-  return <>{useFacilityName(id) || "—"}</>;
-}
+function LocationCell({ incident }: { incident: Incident }) {
+  const name = useFacilityName(incident.facilityId);
+  const detail = incident.locationDetail?.trim();
 
-function AssetLabel({ id }: { id?: string }) {
-  const name = useAssetName(id);
-  return <>{id ? name || "—" : "—"}</>;
+  return (
+    <div>
+      <span className="text-foreground">
+        {name || incident.facilityId || "—"}
+      </span>
+      {detail ? <p className="text-xs text-muted">{detail}</p> : null}
+    </div>
+  );
 }
 
 function AssigneeLabel({ id }: { id?: string }) {
@@ -57,31 +61,28 @@ export function IncidentsTable({
     () => [
       {
         key: "title",
-        header: "Incident",
-        render: (incident) => (
-          <div>
-            <span className="font-medium text-foreground">{incident.title}</span>
-            <p className="text-xs text-muted">{incident.id}</p>
-          </div>
-        ),
+        header: "Event",
+        render: (incident) => {
+          const related = incident.sourceRequestId
+            ? `Request ${incident.sourceRequestId}`
+            : null;
+          return (
+            <div>
+              <span className="font-medium text-foreground">
+                {incident.title}
+              </span>
+              <p className="text-xs text-muted">{incident.id}</p>
+              {related ? (
+                <p className="text-xs text-muted">{related}</p>
+              ) : null}
+            </div>
+          );
+        },
       },
       {
         key: "facilityId",
-        header: "Facility",
-        render: (incident) => (
-          <span className="text-muted">
-            <FacilityLabel id={incident.facilityId} />
-          </span>
-        ),
-      },
-      {
-        key: "assetId",
-        header: "Asset",
-        render: (incident) => (
-          <span className="text-muted">
-            <AssetLabel id={incident.assetId} />
-          </span>
-        ),
+        header: "Location",
+        render: (incident) => <LocationCell incident={incident} />,
       },
       {
         key: "severity",
@@ -113,10 +114,22 @@ export function IncidentsTable({
       },
       {
         key: "reportedAt",
-        header: "Reported At",
-        render: (incident) => (
-          <span className="text-muted">{formatDate(incident.reportedAt)}</span>
-        ),
+        header: "Reported",
+        render: (incident) => {
+          const contained = incident.containedAt;
+          return (
+            <div>
+              <span className="text-muted">
+                {formatDate(incident.reportedAt)}
+              </span>
+              {contained ? (
+                <p className="text-xs text-muted">
+                  Contained {formatDate(contained)}
+                </p>
+              ) : null}
+            </div>
+          );
+        },
       },
       {
         key: "actions",
@@ -146,7 +159,7 @@ export function IncidentsTable({
       total={total}
       onPageChange={onPageChange}
       emptyIcon={AlertTriangle}
-      emptyTitle="No incidents match your filters"
+      emptyTitle="No significant events match your filters"
       emptyDescription="Clear search or adjust severity, status, facility, and assignee filters."
       className="min-w-0"
     />

@@ -311,6 +311,9 @@ function signalFindingKey(
       return `signal:${signalKey}:${normalizeScopeId(subject)}`;
     case "incident.recent_maintenance_at_facility":
       return `signal:${signalKey}`;
+    case "work.facility_frequency_7d":
+    case "work.facility_frequency_30d":
+      return `signal:${signalKey}`;
     default:
       return `signal:${signalKey}:${facility}`;
   }
@@ -829,6 +832,10 @@ function humanIncidentPatternTitle(
         : "Incidents keep occurring in the same place";
     case "incident.recent_maintenance_at_facility":
       return "Maintenance work and incidents are showing up together";
+    case "work.facility_frequency_7d":
+      return "Work activity has increased recently";
+    case "work.facility_frequency_30d":
+      return "Work keeps being logged";
     default:
       return tone === "attention"
         ? "Something may be worth watching"
@@ -894,6 +901,19 @@ function humanIncidentPatternSummary(
         : atOneLocation === "at more than one location"
           ? "Maintenance work and incident reports have appeared together at more than one location recently."
           : "Maintenance work and incident reports have been appearing together recently.";
+    case "work.facility_frequency_7d":
+      if (eventCount === 1) {
+        return atOneLocation === "at one location"
+          ? "Work has been logged at one location recently."
+          : "Work activity has increased recently.";
+      }
+      return atOneLocation
+        ? `${countLabel(eventCount, "work item", "work items")} logged ${atOneLocation} in the past week.`
+        : `${countLabel(eventCount, "work item", "work items")} logged in the past week.`;
+    case "work.facility_frequency_30d":
+      return atOneLocation
+        ? `${countLabel(eventCount, "work item", "work items")} logged ${atOneLocation} over the past month.`
+        : `${countLabel(eventCount, "work item", "work items")} logged over the past month.`;
     default:
       return "This has been showing up more than once recently.";
   }
@@ -974,6 +994,9 @@ export function assembleOrganisationIntelligence(input: {
   windowFrom: string;
   windowTo: string;
   facilityManagementEnabled: boolean;
+  /** Canonical Work root events (facility.maintenance_requested). */
+  workEvents: EventRow[];
+  /** Legacy historical Incident root events. */
   incidentEvents: EventRow[];
   lifecycleEvents?: EventRow[];
   signalRunsByEventId: Map<string, ActionRunRow>;
@@ -985,6 +1008,7 @@ export function assembleOrganisationIntelligence(input: {
     windowFrom,
     windowTo,
     facilityManagementEnabled,
+    workEvents,
     incidentEvents,
     lifecycleEvents = [],
     signalRunsByEventId,
@@ -1036,7 +1060,7 @@ export function assembleOrganisationIntelligence(input: {
   let criticalRiskCount = 0;
   const facilities = new Set<string>();
 
-  for (const event of incidentEvents) {
+  for (const event of [...workEvents, ...incidentEvents]) {
     const facilityId = facilityIdFromEvent(event);
     if (facilityId) facilities.add(facilityId);
 
@@ -1597,21 +1621,25 @@ export function assembleOrganisationIntelligence(input: {
     )
   );
 
+  const recentWorkCount7d = workEvents.filter(
+    (e) => Date.parse(e.occurred_at) >= recentCutoffMs
+  ).length;
   const recentIncidentCount7d = incidentEvents.filter(
     (e) => Date.parse(e.occurred_at) >= recentCutoffMs
   ).length;
 
+  const rootEventCount = workEvents.length + incidentEvents.length;
   let state: OrganisationIntelligence["status"]["state"] = "ready";
-  if (incidentEvents.length > 0 && missingCoreRuns === incidentEvents.length) {
+  if (rootEventCount > 0 && missingCoreRuns === rootEventCount) {
     state = "processing";
     notes.push(
-      "Recent incidents exist but event-level intelligence has not completed yet."
+      "Recent operational activity exists but event-level intelligence has not completed yet."
     );
   } else if (missingCoreRuns > 0 || partialOutcomes > 0) {
     state = "partial";
     if (missingCoreRuns > 0) {
       notes.push(
-        "Some incident events are missing completed signal or risk analysis."
+        "Some operational events are missing completed signal or risk analysis."
       );
     }
     if (partialOutcomes > 0) {
@@ -1626,6 +1654,7 @@ export function assembleOrganisationIntelligence(input: {
 
   const { comparisonWindow, changes } = detectOrganisationIntelligenceChanges({
     windowTo,
+    workEvents,
     incidentEvents,
     signalRunsByEventId,
     riskRunsByEventId,
@@ -1651,6 +1680,8 @@ export function assembleOrganisationIntelligence(input: {
       responsePatterns: responsePatternsForHealth,
     },
     operationalContext: {
+      recentWorkCount30d: workEvents.length,
+      recentWorkCount7d,
       recentIncidentCount30d: incidentEvents.length,
       recentIncidentCount7d,
       highOrCriticalRiskCount,
@@ -1687,6 +1718,7 @@ function emptyOrganisationIntelligence(
   const { comparisonWindow, changes } = detectOrganisationIntelligenceChanges({
     windowTo: to,
     incidentEvents: [],
+    workEvents: [],
     signalRunsByEventId: new Map(),
     riskRunsByEventId: new Map(),
     decisions: [],
@@ -1711,6 +1743,8 @@ function emptyOrganisationIntelligence(
       responsePatterns: [],
     },
     operationalContext: {
+      recentWorkCount30d: 0,
+      recentWorkCount7d: 0,
       recentIncidentCount30d: 0,
       recentIncidentCount7d: 0,
       highOrCriticalRiskCount: 0,
@@ -1750,6 +1784,14 @@ export async function loadOrganisationIntelligence(options: {
     });
   }
 
+  const workEvents = await loadEventsInWindow({
+    supabase: options.supabase,
+    organisationId: options.organisationId,
+    eventType: OperationalEventTypes.FACILITY_MAINTENANCE_REQUESTED,
+    fromIso,
+    toIso,
+  });
+
   const incidentEvents = await loadEventsInWindow({
     supabase: options.supabase,
     organisationId: options.organisationId,
@@ -1773,14 +1815,17 @@ export async function loadOrganisationIntelligence(options: {
     toIso,
   });
 
-  const incidentIds = incidentEvents.map((e) => e.id);
+  const rootEventIds = [
+    ...workEvents.map((e) => e.id),
+    ...incidentEvents.map((e) => e.id),
+  ];
   const decisionEventIds = decisionEvents.map((e) => e.id);
 
-  const [incidentRuns, patternRuns, decisions] = await Promise.all([
+  const [rootRuns, patternRuns, decisions] = await Promise.all([
     loadActionRunsForEvents({
       supabase: options.supabase,
       organisationId: options.organisationId,
-      eventIds: incidentIds,
+      eventIds: rootEventIds,
       actionKeys: [SIGNAL_ACTION_KEY, RISK_ACTION_KEY],
     }),
     loadActionRunsForEvents({
@@ -1801,13 +1846,14 @@ export async function loadOrganisationIntelligence(options: {
     windowFrom: fromIso,
     windowTo: toIso,
     facilityManagementEnabled: true,
+    workEvents,
     incidentEvents,
     lifecycleEvents,
     signalRunsByEventId: pickLatestSucceededByEvent(
-      incidentRuns,
+      rootRuns,
       SIGNAL_ACTION_KEY
     ),
-    riskRunsByEventId: pickLatestSucceededByEvent(incidentRuns, RISK_ACTION_KEY),
+    riskRunsByEventId: pickLatestSucceededByEvent(rootRuns, RISK_ACTION_KEY),
     patternRuns: patternRuns.filter(
       (r) => r.action_key === PATTERN_ACTION_KEY
     ),

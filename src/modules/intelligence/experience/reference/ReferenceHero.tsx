@@ -44,12 +44,12 @@ export function ReferenceHero({
 
       <div className="ix-ref-hero-stats">
         <div className="ix-ref-stat">
-          <span className="ix-ref-stat-value">{ctx.recentIncidentCount30d}</span>
-          <span className="ix-ref-stat-label">Incidents reviewed</span>
+          <span className="ix-ref-stat-value">{ctx.recentWorkCount30d}</span>
+          <span className="ix-ref-stat-label">Work reviewed</span>
         </div>
         <div className="ix-ref-stat">
           <span className="ix-ref-stat-value">{ctx.highOrCriticalRiskCount}</span>
-          <span className="ix-ref-stat-label">Higher-risk incidents</span>
+          <span className="ix-ref-stat-label">Elevated-risk activity</span>
         </div>
         <div className="ix-ref-stat">
           <span className="ix-ref-stat-value">{ctx.facilitiesWithRecentActivity}</span>

@@ -44,13 +44,13 @@ export const REPORT_SECTIONS: ReportSectionDefinition[] = [
   },
   {
     id: "maintenance",
-    title: "Maintenance",
-    description: "Backlog, overdue maintenance, and attention items.",
+    title: "Work",
+    description: "Backlog, overdue work, and attention items.",
   },
   {
     id: "incidents",
-    title: "Incidents",
-    description: "Critical incidents and escalation posture.",
+    title: "Legacy Incidents (Historical)",
+    description: "Historical incident records for reference and audit.",
   },
   {
     id: "assets",
@@ -111,7 +111,7 @@ export const REPORT_TYPES: ReportTypeDefinition[] = [
       "kpi_summary",
       "operational_performance",
       "work_orders",
-      "incidents",
+      "maintenance",
       "recommendations",
     ],
   },
@@ -135,7 +135,7 @@ export const REPORT_TYPES: ReportTypeDefinition[] = [
   },
   {
     id: "incident_report",
-    title: "Incident Report",
+    title: "Legacy Incident Report",
     description:
       "A clear record of incidents, severity, contributing factors, and recommended follow-up.",
     includes: [

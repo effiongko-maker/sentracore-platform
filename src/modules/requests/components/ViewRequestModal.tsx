@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Modal } from "@/components/modals/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { formatDate } from "@/lib/utils";
+import { workHref } from "@/lib/operational/work";
 import { useFacilityName } from "@/hooks/useEntityLabel";
 import type { RequestTreatmentDetail } from "../treatment/detailTypes";
 import type { RequestTreatmentResult } from "../treatment/resultTypes";
@@ -23,7 +25,6 @@ import {
 } from "../constants";
 import { isRequestTerminal } from "../treatment/status";
 import type { RequestRecord } from "../types";
-import { CreateIncidentFromRequestModal } from "./CreateIncidentFromRequestModal";
 import { CreateMaintenanceFromRequestModal } from "./CreateMaintenanceFromRequestModal";
 import { LinkExistingTreatmentModal } from "./LinkExistingTreatmentModal";
 
@@ -48,9 +49,7 @@ function Detail({ label, value }: { label: string; value: React.ReactNode }) {
 type TreatmentPanel =
   | { type: "closed" }
   | { type: "create-maintenance" }
-  | { type: "create-incident" }
   | { type: "link-maintenance" }
-  | { type: "link-incident" }
   | { type: "resolve" }
   | { type: "cancel" };
 
@@ -335,10 +334,8 @@ export function ViewRequestModal({
             {treatable ? (
               <div className="space-y-2">
                 <p className="text-xs text-muted">
-                  Ordinary facility problems: create or link Maintenance.
-                  Use Incident only for significant events (safety, security,
-                  flood/fire/environmental, major disruption, serious equipment
-                  failure) — not as a second way to log routine problems.
+                  Create or link Work to treat this request. New issues are
+                  logged from Issues — not as legacy Incidents.
                 </p>
                 <div className="flex flex-wrap gap-2">
                 <Button
@@ -347,15 +344,7 @@ export function ViewRequestModal({
                   size="sm"
                   onClick={() => setPanel({ type: "create-maintenance" })}
                 >
-                  Create Maintenance
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setPanel({ type: "create-incident" })}
-                >
-                  Create Incident
+                  Create Work
                 </Button>
                 <Button
                   type="button"
@@ -363,15 +352,7 @@ export function ViewRequestModal({
                   size="sm"
                   onClick={() => setPanel({ type: "link-maintenance" })}
                 >
-                  Link Maintenance
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setPanel({ type: "link-incident" })}
-                >
-                  Link Incident
+                  Link Work
                 </Button>
                 </div>
               </div>
@@ -388,15 +369,13 @@ export function ViewRequestModal({
               Linked work
             </h3>
             {!hasTreatment && !loadingDetail && !detailError ? (
-              <p className="text-sm text-muted">
-                No Maintenance or Incident treatments yet.
-              </p>
+              <p className="text-sm text-muted">No Work linked yet.</p>
             ) : null}
 
             {(detail?.maintenance.length ?? 0) > 0 ? (
               <div className="space-y-2">
                 <p className="text-xs font-medium uppercase tracking-wider text-muted">
-                  Maintenance
+                  Work
                 </p>
                 {detail!.maintenance.map((mnt) => (
                   <div
@@ -404,7 +383,12 @@ export function ViewRequestModal({
                     className="rounded-xl border border-border px-3 py-3"
                   >
                     <p className="text-sm font-medium text-foreground">
-                      {mnt.title}
+                      <Link
+                        href={workHref(mnt.id)}
+                        className="text-accent hover:underline"
+                      >
+                        {mnt.title}
+                      </Link>
                     </p>
                     <p className="text-xs text-muted">
                       {mnt.id} · {mnt.status} · {formatDate(mnt.reportedAt)}
@@ -417,18 +401,24 @@ export function ViewRequestModal({
             {(detail?.incidents.length ?? 0) > 0 ? (
               <div className="space-y-2">
                 <p className="text-xs font-medium uppercase tracking-wider text-muted">
-                  Incidents
+                  Legacy incidents
                 </p>
                 {detail!.incidents.map((inc) => (
                   <div
                     key={inc.id}
-                    className="rounded-xl border border-border px-3 py-3"
+                    className="rounded-xl border border-dashed border-border px-3 py-3"
                   >
                     <p className="text-sm font-medium text-foreground">
-                      {inc.title}
+                      <Link
+                        href={`/incidents?id=${encodeURIComponent(inc.id)}`}
+                        className="text-accent hover:underline"
+                      >
+                        {inc.title}
+                      </Link>
                     </p>
                     <p className="text-xs text-muted">
-                      {inc.id} · {inc.status} · {formatDate(inc.reportedAt)}
+                      {inc.id} · {inc.status} · {formatDate(inc.reportedAt)} ·
+                      historical compatibility
                     </p>
                   </div>
                 ))}
@@ -503,18 +493,8 @@ export function ViewRequestModal({
         onCreated={handleTreatmentResult}
       />
 
-      <CreateIncidentFromRequestModal
-        open={panel.type === "create-incident"}
-        request={activeRequest}
-        onClose={() => setPanel({ type: "closed" })}
-        onCreated={handleTreatmentResult}
-      />
-
       <LinkExistingTreatmentModal
-        open={
-          panel.type === "link-maintenance" || panel.type === "link-incident"
-        }
-        kind={panel.type === "link-incident" ? "incident" : "maintenance"}
+        open={panel.type === "link-maintenance"}
         requestId={activeRequest.id}
         onClose={() => setPanel({ type: "closed" })}
         onLinked={handleTreatmentResult}
@@ -525,7 +505,7 @@ export function ViewRequestModal({
         onClose={() => setPanel({ type: "closed" })}
         onConfirm={handleResolve}
         title="Resolve this request?"
-        description="Linked Maintenance and Incident records are preserved. Resolution does not close downstream work."
+        description="Linked Work and legacy incident records are preserved. Resolution does not close downstream work."
         confirmLabel="Resolve"
         loading={busy}
       />

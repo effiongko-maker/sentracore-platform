@@ -92,12 +92,12 @@ export function buildRecentActivityFromDomain(input: {
       id: `ra-mnt-${mnt.id}-${at}`,
       title: mnt.title || mnt.id,
       summary: linked
-        ? `Maintenance ${mnt.id} linked to work order`
-        : `Maintenance ${mnt.id} · ${labelize(mnt.status)}`,
+        ? `Work ${mnt.id} linked to work order`
+        : `Work ${mnt.id} · ${labelize(mnt.status)}`,
       at,
-      href: modulePath("maintenance"),
+      href: modulePath("work"),
       tone: "warning",
-      module: "maintenance",
+      module: "work",
       entityId: mnt.id,
     });
   }
@@ -110,8 +110,8 @@ export function buildRecentActivityFromDomain(input: {
       id: `ra-inc-${inc.id}-${at}`,
       title: inc.title || inc.id,
       summary: resolved
-        ? `Incident ${inc.id} resolved`
-        : `Incident ${inc.id} reported · ${labelize(inc.severity)}`,
+        ? `Legacy incident ${inc.id} resolved`
+        : `Legacy incident ${inc.id} reported · ${labelize(inc.severity)}`,
       at,
       href: modulePath("incidents"),
       tone: resolved ? "success" : "danger",

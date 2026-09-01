@@ -9,7 +9,9 @@ import type { WorkspaceScheduleItem } from "../types";
 
 const modulePath: Record<WorkspaceScheduleItem["module"], string> = {
   incidents: "/incidents",
-  maintenance: "/maintenance",
+  work: "/work",
+  issues: "/issues",
+  maintenance: "/work",
   "work-orders": "/work-orders",
   assets: "/assets",
   facilities: "/facilities",
@@ -37,7 +39,7 @@ export function TodaySchedule({ items }: { items: WorkspaceScheduleItem[] }) {
               icon={CalendarClock}
               className="border-0 bg-transparent py-10"
               title="Nothing scheduled for today"
-              description="Maintenance due today, scheduled work orders, and newly reported incidents will appear here."
+              description="Work due today, scheduled work orders, and legacy incident activity will appear here."
             />
           ) : (
             items.map((item) => (

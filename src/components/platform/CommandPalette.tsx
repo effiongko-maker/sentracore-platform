@@ -20,10 +20,10 @@ type PaletteAction = {
 
 const CREATE_ACTIONS: PaletteAction[] = [
   {
-    id: "create-incident",
-    label: "Report an incident",
+    id: "log-issue",
+    label: "Log an issue",
     description: "Act",
-    href: "/occupant-requests?type=incident",
+    href: "/issues",
     group: "Create",
   },
   {
