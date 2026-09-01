@@ -76,10 +76,10 @@ export interface AttentionMatter {
   entityId: string;
 }
 
-/** Shared model: headline count and Requires attention list. */
+/** Shared model: Requires attention queue (cross-domain intervention). */
 export interface AttentionModel {
   total: number;
-  /** Subset with severity === critical (hero Critical tile). */
+  /** Cross-domain attention matters with severity === critical (not Critical Work KPI). */
   criticalCount: number;
   visible: AttentionMatter[];
   viewAllHref?: string;
@@ -109,7 +109,7 @@ export interface WorkspaceSnapshot {
     name?: string;
   };
   operationalState: OperationalState;
-  /** Matters behind critical headline — Work/Issue operational queue. */
+  /** Cross-domain intervention queue — distinct from pulse.criticalWork KPI. */
   attention: AttentionModel;
   pulse: OrganisationalPulse;
   quickActions: WorkspaceQuickAction[];

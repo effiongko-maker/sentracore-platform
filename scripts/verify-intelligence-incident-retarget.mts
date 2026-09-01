@@ -27,7 +27,7 @@ function readSrc(rel: string): string {
 function main() {
   const results: string[] = [];
 
-  assert(ISSUE_MODEL_PHASE === 23, "phase 19");
+  assert(ISSUE_MODEL_PHASE === 26, "phase 19");
   results.push("PASS ISSUE_MODEL_PHASE = 19");
 
   assert(

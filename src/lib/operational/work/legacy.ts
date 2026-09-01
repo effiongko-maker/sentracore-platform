@@ -20,6 +20,7 @@ export const INCIDENT_DOMAIN_LEGACY = {
   intelligenceConsumersUntouched: true,
   primaryNavigationRetired: true,
   requestTreatmentIncidentUiRetired: true,
+  primaryMaintenanceNavigationRetired: true,
   note: "Incident is a legacy compatibility domain, not a current FM operating category.",
 } as const;
 

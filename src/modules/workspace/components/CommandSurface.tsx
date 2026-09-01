@@ -52,6 +52,21 @@ function padCount(value: number): string {
   return value < 10 ? `0${value}` : String(value);
 }
 
+function heroCriticalWorkMeta(
+  criticalWork: number,
+  attentionTotal: number
+): string {
+  if (criticalWork > 0) {
+    return "Require immediate intervention";
+  }
+  if (attentionTotal > 0) {
+    return attentionTotal === 1
+      ? "1 matter requires attention"
+      : `${attentionTotal} matters require attention`;
+  }
+  return "None requiring intervention";
+}
+
 function buildHeroCopy(snapshot: WorkspaceSnapshot): {
   heading: string;
   line1: string;
@@ -59,7 +74,6 @@ function buildHeroCopy(snapshot: WorkspaceSnapshot): {
 } {
   const { pulse, attention, operationalState } = snapshot;
   const attentionTotal = attention.total;
-  const critical = attention.criticalCount;
 
   if (operationalState.tone === "degraded") {
     return {
@@ -78,10 +92,7 @@ function buildHeroCopy(snapshot: WorkspaceSnapshot): {
         attentionTotal === 1
           ? "1 matter requires action across your facilities."
           : `${attentionTotal} matters require action across your facilities.`,
-      line2:
-        critical > 0
-          ? `${critical} critical · ${pulse.openWork} open work · ${pulse.openWorkOrders} work orders.`
-          : `${pulse.openWork} open work · ${pulse.openWorkOrders} work orders.`,
+      line2: `${pulse.criticalWork} critical work · ${pulse.openWork} open work · ${pulse.openWorkOrders} work orders.`,
     };
   }
 
@@ -167,18 +178,19 @@ function FacilityBlueprint() {
 function CommandHero({ snapshot }: { snapshot: WorkspaceSnapshot }) {
   const { pulse, attention, currentUser, asOf } = snapshot;
   const attentionTotal = attention.total;
-  const critical = attention.criticalCount;
+  const criticalWork = pulse.criticalWork;
   const copy = buildHeroCopy(snapshot);
   const hour = new Date(asOf).getHours();
   const greeting = `${greetingForHour(hour)}, ${firstName(currentUser.name)}`;
   const live = snapshot.operationalState.tone !== "degraded";
   const updated = formatRelativeTime(asOf);
+  const heroStress = attentionTotal > 0 || criticalWork > 0;
 
   return (
     <section
       className={cn(
         "sc-fm-hero",
-        attentionTotal > 0 ? "sc-fm-hero-critical" : "sc-fm-hero-stable"
+        heroStress ? "sc-fm-hero-critical" : "sc-fm-hero-stable"
       )}
       aria-labelledby="sc-fm-hero-heading"
     >
@@ -209,25 +221,20 @@ function CommandHero({ snapshot }: { snapshot: WorkspaceSnapshot }) {
         </div>
 
         <div className="sc-fm-hero-metrics" aria-label="Operational status">
-          <div className="sc-fm-hero-critical-tile">
-            <p className="sc-fm-hero-critical-value">{padCount(critical)}</p>
-            <p className="sc-fm-hero-critical-label">Critical</p>
+          <Link
+            href="/work"
+            className="sc-fm-hero-critical-tile sc-fm-hero-critical-link"
+          >
+            <p className="sc-fm-hero-critical-value">{padCount(criticalWork)}</p>
+            <p className="sc-fm-hero-critical-label">Critical work</p>
             <p className="sc-fm-hero-critical-meta">
-              {critical > 0
-                ? "Requires intervention"
-                : attentionTotal > 0
-                  ? `${attentionTotal} other attention item${attentionTotal === 1 ? "" : "s"}`
-                  : "No intervention needed"}
+              {heroCriticalWorkMeta(criticalWork, attentionTotal)}
             </p>
-          </div>
+          </Link>
 
           <div className="sc-fm-hero-metric">
             <p className="sc-fm-hero-metric-value">{pulse.openWork}</p>
             <p className="sc-fm-hero-metric-label">Open work</p>
-          </div>
-          <div className="sc-fm-hero-metric">
-            <p className="sc-fm-hero-metric-value">{pulse.criticalWork}</p>
-            <p className="sc-fm-hero-metric-label">Critical work</p>
           </div>
           <div className="sc-fm-hero-metric">
             <p className="sc-fm-hero-metric-value">{pulse.openWorkOrders}</p>

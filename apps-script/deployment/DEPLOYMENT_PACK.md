@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Generated: 2026-09-01T08:11:28.626Z
+Generated: 2026-09-01T09:12:24.319Z
 
 This document is the **single source of truth** for copying Apps Script
 source into the Google Apps Script project.
@@ -3709,10 +3709,23 @@ var MaintenanceService = (function () {
         priority === "all" ||
         String(row.priority).toLowerCase() === String(priority).toLowerCase();
 
-      var matchesStatus =
-        !status ||
-        status === "all" ||
-        String(row.status).toLowerCase() === String(status).toLowerCase();
+      var matchesStatus;
+      if (status === "active") {
+        var activeStatuses = {
+          requested: true,
+          triaged: true,
+          scheduled: true,
+          in_progress: true,
+          on_hold: true,
+        };
+        matchesStatus =
+          activeStatuses[String(row.status).toLowerCase()] === true;
+      } else {
+        matchesStatus =
+          !status ||
+          status === "all" ||
+          String(row.status).toLowerCase() === String(status).toLowerCase();
+      }
 
       var matchesType =
         !type ||
@@ -6013,6 +6026,21 @@ var ReportingSnapshotService = (function () {
       )
         .slice(0, LIST_LIMIT)
         .map(projectIncident_),
+      criticalWork: sortByDateDesc_(
+        maintenance.filter(isCriticalOpenWork_),
+        function (row) {
+          return (
+            fieldValue_(row, "dueAt") ||
+            fieldValue_(row, "reportedAt") ||
+            fieldValue_(row, "createdAt")
+          );
+        },
+        function (row) {
+          return row.id;
+        }
+      )
+        .slice(0, LIST_LIMIT)
+        .map(projectMaintenance_),
       overdueWorkOrders: overdueWorkOrders,
       maintenanceAttention: maintenanceAttention,
       blockedItems: blockedItems,

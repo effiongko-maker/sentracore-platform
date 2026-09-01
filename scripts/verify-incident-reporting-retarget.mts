@@ -33,7 +33,7 @@ function readSrc(rel: string): string {
 function main() {
   const results: string[] = [];
 
-  assert(ISSUE_MODEL_PHASE === 23, "phase 20");
+  assert(ISSUE_MODEL_PHASE === 26, "phase 20");
   assert(INCIDENT_REPORTING_RETARGET_PHASE === 20, "reporting retarget phase");
   results.push("PASS ISSUE_MODEL_PHASE = 20");
 

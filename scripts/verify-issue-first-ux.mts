@@ -22,7 +22,7 @@ function assert(cond: unknown, message: string): asserts cond {
 
 function main() {
   const results: string[] = [];
-  assert(ISSUE_MODEL_PHASE === 23, "phase 18");
+  assert(ISSUE_MODEL_PHASE === 26, "phase 18");
   results.push("PASS ISSUE_MODEL_PHASE = 19");
 
   // Log Issue — no taxonomy; Work via Maintenance backing.

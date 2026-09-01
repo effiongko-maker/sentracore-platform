@@ -229,18 +229,44 @@ function buildOperationalState(
   pulse: OrganisationalPulse,
   attention: AttentionModel
 ): OperationalState {
-  if (pulse.criticalWork > 0 || attention.criticalCount > 0) {
-    const n = Math.max(pulse.criticalWork, attention.criticalCount);
+  const hasCriticalWork = pulse.criticalWork > 0;
+  const hasCriticalAttention = attention.criticalCount > 0;
+
+  if (hasCriticalWork || hasCriticalAttention) {
+    let statement: string;
+    if (hasCriticalWork && hasCriticalAttention) {
+      const workPart =
+        pulse.criticalWork === 1
+          ? "One critical work item"
+          : `${pulse.criticalWork} critical work items`;
+      const attentionPart =
+        attention.criticalCount === 1
+          ? "one critical attention matter"
+          : `${attention.criticalCount} critical attention matters`;
+      statement = `${workPart} and ${attentionPart} require intervention.`;
+    } else if (hasCriticalWork) {
+      statement =
+        pulse.criticalWork === 1
+          ? "One critical work item requires intervention."
+          : `${pulse.criticalWork} critical work items require intervention.`;
+    } else {
+      statement =
+        attention.criticalCount === 1
+          ? "One critical attention matter requires intervention."
+          : `${attention.criticalCount} critical attention matters require intervention.`;
+    }
+
+    const subtext =
+      attention.total > 0
+        ? attention.total === 1
+          ? "1 matter in the attention queue."
+          : `${attention.total} matters in the attention queue.`
+        : `${pulse.openWork} open work item${pulse.openWork === 1 ? "" : "s"} across the operation.`;
+
     return {
       tone: "critical",
-      statement:
-        n === 1
-          ? "One critical matter requires intervention."
-          : `${n} critical matters require intervention.`,
-      subtext:
-        attention.total > n
-          ? `${attention.total} total items in the attention queue.`
-          : `${pulse.openWork} open work item${pulse.openWork === 1 ? "" : "s"} across the operation.`,
+      statement,
+      subtext,
     };
   }
 

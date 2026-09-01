@@ -135,13 +135,6 @@ export const OPERATING_LAYERS: OperatingLayer[] = [
         description: "Work moving through the organisation",
       }),
       fm({
-        label: "Maintenance",
-        href: "/maintenance",
-        icon: Wrench,
-        title: "Maintenance",
-        description: "Compatibility work surface",
-      }),
-      fm({
         label: "Approvals",
         href: "/approvals",
         icon: FileCheck2,
@@ -154,6 +147,13 @@ export const OPERATING_LAYERS: OperatingLayer[] = [
 
 /** Routable legacy modules — excluded from command palette / primary layers. */
 const LEGACY_LAYER_MODULES: LayerModule[] = [
+  fm({
+    label: "Legacy Maintenance",
+    href: "/maintenance",
+    icon: Wrench,
+    title: "Legacy Maintenance",
+    description: "Compatibility work surface (historical deep links)",
+  }),
   fm({
     label: "Legacy Incidents",
     href: "/incidents",

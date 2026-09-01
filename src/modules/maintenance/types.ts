@@ -124,7 +124,7 @@ export interface MaintenanceListParams {
   pageSize?: number;
   search?: string;
   priority?: MaintenancePriority | "all";
-  status?: MaintenanceStatus | "all";
+  status?: MaintenanceStatus | "all" | "active";
   type?: MaintenanceType | "all";
   facilityId?: string | "all";
   assignedToUserId?: string | "all";

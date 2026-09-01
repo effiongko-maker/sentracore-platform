@@ -50,6 +50,8 @@ export function WorkPage() {
     setFacilityId,
     assignedToUserId,
     setAssignedToUserId,
+    requiresWorkOrder,
+    setRequiresWorkOrder,
     sort,
     setSort,
     clearAll,
@@ -160,6 +162,8 @@ export function WorkPage() {
         onFacilityIdChange={setFacilityId}
         assignedToUserId={assignedToUserId}
         onAssignedToUserIdChange={setAssignedToUserId}
+        requiresWorkOrder={requiresWorkOrder}
+        onRequiresWorkOrderChange={setRequiresWorkOrder}
         sort={sort}
         onSortChange={setSort}
         total={total}

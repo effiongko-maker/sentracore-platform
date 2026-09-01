@@ -2397,6 +2397,17 @@
     0 14px 28px -16px rgba(127, 29, 29, 0.65);
 }
 
+.sc-fm-hero-critical-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
+.sc-fm-hero-critical-link:focus-visible {
+  outline: 2px solid rgba(254, 202, 202, 0.95);
+  outline-offset: 2px;
+}
+
 .sc-fm-hero-stable .sc-fm-hero-critical-tile {
   background:
     radial-gradient(ellipse at 30% 0%, rgba(74, 222, 128, 0.16), transparent 55%),

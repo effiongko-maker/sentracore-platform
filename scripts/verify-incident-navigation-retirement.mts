@@ -37,7 +37,7 @@ function layerModuleHrefs(): string[] {
 function main() {
   const results: string[] = [];
 
-  assert(ISSUE_MODEL_PHASE === 23, "phase 22");
+  assert(ISSUE_MODEL_PHASE === 26, "phase 22");
   assert(INCIDENT_NAVIGATION_RETIREMENT_PHASE === 22, "nav retirement phase");
   results.push("PASS ISSUE_MODEL_PHASE = 22");
 

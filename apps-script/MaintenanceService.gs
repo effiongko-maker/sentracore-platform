@@ -54,10 +54,23 @@ var MaintenanceService = (function () {
         priority === "all" ||
         String(row.priority).toLowerCase() === String(priority).toLowerCase();
 
-      var matchesStatus =
-        !status ||
-        status === "all" ||
-        String(row.status).toLowerCase() === String(status).toLowerCase();
+      var matchesStatus;
+      if (status === "active") {
+        var activeStatuses = {
+          requested: true,
+          triaged: true,
+          scheduled: true,
+          in_progress: true,
+          on_hold: true,
+        };
+        matchesStatus =
+          activeStatuses[String(row.status).toLowerCase()] === true;
+      } else {
+        matchesStatus =
+          !status ||
+          status === "all" ||
+          String(row.status).toLowerCase() === String(status).toLowerCase();
+      }
 
       var matchesType =
         !type ||

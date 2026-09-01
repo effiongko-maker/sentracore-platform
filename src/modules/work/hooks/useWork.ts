@@ -10,7 +10,9 @@ import type {
   MaintenanceSort,
   MaintenanceStatus,
 } from "@/modules/maintenance/types";
-import { DEFAULT_WORK_SORT, WORK_PAGE_SIZE } from "../constants";
+import { DEFAULT_WORK_LIST_STATUS, DEFAULT_WORK_SORT, WORK_PAGE_SIZE } from "../constants";
+
+type WorkListStatus = MaintenanceStatus | "all" | "active";
 
 /**
  * Work list data — Maintenance persistence as Work backing store.
@@ -24,10 +26,15 @@ export function useWork() {
   const [priority, setPriorityState] = useState<MaintenancePriority | "all">(
     "all"
   );
-  const [status, setStatusState] = useState<MaintenanceStatus | "all">("all");
+  const [status, setStatusState] = useState<WorkListStatus>(
+    DEFAULT_WORK_LIST_STATUS
+  );
   const [facilityId, setFacilityIdState] = useState<string | "all">("all");
   const [assignedToUserId, setAssignedToUserIdState] = useState<
     string | "all"
+  >("all");
+  const [requiresWorkOrder, setRequiresWorkOrderState] = useState<
+    boolean | "all"
   >("all");
   const [sort, setSortState] = useState<MaintenanceSort>(DEFAULT_WORK_SORT);
   const [page, setPage] = useState(1);
@@ -42,7 +49,7 @@ export function useWork() {
     setPage(1);
   }, []);
 
-  const setStatus = useCallback((value: MaintenanceStatus | "all") => {
+  const setStatus = useCallback((value: WorkListStatus) => {
     setStatusState(value);
     setPage(1);
   }, []);
@@ -57,6 +64,11 @@ export function useWork() {
     setPage(1);
   }, []);
 
+  const setRequiresWorkOrder = useCallback((value: boolean | "all") => {
+    setRequiresWorkOrderState(value);
+    setPage(1);
+  }, []);
+
   const setSort = useCallback((value: MaintenanceSort) => {
     setSortState(value);
     setPage(1);
@@ -65,9 +77,10 @@ export function useWork() {
   const clearAll = useCallback(() => {
     setSearch("");
     setPriorityState("all");
-    setStatusState("all");
+    setStatusState(DEFAULT_WORK_LIST_STATUS);
     setFacilityIdState("all");
     setAssignedToUserIdState("all");
+    setRequiresWorkOrderState("all");
     setPage(1);
   }, []);
 
@@ -88,7 +101,7 @@ export function useWork() {
           type: "all",
           facilityId,
           assignedToUserId,
-          requiresWorkOrder: "all",
+          requiresWorkOrder,
           sort,
         });
 
@@ -132,6 +145,7 @@ export function useWork() {
       status,
       facilityId,
       assignedToUserId,
+      requiresWorkOrder,
       sort,
     ]
   );
@@ -190,6 +204,8 @@ export function useWork() {
     setFacilityId,
     assignedToUserId,
     setAssignedToUserId,
+    requiresWorkOrder,
+    setRequiresWorkOrder,
     sort,
     setSort,
     clearAll,

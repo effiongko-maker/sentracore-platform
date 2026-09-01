@@ -136,13 +136,6 @@ export const NAV_GROUPS: NavGroup[] = [
         description: "Assignments, progress, and completion",
       }),
       item({
-        label: "Maintenance",
-        href: "/maintenance",
-        icon: Wrench,
-        title: "Maintenance",
-        description: "Compatibility work surface",
-      }),
-      item({
         label: "Approvals",
         href: "/approvals",
         icon: FileCheck2,
@@ -187,6 +180,14 @@ export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
  * Used only for TopBar context resolution.
  */
 const SECONDARY_NAV_ITEMS: NavItem[] = [
+  {
+    label: "Legacy Maintenance",
+    href: "/maintenance",
+    icon: Wrench,
+    title: "Legacy Maintenance",
+    description: "Compatibility work surface (historical deep links)",
+    moduleSlug: FM_MODULE,
+  },
   {
     label: "Legacy Incidents",
     href: "/incidents",

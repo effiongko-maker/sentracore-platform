@@ -15,9 +15,12 @@ export const WORK_PAGE_SIZE = 10;
 
 export const WORK_STATUSES = MAINTENANCE_STATUSES as WorkStatus[];
 
-/** Active / in-flight work — WIP scope. */
+/** Active / in-flight work — WIP scope (maps to list filter status=active). */
 export const WORK_WIP_STATUSES =
   MAINTENANCE_ACTIVE_WORKFLOW_STATUSES as WorkStatus[];
+
+/** Default Work list scope — active workflow rows only (not completed/cancelled). */
+export const DEFAULT_WORK_LIST_STATUS = "active" as const;
 
 export const WORK_PRIORITIES = MAINTENANCE_PRIORITIES as WorkPriority[];
 

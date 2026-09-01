@@ -110,8 +110,8 @@ export function registerHealthAndActionWidgets() {
     },
     {
       id: "create-maintenance",
-      title: "Create Maintenance Request",
-      description: "Start a maintenance request",
+      title: "Log Issue",
+      description: "Start work from Issues",
       order: 30,
     },
     {

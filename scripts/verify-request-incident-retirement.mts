@@ -34,7 +34,7 @@ function primaryNavLabels(): string[] {
 function main() {
   const results: string[] = [];
 
-  assert(ISSUE_MODEL_PHASE === 23, "phase 23");
+  assert(ISSUE_MODEL_PHASE === 26, "phase 23");
   assert(REQUEST_INCIDENT_UI_RETIREMENT_PHASE === 23, "request ui phase");
   assert(
     REQUEST_TREATMENT_OPERATIONAL_CONTEXT.legacyIncidentCreateRetiredFromUi ===

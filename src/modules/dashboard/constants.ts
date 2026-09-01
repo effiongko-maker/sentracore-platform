@@ -39,7 +39,7 @@ export const DASHBOARD_SECTION_META: Record<
 export const DASHBOARD_ACTION_ROUTES: Record<string, string> = {
   "log-issue": "/issues",
   "create-work-order": "/work-orders",
-  "create-maintenance": "/maintenance",
+  "create-maintenance": "/issues",
   "view-facilities": "/facilities",
 };
 
@@ -48,7 +48,7 @@ export const DASHBOARD_MODULE_ROUTES: Record<string, string> = {
   facilities: "/facilities",
   assets: "/assets",
   incidents: "/incidents",
-  maintenance: "/maintenance",
+  maintenance: "/work",
   work: "/work",
   "work-orders": "/work-orders",
 };

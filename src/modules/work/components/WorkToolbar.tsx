@@ -32,12 +32,14 @@ interface WorkToolbarProps {
   onSearchChange: (value: string) => void;
   priority: MaintenancePriority | "all";
   onPriorityChange: (value: MaintenancePriority | "all") => void;
-  status: MaintenanceStatus | "all";
-  onStatusChange: (value: MaintenanceStatus | "all") => void;
+  status: MaintenanceStatus | "all" | "active";
+  onStatusChange: (value: MaintenanceStatus | "all" | "active") => void;
   facilityId: string | "all";
   onFacilityIdChange: (value: string | "all") => void;
   assignedToUserId: string | "all";
   onAssignedToUserIdChange: (value: string | "all") => void;
+  requiresWorkOrder: boolean | "all";
+  onRequiresWorkOrderChange: (value: boolean | "all") => void;
   sort: MaintenanceSort;
   onSortChange: (value: MaintenanceSort) => void;
   total: number;
@@ -47,15 +49,17 @@ interface WorkToolbarProps {
 
 function countActiveFilters(filters: {
   priority: MaintenancePriority | "all";
-  status: MaintenanceStatus | "all";
+  status: MaintenanceStatus | "all" | "active";
   facilityId: string | "all";
   assignedToUserId: string | "all";
+  requiresWorkOrder: boolean | "all";
 }): number {
   let count = 0;
   if (filters.priority !== "all") count += 1;
-  if (filters.status !== "all") count += 1;
+  if (filters.status !== "all" && filters.status !== "active") count += 1;
   if (filters.facilityId !== "all") count += 1;
   if (filters.assignedToUserId !== "all") count += 1;
+  if (filters.requiresWorkOrder !== "all") count += 1;
   return count;
 }
 
@@ -70,6 +74,8 @@ export function WorkToolbar({
   onFacilityIdChange,
   assignedToUserId,
   onAssignedToUserIdChange,
+  requiresWorkOrder,
+  onRequiresWorkOrderChange,
   sort = DEFAULT_WORK_SORT,
   onSortChange,
   total,
@@ -99,6 +105,7 @@ export function WorkToolbar({
     status,
     facilityId,
     assignedToUserId,
+    requiresWorkOrder,
   });
   const hasSearch = Boolean(search.trim());
   const filtered = activeFilterCount > 0 || hasSearch;
@@ -119,11 +126,18 @@ export function WorkToolbar({
         onRemove: () => onPriorityChange("all"),
       });
     }
-    if (status !== "all") {
+    if (status !== "all" && status !== "active") {
       next.push({
         id: "status",
         label: WORK_STATUS_LABELS[status] ?? labelize(status),
-        onRemove: () => onStatusChange("all"),
+        onRemove: () => onStatusChange("active"),
+      });
+    }
+    if (requiresWorkOrder !== "all") {
+      next.push({
+        id: "requires-wo",
+        label: requiresWorkOrder ? "Requires work order" : "No work order required",
+        onRemove: () => onRequiresWorkOrderChange("all"),
       });
     }
     if (facilityId !== "all") {
@@ -150,6 +164,7 @@ export function WorkToolbar({
     status,
     facilityId,
     assignedToUserId,
+    requiresWorkOrder,
     facilities,
     users,
     onSearchChange,
@@ -157,13 +172,15 @@ export function WorkToolbar({
     onStatusChange,
     onFacilityIdChange,
     onAssignedToUserIdChange,
+    onRequiresWorkOrderChange,
   ]);
 
   function clearFiltersOnly() {
     onPriorityChange("all");
-    onStatusChange("all");
+    onStatusChange("active");
     onFacilityIdChange("all");
     onAssignedToUserIdChange("all");
+    onRequiresWorkOrderChange("all");
   }
 
   return (
@@ -188,9 +205,10 @@ export function WorkToolbar({
               label="Status"
               value={status}
               onChange={(value) =>
-                onStatusChange(value as MaintenanceStatus | "all")
+                onStatusChange(value as MaintenanceStatus | "all" | "active")
               }
             >
+              <option value="active">Active work (WIP)</option>
               <option value="all">All statuses</option>
               {WORK_STATUSES.map((value) => (
                 <option key={value} value={value}>
@@ -245,6 +263,26 @@ export function WorkToolbar({
                   {user.name}
                 </option>
               ))}
+            </FilterField>
+
+            <FilterField
+              id="work-filter-requires-wo"
+              label="Work order"
+              value={
+                requiresWorkOrder === "all"
+                  ? "all"
+                  : requiresWorkOrder
+                    ? "yes"
+                    : "no"
+              }
+              onChange={(value) => {
+                if (value === "all") onRequiresWorkOrderChange("all");
+                else onRequiresWorkOrderChange(value === "yes");
+              }}
+            >
+              <option value="all">All work</option>
+              <option value="yes">Requires work order</option>
+              <option value="no">No work order required</option>
             </FilterField>
           </>
         }

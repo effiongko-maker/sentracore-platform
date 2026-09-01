@@ -34,7 +34,7 @@ function readSrc(rel: string): string {
 function main() {
   const results: string[] = [];
 
-  assert(ISSUE_MODEL_PHASE === 23, "phase 21");
+  assert(ISSUE_MODEL_PHASE === 26, "phase 21");
   assert(WORKSPACE_INCIDENT_RETARGET_PHASE === 21, "workspace phase");
   results.push("PASS ISSUE_MODEL_PHASE = 21");
 
@@ -58,7 +58,9 @@ function main() {
   const command = readSrc("src/modules/workspace/components/CommandSurface.tsx");
   assert(command.includes("log-issue"), "log issue primary action");
   assert(!command.includes('"report-incident"'), "no report incident action");
-  assert(command.includes("Open work"), "open work hero metric");
+  assert(command.includes("Critical work"), "critical work hero metric");
+  assert(command.includes("pulse.criticalWork"), "hero critical work from pulse");
+  assert(!command.includes("attention.criticalCount"), "hero not attention criticalCount");
   assert(command.includes('href: "/work"'), "work links");
   assert(command.includes("Legacy incidents"), "legacy incidents row conditional");
   results.push("PASS CommandSurface retargeted to Work/Issues");

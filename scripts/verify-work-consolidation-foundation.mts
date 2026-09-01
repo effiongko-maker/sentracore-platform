@@ -36,7 +36,7 @@ function assert(cond: unknown, message: string): asserts cond {
 function main() {
   const results: string[] = [];
 
-  assert(ISSUE_MODEL_PHASE === 23, "phase 18");
+  assert(ISSUE_MODEL_PHASE === 26, "phase 18");
   assert(
     ISSUE_OPERATIONAL_CHAIN.join(">") ===
       "issue>treatment>execution>outcome>cost_payment",
