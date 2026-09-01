@@ -15,6 +15,7 @@ import {
   Database,
   ScanSearch,
   FileCheck2,
+  Banknote,
   type LucideIcon,
 } from "lucide-react";
 import type { AuthEnabledModule } from "@/lib/auth/types";
@@ -149,6 +150,14 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Understand",
     items: [
       item({
+        label: "Finance",
+        href: "/finance",
+        icon: Banknote,
+        title: "Finance",
+        description:
+          "Operational costs, reimbursement submissions, and payment position",
+      }),
+      item({
         label: "Intelligence",
         href: "/intelligence",
         icon: ScanSearch,
@@ -238,6 +247,7 @@ const ARCHETYPE_BY_HREF: Record<string, PageArchetypeHint> = {
   "/maintenance": "operational-list",
   "/work-orders": "operational-list",
   "/approvals": "operational-list",
+  "/finance": "snapshot",
   "/requests": "operational-list",
   "/issues": "operational-list",
   "/facilities": "reference-admin",

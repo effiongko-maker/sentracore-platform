@@ -34,7 +34,7 @@ function main() {
 
   assert(ISSUE_MODEL_PHASE === 26, "phase 18");
   assert(FINANCIAL_DOMAIN_IMPLEMENTED.persistence === false, "no persistence");
-  assert(FINANCIAL_DOMAIN_IMPLEMENTED.ui === false, "no ui");
+  assert(FINANCIAL_DOMAIN_IMPLEMENTED.ui === true, "first finance view");
   assert(FINANCIAL_DOMAIN_IMPLEMENTED.paymentProcessing === false, "no payments");
   assert(FINANCIAL_DOMAIN_IMPLEMENTED.approvalWorkflows === false, "no approvals");
   assert(FINANCIAL_DOMAIN_IMPLEMENTED.jobOrder === false, "no JO");

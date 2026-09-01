@@ -20,7 +20,7 @@ export const FINANCIAL_OPERATIONAL_COUPLING = {
 
 export const FINANCIAL_DOMAIN_IMPLEMENTED = {
   persistence: false,
-  ui: false,
+  ui: true,
   paymentProcessing: false,
   approvalWorkflows: false,
   jobOrder: false,

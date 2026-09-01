@@ -11,6 +11,7 @@ import {
   CircleDot,
   Users,
   Wrench,
+  Banknote,
   type LucideIcon,
 } from "lucide-react";
 import type { AuthEnabledModule } from "@/lib/auth/types";
@@ -50,8 +51,16 @@ function fm(partial: Omit<LayerModule, "moduleSlug">): LayerModule {
 export const OPERATING_LAYERS: OperatingLayer[] = [
   {
     id: "understand",
-    label: "Intelligence",
+    label: "Understand",
     modules: [
+      fm({
+        label: "Finance",
+        href: "/finance",
+        icon: Banknote,
+        title: "Finance",
+        description:
+          "Operational costs, reimbursement submissions, and payment position",
+      }),
       fm({
         label: "Intelligence",
         href: "/intelligence",
@@ -249,7 +258,7 @@ export const LAYER_LABEL: Record<
 > = {
   platform: "SentraCore",
   command: "Operations",
-  understand: "Intelligence",
+  understand: "Understand",
   organise: "Organisation",
   act: "Work",
   execute: "Operations",

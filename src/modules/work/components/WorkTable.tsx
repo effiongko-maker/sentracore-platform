@@ -12,7 +12,6 @@ import {
 } from "@/lib/operational/work";
 import {
   useFacilityName,
-  useUserName,
 } from "@/hooks/useEntityLabel";
 import {
   displayMaintenanceLocation,
@@ -20,7 +19,9 @@ import {
   labelize,
 } from "@/modules/maintenance/utils";
 import type { Maintenance } from "@/modules/maintenance/types";
+import type { WorkOrder } from "@/modules/work-orders/types";
 import { WORK_PRIORITY_VARIANT, WORK_STATUS_VARIANT } from "../constants";
+import { WorkExecutionAssigneeCell } from "./WorkOrderExecutionAssignees";
 import { WorkRowActions } from "./WorkRowActions";
 
 interface WorkTableProps {
@@ -29,6 +30,8 @@ interface WorkTableProps {
   page: number;
   totalPages: number;
   total: number;
+  linkedWorkOrdersById?: Record<string, WorkOrder | null>;
+  linkedWorkOrdersLoading?: boolean;
   onPageChange: (page: number) => void;
   onView: (work: Maintenance) => void;
   onTreat: (work: Maintenance) => void;
@@ -47,17 +50,14 @@ function FacilityCell({ row }: { row: Maintenance }) {
   );
 }
 
-function AssigneeLabel({ id }: { id?: string }) {
-  const name = useUserName(id);
-  return <>{id ? name || "—" : "—"}</>;
-}
-
 export function WorkTable({
   items,
   loading,
   page,
   totalPages,
   total,
+  linkedWorkOrdersById = {},
+  linkedWorkOrdersLoading = false,
   onPageChange,
   onView,
   onTreat,
@@ -112,7 +112,11 @@ export function WorkTable({
         header: "Assigned to",
         render: (row) => (
           <span className="text-muted">
-            <AssigneeLabel id={row.assignedToUserId} />
+            <WorkExecutionAssigneeCell
+              work={row}
+              workOrdersById={linkedWorkOrdersById}
+              loading={linkedWorkOrdersLoading}
+            />
           </span>
         ),
       },
@@ -173,7 +177,7 @@ export function WorkTable({
         ),
       },
     ],
-    [onView, onTreat, onCancel, page, total]
+    [onView, onTreat, onCancel, page, total, linkedWorkOrdersById, linkedWorkOrdersLoading]
   );
 
   const emptyTitle =

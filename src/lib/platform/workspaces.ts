@@ -70,13 +70,17 @@ export const PLATFORM_WORKSPACES: PlatformWorkspace[] = [
     id: "finance",
     label: "Finance",
     title: "Finance",
-    status: "in_development",
-    statusLabel: "In development",
-    statusDetail: "Being built for your organisation",
+    status: "active",
+    statusLabel: "Active",
     description:
-      "Manage financial operations, planning, treasury and expenditure with greater visibility and control.",
-    previewHref: "/workspaces/finance",
-    capabilities: ["Treasury", "Planning", "Expenditure"],
+      "Operational financial position — costs, reimbursement submissions, client authorisation, and payment across facility operations.",
+    href: "/finance",
+    capabilities: [
+      "Operational costs",
+      "Reimbursement submissions",
+      "Client authorisation",
+      "Payment position",
+    ],
   },
   {
     id: "construction",
@@ -135,6 +139,7 @@ export function isOperationsPath(pathname: string): boolean {
     pathname.startsWith("/maintenance") ||
     pathname.startsWith("/work-orders") ||
     pathname.startsWith("/approvals") ||
+    pathname.startsWith("/finance") ||
     pathname.startsWith("/incidents") ||
     pathname.startsWith("/inventory") ||
     pathname.startsWith("/utilities") ||

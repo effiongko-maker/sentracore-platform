@@ -106,7 +106,9 @@ export function OrganisationalCompass() {
                     isGroupActive && "os-compass-group-active"
                   )}
                 >
-                  <p className="os-compass-group-label">{layer.label}</p>
+                  {layer.id !== "understand" ? (
+                    <p className="os-compass-group-label">{layer.label}</p>
+                  ) : null}
                   <div className="os-compass-modules">
                     {layer.modules.map((mod) => {
                       const Icon = mod.icon;

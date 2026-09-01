@@ -1,7 +1,7 @@
 "use client";
 
 import { Wrench } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ModeFrame,
   OperateHeader,
@@ -19,6 +19,11 @@ import { MaintenanceService } from "@/modules/maintenance/services/MaintenanceSe
 import { displayMaintenanceTitle } from "@/modules/maintenance/utils";
 import type { Maintenance } from "@/modules/maintenance/types";
 import { useWork } from "../hooks/useWork";
+import {
+  invalidateLinkedWorkOrderCache,
+  useLinkedWorkOrders,
+} from "../hooks/useLinkedWorkOrders";
+import { collectLinkedWorkOrderIds } from "../utils/linkedWorkOrderIds";
 import { WorkDetailModal } from "./WorkDetailModal";
 import { WorkTable } from "./WorkTable";
 import { WorkToolbar } from "./WorkToolbar";
@@ -103,6 +108,26 @@ export function WorkPage() {
     };
   }, [openId]);
 
+  const linkedWorkOrderIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const item of items) {
+      for (const id of collectLinkedWorkOrderIds(item)) {
+        ids.add(id);
+      }
+    }
+    if (modal.type === "view" || modal.type === "treat") {
+      for (const id of collectLinkedWorkOrderIds(modal.work)) {
+        ids.add(id);
+      }
+    }
+    return [...ids];
+  }, [items, modal]);
+
+  const {
+    byId: linkedWorkOrdersById,
+    loading: linkedWorkOrdersLoading,
+  } = useLinkedWorkOrders(linkedWorkOrderIds);
+
   async function handleCancel() {
     if (modal.type !== "cancel") return;
 
@@ -148,6 +173,9 @@ export function WorkPage() {
   }
 
   function handleWorkUpdated(next: Maintenance) {
+    for (const id of collectLinkedWorkOrderIds(next)) {
+      invalidateLinkedWorkOrderCache(id);
+    }
     reconcileItem(next);
     setModal({ type: "view", work: next });
   }
@@ -210,6 +238,8 @@ export function WorkPage() {
             page={page}
             totalPages={totalPages}
             total={total}
+            linkedWorkOrdersById={linkedWorkOrdersById}
+            linkedWorkOrdersLoading={linkedWorkOrdersLoading}
             onPageChange={setPage}
             onView={openWorkView}
             onTreat={(row) => setModal({ type: "treat", work: row })}
@@ -221,6 +251,8 @@ export function WorkPage() {
       <WorkDetailModal
         open={modal.type === "view"}
         work={modal.type === "view" ? modal.work : null}
+        linkedWorkOrdersById={linkedWorkOrdersById}
+        linkedWorkOrdersLoading={linkedWorkOrdersLoading}
         onClose={() => setModal({ type: "closed" })}
         onTreat={(row) => setModal({ type: "treat", work: row })}
         onUpdated={handleWorkUpdated}

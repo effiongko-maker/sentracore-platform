@@ -15,7 +15,6 @@ import {
   useAssetName,
   useFacilityName,
   useUserName,
-  useWorkOrderTitle,
 } from "@/hooks/useEntityLabel";
 import { createWorkOrderFromMaintenance } from "@/modules/work-orders/actions/createWorkOrderFromMaintenance";
 import { useToast } from "@/components/ui/Toast";
@@ -25,11 +24,16 @@ import {
   parseMaintenanceDescriptionNotes,
 } from "@/modules/maintenance/utils";
 import type { Maintenance } from "@/modules/maintenance/types";
+import type { WorkOrder } from "@/modules/work-orders/types";
 import { WORK_PRIORITY_VARIANT, WORK_STATUS_VARIANT } from "../constants";
+import { collectLinkedWorkOrderIds } from "../utils/linkedWorkOrderIds";
+import { WorkOrderExecutionAssigneeList } from "./WorkOrderExecutionAssignees";
 
 interface WorkDetailModalProps {
   open: boolean;
   work: Maintenance | null;
+  linkedWorkOrdersById?: Record<string, WorkOrder | null>;
+  linkedWorkOrdersLoading?: boolean;
   onClose: () => void;
   onTreat?: (work: Maintenance) => void;
   onUpdated?: (work: Maintenance) => void;
@@ -67,6 +71,8 @@ function Section({
 export function WorkDetailModal({
   open,
   work,
+  linkedWorkOrdersById = {},
+  linkedWorkOrdersLoading = false,
   onClose,
   onTreat,
   onUpdated,
@@ -78,7 +84,6 @@ export function WorkDetailModal({
   const assetName = useAssetName(work?.assetId);
   const assigneeName = useUserName(work?.assignedToUserId);
   const reportedByName = useUserName(work?.reportedByUserId);
-  const workOrderTitle = useWorkOrderTitle(work?.workOrderId);
 
   if (!work) return null;
 
@@ -91,6 +96,7 @@ export function WorkDetailModal({
       : undefined);
   const needsWorkOrderLink =
     Boolean(work.requiresWorkOrder) && !work.workOrderId;
+  const linkedWorkOrderIds = collectLinkedWorkOrderIds(work);
   const canTreat = work.status !== "cancelled";
 
   async function handleCreateWorkOrder() {
@@ -236,50 +242,50 @@ export function WorkDetailModal({
         </Section>
 
         <Section title="Formal execution">
-          <Detail
-            label="Work order"
-            value={
-              work.workOrderId ? (
-                <button
-                  type="button"
-                  className="text-left text-sm font-medium text-accent underline-offset-2 hover:underline"
-                  onClick={() => onOpenWorkOrder?.(work.workOrderId!)}
-                >
-                  {work.workOrderId}
-                  {workOrderTitle ? ` — ${workOrderTitle}` : ""}
-                </button>
-              ) : needsWorkOrderLink ? (
-                <div className="space-y-2">
-                  <p className="text-sm text-muted">No work order linked yet</p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      loading={creatingWorkOrder}
-                      onClick={() => void handleCreateWorkOrder()}
-                    >
-                      Create Work Order
-                    </Button>
-                    {onTreat ? (
+          {linkedWorkOrderIds.length > 0 ? (
+            <WorkOrderExecutionAssigneeList
+              work={work}
+              workOrdersById={linkedWorkOrdersById}
+              loading={linkedWorkOrdersLoading}
+              onOpenWorkOrder={onOpenWorkOrder}
+            />
+          ) : (
+            <Detail
+              label="Work order"
+              value={
+                needsWorkOrderLink ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted">No work order linked yet</p>
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         type="button"
                         size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          onClose();
-                          onTreat(work);
-                        }}
+                        loading={creatingWorkOrder}
+                        onClick={() => void handleCreateWorkOrder()}
                       >
-                        Link existing
+                        Create Work Order
                       </Button>
-                    ) : null}
+                      {onTreat ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            onClose();
+                            onTreat(work);
+                          }}
+                        >
+                          Link existing
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              ) : (
-                "—"
-              )
-            }
-          />
+                ) : (
+                  "—"
+                )
+              }
+            />
+          )}
         </Section>
 
         <Section title="Completion & evidence">

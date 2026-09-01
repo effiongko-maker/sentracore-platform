@@ -1,0 +1,444 @@
+/* Finance experience — operational financial lens (fin-)
+   Scoped to /finance. See docs/sentracore-design-system.md §9 */
+
+.fin-page {
+  --fin-ink: var(--os-ink-800);
+  --fin-muted: var(--os-ink-muted);
+  --fin-live: var(--os-success);
+  --fin-live-soft: var(--os-success-soft);
+  --fin-await: var(--os-ink-faint);
+  --fin-await-soft: color-mix(in srgb, var(--os-canvas) 82%, #ffffff);
+}
+
+.fin-eyebrow {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fin-muted);
+}
+
+.fin-title {
+  margin: 0.35rem 0 0;
+  font-size: clamp(1.75rem, 2.4vw, 2.125rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.12;
+  color: var(--fin-ink);
+}
+
+.fin-lede {
+  margin: 0.75rem 0 0;
+  max-width: 42rem;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--fin-muted);
+}
+
+.fin-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+  margin-top: 1.25rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid color-mix(in srgb, var(--os-border) 70%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--os-border) 70%, transparent);
+  background: color-mix(in srgb, var(--os-canvas) 55%, #ffffff);
+}
+
+.fin-context-meta {
+  font-size: 0.8125rem;
+  color: var(--fin-muted);
+}
+
+.fin-context-meta strong {
+  color: var(--fin-ink);
+  font-weight: 600;
+}
+
+.fin-flow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin-top: 1.75rem;
+  border: 1px solid color-mix(in srgb, var(--os-border) 80%, transparent);
+  border-radius: var(--os-radius-lg, 12px);
+  overflow: hidden;
+  background: var(--os-surface);
+}
+
+@media (max-width: 900px) {
+  .fin-flow {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .fin-flow {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fin-flow-stage {
+  position: relative;
+  padding: 1.1rem 1.15rem 1.15rem;
+  border-right: 1px solid color-mix(in srgb, var(--os-border) 65%, transparent);
+  background: var(--fin-await-soft);
+}
+
+.fin-flow-stage:last-child {
+  border-right: none;
+}
+
+.fin-flow-stage--live {
+  background: var(--fin-live-soft);
+  box-shadow: inset 3px 0 0 var(--fin-live);
+}
+
+.fin-flow-label {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fin-muted);
+}
+
+.fin-flow-title {
+  margin: 0.35rem 0 0;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--fin-ink);
+}
+
+.fin-flow-detail {
+  margin: 0.4rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--fin-muted);
+}
+
+.fin-flow-badge {
+  display: inline-flex;
+  margin-top: 0.65rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.fin-flow-badge--live {
+  background: color-mix(in srgb, var(--fin-live) 14%, #ffffff);
+  color: var(--fin-live);
+}
+
+.fin-flow-badge--await {
+  background: color-mix(in srgb, var(--fin-muted) 10%, #ffffff);
+  color: var(--fin-muted);
+}
+
+.fin-hero {
+  display: grid;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+@media (min-width: 768px) {
+  .fin-hero {
+    grid-template-columns: 1.35fr 1fr 1fr;
+    gap: 1.25rem;
+  }
+}
+
+.fin-hero-primary {
+  padding: 1.35rem 1.4rem 1.4rem;
+  border-radius: var(--os-radius-lg, 12px);
+  border: 1px solid color-mix(in srgb, var(--os-accent) 22%, transparent);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--os-accent-soft) 70%, #ffffff) 0%,
+    #ffffff 68%
+  );
+}
+
+.fin-hero-secondary {
+  padding: 1.15rem 1.2rem 1.2rem;
+  border-radius: var(--os-radius-lg, 12px);
+  border: 1px solid color-mix(in srgb, var(--os-border) 80%, transparent);
+  background: var(--os-surface);
+}
+
+.fin-metric-kicker {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fin-muted);
+}
+
+.fin-metric-value {
+  margin: 0.45rem 0 0;
+  font-size: clamp(1.5rem, 2.2vw, 1.875rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: var(--fin-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.fin-metric-detail {
+  margin: 0.5rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--fin-muted);
+}
+
+.fin-section-title {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--fin-ink);
+}
+
+.fin-section-lede {
+  margin: 0.4rem 0 0;
+  max-width: 38rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--fin-muted);
+}
+
+.fin-action-row {
+  display: grid;
+  gap: 0.75rem 1rem;
+  padding: 0.95rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--os-border) 60%, transparent);
+}
+
+.fin-action-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+@media (min-width: 768px) {
+  .fin-action-row {
+    grid-template-columns: minmax(0, 1.4fr) auto auto auto;
+    align-items: center;
+  }
+}
+
+.fin-action-kind {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fin-muted);
+}
+
+.fin-action-title {
+  margin: 0.2rem 0 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--fin-ink);
+}
+
+.fin-action-meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--fin-muted);
+}
+
+.fin-action-amount {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--fin-ink);
+  white-space: nowrap;
+}
+
+.fin-action-stage {
+  font-size: 0.8125rem;
+  color: var(--fin-muted);
+  white-space: nowrap;
+}
+
+.fin-action-age {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--os-warning);
+  white-space: nowrap;
+}
+
+.fin-quiet-panel {
+  padding: 1.1rem 1.15rem;
+  border-radius: var(--os-radius-lg, 12px);
+  border: 1px dashed color-mix(in srgb, var(--os-border) 85%, transparent);
+  background: color-mix(in srgb, var(--os-canvas) 45%, #ffffff);
+}
+
+.fin-lens-grid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+}
+
+.fin-lens {
+  padding: 0.75rem 0.85rem;
+  border-radius: 8px;
+  border: 1px dashed color-mix(in srgb, var(--os-border) 75%, transparent);
+  background: color-mix(in srgb, var(--os-surface) 90%, var(--os-canvas));
+}
+
+.fin-lens-label {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--fin-ink);
+}
+
+.fin-lens-note {
+  margin: 0.25rem 0 0;
+  font-size: 0.6875rem;
+  color: var(--fin-muted);
+}
+
+.fin-intel {
+  padding: 1.25rem 1.3rem;
+  border-radius: var(--os-radius-lg, 12px);
+  border: 1px solid color-mix(in srgb, var(--os-border) 75%, transparent);
+  background: color-mix(in srgb, var(--os-canvas) 35%, #ffffff);
+}
+
+.fin-intel-kicker {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fin-muted);
+}
+
+.fin-intel-copy {
+  margin: 0.55rem 0 0;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--fin-muted);
+}
+
+.fin-flow-signal {
+  margin-top: 0.45rem;
+}
+
+.fin-section-primary {
+  margin-top: 2rem;
+}
+
+.fin-action-panel {
+  margin-top: 1rem;
+  border-radius: var(--os-radius-lg, 12px);
+  border: 1px solid color-mix(in srgb, var(--os-accent) 18%, transparent);
+  background: var(--os-surface);
+  padding: 0.25rem 1rem;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--os-border) 40%, transparent);
+}
+
+.fin-coverage {
+  margin-top: 1.75rem;
+  padding: 1rem 0;
+  border-top: 1px solid color-mix(in srgb, var(--os-border) 55%, transparent);
+}
+
+.fin-coverage-list {
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fin-coverage-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.45rem 0;
+}
+
+.fin-coverage-label {
+  font-size: 0.8125rem;
+  color: var(--fin-ink);
+}
+
+.fin-coverage-status {
+  font-size: 0.8125rem;
+  color: var(--fin-muted);
+}
+
+.fin-pipeline-list {
+  margin: 0.85rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fin-pipeline-list li {
+  padding: 0.35rem 0;
+  font-size: 0.8125rem;
+  color: var(--fin-muted);
+}
+
+.fin-intel-title {
+  margin-top: 0.35rem;
+}
+
+.fin-intel-chain {
+  margin: 0.85rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--fin-muted);
+}
+
+.fin-layout-main {
+  display: grid;
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+@media (min-width: 1024px) {
+  .fin-layout-main {
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.fin-layout-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.fin-reserved {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid color-mix(in srgb, var(--os-border) 55%, transparent);
+}
+
+.fin-reserved-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  margin: 0.65rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fin-reserved-list li {
+  font-size: 0.75rem;
+  color: var(--fin-muted);
+}

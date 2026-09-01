@@ -20,7 +20,7 @@ export type ShellNavState = "compass" | "focus" | "cognitive" | "platform";
 export const MODE_LABEL: Record<ProductMode, string> = {
   platform: "SentraCore",
   command: "Facility Management",
-  understand: "Intelligence",
+  understand: "Understand",
   organise: "Organisation",
   act: "Work",
   execute: "Operations",
@@ -31,7 +31,7 @@ export const MODE_LABEL: Record<ProductMode, string> = {
 export const MODE_DESCRIPTION: Record<ProductMode, string> = {
   platform: "Your organisation's operating environment",
   command: "Facility Management home",
-  understand: "What the organisation is telling you",
+  understand: "Operational understanding across finance, intelligence and reporting",
   organise: "Facilities, assets, and people",
   act: "Requests and work in progress",
   execute: "Active operational events",
