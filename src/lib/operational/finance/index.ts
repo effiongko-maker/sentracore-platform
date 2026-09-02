@@ -21,6 +21,7 @@ export type {
   FinancialOperationalRefs,
   FinancialRecordKind,
   MarkupRepresentation,
+  ReimbursementPayment,
   ReimbursementPaymentOutcome,
   ReimbursementPaymentReconciliation,
 } from "./types";
@@ -47,6 +48,9 @@ export {
   FORBIDDEN_MARKUP_RATE_LITERALS,
   assertDistinctClaimAmounts,
   canSubmitCostSubmission,
+  canTransitionCostSubmission,
+  assertCostSubmissionTransition,
+  canQueryCostSubmission,
   getSubmissionActualCostTotal,
   getSubmissionClaimAmount,
   getSubmissionCostCount,
@@ -60,6 +64,7 @@ export {
   isValidCostSubmissionId,
   isValidCostSubmissionLifecycleStatus,
   validateCostSubmission,
+  type CostSubmissionValidationOptions,
   type CostSubmissionValidationResult,
 } from "./costSubmission";
 
@@ -77,6 +82,41 @@ export {
   type CostRecordSheetHeader,
   type RemoteCostRecord,
 } from "./costRecordRow";
+
+export {
+  COST_SUBMISSION_SHEET_HEADERS,
+  FORBIDDEN_COST_SUBMISSION_SHEET_HEADERS,
+  costSubmissionToRemotePayload,
+  costSubmissionToRow,
+  mapRemoteCostSubmission,
+  rowToCostSubmission,
+  type CostSubmissionRow,
+  type CostSubmissionSheetHeader,
+  type RemoteCostSubmission,
+} from "./costSubmissionRow";
+
+export {
+  DEFAULT_REIMBURSEMENT_PAYMENT_CURRENCY,
+  REIMBURSEMENT_PAYMENT_ID_PATTERN,
+  isValidReimbursementPaymentId,
+  paymentAppliesToSubmission,
+  sumPaymentsForSubmission,
+  validateReimbursementPayment,
+  type ReimbursementPaymentValidationOptions,
+  type ReimbursementPaymentValidationResult,
+} from "./payment";
+
+export {
+  FORBIDDEN_REIMBURSEMENT_PAYMENT_SHEET_HEADERS,
+  REIMBURSEMENT_PAYMENT_SHEET_HEADERS,
+  mapRemoteReimbursementPayment,
+  reimbursementPaymentToRemotePayload,
+  reimbursementPaymentToRow,
+  rowToReimbursementPayment,
+  type ReimbursementPaymentRow,
+  type ReimbursementPaymentSheetHeader,
+  type RemoteReimbursementPayment,
+} from "./paymentRow";
 
 export {
   COST_SUBMISSION_FLOW,

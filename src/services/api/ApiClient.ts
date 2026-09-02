@@ -121,6 +121,16 @@ export class ApiClient {
                                 endpoint: "/api/cost-records",
                                 resource: "cost-records",
                               }
+                            : path === "/cost-submissions"
+                              ? {
+                                  endpoint: "/api/cost-submissions",
+                                  resource: "cost-submissions",
+                                }
+                              : path === "/reimbursement-payments"
+                                ? {
+                                    endpoint: "/api/reimbursement-payments",
+                                    resource: "reimbursement-payments",
+                                  }
                           : null;
 
     if (liveProxy) {

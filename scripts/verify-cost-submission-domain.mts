@@ -234,6 +234,19 @@ function main() {
   assert(!domainSrc.includes("MaintenanceService"), "Q: no maintenance service");
   results.push("PASS Q — domain validation remains pure");
 
+  const createWithoutId = submissionBase();
+  delete (createWithoutId as { submissionId?: string }).submissionId;
+  assert(
+    validateCostSubmission(createWithoutId, { serverGeneratedId: true }).valid ===
+      true,
+    "R: create without submissionId when server-generated"
+  );
+  assert(
+    validateCostSubmission(createWithoutId).valid === false,
+    "R: submissionId required without serverGeneratedId"
+  );
+  results.push("PASS R — serverGeneratedId create validation for persistence");
+
   // Legacy single costRecordId compat
   const legacy = submissionBase({
     costRecordIds: [],

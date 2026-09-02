@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApprovalService } from "@/modules/approvals/services/ApprovalService";
 import { CostRecordService } from "@/services/finance/CostRecordService";
+import { CostSubmissionService } from "@/services/finance/CostSubmissionService";
+import { ReimbursementPaymentService } from "@/services/finance/ReimbursementPaymentService";
 import {
-  FINANCE_COST_LIST_PAGE_SIZE,
+  FINANCE_COST_POOL_FETCH_SIZE,
   FINANCE_OVERVIEW_FETCH_SIZE,
 } from "../constants";
 import type { FinanceOverview } from "../types";
@@ -22,30 +24,41 @@ export function useFinanceOverview() {
     setError(null);
 
     try {
-      const [approvalResult, costResult] = await Promise.all([
-        ApprovalService.listApprovals({
-          page: 1,
-          pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
-          status: "all",
-          sort: "newest",
-        }),
-        CostRecordService.listCostRecords({
-          page: 1,
-          pageSize: FINANCE_COST_LIST_PAGE_SIZE,
-        }),
-      ]);
+      const [approvalResult, costResult, submissionResult, paymentResult] =
+        await Promise.all([
+          ApprovalService.listApprovals({
+            page: 1,
+            pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
+            status: "all",
+            sort: "newest",
+          }),
+          CostRecordService.listCostRecords({
+            page: 1,
+            pageSize: FINANCE_COST_POOL_FETCH_SIZE,
+          }),
+          CostSubmissionService.listCostSubmissions({
+            page: 1,
+            pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
+          }),
+          ReimbursementPaymentService.listPayments({
+            page: 1,
+            pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
+          }),
+        ]);
 
       if (id !== requestId.current) return;
 
       setOverview(
-        deriveFinanceOverview(
-          approvalResult.data,
-          costResult.data,
-          {
-            totalApprovals: approvalResult.total,
-            truncated: approvalResult.total > approvalResult.data.length,
-          }
-        )
+        deriveFinanceOverview({
+          approvals: approvalResult.data,
+          totalApprovals: approvalResult.total,
+          costRecords: costResult.data,
+          totalCostRecords: costResult.total,
+          submissions: submissionResult.data,
+          totalSubmissions: submissionResult.total,
+          payments: paymentResult.data,
+          totalPayments: paymentResult.total,
+        })
       );
     } catch (err) {
       if (id !== requestId.current) return;
@@ -56,7 +69,9 @@ export function useFinanceOverview() {
       );
       setOverview(null);
     } finally {
-      if (id === requestId.current) {
+      if (id !== requestId.current) {
+        /* ignore */
+      } else {
         setLoading(false);
       }
     }

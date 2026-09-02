@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Release: **v0.8.3** — CostRecord receipt and invoice uploads
+Release: **v0.8.5.1** — Reimbursement payment service deploy recovery
 
 Use this checklist with `DEPLOYMENT_PACK.md` open. Someone unfamiliar
 with the project should be able to deploy from these steps alone.
@@ -27,49 +27,55 @@ Current pack file list:
 
 - [ ] `ROUTER.gs`
 - [ ] `ApprovalRepository.gs`
-- [ ] `ApprovalsController.gs`
-- [ ] `ApprovalService.gs`
 - [ ] `AssetRepository.gs`
-- [ ] `AssetsController.gs`
+- [ ] `CostRecordRepository.gs`
+- [ ] `CostSubmissionRepository.gs`
+- [ ] `FacilityRepository.gs`
+- [ ] `IncidentRepository.gs`
+- [ ] `MaintenanceRepository.gs`
+- [ ] `MasterDataRepository.gs`
+- [ ] `ReimbursementPaymentRepository.gs`
+- [ ] `ReportingSnapshotRepository.gs`
+- [ ] `RequestRepository.gs`
+- [ ] `UserRepository.gs`
+- [ ] `WorkOrderRepository.gs`
+- [ ] `ApprovalService.gs`
 - [ ] `AssetService.gs`
 - [ ] `CatalogCacheService.gs`
-- [ ] `CostRecordRepository.gs`
-- [ ] `CostRecordsController.gs`
 - [ ] `CostRecordService.gs`
-- [ ] `FacilitiesController.gs`
-- [ ] `FacilityRepository.gs`
+- [ ] `CostSubmissionService.gs`
 - [ ] `FacilityService.gs`
-- [ ] `IncidentRepository.gs`
-- [ ] `IncidentsController.gs`
 - [ ] `IncidentService.gs`
-- [ ] `MaintenanceController.gs`
-- [ ] `MaintenanceRepository.gs`
 - [ ] `MaintenanceService.gs`
-- [ ] `MasterDataController.gs`
-- [ ] `MasterDataRepository.gs`
 - [ ] `MasterDataService.gs`
-- [ ] `OperationalListAudit.gs`
-- [ ] `OperationalRegisterCache.gs`
-- [ ] `OperationalWorkloadController.gs`
 - [ ] `OperationalWorkloadService.gs`
-- [ ] `ReportingSnapshotController.gs`
-- [ ] `ReportingSnapshotRepository.gs`
+- [ ] `ReimbursementPaymentService.gs`
 - [ ] `ReportingSnapshotService.gs`
-- [ ] `ReportingSnapshotTriggers.gs`
-- [ ] `RequestRepository.gs`
-- [ ] `RequestsController.gs`
 - [ ] `RequestService.gs`
-- [ ] `RequestTreatmentLinkSpike.gs`
-- [ ] `RequestTreatmentMutationSpike.gs`
 - [ ] `RequestTreatmentService.gs`
-- [ ] `SheetFieldUtils.gs`
-- [ ] `UserRepository.gs`
-- [ ] `UsersController.gs`
 - [ ] `UserService.gs`
 - [ ] `WorkOrderMaintenanceMutationService.gs`
-- [ ] `WorkOrderRepository.gs`
-- [ ] `WorkOrdersController.gs`
 - [ ] `WorkOrderService.gs`
+- [ ] `ApprovalsController.gs`
+- [ ] `AssetsController.gs`
+- [ ] `CostRecordsController.gs`
+- [ ] `CostSubmissionsController.gs`
+- [ ] `FacilitiesController.gs`
+- [ ] `IncidentsController.gs`
+- [ ] `MaintenanceController.gs`
+- [ ] `MasterDataController.gs`
+- [ ] `OperationalWorkloadController.gs`
+- [ ] `ReimbursementPaymentsController.gs`
+- [ ] `ReportingSnapshotController.gs`
+- [ ] `RequestsController.gs`
+- [ ] `UsersController.gs`
+- [ ] `WorkOrdersController.gs`
+- [ ] `OperationalListAudit.gs`
+- [ ] `OperationalRegisterCache.gs`
+- [ ] `ReportingSnapshotTriggers.gs`
+- [ ] `RequestTreatmentLinkSpike.gs`
+- [ ] `RequestTreatmentMutationSpike.gs`
+- [ ] `SheetFieldUtils.gs`
 
 Especially ensure these reporting-snapshot files exist:
 
@@ -79,6 +85,15 @@ Especially ensure these reporting-snapshot files exist:
 - [ ] `ReportingSnapshotTriggers.gs`
 - [ ] `UserService.gs`
 - [ ] `ROUTER.gs`
+
+CRITICAL — reimbursement-payments requires **all three** files (Controller alone is not enough):
+
+- [ ] `ReimbursementPaymentRepository.gs`
+- [ ] `ReimbursementPaymentService.gs`
+- [ ] `ReimbursementPaymentsController.gs`
+
+> Live symptom if Service is missing: `ReimbursementPaymentService is not defined`.
+> Confirm in the Apps Script project file list that `ReimbursementPaymentService.gs` exists and defines `var ReimbursementPaymentService`.
 
 > Note: `UserRepository.gs` may already exist only in the deployed Apps Script
 > project. Do **not** delete it. Replace `UsersController.gs` and `UserService.gs`
@@ -92,49 +107,55 @@ For each file that already exists in Apps Script, **replace the entire contents*
 (do not merge by hand):
 
 - [ ] Replace `ApprovalRepository.gs`
-- [ ] Replace `ApprovalsController.gs`
-- [ ] Replace `ApprovalService.gs`
 - [ ] Replace `AssetRepository.gs`
-- [ ] Replace `AssetsController.gs`
+- [ ] Replace `CostRecordRepository.gs`
+- [ ] Replace `CostSubmissionRepository.gs`
+- [ ] Replace `FacilityRepository.gs`
+- [ ] Replace `IncidentRepository.gs`
+- [ ] Replace `MaintenanceRepository.gs`
+- [ ] Replace `MasterDataRepository.gs`
+- [ ] Replace `ReimbursementPaymentRepository.gs`
+- [ ] Replace `ReportingSnapshotRepository.gs`
+- [ ] Replace `RequestRepository.gs`
+- [ ] Replace `UserRepository.gs`
+- [ ] Replace `WorkOrderRepository.gs`
+- [ ] Replace `ApprovalService.gs`
 - [ ] Replace `AssetService.gs`
 - [ ] Replace `CatalogCacheService.gs`
-- [ ] Replace `CostRecordRepository.gs`
-- [ ] Replace `CostRecordsController.gs`
 - [ ] Replace `CostRecordService.gs`
-- [ ] Replace `FacilitiesController.gs`
-- [ ] Replace `FacilityRepository.gs`
+- [ ] Replace `CostSubmissionService.gs`
 - [ ] Replace `FacilityService.gs`
-- [ ] Replace `IncidentRepository.gs`
-- [ ] Replace `IncidentsController.gs`
 - [ ] Replace `IncidentService.gs`
-- [ ] Replace `MaintenanceController.gs`
-- [ ] Replace `MaintenanceRepository.gs`
 - [ ] Replace `MaintenanceService.gs`
-- [ ] Replace `MasterDataController.gs`
-- [ ] Replace `MasterDataRepository.gs`
 - [ ] Replace `MasterDataService.gs`
-- [ ] Replace `OperationalListAudit.gs`
-- [ ] Replace `OperationalRegisterCache.gs`
-- [ ] Replace `OperationalWorkloadController.gs`
 - [ ] Replace `OperationalWorkloadService.gs`
-- [ ] Replace `ReportingSnapshotController.gs`
-- [ ] Replace `ReportingSnapshotRepository.gs`
+- [ ] Replace `ReimbursementPaymentService.gs`
 - [ ] Replace `ReportingSnapshotService.gs`
-- [ ] Replace `ReportingSnapshotTriggers.gs`
-- [ ] Replace `RequestRepository.gs`
-- [ ] Replace `RequestsController.gs`
 - [ ] Replace `RequestService.gs`
-- [ ] Replace `RequestTreatmentLinkSpike.gs`
-- [ ] Replace `RequestTreatmentMutationSpike.gs`
 - [ ] Replace `RequestTreatmentService.gs`
-- [ ] Replace `SheetFieldUtils.gs`
-- [ ] Replace `UserRepository.gs`
-- [ ] Replace `UsersController.gs`
 - [ ] Replace `UserService.gs`
 - [ ] Replace `WorkOrderMaintenanceMutationService.gs`
-- [ ] Replace `WorkOrderRepository.gs`
-- [ ] Replace `WorkOrdersController.gs`
 - [ ] Replace `WorkOrderService.gs`
+- [ ] Replace `ApprovalsController.gs`
+- [ ] Replace `AssetsController.gs`
+- [ ] Replace `CostRecordsController.gs`
+- [ ] Replace `CostSubmissionsController.gs`
+- [ ] Replace `FacilitiesController.gs`
+- [ ] Replace `IncidentsController.gs`
+- [ ] Replace `MaintenanceController.gs`
+- [ ] Replace `MasterDataController.gs`
+- [ ] Replace `OperationalWorkloadController.gs`
+- [ ] Replace `ReimbursementPaymentsController.gs`
+- [ ] Replace `ReportingSnapshotController.gs`
+- [ ] Replace `RequestsController.gs`
+- [ ] Replace `UsersController.gs`
+- [ ] Replace `WorkOrdersController.gs`
+- [ ] Replace `OperationalListAudit.gs`
+- [ ] Replace `OperationalRegisterCache.gs`
+- [ ] Replace `ReportingSnapshotTriggers.gs`
+- [ ] Replace `RequestTreatmentLinkSpike.gs`
+- [ ] Replace `RequestTreatmentMutationSpike.gs`
+- [ ] Replace `SheetFieldUtils.gs`
 - [ ] Replace `ROUTER.gs` (or the project file that currently holds `doPost` / `jsonResponse_`)
 
 If your project historically kept `doPost` inside `Code.gs`, either:
@@ -186,22 +207,16 @@ A **new Web App version** is REQUIRED.
 
 With `npm run dev` running:
 
-### CostRecord domain
+### Financial domain foundation
 
 ```bash
-npx tsx --tsconfig tsconfig.json scripts/verify-cost-record-domain.mts
+npx tsx --tsconfig tsconfig.json scripts/verify-financial-domain-foundation.mts
 ```
 
-### CostRecord persistence
+### Finance reimbursement payment
 
 ```bash
-npx tsx --tsconfig tsconfig.json scripts/verify-cost-record-persistence.mts
-```
-
-### Finance Cost Entry and evidence upload
-
-```bash
-npx tsx --tsconfig tsconfig.json scripts/verify-finance-cost-entry.mts
+npx tsx --tsconfig tsconfig.json scripts/verify-finance-reimbursement-payment.mts
 ```
 
 Expected checks:

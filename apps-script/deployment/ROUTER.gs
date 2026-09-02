@@ -10,7 +10,7 @@
  *   resource: "users" | "facilities" | "assets" | "work-orders" |
  *             "incidents" | "maintenance" | "approvals" | "requests" |
  *             "master-data" | "reporting-snapshot" | "operational-workload" |
- *             "cost-records",
+ *             "cost-records" | "cost-submissions" | "reimbursement-payments",
  *   action: string,
  *   payload: object
  * }
@@ -106,12 +106,16 @@ function doPost(e) {
       result = OperationalWorkloadController.handle(action, payload);
     } else if (resource === "cost-records") {
       result = CostRecordsController.handle(action, payload);
+    } else if (resource === "cost-submissions") {
+      result = CostSubmissionsController.handle(action, payload);
+    } else if (resource === "reimbursement-payments") {
+      result = ReimbursementPaymentsController.handle(action, payload);
     } else {
       result = jsonResponse_(
         false,
         resource
           ? "Unknown module: " + resource
-          : "Missing resource. Expected users|facilities|assets|work-orders|incidents|maintenance|approvals|requests|master-data|reporting-snapshot|operational-workload|cost-records.",
+          : "Missing resource. Expected users|facilities|assets|work-orders|incidents|maintenance|approvals|requests|master-data|reporting-snapshot|operational-workload|cost-records|cost-submissions|reimbursement-payments.",
         null,
         { errorClass: "validation", retryable: false }
       );
@@ -157,6 +161,8 @@ function doGet() {
       "reporting-snapshot",
       "operational-workload",
       "cost-records",
+      "cost-submissions",
+      "reimbursement-payments",
     ],
     builds: builds,
   });

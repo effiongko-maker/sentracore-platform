@@ -125,6 +125,42 @@ export function canSubmitCostSubmission(
   return submission.status === "draft" || submission.status === "queried";
 }
 
+/** Allowed CostSubmission lifecycle transitions. */
+const ALLOWED_SUBMISSION_TRANSITIONS: Record<
+  CostSubmissionLifecycleStatus,
+  ReadonlyArray<CostSubmissionLifecycleStatus>
+> = {
+  draft: ["submitted", "cancelled"],
+  submitted: ["queried", "cancelled"],
+  queried: ["submitted", "cancelled"],
+  cancelled: [],
+};
+
+export function canTransitionCostSubmission(
+  from: CostSubmissionLifecycleStatus,
+  to: CostSubmissionLifecycleStatus
+): boolean {
+  if (from === to) return true;
+  return ALLOWED_SUBMISSION_TRANSITIONS[from].includes(to);
+}
+
+export function assertCostSubmissionTransition(
+  from: CostSubmissionLifecycleStatus,
+  to: CostSubmissionLifecycleStatus
+): void {
+  if (!canTransitionCostSubmission(from, to)) {
+    throw new Error(
+      `Invalid submission lifecycle transition: ${from} → ${to}`
+    );
+  }
+}
+
+export function canQueryCostSubmission(
+  submission: Pick<CostSubmission, "status">
+): boolean {
+  return submission.status === "submitted";
+}
+
 /**
  * Total underlying actual cost from referenced CostRecords.
  * Authoritative amounts come from CostRecord — not from CostSubmission fields.
@@ -181,20 +217,28 @@ export function isCostSubmissionPackagePresent(
 /** Default operational currency for draft submissions. */
 export const DEFAULT_COST_SUBMISSION_CURRENCY: FinancialCurrencyCode = "NGN";
 
+export type CostSubmissionValidationOptions = {
+  /** Persistence create — ID is generated server-side; omit submissionId validation. */
+  serverGeneratedId?: boolean;
+};
+
 /**
  * Pure domain validation for CostSubmission shape and invariants.
  * Does not verify CostRecord / Facility / Approval / Payment existence.
  */
 export function validateCostSubmission(
-  submission: Partial<CostSubmission>
+  submission: Partial<CostSubmission>,
+  options?: CostSubmissionValidationOptions
 ): CostSubmissionValidationResult {
   const errors: string[] = [];
 
-  const submissionId = submission.submissionId ?? submission.id;
-  if (!isNonEmptyString(submissionId)) {
-    errors.push("submissionId is required");
-  } else if (!isValidCostSubmissionId(submissionId)) {
-    errors.push("submissionId must match SUB-YYYY-NNNNNN format");
+  if (!options?.serverGeneratedId) {
+    const submissionId = submission.submissionId ?? submission.id;
+    if (!isNonEmptyString(submissionId)) {
+      errors.push("submissionId is required");
+    } else if (!isValidCostSubmissionId(submissionId)) {
+      errors.push("submissionId must match SUB-YYYY-NNNNNN format");
+    }
   }
 
   if (!isValidCostSubmissionLifecycleStatus(submission.status)) {

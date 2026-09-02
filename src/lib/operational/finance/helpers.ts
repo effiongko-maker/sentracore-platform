@@ -21,10 +21,11 @@ export const FINANCIAL_OPERATIONAL_COUPLING = {
 
 export const FINANCIAL_DOMAIN_IMPLEMENTED = {
   costRecords: true,
-  costSubmissions: false,
+  costSubmissions: true,
   contractPayments: false,
   ui: true,
-  paymentProcessing: false,
+  /** Reimbursement payment receipts against CostSubmission (REIMBURSEMENT_PAYMENTS). */
+  paymentProcessing: true,
   approvalWorkflows: false,
   jobOrder: false,
 } as const;

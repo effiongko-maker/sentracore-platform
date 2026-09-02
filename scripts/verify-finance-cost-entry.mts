@@ -93,11 +93,15 @@ function main() {
       location: "Generator house",
     },
   ];
-  const overview = deriveFinanceOverview([], withCosts, {
+  const overview = deriveFinanceOverview({
+    approvals: [],
     totalApprovals: 0,
-    truncated: false,
+    costRecords: withCosts,
+    totalCostRecords: withCosts.length,
+    submissions: [],
+    totalSubmissions: 0,
   });
-  assert(overview.operationalCostSummary?.count === 1, "summary count");
+  assert(overview.operationalCostSummary?.totalCount === 1, "summary count");
   assert(overview.recentCosts.length === 1, "recent costs");
   assert(overview.availability.costRecords === true, "cost source live");
 
@@ -106,11 +110,15 @@ function main() {
     costId: `COST-2026-${String(index + 1).padStart(6, "0")}`,
   }));
   assert(
-    deriveFinanceOverview([], elevenCosts, {
+    deriveFinanceOverview({
+      approvals: [],
       totalApprovals: 0,
-      truncated: false,
-    }).recentCosts.length === 10,
-    "recent costs limited to ten"
+      costRecords: elevenCosts,
+      totalCostRecords: elevenCosts.length,
+      submissions: [],
+      totalSubmissions: 0,
+    }).recentCosts.length === 5,
+    "recent costs limited to five"
   );
 
   console.log("PASS finance cost entry contracts");

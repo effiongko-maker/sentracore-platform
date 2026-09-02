@@ -25,6 +25,8 @@ export const CacheNamespaces = {
   approvalsList: "list:approvals",
   requestsList: "list:requests",
   costRecordsList: "list:cost-records",
+  costSubmissionsList: "list:cost-submissions",
+  reimbursementPaymentsList: "list:reimbursement-payments",
 } as const;
 
 export function invalidateUsersCatalog(): void {
@@ -135,6 +137,23 @@ export function invalidateCostRecordsLists(): void {
 
 export function onCostRecordMutation(): void {
   invalidateCostRecordsLists();
+}
+
+export function invalidateCostSubmissionsLists(): void {
+  invalidateSharedRequests(CacheNamespaces.costSubmissionsList);
+  SnapshotService.invalidate();
+}
+
+export function onCostSubmissionMutation(): void {
+  invalidateCostSubmissionsLists();
+}
+
+export function invalidateReimbursementPaymentsLists(): void {
+  invalidateSharedRequests(CacheNamespaces.reimbursementPaymentsList);
+}
+
+export function onReimbursementPaymentMutation(): void {
+  invalidateReimbursementPaymentsLists();
 }
 
 export function onUserMutation(): void {

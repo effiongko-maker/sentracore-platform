@@ -52,13 +52,21 @@ function deployLabel(absPath) {
   return path.basename(absPath);
 }
 
+/** Prefer Repository → Service → Controller so deploy checklists match runtime deps. */
+function deployLayer(label) {
+  if (label === "ROUTER.gs") return 0;
+  if (/Repository\.gs$/i.test(label)) return 1;
+  if (/Service\.gs$/i.test(label)) return 2;
+  if (/Controller\.gs$/i.test(label)) return 3;
+  return 4;
+}
+
 function sortFiles(files) {
   return [...files].sort((a, b) => {
     const la = deployLabel(a);
     const lb = deployLabel(b);
-    // Router first for discoverability, then alpha by deploy label.
-    if (la === "ROUTER.gs") return -1;
-    if (lb === "ROUTER.gs") return 1;
+    const layerDiff = deployLayer(la) - deployLayer(lb);
+    if (layerDiff !== 0) return layerDiff;
     return la.localeCompare(lb);
   });
 }
@@ -161,6 +169,28 @@ function buildChecklist(meta, files) {
     lines.push(`- [ ] \`${label}\``);
   }
   lines.push("");
+  const paymentTriad = [
+    "ReimbursementPaymentRepository.gs",
+    "ReimbursementPaymentService.gs",
+    "ReimbursementPaymentsController.gs",
+  ].filter((n) => labels.includes(n));
+  if (paymentTriad.length) {
+    lines.push(
+      "CRITICAL — reimbursement-payments requires **all three** files (Controller alone is not enough):"
+    );
+    lines.push("");
+    for (const label of paymentTriad) {
+      lines.push(`- [ ] \`${label}\``);
+    }
+    lines.push("");
+    lines.push(
+      "> Live symptom if Service is missing: `ReimbursementPaymentService is not defined`."
+    );
+    lines.push(
+      "> Confirm in the Apps Script project file list that `ReimbursementPaymentService.gs` exists and defines `var ReimbursementPaymentService`."
+    );
+    lines.push("");
+  }
   lines.push("> Note: `UserRepository.gs` may already exist only in the deployed Apps Script");
   lines.push("> project. Do **not** delete it. Replace `UsersController.gs` and `UserService.gs`");
   lines.push("> from this pack when present.");
@@ -326,6 +356,42 @@ function buildVersion(meta, files) {
     lines.push(`Notes`);
     for (const note of meta.notes) {
       lines.push(`- ${note}`);
+    }
+    lines.push("");
+  }
+  if (meta.deploymentSemantics && typeof meta.deploymentSemantics === "object") {
+    lines.push(`Deployment semantics`);
+    for (const [key, value] of Object.entries(meta.deploymentSemantics)) {
+      lines.push(`- \`${key}\`: ${value}`);
+    }
+    lines.push("");
+  }
+  if (meta.liveVerification && typeof meta.liveVerification === "object") {
+    const lv = meta.liveVerification;
+    lines.push(`Live verification (read-only audit)`);
+    if (lv.verifiedAt) lines.push(`- Verified: ${lv.verifiedAt}`);
+    if (lv.method) lines.push(`- Method: ${lv.method}`);
+    if (lv.costRecordsStatus) {
+      lines.push(`- CostRecord live status: ${lv.costRecordsStatus}`);
+    }
+    for (const [key, value] of Object.entries(lv)) {
+      if (
+        key === "verifiedAt" ||
+        key === "method" ||
+        key === "costRecordsStatus" ||
+        key === "notes"
+      ) {
+        continue;
+      }
+      if (typeof value === "boolean") {
+        lines.push(`- ${key}: ${value ? "yes" : "no"}`);
+      }
+    }
+    if (Array.isArray(lv.notes) && lv.notes.length) {
+      lines.push(`- Notes:`);
+      for (const note of lv.notes) {
+        lines.push(`  - ${note}`);
+      }
     }
     lines.push("");
   }

@@ -135,6 +135,19 @@ export function CostRecordsPage() {
           </span>
         ),
       },
+      {
+        key: "actions",
+        header: "",
+        className: "w-24 text-right",
+        render: (record) => (
+          <Link
+            href={`/finance/costs/${encodeURIComponent(record.costId)}`}
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            Open →
+          </Link>
+        ),
+      },
     ],
     []
   );

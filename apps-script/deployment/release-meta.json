@@ -1,39 +1,52 @@
 {
-  "release": "v0.8.3",
-  "title": "CostRecord receipt and invoice uploads",
+  "release": "v0.8.5.1",
+  "title": "Reimbursement payment service deploy recovery",
   "features": [
-    "COST_RECORDS schema: Location column + Budgeted Amount replaces Estimated Amount",
-    "Safe in-place migration preserves existing Estimated Amount values into Budgeted Amount",
-    "CostRecord domain: budgetedAmount + required location (estimatedAmount removed)",
-    "Receipt and invoice uploads stored in the Apps Script project's Google Drive"
+    "REIMBURSEMENT_PAYMENTS sheet with 11-column canonical schema",
+    "Reimbursement payment domain: getAll, getById, create, update against CostSubmission",
+    "reimbursement-payments Apps Script resource + Next.js /api/reimbursement-payments proxy",
+    "CostSubmission lifecycle transition guards: draft→submitted→queried→submitted",
+    "Payment never stored on CostRecord or CostSubmission status",
+    "Pack/checklist orders Repository → Service → Controller and calls out the payment triad"
   ],
   "performance": [
-    "No additional API calls — schema migration runs on sheet access only",
-    "Evidence upload is a single cost-create request, limited to 5 MB"
+    "Same list/pagination pattern as cost-submissions — single sheet read per getAll",
+    "Payments filtered by submissionId without joining CostRecord amounts"
   ],
   "deploymentRequired": true,
+  "deploymentSemantics": {
+    "deploymentRequired": "Pack intent: a new Web App deploy is required to apply this source release when cutting from the repo. Not a live deployment status flag.",
+    "appsScriptRedeploy": "Required — live project recognises reimbursement-payments but is missing ReimbursementPaymentService.gs (ReferenceError at runtime)."
+  },
+  "liveVerification": {
+    "verifiedAt": null,
+    "method": "Partial live probe — ROUTER + Controller present; Service global missing",
+    "reimbursementPaymentsStatus": "partial_deploy_missing_service",
+    "resourceLive": false,
+    "notes": [
+      "Observed live error: ReimbursementPaymentService is not defined.",
+      "Root cause: ReimbursementPaymentService.gs was not present/loaded in the Apps Script project (source/pack already define it correctly).",
+      "Redeploy must include ReimbursementPaymentRepository.gs, ReimbursementPaymentService.gs, and ReimbursementPaymentsController.gs, then a new Web App version."
+    ]
+  },
   "triggerRequired": false,
   "appsScriptRedeploy": true,
   "smokeTests": [
     {
-      "name": "CostRecord domain",
-      "command": "npx tsx --tsconfig tsconfig.json scripts/verify-cost-record-domain.mts"
+      "name": "Financial domain foundation",
+      "command": "npx tsx --tsconfig tsconfig.json scripts/verify-financial-domain-foundation.mts"
     },
     {
-      "name": "CostRecord persistence",
-      "command": "npx tsx --tsconfig tsconfig.json scripts/verify-cost-record-persistence.mts"
-    },
-    {
-      "name": "Finance Cost Entry and evidence upload",
-      "command": "npx tsx --tsconfig tsconfig.json scripts/verify-finance-cost-entry.mts"
+      "name": "Finance reimbursement payment",
+      "command": "npx tsx --tsconfig tsconfig.json scripts/verify-finance-reimbursement-payment.mts"
     }
   ],
   "notes": [
-    "MANUAL ACTION REQUIRED: Deploy updated CostRecordRepository.gs and CostRecordService.gs, then create a new Web App version.",
-    "Existing COST_RECORDS rows are preserved; Estimated Amount values migrate to Budgeted Amount on first sheet access.",
-    "New Location column is added without deleting or recreating the sheet.",
-    "Receipt and invoice files are saved privately in the Apps Script project's Google Drive folder named SentraCore Cost Evidence.",
-    "After deployment, run initialiseCostEvidenceStorage() once from the Apps Script editor to authorize Google Drive and create the evidence folder.",
-    "Live GAS verification requires APPS_SCRIPT_URL in .env.local after deploy."
+    "MANUAL DEPLOYMENT REQUIRED: Add/replace ReimbursementPaymentService.gs from this pack (likely omitted in the partial v0.8.5 paste). Also confirm Repository + Controller + ROUTER.",
+    "Service definition is unchanged — still `var ReimbursementPaymentService = (function () { ... })();`, same pattern as CostSubmissionService.",
+    "File load order does not cause this ReferenceError for IIFE modules; missing file does.",
+    "REIMBURSEMENT_PAYMENTS sheet is auto-created on first access — does not modify COST_RECORDS or COST_SUBMISSIONS schemas.",
+    "Partial payments are supported via multiple payment rows per submission; outstanding = claim − sum(received).",
+    "Reimbursed on Cost workflow only when linked submission claim is fully paid."
   ]
 }

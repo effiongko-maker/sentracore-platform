@@ -1,40 +1,13 @@
 type FlowStage = {
   id: string;
   label: string;
-  title: string;
-  detail: string;
-  live: boolean;
 };
 
 const STAGES: FlowStage[] = [
-  {
-    id: "cost",
-    label: "Cost",
-    title: "Operational spend",
-    detail: "What the operation actually spent.",
-    live: false,
-  },
-  {
-    id: "submission",
-    label: "Submission",
-    title: "Reimbursement requests",
-    detail: "Amounts submitted for reimbursement or payment.",
-    live: false,
-  },
-  {
-    id: "authorisation",
-    label: "Authorisation",
-    title: "Client approvals",
-    detail: "Permission to proceed with work before execution.",
-    live: true,
-  },
-  {
-    id: "payment",
-    label: "Payment",
-    title: "Money received",
-    detail: "Funds recorded when payment is received.",
-    live: false,
-  },
+  { id: "cost", label: "Operational costs" },
+  { id: "submission", label: "Reimbursement" },
+  { id: "authorisation", label: "Client authorisation" },
+  { id: "payment", label: "Payment" },
 ];
 
 export function FinanceFlowRail({
@@ -42,71 +15,64 @@ export function FinanceFlowRail({
   awaitingDecisionCount,
   costRecordedCount,
   costLive,
+  submissionCount,
+  submissionLive,
+  paymentStatusSignal,
   loading,
 }: {
   authorisationCount: number;
   awaitingDecisionCount: number;
   costRecordedCount: number;
   costLive: boolean;
+  submissionCount: number;
+  submissionLive: boolean;
+  paymentStatusSignal: string;
   loading: boolean;
 }) {
-  const stages = STAGES.map((stage) =>
-    stage.id === "cost"
-      ? {
-          ...stage,
-          live: costLive,
-        }
-      : stage
-  );
-
   return (
-    <section aria-label="Operational financial flow">
-      <div className="fin-flow">
-        {stages.map((stage) => {
-          const live = stage.live;
-          let signal: string | undefined;
-          if (live && !loading) {
+    <section className="fin-v13-status" aria-label="Financial status">
+      <p className="fin-v13-status-note">
+        Client authorisation is Work Order approval — not reimbursement authority
+        on a CostSubmission.
+      </p>
+      <ul className="fin-v13-status-strip">
+        {STAGES.map((stage) => {
+          let signal = "—";
+          if (!loading) {
             if (stage.id === "cost") {
-              signal =
-                costRecordedCount > 0
-                  ? `${costRecordedCount} cost${costRecordedCount === 1 ? "" : "s"} recorded`
-                  : "Ready to record costs";
-            } else {
+              signal = costLive
+                ? costRecordedCount > 0
+                  ? `${costRecordedCount} recorded`
+                  : "Ready"
+                : "Not yet recorded";
+            } else if (stage.id === "submission") {
+              signal = submissionLive
+                ? submissionCount > 0
+                  ? `${submissionCount} submission${
+                      submissionCount === 1 ? "" : "s"
+                    }`
+                  : "Ready"
+                : "Not yet recorded";
+            } else if (stage.id === "authorisation") {
               signal =
                 awaitingDecisionCount > 0
-                  ? `${awaitingDecisionCount} awaiting client decision`
+                  ? `${awaitingDecisionCount} awaiting decision`
                   : authorisationCount > 0
-                    ? `${authorisationCount} authorisations in view`
-                    : "No authorisations yet";
+                    ? `${authorisationCount} recorded`
+                    : "None yet";
+            } else if (stage.id === "payment") {
+              signal = paymentStatusSignal || "Not yet recorded";
             }
           }
 
           return (
-            <article
-              key={stage.id}
-              className={
-                live ? "fin-flow-stage fin-flow-stage--live" : "fin-flow-stage"
-              }
-            >
-              <p className="fin-flow-label">{stage.label}</p>
-              <h2 className="fin-flow-title">{stage.title}</h2>
-              <p className="fin-flow-detail">{stage.detail}</p>
-              <span
-                className={
-                  live
-                    ? "fin-flow-badge fin-flow-badge--live"
-                    : "fin-flow-badge fin-flow-badge--await"
-                }
-              >
-                {live ? "Live" : "Not yet recorded"}
-              </span>
-              {signal ? (
-                <p className="fin-flow-detail fin-flow-signal">{signal}</p>
-              ) : null}
-            </article>
+            <li key={stage.id} className="fin-v13-status-item">
+              <span className="fin-v13-status-label">{stage.label}</span>
+              <span className="fin-v13-status-value">{signal}</span>
+            </li>
           );
         })}
-      </div>
+      </ul>
     </section>
   );
 }

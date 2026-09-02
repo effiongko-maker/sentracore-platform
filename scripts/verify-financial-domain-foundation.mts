@@ -54,12 +54,12 @@ function main() {
 
   assert(ISSUE_MODEL_PHASE === 26, "phase 18");
   assert(FINANCIAL_DOMAIN_IMPLEMENTED.costRecords === true, "cost records persisted");
-  assert(FINANCIAL_DOMAIN_IMPLEMENTED.costSubmissions === false, "no submission persistence");
+  assert(FINANCIAL_DOMAIN_IMPLEMENTED.costSubmissions === true, "submission persistence");
   assert(FINANCIAL_DOMAIN_IMPLEMENTED.ui === true, "first finance view");
-  assert(FINANCIAL_DOMAIN_IMPLEMENTED.paymentProcessing === false, "no payments");
+  assert(FINANCIAL_DOMAIN_IMPLEMENTED.paymentProcessing === true, "reimbursement payments");
   assert(FINANCIAL_DOMAIN_IMPLEMENTED.approvalWorkflows === false, "no approvals");
   assert(FINANCIAL_DOMAIN_IMPLEMENTED.jobOrder === false, "no JO");
-  results.push("PASS Phase 15; CostRecord persistence enabled; submissions still types-only");
+  results.push("PASS Phase 15; CostRecord + CostSubmission persistence enabled");
 
   // 1. Non-reimbursable CostRecord
   const labour = costBase({
@@ -267,7 +267,7 @@ function main() {
   );
   assert(!("status" in labour), "no status on CostRecord");
   assert(!("costSubmissionId" in labour), "no submission link on CostRecord");
-  results.push("PASS CostRecord persistence foundation; submission persistence still absent");
+  results.push("PASS CostRecord + CostSubmission persistence foundations");
 
   console.log("\n=== financial domain foundation verify (phase 16) ===");
   for (const line of results) console.log(line);

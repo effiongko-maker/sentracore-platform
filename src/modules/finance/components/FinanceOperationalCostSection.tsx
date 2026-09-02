@@ -1,13 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { FINANCE_UI_LIST_LIMIT } from "../constants";
 import type {
   FinanceOperationalCostLens,
   FinanceOperationalCostSummary,
   FinanceRecentCostRow,
 } from "../types";
-import { formatFinancialAmount } from "../utils/formatFinancialAmount";
 
 function formatRecordedAt(iso: string): string {
   const date = new Date(iso);
@@ -30,101 +29,97 @@ export function FinanceOperationalCostSection({
   recentCosts: FinanceRecentCostRow[];
   loading: boolean;
 }) {
-  const hasCosts = (summary?.count ?? 0) > 0;
+  const hasCosts = (summary?.totalCount ?? 0) > 0;
+  const visible = recentCosts.slice(0, FINANCE_UI_LIST_LIMIT);
+  const hasMore =
+    recentCosts.length > FINANCE_UI_LIST_LIMIT ||
+    (summary?.totalCount ?? 0) > FINANCE_UI_LIST_LIMIT;
 
   return (
-    <section className="fin-quiet-panel">
-      <div>
+    <section className="fin-v13-panel">
+      <div className="fin-v13-section-head">
         <div>
-          <h2 className="fin-section-title">Operational cost</h2>
-          <p className="fin-section-lede">
-            {hasCosts
-              ? "Recorded operational spend across facilities and work."
-              : "Record operational costs as they are incurred — facility spend, materials, labour, and related expenses."}
+          <h2 className="fin-v13-section-title">Operational costs</h2>
+          <p className="fin-v13-section-lede">
+            Newest recorded spend
+            {summary && summary.unknownCount > 0
+              ? ` · ${summary.unknownCount} need classification`
+              : ""}
+            {summary?.truncated ? " · amount is a sample" : ""}.
           </p>
         </div>
+        <Link href="/finance/costs" className="fin-v13-text-action">
+          View all costs →
+        </Link>
       </div>
 
       {loading ? (
-        <div className="fin-lens-grid mt-4">
-          {Array.from({ length: 5 }).map((_, index) => (
-            <div key={index} className="fin-lens h-16 animate-pulse bg-muted/15" />
-          ))}
-        </div>
+        <div className="fin-v13-skel-block" />
       ) : hasCosts && summary ? (
         <>
-          <div className="fin-cost-summary mt-4">
-            <div>
-              <p className="fin-metric-kicker">Total recorded</p>
-              <p className="fin-cost-summary-value">
-                {formatFinancialAmount(summary.totalAmount, summary.currency)}
-              </p>
-            </div>
-            <div>
-              <p className="fin-metric-kicker">Costs recorded</p>
-              <p className="fin-cost-summary-value">{summary.count}</p>
-            </div>
-          </div>
-
-          <div className="fin-lens-grid mt-4">
+          <div className="fin-v13-lenses" aria-label="Cost context">
             {lenses.map((lens) => (
-              <div key={lens.id} className="fin-lens fin-lens--live">
-                <p className="fin-lens-label">{lens.label}</p>
-                <p className="fin-lens-note">{lens.detail ?? "Recorded"}</p>
-              </div>
+              <span key={lens.id} className="fin-v13-lens">
+                {lens.label}
+              </span>
             ))}
           </div>
 
-          {recentCosts.length > 0 ? (
-            <div className="fin-cost-table-wrap mt-5">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="fin-metric-kicker">Recent costs</h3>
-                <Link
-                  href="/finance/costs"
-                  className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-                >
-                  View all costs <ArrowRight className="h-4 w-4" />
-                </Link>
-              </div>
-              <table className="fin-cost-table">
+          {visible.length > 0 ? (
+            <>
+              <p className="fin-v13-table-caption">Recent costs</p>
+              <table className="fin-v13-table fin-v13-table--compact">
                 <thead>
                   <tr>
                     <th>Date</th>
                     <th>Description</th>
                     <th>Category</th>
-                    <th>Facility</th>
-                    <th>Amount</th>
-                    <th>Reimbursement</th>
+                    <th className="fin-v13-num">Amount</th>
+                    <th>Class</th>
+                    <th className="fin-v13-action-col" />
                   </tr>
                 </thead>
                 <tbody>
-                  {recentCosts.map((row) => (
+                  {visible.map((row) => (
                     <tr key={row.costId}>
-                      <td>{formatRecordedAt(row.recordedAt)}</td>
-                      <td>
-                        <span className="fin-cost-desc">{row.description}</span>
-                        <span className="fin-cost-id">{row.costId}</span>
+                      <td className="fin-v13-muted">
+                        {formatRecordedAt(row.recordedAt)}
                       </td>
-                      <td>{row.categoryLabel}</td>
-                      <td>{row.facilityId}</td>
-                      <td className="fin-cost-amount">{row.amountLabel}</td>
-                      <td>{row.reimbursabilityLabel}</td>
+                      <td>
+                        <span className="fin-v13-item-title">
+                          {row.description}
+                        </span>
+                        <span className="fin-v13-item-meta">{row.costId}</span>
+                      </td>
+                      <td className="fin-v13-muted">{row.categoryLabel}</td>
+                      <td className="fin-v13-num">{row.amountLabel}</td>
+                      <td className="fin-v13-muted">
+                        {row.reimbursabilityLabel}
+                      </td>
+                      <td className="fin-v13-action-col">
+                        <Link
+                          href={`/finance/costs/${encodeURIComponent(row.costId)}`}
+                          className="fin-v13-text-action"
+                        >
+                          Open →
+                        </Link>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
+              {hasMore ? (
+                <div className="fin-v13-table-footer">
+                  <Link href="/finance/costs" className="fin-v13-text-action">
+                    View all →
+                  </Link>
+                </div>
+              ) : null}
+            </>
           ) : null}
         </>
       ) : (
-        <div className="fin-lens-grid mt-4">
-          {lenses.map((lens) => (
-            <div key={lens.id} className="fin-lens">
-              <p className="fin-lens-label">{lens.label}</p>
-              <p className="fin-lens-note">No cost records yet</p>
-            </div>
-          ))}
-        </div>
+        <p className="fin-v13-empty">No cost records yet.</p>
       )}
     </section>
   );

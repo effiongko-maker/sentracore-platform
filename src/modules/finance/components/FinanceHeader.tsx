@@ -4,17 +4,11 @@ import { Button } from "@/components/ui/Button";
 
 export function FinanceHeader({
   derivedAt,
-  totalApprovals,
-  approvalsInView,
-  truncated,
   loading,
   onRefresh,
   onRecordCost,
 }: {
   derivedAt?: string;
-  totalApprovals: number;
-  approvalsInView: number;
-  truncated: boolean;
   loading: boolean;
   onRefresh: () => void;
   onRecordCost: () => void;
@@ -26,33 +20,23 @@ export function FinanceHeader({
       })
     : null;
 
-  const periodLabel = truncated
-    ? `First ${approvalsInView} of ${totalApprovals} client authorisation records`
-    : totalApprovals > 0
-      ? `All ${totalApprovals} client authorisation records`
-      : "No client authorisation records yet";
-
   return (
-    <header>
-      <p className="fin-eyebrow">Finance</p>
-      <h1 className="fin-title">Operational financial position</h1>
-      <p className="fin-lede">
-        Understand the financial activity, commitments, authorisations and
-        reimbursement flow across facility operations. This is not corporate
-        treasury or accounting — it is the financial operating view of work.
-      </p>
-
-      <div className="fin-context">
-        <p className="fin-context-meta">
-          <strong>Period:</strong> {periodLabel}
+    <header className="fin-v13-header">
+      <div className="fin-v13-header-row">
+        <div className="min-w-0">
+          <p className="fin-eyebrow">Finance</p>
+          <h1 className="fin-title fin-title--compact">
+            Operational financial position
+          </h1>
+          <p className="fin-lede fin-lede--compact">
+            Operational spend, reimbursement preparation, and client
+            authorisation.
+          </p>
           {asOf ? (
-            <>
-              {" "}
-              · <strong>As of</strong> {asOf}
-            </>
+            <p className="fin-v13-asof">In view as of {asOf}</p>
           ) : null}
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
+        </div>
+        <div className="fin-v13-actions">
           <Button type="button" size="sm" onClick={onRecordCost} disabled={loading}>
             <Plus className="h-4 w-4" />
             Record cost
@@ -67,14 +51,56 @@ export function FinanceHeader({
             <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
-          <Link
-            href="/approvals"
-            className="text-sm font-medium text-accent hover:underline"
-          >
+          <Link href="/approvals" className="fin-v13-text-action">
             Client authorisations
           </Link>
         </div>
       </div>
     </header>
+  );
+}
+
+export function FinanceSummaryRow({
+  operationalSpendLabel,
+  spendIsSample,
+  costRecordsTotal,
+  reimbursementsInPreparation,
+  clientAuthorisationsTotal,
+  loading,
+}: {
+  operationalSpendLabel: string;
+  spendIsSample: boolean;
+  costRecordsTotal: number;
+  reimbursementsInPreparation: string;
+  clientAuthorisationsTotal: number;
+  loading: boolean;
+}) {
+  return (
+    <section className="fin-v13-summary" aria-label="Financial summary">
+      <div className="fin-v13-summary-item">
+        <p className="fin-v13-metric-label">
+          Operational spend{spendIsSample ? " (sample)" : ""}
+        </p>
+        <p className="fin-v13-metric-value">{operationalSpendLabel}</p>
+      </div>
+      <div className="fin-v13-summary-item">
+        <p className="fin-v13-metric-label">Costs recorded</p>
+        <p className="fin-v13-metric-value">
+          {loading ? "—" : costRecordsTotal}
+        </p>
+      </div>
+      <div className="fin-v13-summary-item">
+        <p className="fin-v13-metric-label">Reimbursement in preparation</p>
+        <p className="fin-v13-metric-value">
+          {loading ? "—" : reimbursementsInPreparation}
+        </p>
+      </div>
+      <div className="fin-v13-summary-item">
+        <p className="fin-v13-metric-label">Client authorisations</p>
+        <p className="fin-v13-metric-value">
+          {loading ? "—" : clientAuthorisationsTotal}
+        </p>
+      </div>
+    </section>
   );
 }

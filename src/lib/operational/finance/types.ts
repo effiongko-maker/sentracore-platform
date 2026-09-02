@@ -304,7 +304,37 @@ export type ContractPaymentRecord = {
   notes?: string;
 };
 
-export type FinancialRecordKind = "cost" | "cost_submission" | "contract_payment";
+export type FinancialRecordKind =
+  | "cost"
+  | "cost_submission"
+  | "contract_payment"
+  | "reimbursement_payment";
+
+/**
+ * Reimbursement payment received against a CostSubmission.
+ * Separate from CostRecord and from ContractPaymentRecord (PayChex contract dues).
+ * Does not live on CostSubmission.status.
+ */
+export type ReimbursementPayment = {
+  /** Canonical payment identity (e.g. PAY-2026-000001 when persisted). */
+  paymentId: string;
+  /** CostSubmission this receipt applies to. */
+  submissionId: string;
+  /** Amount received. */
+  receivedAmount: number;
+  currency: FinancialCurrencyCode;
+  /** When payment was received (ISO date or datetime). */
+  receivedAt: string;
+  /** Bank / remittance / cheque reference when known. */
+  reference?: string;
+  /** Free-text method (transfer, cheque, etc.) — no fixed enum yet. */
+  method?: string;
+  /** Supporting evidence reference (not CostRecord evidence). */
+  evidenceReference?: string;
+  notes?: string;
+  recordedAt: string;
+  recordedBy: string;
+};
 
 /** @deprecated Prefer CostSubmission. Alias retained for Issue-module imports. */
 export type CostSubmissionContract = {
