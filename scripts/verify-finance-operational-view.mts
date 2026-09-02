@@ -79,6 +79,13 @@ function staticChecks() {
   assert(page.includes("FinancePositionSection"), "position section");
   assert(page.includes("FinanceSubmissionsSection"), "submissions section");
   assert(page.includes("FinanceFlowRail"), "financial flow rail");
+  assert(page.includes("CostRecordFormModal"), "cost entry modal");
+  assert(page.includes("onRecordCost"), "record cost wiring");
+  const header = readFileSync(
+    resolve("src/modules/finance/components/FinanceHeader.tsx"),
+    "utf8"
+  );
+  assert(header.includes("Record cost"), "record cost action");
   assert(page.includes("FinanceHeader"), "finance header");
   assert(page.includes("FinanceIntelligencePreview"), "intelligence preview");
   assert(page.includes("fin-page"), "finance visual language");
@@ -129,15 +136,15 @@ function staticChecks() {
 }
 
 function mappingChecks() {
-  const overview = deriveFinanceOverview(fixtureApprovals(), {
+  const overview = deriveFinanceOverview(fixtureApprovals(), [], {
     totalApprovals: 4,
     truncated: false,
   });
 
   assert(FINANCIAL_DOMAIN_IMPLEMENTED.ui === true, "finance ui flag");
-  assert(FINANCIAL_DOMAIN_IMPLEMENTED.persistence === false, "no persistence");
+  assert(FINANCIAL_DOMAIN_IMPLEMENTED.costRecords === true, "cost records persisted");
+  assert(FINANCIAL_DOMAIN_IMPLEMENTED.costSubmissions === false, "no submissions yet");
   assert(overview.availability.clientAuthorisation === true, "approvals live");
-  assert(overview.availability.costSubmissions === false, "no submissions yet");
 
   const awaiting = overview.pendingActions.filter(
     (item) => item.kind === "client_authorisation_awaiting"

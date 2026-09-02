@@ -78,6 +78,11 @@ export function useUsers() {
         setUsers(result.data);
         setTotalPages(result.totalPages);
         setTotal(result.total);
+
+        void UserService.enrichUsersWorkload(result.data).then((enriched) => {
+          if (id !== requestId.current) return;
+          setUsers(enriched);
+        });
       } catch (err) {
         if (id !== requestId.current) return;
         setError(

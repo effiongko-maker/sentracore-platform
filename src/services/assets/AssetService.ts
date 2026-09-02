@@ -19,9 +19,13 @@ import {
 import {
   CATALOG_TTL_MS,
   sharedRequest,
+  stableRequestKey,
 } from "@/services/cache/sharedRequest";
 import { FacilityService } from "@/services/facilities/FacilityService";
-import { OperationalWorkloadService } from "@/services/operational/OperationalWorkloadService";
+import {
+  applyAssetWorkloadSummary,
+  loadBoundedWorkloadSummary,
+} from "@/lib/operational/workload/loadBoundedWorkloadSummary";
 import { queryAssetsPage } from "./queryAssets";
 
 /** Raw row shape from the Apps Script assets API. */
@@ -83,16 +87,59 @@ function mapRemoteAsset(raw: RemoteAsset): Asset {
   };
 }
 
-function extractAssetRows(payload: unknown): Asset[] {
+function toPaginatedAssets(
+  payload: unknown,
+  params: AssetListParams
+): PaginatedResult<Asset> {
   if (Array.isArray(payload)) {
-    return payload.map((row) => mapRemoteAsset(row as RemoteAsset));
+    const data = payload.map((row) => mapRemoteAsset(row as RemoteAsset));
+    return {
+      data,
+      page: params.page ?? 1,
+      pageSize: params.pageSize ?? data.length,
+      total: data.length,
+      totalPages: 1,
+    };
   }
+
   if (payload && typeof payload === "object") {
     const page = payload as Record<string, unknown>;
     const rows = Array.isArray(page.data) ? page.data : [];
-    return rows.map((row) => mapRemoteAsset(row as RemoteAsset));
+    return {
+      data: rows.map((row) => mapRemoteAsset(row as RemoteAsset)),
+      page: Number(page.page ?? params.page ?? 1),
+      pageSize: Number(page.pageSize ?? params.pageSize ?? rows.length),
+      total: Number(page.total ?? rows.length),
+      totalPages: Number(page.totalPages ?? 1),
+    };
   }
-  return [];
+
+  return {
+    data: [],
+    page: 1,
+    pageSize: params.pageSize ?? 8,
+    total: 0,
+    totalPages: 1,
+  };
+}
+
+async function fetchAssetsPage(
+  params: AssetListParams
+): Promise<PaginatedResult<Asset>> {
+  const response = await apiClient.post<unknown>("/assets", {
+    resource: "assets",
+    action: "getAll",
+    payload: {
+      page: params.page ?? 1,
+      pageSize: params.pageSize ?? 8,
+      search: params.search ?? "",
+      status: params.status ?? "all",
+      category: params.category ?? "all",
+      facility: params.facility ?? "all",
+      sort: params.sort ?? "newest",
+    },
+  });
+  return toPaginatedAssets(response.data, params);
 }
 
 async function fetchAllAssetsUncached(): Promise<Asset[]> {
@@ -116,7 +163,14 @@ async function fetchAllAssetsUncached(): Promise<Asset[]> {
     });
 
     const payload = response.data;
-    const rows = extractAssetRows(payload);
+    const rows = toPaginatedAssets(payload, {
+      page,
+      pageSize,
+      search: "",
+      status: "all",
+      category: "all",
+      facility: "all",
+    }).data;
     all.push(...rows);
 
     if (payload && typeof payload === "object" && !Array.isArray(payload)) {
@@ -246,18 +300,29 @@ async function assertAssetPersisted(
 /**
  * Assets domain service.
  *
- * Talks only to ApiClient — never to storage backends or UI details.
- * List uses: all → search/filters → sort → paginate.
+ * List uses server-side pagination via Apps Script (Phase 33).
+ * Workload overlay is applied separately via enrichAssetsWorkload().
  */
 export const AssetService = {
   async listAssets(params: AssetListParams = {}): Promise<PaginatedResult<Asset>> {
-    const [assets, facilityNameById, maps] = await Promise.all([
-      loadAllAssets(),
-      loadFacilityNameById(),
-      OperationalWorkloadService.getMaps(),
-    ]);
-    const enriched = OperationalWorkloadService.applyToAssets(assets, maps);
-    return queryAssetsPage(enriched, params, facilityNameById);
+    const key = stableRequestKey(CacheNamespaces.assetsList, {
+      page: params.page ?? 1,
+      pageSize: params.pageSize ?? 8,
+      search: params.search ?? "",
+      status: params.status ?? "all",
+      category: params.category ?? "all",
+      facility: params.facility ?? "all",
+      sort: params.sort ?? "newest",
+    });
+    return sharedRequest(key, () => fetchAssetsPage(params));
+  },
+
+  /** Bounded workload overlay for visible asset rows (lazy — not on list critical path). */
+  async enrichAssetsWorkload(assets: Asset[]): Promise<Asset[]> {
+    if (assets.length === 0) return assets;
+    const assetIds = assets.map((row) => row.id).filter(Boolean);
+    const summary = await loadBoundedWorkloadSummary({ assetIds });
+    return applyAssetWorkloadSummary(assets, summary);
   },
 
   /**
@@ -287,9 +352,9 @@ export const AssetService = {
         payload: { id },
       });
       if (response.data == null) return null;
-      return OperationalWorkloadService.enrichAsset(
-        mapRemoteAsset(response.data as unknown as RemoteAsset)
-      );
+      const asset = mapRemoteAsset(response.data as unknown as RemoteAsset);
+      const [enriched] = await AssetService.enrichAssetsWorkload([asset]);
+      return enriched ?? asset;
     } catch (error) {
       if (
         error instanceof ApiError &&

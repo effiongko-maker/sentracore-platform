@@ -47,6 +47,23 @@ export type FinanceOperationalCostLens = {
   id: string;
   label: string;
   available: boolean;
+  detail?: string;
+};
+
+export type FinanceOperationalCostSummary = {
+  totalAmount: number;
+  count: number;
+  currency: string;
+};
+
+export type FinanceRecentCostRow = {
+  costId: string;
+  recordedAt: string;
+  description: string;
+  categoryLabel: string;
+  facilityId: string;
+  amountLabel: string;
+  reimbursabilityLabel: string;
 };
 
 export type FinanceOverviewMeta = {
@@ -64,6 +81,8 @@ export type FinanceOverview = {
   clientAuthorisationStages: FinancePipelineStage[];
   pendingActions: FinancePendingActionItem[];
   operationalCostLenses: FinanceOperationalCostLens[];
+  operationalCostSummary: FinanceOperationalCostSummary | null;
+  recentCosts: FinanceRecentCostRow[];
   sourceApprovals: Approval[];
 };
 

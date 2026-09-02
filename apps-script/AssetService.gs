@@ -96,8 +96,38 @@ var AssetService = (function () {
     });
   }
 
-  function sortNewestFirst_(rows) {
-    return rows.slice().sort(function (a, b) {
+  function compareName_(a, b) {
+    var byName = String(a.name || "").localeCompare(String(b.name || ""), undefined, {
+      sensitivity: "base",
+    });
+    if (byName !== 0) return byName;
+    return String(a.id || "").localeCompare(String(b.id || ""));
+  }
+
+  function sortRows_(rows, payload) {
+    var sort = String((payload && payload.sort) || "newest").toLowerCase();
+    var next = rows.slice();
+    if (sort === "oldest") {
+      return next.sort(function (a, b) {
+        var aSeq = parseAssetSeq_(a.id);
+        var bSeq = parseAssetSeq_(b.id);
+        if (aSeq === bSeq) {
+          return String(a.id || "").localeCompare(String(b.id || ""));
+        }
+        return aSeq - bSeq;
+      });
+    }
+    if (sort === "name_asc") {
+      return next.sort(function (a, b) {
+        return compareName_(a, b);
+      });
+    }
+    if (sort === "name_desc") {
+      return next.sort(function (a, b) {
+        return compareName_(b, a);
+      });
+    }
+    return next.sort(function (a, b) {
       var aSeq = parseAssetSeq_(a.id);
       var bSeq = parseAssetSeq_(b.id);
       if (aSeq === bSeq) {
@@ -132,7 +162,7 @@ var AssetService = (function () {
   function getAll(payload) {
     var rows = AssetRepository.getAll();
     var filtered = applyFilters_(rows, payload);
-    var sorted = sortNewestFirst_(filtered);
+    var sorted = sortRows_(filtered, payload);
     return paginate_(sorted, payload);
   }
 

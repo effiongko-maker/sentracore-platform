@@ -9,6 +9,7 @@ import type {
   CostSubmission,
   MarkupRepresentation,
   ReimbursementPaymentOutcome,
+  ReimbursementPaymentReconciliation,
 } from "./types";
 
 /** Financial state must never resolve an Issue (and vice versa). */
@@ -19,7 +20,9 @@ export const FINANCIAL_OPERATIONAL_COUPLING = {
 } as const;
 
 export const FINANCIAL_DOMAIN_IMPLEMENTED = {
-  persistence: false,
+  costRecords: true,
+  costSubmissions: false,
+  contractPayments: false,
   ui: true,
   paymentProcessing: false,
   approvalWorkflows: false,
@@ -58,21 +61,26 @@ export const COST_SUBMISSION_OPEN_DECISIONS = [
 /**
  * Assert commercial amounts remain independently representable.
  * Does not enforce a markup formula — only that fields are not collapsed.
+ *
+ * @deprecated Prefer assertDistinctClaimAmounts from costSubmission.ts
  */
 export function assertDistinctCommercialAmounts(submission: {
-  actualAmount: number;
-  submittedAmount: number;
+  underlyingActualTotal?: number;
+  actualAmount?: number;
+  claimAmount?: number;
+  submittedAmount?: number;
   markup?: MarkupRepresentation;
   approvedAmount?: number;
   receivedAmount?: number;
 }): void {
-  // Identity check: callers must supply both actual and submitted; they may equal
-  // numerically when no markup, but both fields must exist as first-class values.
-  if (
-    typeof submission.actualAmount !== "number" ||
-    typeof submission.submittedAmount !== "number"
-  ) {
-    throw new Error("actualAmount and submittedAmount must both be numbers");
+  const claim =
+    submission.claimAmount ?? submission.submittedAmount;
+  const underlying =
+    submission.underlyingActualTotal ?? submission.actualAmount;
+  if (typeof claim !== "number" || typeof underlying !== "number") {
+    throw new Error(
+      "claim and underlying actual totals must both be numbers"
+    );
   }
   void submission.markup;
   void submission.approvedAmount;
@@ -81,60 +89,66 @@ export function assertDistinctCommercialAmounts(submission: {
 
 /**
  * Conceptual outstanding = basis − received (when received known).
- * Prefer approvedAmount as basis when present; else submittedAmount.
+ * Prefer authorizedAmount from Approval when present; else claimAmount.
  * Does not invent payment transactions.
  */
 export function deriveOutstandingAmount(options: {
-  submittedAmount: number;
+  claimAmount?: number;
+  submittedAmount?: number;
+  authorizedAmount?: number;
   approvedAmount?: number;
   receivedAmount?: number;
 }): number | undefined {
   if (options.receivedAmount === undefined) return undefined;
+  const claim = options.claimAmount ?? options.submittedAmount;
+  if (claim === undefined) return undefined;
   const basis =
-    options.approvedAmount !== undefined
-      ? options.approvedAmount
-      : options.submittedAmount;
+    options.authorizedAmount ??
+    options.approvedAmount ??
+    claim;
   return basis - options.receivedAmount;
 }
 
 export function deriveReimbursementPaymentOutcome(
-  submission: Pick<
-    CostSubmission,
-    "submittedAmount" | "approvedAmount" | "receivedAmount"
-  >
+  reconciliation: ReimbursementPaymentReconciliation
 ): ReimbursementPaymentOutcome {
-  const received = submission.receivedAmount ?? 0;
+  const received = reconciliation.receivedAmount ?? 0;
   if (received <= 0) return "unpaid";
   const basis =
-    submission.approvedAmount !== undefined
-      ? submission.approvedAmount
-      : submission.submittedAmount;
+    reconciliation.authorizedAmount !== undefined
+      ? reconciliation.authorizedAmount
+      : reconciliation.claimAmount;
   if (received >= basis) return "fully_paid";
   return "partially_paid";
 }
 
-/** Non-reimbursable costs must not carry a reimbursable submission expectation. */
-export function isValidNonReimbursableCost(cost: CostRecord): boolean {
-  return (
-    cost.costClass === "non_reimbursable" &&
-    cost.reimbursementEligible === false &&
-    typeof cost.actualAmount === "number"
-  );
-}
-
-export function isValidReimbursableCost(cost: CostRecord): boolean {
-  return (
-    cost.costClass === "reimbursable" &&
-    cost.reimbursementEligible === true &&
-    typeof cost.actualAmount === "number"
-  );
+/** @deprecated Pass ReimbursementPaymentReconciliation instead of CostSubmission. */
+export function deriveReimbursementPaymentOutcomeFromSubmission(
+  submission: Pick<
+    CostSubmission,
+    "claimAmount"
+  > & {
+    submittedAmount?: number;
+    approvedAmount?: number;
+    receivedAmount?: number;
+    authorizedAmount?: number;
+  }
+): ReimbursementPaymentOutcome {
+  const claimAmount =
+    submission.claimAmount ?? submission.submittedAmount ?? 0;
+  return deriveReimbursementPaymentOutcome({
+    claimAmount,
+    authorizedAmount:
+      submission.authorizedAmount ?? submission.approvedAmount,
+    receivedAmount: submission.receivedAmount,
+  });
 }
 
 /** Contract payment is never a CostRecord or CostSubmission. */
 export function isContractPaymentRecord(
   record: CostRecord | CostSubmission | ContractPaymentRecord
 ): record is ContractPaymentRecord {
-  return "expectedAmount" in record && !("costClass" in record);
+  return "expectedAmount" in record && !("costId" in record);
 }
 
 /** @deprecated Prefer isContractPaymentRecord */

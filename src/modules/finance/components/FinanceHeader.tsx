@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { RefreshCw } from "lucide-react";
+import { Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
 export function FinanceHeader({
@@ -9,6 +9,7 @@ export function FinanceHeader({
   truncated,
   loading,
   onRefresh,
+  onRecordCost,
 }: {
   derivedAt?: string;
   totalApprovals: number;
@@ -16,6 +17,7 @@ export function FinanceHeader({
   truncated: boolean;
   loading: boolean;
   onRefresh: () => void;
+  onRecordCost: () => void;
 }) {
   const asOf = derivedAt
     ? new Date(derivedAt).toLocaleString("en-GB", {
@@ -51,6 +53,10 @@ export function FinanceHeader({
           ) : null}
         </p>
         <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" size="sm" onClick={onRecordCost} disabled={loading}>
+            <Plus className="h-4 w-4" />
+            Record cost
+          </Button>
           <Button
             type="button"
             variant="ghost"

@@ -16,9 +16,13 @@ import {
 import {
   CATALOG_TTL_MS,
   sharedRequest,
+  stableRequestKey,
 } from "@/services/cache/sharedRequest";
 import { FacilityService } from "@/services/facilities/FacilityService";
-import { OperationalWorkloadService } from "@/services/operational/OperationalWorkloadService";
+import {
+  applyUserWorkloadSummary,
+  loadBoundedWorkloadSummary,
+} from "@/lib/operational/workload/loadBoundedWorkloadSummary";
 import { queryUsersPage } from "./queryUsers";
 
 export const USER_REPOSITORY_BUILD = "2026-08-25-users-header-v3";
@@ -81,23 +85,73 @@ function mapRemoteUser(raw: RemoteUser): User {
   };
 }
 
-function extractUserRows(payload: unknown): User[] {
+function toPaginatedUsers(
+  payload: unknown,
+  params: UserListParams
+): PaginatedResult<User> {
   if (Array.isArray(payload)) {
-    return payload.map((row) => mapRemoteUser(row as RemoteUser));
+    const data = payload.map((row) => mapRemoteUser(row as RemoteUser));
+    return {
+      data,
+      page: params.page ?? 1,
+      pageSize: params.pageSize ?? data.length,
+      total: data.length,
+      totalPages: 1,
+    };
   }
+
   if (payload && typeof payload === "object") {
     const page = payload as Record<string, unknown>;
     if (Array.isArray(page.data)) {
-      return page.data.map((row) => mapRemoteUser(row as RemoteUser));
+      const rows = page.data;
+      return {
+        data: rows.map((row) => mapRemoteUser(row as RemoteUser)),
+        page: Number(page.page ?? params.page ?? 1),
+        pageSize: Number(page.pageSize ?? params.pageSize ?? rows.length),
+        total: Number(page.total ?? rows.length),
+        totalPages: Number(page.totalPages ?? 1),
+      };
     }
     if (page.data && typeof page.data === "object") {
       const inner = page.data as Record<string, unknown>;
       if (Array.isArray(inner.data)) {
-        return inner.data.map((row) => mapRemoteUser(row as RemoteUser));
+        const rows = inner.data;
+        return {
+          data: rows.map((row) => mapRemoteUser(row as RemoteUser)),
+          page: Number(inner.page ?? params.page ?? 1),
+          pageSize: Number(inner.pageSize ?? params.pageSize ?? rows.length),
+          total: Number(inner.total ?? rows.length),
+          totalPages: Number(inner.totalPages ?? 1),
+        };
       }
     }
   }
-  return [];
+
+  return {
+    data: [],
+    page: 1,
+    pageSize: params.pageSize ?? 8,
+    total: 0,
+    totalPages: 1,
+  };
+}
+
+async function fetchUsersPage(
+  params: UserListParams
+): Promise<PaginatedResult<User>> {
+  const response = await apiClient.post<unknown>("/users", {
+    resource: "users",
+    action: "getAll",
+    payload: {
+      page: params.page ?? 1,
+      pageSize: params.pageSize ?? 8,
+      search: params.search ?? "",
+      status: params.status ?? "all",
+      role: params.role ?? "all",
+      facility: params.facility ?? "all",
+    },
+  });
+  return toPaginatedUsers(response.data, params);
 }
 
 async function fetchAllUsersUncached(): Promise<User[]> {
@@ -121,8 +175,15 @@ async function fetchAllUsersUncached(): Promise<User[]> {
     });
 
     const payload = response.data;
-    const rows = extractUserRows(payload);
-    all.push(...rows);
+    const pageResult = toPaginatedUsers(payload, {
+      page,
+      pageSize,
+      search: "",
+      status: "all",
+      role: "all",
+      facility: "all",
+    });
+    all.push(...pageResult.data);
 
     if (payload && typeof payload === "object" && !Array.isArray(payload)) {
       const meta = payload as Record<string, unknown>;
@@ -130,10 +191,10 @@ async function fetchAllUsersUncached(): Promise<User[]> {
         const inner = meta.data as Record<string, unknown>;
         totalPages = Math.max(1, Number(inner.totalPages ?? 1));
         const total = Number(inner.total ?? all.length);
-        if (all.length >= total || rows.length === 0) break;
+        if (all.length >= total || pageResult.data.length === 0) break;
       } else {
         totalPages = Math.max(1, Number(meta.totalPages ?? 1));
-        if (rows.length === 0) break;
+        if (pageResult.data.length === 0) break;
       }
     } else {
       break;
@@ -208,7 +269,8 @@ async function assertUserPersisted(
 /**
  * Users domain service.
  *
- * List pipeline (authoritative in TS): all → search/filters → sort → paginate
+ * List uses server-side pagination via Apps Script (Phase 33).
+ * Workload overlay is applied separately via enrichUsersWorkload().
  */
 export const UserService = {
   async getCurrentUser(): Promise<CurrentUser> {
@@ -247,8 +309,23 @@ export const UserService = {
   },
 
   async listUsers(params: UserListParams = {}): Promise<PaginatedResult<User>> {
-    const { page } = await this.listUsersWithCatalog(params);
-    return page;
+    const key = stableRequestKey(CacheNamespaces.usersList, {
+      page: params.page ?? 1,
+      pageSize: params.pageSize ?? 8,
+      search: params.search ?? "",
+      status: params.status ?? "all",
+      role: params.role ?? "all",
+      facility: params.facility ?? "all",
+    });
+    return sharedRequest(key, () => fetchUsersPage(params));
+  },
+
+  /** Bounded workload overlay for visible user rows (lazy — not on list critical path). */
+  async enrichUsersWorkload(users: User[]): Promise<User[]> {
+    if (users.length === 0) return users;
+    const userIds = users.map((row) => row.id).filter(Boolean);
+    const summary = await loadBoundedWorkloadSummary({ userIds });
+    return applyUserWorkloadSummary(users, summary);
   },
 
   /**
@@ -273,21 +350,16 @@ export const UserService = {
   async listUsersWithCatalog(
     params: UserListParams = {}
   ): Promise<{ catalog: User[]; page: PaginatedResult<User> }> {
-    const [users, facilityNameById, maps] = await Promise.all([
+    const [page, catalog] = await Promise.all([
+      UserService.listUsers(params),
       loadAllUsers(),
-      loadFacilityNameById(),
-      OperationalWorkloadService.getMaps(),
     ]);
-    const enriched = OperationalWorkloadService.applyToUsers(users, maps);
-    return {
-      catalog: enriched,
-      page: queryUsersPage(enriched, params, facilityNameById),
-    };
+    return { catalog, page };
   },
 
-  /** Unfiltered user catalog for filter option discovery (enriched — People only). */
+  /** Unfiltered user catalog for filter option discovery (no workload enrichment). */
   async fetchAllUsers(): Promise<User[]> {
-    return OperationalWorkloadService.enrichUsers(await loadAllUsers());
+    return loadAllUsers();
   },
 
   async getUser(id: string): Promise<User | null> {
@@ -298,9 +370,9 @@ export const UserService = {
         payload: { id },
       });
       if (response.data == null) return null;
-      return OperationalWorkloadService.enrichUser(
-        mapRemoteUser(response.data as RemoteUser)
-      );
+      const user = mapRemoteUser(response.data as RemoteUser);
+      const [enriched] = await UserService.enrichUsersWorkload([user]);
+      return enriched ?? user;
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) return null;
       throw error;

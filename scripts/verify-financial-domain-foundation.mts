@@ -7,12 +7,15 @@ import {
   FINANCIAL_DOMAIN_IMPLEMENTED,
   FINANCIAL_OPEN_DECISIONS,
   FINANCIAL_OPERATIONAL_COUPLING,
+  assertDistinctClaimAmounts,
   assertDistinctCommercialAmounts,
   deriveOutstandingAmount,
   deriveReimbursementPaymentOutcome,
+  getSubmissionActualCostTotal,
   isContractPaymentRecord,
-  isValidNonReimbursableCost,
-  isValidReimbursableCost,
+  isCostRecordReimbursable,
+  validateCostRecord,
+  validateCostSubmission,
   type ContractPaymentRecord,
   type CostRecord,
   type CostSubmission,
@@ -29,123 +32,141 @@ function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);
 }
 
+function costBase(overrides: Partial<CostRecord>): CostRecord {
+  return {
+    costId: "COST-BASE",
+    recordedAt: "2026-01-10T00:00:00.000Z",
+    facilityId: "FAC-0001",
+    location: "Generator house",
+    description: "Base cost",
+    category: "other",
+    actualAmount: 0,
+    currency: "NGN",
+    reimbursability: "unknown",
+    evidence: { reference: "REF-BASE" },
+    recordedBy: "USR-SYSTEM",
+    ...overrides,
+  };
+}
+
 function main() {
   const results: string[] = [];
 
   assert(ISSUE_MODEL_PHASE === 26, "phase 18");
-  assert(FINANCIAL_DOMAIN_IMPLEMENTED.persistence === false, "no persistence");
+  assert(FINANCIAL_DOMAIN_IMPLEMENTED.costRecords === true, "cost records persisted");
+  assert(FINANCIAL_DOMAIN_IMPLEMENTED.costSubmissions === false, "no submission persistence");
   assert(FINANCIAL_DOMAIN_IMPLEMENTED.ui === true, "first finance view");
   assert(FINANCIAL_DOMAIN_IMPLEMENTED.paymentProcessing === false, "no payments");
   assert(FINANCIAL_DOMAIN_IMPLEMENTED.approvalWorkflows === false, "no approvals");
   assert(FINANCIAL_DOMAIN_IMPLEMENTED.jobOrder === false, "no JO");
-  results.push("PASS Phase 15; financial foundation still types-only");
+  results.push("PASS Phase 15; CostRecord persistence enabled; submissions still types-only");
 
   // 1. Non-reimbursable CostRecord
-  const labour: CostRecord = {
-    id: "COST-NR-1",
-    reference: "GEN-LABOUR",
-    category: "generator_servicing_labour",
-    costClass: "non_reimbursable",
-    actualAmount: 45000,
-    currency: "NGN",
-    incurredAt: "2026-01-10",
+  const labour = costBase({
+    costId: "COST-NR-1",
     description: "Generator servicing labour (contractual)",
-    origin: "contractual_obligation",
-    reimbursementEligible: false,
-    refs: {
-      issueId: "issue:maintenance:MNT-FIN-1",
-      maintenanceId: "MNT-FIN-1",
-      facilityId: "FAC-0001",
-    },
-  };
-  assert(isValidNonReimbursableCost(labour), "non-reimbursable valid");
-  assert(labour.reimbursementEligible === false, "not reimbursable");
+    category: "labour",
+    actualAmount: 45000,
+    reimbursability: "non_reimbursable",
+    workId: "MNT-FIN-1",
+  });
+  assert(validateCostRecord(labour).valid === true, "non-reimbursable valid");
+  assert(!isCostRecordReimbursable(labour), "not reimbursable");
   results.push("PASS Non-reimbursable CostRecord representable");
 
   // 2. Reimbursable CostRecord (+ oil / filter under same treatment)
-  const oil: CostRecord = {
-    id: "COST-R-1",
-    category: "generator_oil",
-    costClass: "reimbursable",
+  const oil = costBase({
+    costId: "COST-R-1",
+    category: "consumables",
     actualAmount: 12000,
-    currency: "NGN",
-    reimbursementEligible: true,
-    origin: "consumable",
-    refs: {
-      issueId: "issue:maintenance:MNT-FIN-1",
-      maintenanceId: "MNT-FIN-1",
-      workOrderId: "WO-FIN-1",
-      facilityId: "FAC-0001",
-    },
-  };
-  const filter: CostRecord = {
-    id: "COST-R-2",
-    category: "generator_filter",
-    costClass: "reimbursable",
+    reimbursability: "reimbursable",
+    workId: "MNT-FIN-1",
+    workOrderId: "WO-FIN-1",
+    evidence: { reference: "OIL-INV-1" },
+  });
+  const filter = costBase({
+    costId: "COST-R-2",
+    category: "consumables",
     actualAmount: 8000,
-    currency: "NGN",
-    reimbursementEligible: true,
-    origin: "consumable",
-    refs: {
-      issueId: "issue:maintenance:MNT-FIN-1",
-      maintenanceId: "MNT-FIN-1",
-      workOrderId: "WO-FIN-1",
-    },
-  };
-  assert(isValidReimbursableCost(oil), "oil reimbursable");
-  assert(isValidReimbursableCost(filter), "filter reimbursable");
+    reimbursability: "reimbursable",
+    workId: "MNT-FIN-1",
+    workOrderId: "WO-FIN-1",
+    evidence: { reference: "FILTER-INV-1" },
+  });
+  assert(validateCostRecord(oil).valid === true, "oil reimbursable");
+  assert(validateCostRecord(filter).valid === true, "filter reimbursable");
+  assert(isCostRecordReimbursable(oil), "oil is reimbursable class");
   results.push("PASS Reimbursable CostRecord representable");
 
   // 5. Multiple cost records on one Issue/treatment
   const costsForIssue = [labour, oil, filter];
   assert(costsForIssue.length === 3, "three cost components");
   assert(
-    costsForIssue.every((c) => c.refs?.maintenanceId === "MNT-FIN-1"),
+    costsForIssue.every((c) => c.workId === "MNT-FIN-1"),
     "same treatment"
   );
   assert(
-    costsForIssue.some((c) => c.costClass === "non_reimbursable") &&
-      costsForIssue.filter((c) => c.costClass === "reimbursable").length === 2,
-    "mixed classes under one treatment"
+    costsForIssue.some((c) => c.reimbursability === "non_reimbursable") &&
+      costsForIssue.filter((c) => c.reimbursability === "reimbursable").length === 2,
+    "mixed reimbursability under one treatment"
   );
   results.push(
-    "PASS Multiple CostRecords per Issue/treatment with distinct classes"
+    "PASS Multiple CostRecords per Issue/treatment with distinct reimbursability"
   );
 
-  // 3–4. Actual ≠ submitted; markup independent
+  // 3–4. Underlying actual ≠ claim; markup independent; approval/payment separate
+  const submissionCosts = [oil, filter];
+  const underlyingTotal = getSubmissionActualCostTotal(submissionCosts);
   const submission: CostSubmission = {
-    id: "SUB-1",
-    costRecordId: oil.id,
+    submissionId: "SUB-2026-000001",
+    costRecordIds: [oil.costId, filter.costId],
     currency: "NGN",
-    actualAmount: oil.actualAmount,
-    markup: { markupAmount: 1800, markupRatePercent: 15 },
-    submittedAmount: 13800,
-    approvedAmount: 13000,
-    receivedAmount: 5000,
-    status: "partially_paid",
-    refs: oil.refs,
+    claimAmount: 23000,
+    markup: { markupAmount: 3000, markupRatePercent: 15 },
+    status: "submitted",
+    createdAt: "2026-01-12T00:00:00.000Z",
+    createdBy: "USR-FIN",
+    submittedAt: "2026-01-12T00:00:00.000Z",
+    submittedBy: "USR-FIN",
+    refs: {
+      maintenanceId: "MNT-FIN-1",
+      workOrderId: "WO-FIN-1",
+      facilityId: "FAC-0001",
+    },
     executionKind: "work_order",
     executionId: "WO-FIN-1",
   };
-  assertDistinctCommercialAmounts(submission);
-  assert(submission.actualAmount === 12000, "actual preserved");
-  assert(submission.submittedAmount === 13800, "submitted distinct");
-  assert(submission.markup?.markupAmount === 1800, "markup independent");
-  assert(submission.approvedAmount !== submission.submittedAmount, "approved may differ");
+  assert(validateCostSubmission(submission).valid === true, "submission valid");
+  assertDistinctClaimAmounts({
+    underlyingActualTotal: underlyingTotal,
+    claimAmount: submission.claimAmount!,
+    markup: submission.markup,
+  });
+  assertDistinctCommercialAmounts({
+    underlyingActualTotal: underlyingTotal,
+    claimAmount: submission.claimAmount,
+  });
+  assert(underlyingTotal === 20000, "actual from CostRecords");
+  assert(submission.claimAmount === 23000, "claim distinct");
+  assert(submission.markup?.markupAmount === 3000, "markup independent");
   assert(
     deriveOutstandingAmount({
-      submittedAmount: submission.submittedAmount,
-      approvedAmount: submission.approvedAmount,
-      receivedAmount: submission.receivedAmount,
-    }) === 8000,
-    "outstanding from approved − received"
+      claimAmount: submission.claimAmount,
+      authorizedAmount: 22000,
+      receivedAmount: 5000,
+    }) === 17000,
+    "outstanding from authorized − received"
   );
   assert(
-    deriveReimbursementPaymentOutcome(submission) === "partially_paid",
-    "payment outcome"
+    deriveReimbursementPaymentOutcome({
+      claimAmount: submission.claimAmount!,
+      authorizedAmount: 22000,
+      receivedAmount: 5000,
+    }) === "partially_paid",
+    "payment outcome from reconciliation"
   );
   results.push(
-    "PASS Actual/markup/submitted/approved/received remain distinct"
+    "PASS Actual/markup/claim/authorized/received remain distinct"
   );
 
   // 6. CostSubmission separate from operational status
@@ -171,7 +192,7 @@ function main() {
     ],
   });
   assert(issue.status === "resolved", "issue resolved from MNT completed");
-  assert(submission.status === "partially_paid", "submission still financial");
+  assert(submission.status === "submitted", "submission lifecycle independent");
   assert(
     issue.status !== (submission.status as string),
     "operational ≠ financial status strings"
@@ -192,13 +213,13 @@ function main() {
     notes: "Amount placeholder — contract amount OPEN; not hard-coded product rule",
   };
   assert(isContractPaymentRecord(monthly), "contract payment kind");
-  assert(!("costClass" in monthly), "not a cost record");
+  assert(!("costId" in monthly), "not a cost record");
   assert(monthly.expectedAmount !== undefined, "expected amount");
   assert(!isContractPaymentRecord(submission as never), "submission not contract");
   results.push("PASS ContractPaymentRecord distinct from reimbursement");
 
   // 8–9. WO reference; JO unimplemented
-  assert(oil.refs?.workOrderId === "WO-FIN-1", "WO linked on cost");
+  assert(oil.workOrderId === "WO-FIN-1", "WO linked on cost");
   assert(submission.executionKind === "work_order", "WO execution on submission");
   assert(JOB_ORDER_BOUNDARY.implemented === false, "JO unimplemented");
   assert(
@@ -224,14 +245,18 @@ function main() {
   const outcome = deriveIssueOutcome(issue);
   assert(outcome.kind === "resolved", "outcome resolved");
   assert(
-    (submission.receivedAmount ?? 0) < (submission.approvedAmount ?? 0),
+    deriveReimbursementPaymentOutcome({
+      claimAmount: submission.claimAmount!,
+      authorizedAmount: 22000,
+      receivedAmount: 5000,
+    }) === "partially_paid",
     "payment still outstanding while Issue resolved"
   );
   results.push(
     "PASS Financial state cannot resolve Issue; resolution does not imply payment"
   );
 
-  // 12. No persistence flags
+  // 12. No persistence flags; CostRecord has no lifecycle fields
   assert(
     typeof (labour as { persist?: unknown }).persist === "undefined",
     "no persist on CostRecord"
@@ -240,7 +265,9 @@ function main() {
     typeof (submission as { save?: unknown }).save === "undefined",
     "no save on submission"
   );
-  results.push("PASS No persistence/schema introduced on financial types");
+  assert(!("status" in labour), "no status on CostRecord");
+  assert(!("costSubmissionId" in labour), "no submission link on CostRecord");
+  results.push("PASS CostRecord persistence foundation; submission persistence still absent");
 
   console.log("\n=== financial domain foundation verify (phase 16) ===");
   for (const line of results) console.log(line);

@@ -442,3 +442,185 @@
   font-size: 0.75rem;
   color: var(--fin-muted);
 }
+
+.fin-form-amount-row {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 640px) {
+  .fin-form-amount-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fin-form-kicker {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fin-muted);
+}
+
+.fin-form-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--fin-muted);
+}
+
+.fin-cost-summary {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--os-border) 70%, transparent);
+  background: color-mix(in srgb, var(--os-surface) 92%, #ffffff);
+}
+
+.fin-cost-summary-value {
+  margin: 0.25rem 0 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--fin-ink);
+}
+
+.fin-lens--live {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--fin-live) 25%, var(--os-border));
+}
+
+.fin-cost-table-wrap {
+  overflow-x: auto;
+}
+
+.fin-cost-table {
+  width: 100%;
+  margin-top: 0.65rem;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.fin-cost-table th,
+.fin-cost-table td {
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+  border-bottom: 1px solid color-mix(in srgb, var(--os-border) 55%, transparent);
+  vertical-align: top;
+}
+
+.fin-cost-table th {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fin-muted);
+}
+
+.fin-cost-desc {
+  display: block;
+  color: var(--fin-ink);
+}
+
+.fin-cost-id {
+  display: block;
+  margin-top: 0.15rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.6875rem;
+  color: var(--fin-muted);
+}
+
+.fin-cost-amount {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fin-form-kicker {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fin-muted);
+}
+
+.fin-form-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--fin-muted);
+}
+
+.fin-cost-summary {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--os-border) 70%, transparent);
+  background: var(--os-surface);
+}
+
+.fin-cost-summary-value {
+  margin: 0.25rem 0 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--fin-ink);
+}
+
+.fin-lens--live {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--fin-live) 25%, var(--os-border));
+}
+
+.fin-cost-table-wrap {
+  overflow-x: auto;
+}
+
+.fin-cost-table {
+  width: 100%;
+  margin-top: 0.65rem;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.fin-cost-table th,
+.fin-cost-table td {
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+  border-bottom: 1px solid color-mix(in srgb, var(--os-border) 60%, transparent);
+  vertical-align: top;
+}
+
+.fin-cost-table th {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fin-muted);
+}
+
+.fin-cost-desc {
+  display: block;
+  color: var(--fin-ink);
+}
+
+.fin-cost-id {
+  display: block;
+  margin-top: 0.15rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.6875rem;
+  color: var(--fin-muted);
+}
+
+.fin-cost-amount {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

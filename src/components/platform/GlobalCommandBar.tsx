@@ -4,9 +4,7 @@ import { Menu, Search } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 import { signOut } from "@/lib/auth/actions";
 import {
-  LAYER_LABEL,
-  resolveLayerByPath,
-  resolveModuleByPath,
+  resolveBreadcrumbSegments,
 } from "@/lib/platform/layers";
 import { UserService } from "@/services/users/UserService";
 import type { CurrentUser } from "@/types";
@@ -19,8 +17,7 @@ export function GlobalCommandBar() {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const layer = resolveLayerByPath(pathname);
-  const module = resolveModuleByPath(pathname);
+  const breadcrumb = resolveBreadcrumbSegments(pathname);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,18 +46,22 @@ export function GlobalCommandBar() {
         </button>
 
         <div className="os-command-breadcrumb hidden min-w-0 sm:flex">
-          <span className="os-command-layer">{LAYER_LABEL[layer]}</span>
-          {module ? (
-            <>
-              <span className="text-[var(--os-ink-faint)]">/</span>
-              <span className="os-command-module truncate">{module.label}</span>
-            </>
-          ) : layer === "platform" ? (
-            <>
-              <span className="text-[var(--os-ink-faint)]">/</span>
-              <span className="os-command-module truncate">Platform Home</span>
-            </>
-          ) : null}
+          {breadcrumb.map((segment, index) => (
+            <span key={`${segment}-${index}`} className="contents">
+              {index > 0 ? (
+                <span className="text-[var(--os-ink-faint)]">/</span>
+              ) : null}
+              <span
+                className={
+                  index === breadcrumb.length - 1
+                    ? "os-command-module truncate"
+                    : "os-command-layer"
+                }
+              >
+                {segment}
+              </span>
+            </span>
+          ))}
         </div>
       </div>
 

@@ -116,6 +116,11 @@ export class ApiClient {
                               endpoint: "/api/reporting-snapshot",
                               resource: "reporting-snapshot",
                             }
+                          : path === "/cost-records"
+                            ? {
+                                endpoint: "/api/cost-records",
+                                resource: "cost-records",
+                              }
                           : null;
 
     if (liveProxy) {

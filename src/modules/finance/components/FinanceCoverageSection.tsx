@@ -1,6 +1,10 @@
-export function FinanceCoverageSection() {
+export function FinanceCoverageSection({
+  operationalCostsStatus = "Not yet recorded",
+}: {
+  operationalCostsStatus?: string;
+}) {
   const rows = [
-    { label: "Operational costs", status: "Not yet recorded" },
+    { label: "Operational costs", status: operationalCostsStatus },
     { label: "Reimbursements", status: "Not yet recorded" },
     { label: "Payments received", status: "Not yet recorded" },
   ];

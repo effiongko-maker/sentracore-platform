@@ -1,9 +1,5 @@
-import type { Asset } from "@/modules/assets/types";
-import type { User } from "@/modules/users/types";
-import type { WorkOrder } from "@/modules/work-orders/types";
 import {
   loadOperationalWorkloadMaps,
-  loadOperationalWorkloadSource,
   peekOperationalWorkloadSource,
   workloadEvidenceForAsset,
   workloadEvidenceForUser,
@@ -12,7 +8,15 @@ import {
   type UserWorkloadEvidence,
   type AssetWorkloadEvidence,
 } from "@/lib/operational/workload";
+import {
+  applyAssetWorkloadSummary,
+  applyUserWorkloadSummary,
+  loadBoundedWorkloadSummary,
+} from "@/lib/operational/workload/loadBoundedWorkloadSummary";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
+import type { Asset } from "@/modules/assets/types";
+import type { User } from "@/modules/users/types";
+import type { WorkOrder } from "@/modules/work-orders/types";
 
 export type UserWorkloadDetails = {
   userId: string;
@@ -83,14 +87,18 @@ export const OperationalWorkloadService = {
 
   async enrichUsers(users: User[]): Promise<User[]> {
     if (users.length === 0) return users;
-    const maps = await this.getMaps();
-    return this.applyToUsers(users, maps);
+    const summary = await loadBoundedWorkloadSummary({
+      userIds: users.map((row) => row.id).filter(Boolean),
+    });
+    return applyUserWorkloadSummary(users, summary);
   },
 
   async enrichAssets(assets: Asset[]): Promise<Asset[]> {
     if (assets.length === 0) return assets;
-    const maps = await this.getMaps();
-    return this.applyToAssets(assets, maps);
+    const summary = await loadBoundedWorkloadSummary({
+      assetIds: assets.map((row) => row.id).filter(Boolean),
+    });
+    return applyAssetWorkloadSummary(assets, summary);
   },
 
   async enrichUser(user: User): Promise<User> {
@@ -111,20 +119,30 @@ export const OperationalWorkloadService = {
     userId: string,
     snapshotWorkOrderIds?: string[]
   ): Promise<UserWorkloadDetails> {
-    const source =
-      peekOperationalWorkloadSource() ??
-      (await loadOperationalWorkloadSource());
-    const evidence = workloadEvidenceForUser(
-      source.maps.byUserIdEvidence,
-      userId
-    );
-    const ids =
-      snapshotWorkOrderIds !== undefined
-        ? snapshotWorkOrderIds
-        : evidence.workOrderIds;
-    const byId = new Map(source.workOrders.map((row) => [row.id, row]));
+    let ids: string[];
+
+    if (snapshotWorkOrderIds !== undefined) {
+      ids = snapshotWorkOrderIds;
+    } else {
+      const peek = peekOperationalWorkloadSource();
+      if (peek) {
+        ids = workloadEvidenceForUser(peek.maps.byUserIdEvidence, userId)
+          .workOrderIds;
+      } else {
+        const summary = await loadBoundedWorkloadSummary({ userIds: [userId] });
+        ids =
+          summary.byUserIdEvidence[userId]?.workOrderIds ??
+          [];
+      }
+    }
+
     const workOrders: WorkOrder[] = [];
     const missing: string[] = [];
+
+    const peek = peekOperationalWorkloadSource();
+    const byId = peek
+      ? new Map(peek.workOrders.map((row) => [row.id, row]))
+      : new Map<string, WorkOrder>();
 
     for (const id of ids) {
       const row = byId.get(id);
@@ -150,19 +168,16 @@ export const OperationalWorkloadService = {
 
   /** Audit helper — prove which WOs contribute to a person's workload. */
   async explainUserWorkload(userId: string): Promise<UserWorkloadEvidence> {
-    const maps = await this.getMaps();
-    const evidence = workloadEvidenceForUser(maps.byUserIdEvidence, userId);
+    const summary = await loadBoundedWorkloadSummary({ userIds: [userId] });
+    const evidence = workloadEvidenceForUser(summary.byUserIdEvidence, userId);
     console.info("[workload.people.explain]", { userId, ...evidence });
     return evidence;
   },
 
   /** Audit helper — prove which records contribute to an asset's workload. */
   async explainAssetWorkload(assetId: string): Promise<AssetWorkloadEvidence> {
-    const maps = await this.getMaps();
-    const evidence = workloadEvidenceForAsset(
-      maps.byAssetIdEvidence,
-      assetId
-    );
+    const summary = await loadBoundedWorkloadSummary({ assetIds: [assetId] });
+    const evidence = workloadEvidenceForAsset(summary.byAssetIdEvidence, assetId);
     console.info("[workload.asset.explain]", { assetId, ...evidence });
     return evidence;
   },

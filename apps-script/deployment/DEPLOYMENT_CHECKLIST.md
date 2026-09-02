@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Release: **v0.7.8** — Phase 32 status transition read elimination
+Release: **v0.8.3** — CostRecord receipt and invoice uploads
 
 Use this checklist with `DEPLOYMENT_PACK.md` open. Someone unfamiliar
 with the project should be able to deploy from these steps alone.
@@ -33,6 +33,9 @@ Current pack file list:
 - [ ] `AssetsController.gs`
 - [ ] `AssetService.gs`
 - [ ] `CatalogCacheService.gs`
+- [ ] `CostRecordRepository.gs`
+- [ ] `CostRecordsController.gs`
+- [ ] `CostRecordService.gs`
 - [ ] `FacilitiesController.gs`
 - [ ] `FacilityRepository.gs`
 - [ ] `FacilityService.gs`
@@ -47,6 +50,8 @@ Current pack file list:
 - [ ] `MasterDataService.gs`
 - [ ] `OperationalListAudit.gs`
 - [ ] `OperationalRegisterCache.gs`
+- [ ] `OperationalWorkloadController.gs`
+- [ ] `OperationalWorkloadService.gs`
 - [ ] `ReportingSnapshotController.gs`
 - [ ] `ReportingSnapshotRepository.gs`
 - [ ] `ReportingSnapshotService.gs`
@@ -93,6 +98,9 @@ For each file that already exists in Apps Script, **replace the entire contents*
 - [ ] Replace `AssetsController.gs`
 - [ ] Replace `AssetService.gs`
 - [ ] Replace `CatalogCacheService.gs`
+- [ ] Replace `CostRecordRepository.gs`
+- [ ] Replace `CostRecordsController.gs`
+- [ ] Replace `CostRecordService.gs`
 - [ ] Replace `FacilitiesController.gs`
 - [ ] Replace `FacilityRepository.gs`
 - [ ] Replace `FacilityService.gs`
@@ -107,6 +115,8 @@ For each file that already exists in Apps Script, **replace the entire contents*
 - [ ] Replace `MasterDataService.gs`
 - [ ] Replace `OperationalListAudit.gs`
 - [ ] Replace `OperationalRegisterCache.gs`
+- [ ] Replace `OperationalWorkloadController.gs`
+- [ ] Replace `OperationalWorkloadService.gs`
 - [ ] Replace `ReportingSnapshotController.gs`
 - [ ] Replace `ReportingSnapshotRepository.gs`
 - [ ] Replace `ReportingSnapshotService.gs`
@@ -176,16 +186,22 @@ A **new Web App version** is REQUIRED.
 
 With `npm run dev` running:
 
-### Phase 32 status transition read elimination
+### CostRecord domain
 
 ```bash
-npx tsx --tsconfig tsconfig.json scripts/verify-phase32-status-transition-read-elimination.mts
+npx tsx --tsconfig tsconfig.json scripts/verify-cost-record-domain.mts
 ```
 
-### Phase 31 browser smoke
+### CostRecord persistence
 
 ```bash
-node scripts/verify-phase31-browser-smoke.cjs
+npx tsx --tsconfig tsconfig.json scripts/verify-cost-record-persistence.mts
+```
+
+### Finance Cost Entry and evidence upload
+
+```bash
+npx tsx --tsconfig tsconfig.json scripts/verify-finance-cost-entry.mts
 ```
 
 Expected checks:

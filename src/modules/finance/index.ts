@@ -1,4 +1,5 @@
 export { FinancePage } from "./components/FinancePage";
+export { CostRecordsPage } from "./components/CostRecordsPage";
 export { useFinanceOverview } from "./hooks/useFinanceOverview";
 export {
   CLIENT_AUTHORISATION_STAGES,

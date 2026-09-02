@@ -9,7 +9,8 @@
  * {
  *   resource: "users" | "facilities" | "assets" | "work-orders" |
  *             "incidents" | "maintenance" | "approvals" | "requests" |
- *             "master-data" | "reporting-snapshot",
+ *             "master-data" | "reporting-snapshot" | "operational-workload" |
+ *             "cost-records",
  *   action: string,
  *   payload: object
  * }
@@ -101,12 +102,16 @@ function doPost(e) {
       result = MasterDataController.handle(action, payload);
     } else if (resource === "reporting-snapshot") {
       result = ReportingSnapshotController.handle(action, payload);
+    } else if (resource === "operational-workload") {
+      result = OperationalWorkloadController.handle(action, payload);
+    } else if (resource === "cost-records") {
+      result = CostRecordsController.handle(action, payload);
     } else {
       result = jsonResponse_(
         false,
         resource
           ? "Unknown module: " + resource
-          : "Missing resource. Expected users|facilities|assets|work-orders|incidents|maintenance|approvals|requests|master-data|reporting-snapshot.",
+          : "Missing resource. Expected users|facilities|assets|work-orders|incidents|maintenance|approvals|requests|master-data|reporting-snapshot|operational-workload|cost-records.",
         null,
         { errorClass: "validation", retryable: false }
       );
@@ -150,6 +155,8 @@ function doGet() {
       "requests",
       "master-data",
       "reporting-snapshot",
+      "operational-workload",
+      "cost-records",
     ],
     builds: builds,
   });

@@ -40,25 +40,45 @@ const STAGES: FlowStage[] = [
 export function FinanceFlowRail({
   authorisationCount,
   awaitingDecisionCount,
+  costRecordedCount,
+  costLive,
   loading,
 }: {
   authorisationCount: number;
   awaitingDecisionCount: number;
+  costRecordedCount: number;
+  costLive: boolean;
   loading: boolean;
 }) {
+  const stages = STAGES.map((stage) =>
+    stage.id === "cost"
+      ? {
+          ...stage,
+          live: costLive,
+        }
+      : stage
+  );
+
   return (
     <section aria-label="Operational financial flow">
       <div className="fin-flow">
-        {STAGES.map((stage) => {
+        {stages.map((stage) => {
           const live = stage.live;
           let signal: string | undefined;
           if (live && !loading) {
-            signal =
-              awaitingDecisionCount > 0
-                ? `${awaitingDecisionCount} awaiting client decision`
-                : authorisationCount > 0
-                  ? `${authorisationCount} authorisations in view`
-                  : "No authorisations yet";
+            if (stage.id === "cost") {
+              signal =
+                costRecordedCount > 0
+                  ? `${costRecordedCount} cost${costRecordedCount === 1 ? "" : "s"} recorded`
+                  : "Ready to record costs";
+            } else {
+              signal =
+                awaitingDecisionCount > 0
+                  ? `${awaitingDecisionCount} awaiting client decision`
+                  : authorisationCount > 0
+                    ? `${authorisationCount} authorisations in view`
+                    : "No authorisations yet";
+            }
           }
 
           return (

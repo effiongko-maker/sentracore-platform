@@ -14,6 +14,8 @@ import { invalidateSharedRequests } from "./sharedRequest";
 export const CacheNamespaces = {
   usersCatalog: "catalog:users",
   assetsCatalog: "catalog:assets",
+  usersList: "list:users",
+  assetsList: "list:assets",
   maintenanceCatalog: "catalog:maintenance",
   facilities: "catalog:facilities",
   masterData: "catalog:master-data",
@@ -22,6 +24,7 @@ export const CacheNamespaces = {
   maintenanceList: "list:maintenance",
   approvalsList: "list:approvals",
   requestsList: "list:requests",
+  costRecordsList: "list:cost-records",
 } as const;
 
 export function invalidateUsersCatalog(): void {
@@ -125,13 +128,24 @@ export function onRequestMutation(): void {
   invalidateRequestsLists();
 }
 
+export function invalidateCostRecordsLists(): void {
+  invalidateSharedRequests(CacheNamespaces.costRecordsList);
+  SnapshotService.invalidate();
+}
+
+export function onCostRecordMutation(): void {
+  invalidateCostRecordsLists();
+}
+
 export function onUserMutation(): void {
   invalidateUsersCatalog();
+  invalidateSharedRequests(CacheNamespaces.usersList);
   SnapshotService.invalidate();
 }
 
 export function onAssetMutation(): void {
   invalidateAssetsCatalog();
+  invalidateSharedRequests(CacheNamespaces.assetsList);
   SnapshotService.invalidate();
 }
 

@@ -1,14 +1,15 @@
 /**
- * Financial domain foundation — Phase 12.
+ * Financial domain foundation.
  *
- * Types / documentation only. No persistence, UI, payment processing, or approval engines.
+ * Types, persistence mapping, and documentation — see MODEL.md.
  *
- * Three distinct flows:
- *   A. Non-reimbursable (contractual) CostRecord
- *   B. Reimbursable CostRecord → CostSubmission → payment outcome
- *   C. ContractPaymentRecord (monthly contract payment to PayChex)
+ * Conceptual chain:
+ *   Work / Work Order / Job Order → CostRecord → CostSubmission → Authority/Approval → Payment
  *
- * ACTUAL ≠ SUBMITTED ≠ APPROVED ≠ RECEIVED
+ * CostRecord answers: "What did this cost us?"
+ * CostSubmission answers: "What are we claiming?"
+ * Approval answers: "What was authorized?"
+ * Payment answers: "What was received?"
  *
  * @see MODEL.md
  */
@@ -16,18 +17,103 @@
 import type { IssueAuthorityRole } from "../issues/authority";
 import type { IssueExecutionKind } from "../issues/types";
 
-/** ISO currency code — default operational currency is OPEN. */
+/** ISO currency code — default operational currency is NGN. */
 export type FinancialCurrencyCode = string;
 
 /**
- * Cost class — contractual vs NCC-reimbursable.
- * Do not assume one operational activity has a single class; use multiple CostRecords.
+ * Canonical cost category keys.
+ * User-facing labels: {@link COST_CATEGORY_LABELS} in costRecord.ts
+ */
+export type CostCategory =
+  | "diesel_fuel"
+  | "materials"
+  | "spare_parts"
+  | "labour"
+  | "transportation"
+  | "equipment"
+  | "consumables"
+  | "service"
+  | "other";
+
+/**
+ * Explicit financial classification — never inferred from category, WO, or amount.
+ * Initial state may legitimately be `unknown`.
+ */
+export type CostReimbursability = "unknown" | "reimbursable" | "non_reimbursable";
+
+/**
+ * Supporting / originating evidence for a CostRecord.
+ * A valid CostRecord requires evidence with a non-empty reference.
+ */
+export type CostEvidence = {
+  /** Primary audit reference (invoice no., receipt id, PO reference, etc.). */
+  reference: string;
+  /** Google Drive id when a receipt or invoice has been uploaded. */
+  fileId?: string;
+  /** Original filename of the uploaded evidence. */
+  fileName?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  /** Private Drive link. Access remains governed by the Drive file's sharing settings. */
+  fileUrl?: string;
+  /** Lightweight classifier — not an exhaustive taxonomy. */
+  evidenceType?: string;
+  /** Date on the supporting document when known (ISO date or datetime). */
+  evidenceDate?: string;
+  /** Vendor, supplier, or source of the cost. */
+  vendorOrSource?: string;
+  /** Secondary document / line reference when distinct from `reference`. */
+  documentReference?: string;
+};
+
+/**
+ * Cost incurred for facility operations.
+ *
+ * - Independent of CostSubmission, Approval, and Payment lifecycles.
+ * - Work / Work Order / Job Order references are optional operational context.
+ * - No markup, submission status, approval status, or payment fields.
+ */
+export type CostRecord = {
+  /** Canonical cost identity (e.g. COST-2026-000001 when persisted). */
+  costId: string;
+  /** When the cost was recorded in SentraCore (ISO datetime). */
+  recordedAt: string;
+
+  /** Operational context — facility and location are required; execution links are optional. */
+  facilityId: string;
+  /** Operational place within/around the facility (free text). */
+  location: string;
+  departmentId?: string;
+  /** Work backing store id (Maintenance / MNT-* in current architecture). */
+  workId?: string;
+  workOrderId?: string;
+  /** Reserved — Job Order is not yet implemented. */
+  jobOrderId?: string;
+
+  description: string;
+  category: CostCategory;
+  /** Optional amount budgeted/planned for this cost when a budget exists. */
+  budgetedAmount?: number;
+  /** Authoritative incurred amount once confirmed. */
+  actualAmount: number;
+  currency: FinancialCurrencyCode;
+
+  reimbursability: CostReimbursability;
+  evidence: CostEvidence;
+
+  /** User id of the person who recorded the cost. */
+  recordedBy: string;
+  notes?: string;
+};
+
+/**
+ * @deprecated Phase ≤12 — use CostReimbursability on CostRecord instead.
+ * Retained for CostSubmission documentation compatibility only.
  */
 export type CostClass = "non_reimbursable" | "reimbursable";
 
 /**
- * Origin of a cost (conceptual — not an accounting journal source).
- * Exact category taxonomy is OPEN.
+ * @deprecated Phase ≤12 origin taxonomy — prefer CostCategory on CostRecord.
  */
 export type CostOrigin =
   | "contractual_obligation"
@@ -38,70 +124,44 @@ export type CostOrigin =
   | "other";
 
 /**
- * Optional links to operational / execution context.
- * All optional — never invent fake links.
+ * Optional links on submission packages (broader Issue lens refs).
+ * CostRecord uses first-class optional fields instead of this bundle.
  */
 export type FinancialOperationalRefs = {
-  /** Issue lens id when known (`issue:request:*` | `issue:maintenance:*` | `issue:incident:*`). */
   issueId?: string;
   requestId?: string;
   maintenanceId?: string;
-  /** Only when genuinely relevant — Incident is specialised, not mandatory. */
   incidentId?: string;
   workOrderId?: string;
-  /**
-   * Future Job Order id — reserved only.
-   * Job Order remains unimplemented; do not emit as if live.
-   */
   jobOrderId?: string;
   facilityId?: string;
   contractId?: string;
 };
 
 /**
- * Cost incurred by PayChex (operational spend).
- * Not a journal entry. Not reimbursement state. Not contract payment.
- */
-export type CostRecord = {
-  /** Future id when persisted — not allocated in Phase 12. */
-  id?: string;
-  /** Human/reference code when known. */
-  reference?: string;
-  /** Category label — exact taxonomy OPEN. */
-  category?: string;
-  costClass: CostClass;
-  /** What PayChex actually spent. Never overwritten by submitted amount. */
-  actualAmount: number;
-  currency: FinancialCurrencyCode;
-  incurredAt?: string;
-  description?: string;
-  origin?: CostOrigin;
-  /** Whether this cost is eligible for NCC reimbursement submission. */
-  reimbursementEligible: boolean;
-  refs?: FinancialOperationalRefs;
-  /** Optional link to a CostSubmission when reimbursable path is used. */
-  costSubmissionId?: string;
-  createdAt?: string;
-  createdByUserId?: string;
-  notes?: string;
-};
-
-/**
- * How markup is represented on a reimbursable submission.
- * Calculation policy is OPEN — store values; do not invent universal %.
+ * How markup is represented on a reimbursable submission package.
+ * Policy-driven — no hard-coded rates in the domain layer.
+ * Markup does NOT belong on CostRecord.
  */
 export type MarkupRepresentation = {
-  /** Fixed commercial markup amount (currency units). */
   markupAmount?: number;
-  /** Percentage markup when that is the commercial form. */
   markupRatePercent?: number;
-  /** Explicit none — no markup applied. */
   noMarkup?: boolean;
 };
 
 /**
- * Financial submission / reimbursement state — independent of operational status.
- * Candidates for a future workflow; several semantics remain OPEN.
+ * Submission lifecycle — the submission's own state only.
+ * Does NOT encode Approval authority decisions or Payment receipt.
+ */
+export type CostSubmissionLifecycleStatus =
+  | "draft"
+  | "submitted"
+  | "queried"
+  | "cancelled";
+
+/**
+ * @deprecated Finance UI pipeline stages spanning cost → submission → approval → payment.
+ * Not the domain lifecycle on {@link CostSubmission} — use {@link CostSubmissionLifecycleStatus}.
  */
 export type CostSubmissionStatus =
   | "draft"
@@ -113,67 +173,106 @@ export type CostSubmissionStatus =
   | "partially_paid"
   | "paid"
   | "cancelled"
-  /**
-   * @deprecated Prefer under_review. Retained for Phase ≤11 CostSubmissionContract compatibility.
-   */
   | "awaiting_approval"
-  /**
-   * @deprecated Prefer partially_paid or paid. Retained for compatibility.
-   */
   | "payment_pending";
 
 /**
- * Payment outcome for a reimbursement submission — not payment processing.
+ * Payment reconciliation view — belongs to Payment / Approval cross-cut, not CostSubmission.
+ * Used by pure helpers to reason about received vs authorized amounts.
  */
+export type ReimbursementPaymentReconciliation = {
+  /** Claim-side amount submitted for consideration. */
+  claimAmount: number;
+  /** Authorized amount from Approval domain when known. */
+  authorizedAmount?: number;
+  /** Received amount from Payment domain when known. */
+  receivedAmount?: number;
+};
+
 export type ReimbursementPaymentOutcome =
   | "unpaid"
   | "partially_paid"
   | "fully_paid";
 
 /**
- * NCC-reimbursable cost submission package.
- *
- * Preserves actualAmount, markup, and submittedAmount independently.
- * Approval and payment amounts may differ from submitted.
+ * Submission support package — distinct from per-cost {@link CostEvidence}.
+ * "What documentation accompanies this claim/submission?"
  */
-export type CostSubmission = {
-  id?: string;
-  /** CostRecord this submission packages (when linked). */
-  costRecordId?: string;
-  refs?: FinancialOperationalRefs;
-  /** Execution instrument context when applicable. */
-  executionKind?: IssueExecutionKind;
-  executionId?: string;
-  currency: FinancialCurrencyCode;
-
-  /** Amount actually incurred by PayChex (SoT for cost). */
-  actualAmount: number;
-  markup?: MarkupRepresentation;
-  /** Amount presented to NCC for reimbursement. */
-  submittedAmount: number;
-  /** Amount NCC approved — may differ from submitted (OPEN rules). */
-  approvedAmount?: number;
-  /** Amount received as payment. */
-  receivedAmount?: number;
-  /** Derived conceptual outstanding — not a second SoT when both submitted/approved+received known. */
-  outstandingAmount?: number;
-
-  status: CostSubmissionStatus;
-  paymentOutcome?: ReimbursementPaymentOutcome;
-
-  /**
-   * Conceptual roles involved — not wired to engines.
-   * Client/NCC APR ≠ internal approval ≠ payment status.
-   */
-  authorityRoles?: IssueAuthorityRole[];
+export type CostSubmissionPackage = {
+  /** Primary reference for the submission package (cover sheet, batch ref, etc.). */
+  reference?: string;
+  /** Lightweight classifier — not an exhaustive taxonomy. */
+  packageType?: string;
+  /** Date on the package when known (ISO date or datetime). */
+  packageDate?: string;
   notes?: string;
-  openDecisions?: string[];
 };
 
 /**
- * Monthly / periodic contract payment owed to PayChex.
- * Distinct from reimbursement. Not an expense submission.
+ * Reimbursement / claim submission package referencing one or more CostRecords.
+ *
+ * - Does NOT duplicate CostRecord.actualAmount as authoritative cost fact.
+ * - Cost selection is explicit via `costRecordIds`.
+ * - Approval and Payment remain separate domains (linked by id, not duplicated state).
  */
+export type CostSubmission = {
+  /** Canonical submission identity (e.g. SUB-2026-000001 when persisted). */
+  submissionId: string;
+
+  /** Explicit CostRecord selection — cardinality not restricted at domain layer. */
+  costRecordIds: string[];
+
+  /** Submission lifecycle — does not encode approval or payment. */
+  status: CostSubmissionLifecycleStatus;
+
+  currency: FinancialCurrencyCode;
+
+  /**
+   * Claim-side amount being presented for reimbursement consideration.
+   * Distinct from underlying CostRecord.actualAmount totals.
+   */
+  claimAmount?: number;
+
+  /** Policy-driven markup adjustment — rates are not hard-coded in domain. */
+  markup?: MarkupRepresentation;
+
+  /** Optional contextual metadata — not required for standalone facility costs. */
+  facilityId?: string;
+  departmentId?: string;
+  /** Human-readable period/cycle label — not a hard-coded cadence rule. */
+  periodLabel?: string;
+  /** Extensible submission classification — no fixed enum until policy is established. */
+  submissionKind?: string;
+
+  /** Submission support package — distinct from per-cost evidence. */
+  submissionPackage?: CostSubmissionPackage;
+
+  /** Optional broader operational context (Issue lens refs). */
+  refs?: FinancialOperationalRefs;
+  executionKind?: IssueExecutionKind;
+  executionId?: string;
+
+  /** Relationship to Approval domain — not duplicated approval state. */
+  approvalId?: string;
+
+  /** Audit — who prepared and when. */
+  createdAt: string;
+  createdBy: string;
+  /** When last sent for consideration (initial submit or resubmit). */
+  submittedAt?: string;
+  submittedBy?: string;
+  /** When authority returned the submission for clarification. */
+  queriedAt?: string;
+  queryNotes?: string;
+
+  notes?: string;
+
+  /** @deprecated Use submissionId. Phase ≤12 alias. */
+  id?: string;
+  /** @deprecated Use costRecordIds. Phase ≤12 single-cost reference. */
+  costRecordId?: string;
+};
+
 export type ContractPaymentStatus =
   | "expected"
   | "due"
@@ -188,20 +287,15 @@ export type ContractPaymentStatus =
 
 export type ContractPaymentRecord = {
   id?: string;
-  /** Contract / commercial agreement reference — naming OPEN. */
   contractReference?: string;
-  /** Period covered (e.g. calendar month) — exact encoding OPEN. */
   period?: string;
   periodStart?: string;
   periodEnd?: string;
   currency: FinancialCurrencyCode;
-  /** Amount contractually expected — do not hard-code in code. */
   expectedAmount: number;
-  /** Amount submitted / invoiced when known. */
   submittedAmount?: number;
   invoiceReference?: string;
   submittedAt?: string;
-  /** Amount received. */
   receivedAmount?: number;
   receivedAt?: string;
   outstandingAmount?: number;
@@ -210,15 +304,9 @@ export type ContractPaymentRecord = {
   notes?: string;
 };
 
-/**
- * Conceptual grouping only — not a required persisted super-entity.
- */
 export type FinancialRecordKind = "cost" | "cost_submission" | "contract_payment";
 
-/**
- * @deprecated Prefer CostSubmission. Alias retained for Issue-module imports.
- * Maps legacy field names onto the Phase 12 submission contract.
- */
+/** @deprecated Prefer CostSubmission. Alias retained for Issue-module imports. */
 export type CostSubmissionContract = {
   id?: string;
   executionKind?: IssueExecutionKind;
@@ -226,13 +314,11 @@ export type CostSubmissionContract = {
   issueId?: string;
   facilityId?: string;
   currency?: string;
-  /** @deprecated Prefer actualAmount on CostSubmission */
   actualCost?: number;
   markupAmount?: number;
   markupRate?: number;
   submittedAmount?: number;
   approvedAmount?: number;
-  /** @deprecated Prefer receivedAmount */
   paymentReceivedAmount?: number;
   status: CostSubmissionStatus;
   authorityRoles?: IssueAuthorityRole[];

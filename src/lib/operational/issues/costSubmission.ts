@@ -7,6 +7,7 @@
 
 export type {
   CostSubmissionContract,
+  CostSubmissionLifecycleStatus,
   CostSubmissionStatus,
 } from "../finance/types";
 

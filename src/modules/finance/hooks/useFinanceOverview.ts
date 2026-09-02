@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApprovalService } from "@/modules/approvals/services/ApprovalService";
-import { FINANCE_OVERVIEW_FETCH_SIZE } from "../constants";
+import { CostRecordService } from "@/services/finance/CostRecordService";
+import {
+  FINANCE_COST_LIST_PAGE_SIZE,
+  FINANCE_OVERVIEW_FETCH_SIZE,
+} from "../constants";
 import type { FinanceOverview } from "../types";
 import { deriveFinanceOverview } from "../utils/deriveFinanceOverview";
 
@@ -18,20 +22,30 @@ export function useFinanceOverview() {
     setError(null);
 
     try {
-      const result = await ApprovalService.listApprovals({
-        page: 1,
-        pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
-        status: "all",
-        sort: "newest",
-      });
+      const [approvalResult, costResult] = await Promise.all([
+        ApprovalService.listApprovals({
+          page: 1,
+          pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
+          status: "all",
+          sort: "newest",
+        }),
+        CostRecordService.listCostRecords({
+          page: 1,
+          pageSize: FINANCE_COST_LIST_PAGE_SIZE,
+        }),
+      ]);
 
       if (id !== requestId.current) return;
 
       setOverview(
-        deriveFinanceOverview(result.data, {
-          totalApprovals: result.total,
-          truncated: result.total > result.data.length,
-        })
+        deriveFinanceOverview(
+          approvalResult.data,
+          costResult.data,
+          {
+            totalApprovals: approvalResult.total,
+            truncated: approvalResult.total > approvalResult.data.length,
+          }
+        )
       );
     } catch (err) {
       if (id !== requestId.current) return;

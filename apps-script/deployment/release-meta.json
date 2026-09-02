@@ -1,30 +1,39 @@
 {
-  "release": "v0.7.8",
-  "title": "Phase 32 status transition read elimination",
+  "release": "v0.8.3",
+  "title": "CostRecord receipt and invoice uploads",
   "features": [
-    "Maintenance update returns _previousStatus + buildMarker for single-round-trip status transitions",
-    "Next.js transition path removes pre-update getMaintenance when status changes"
+    "COST_RECORDS schema: Location column + Budgeted Amount replaces Estimated Amount",
+    "Safe in-place migration preserves existing Estimated Amount values into Budgeted Amount",
+    "CostRecord domain: budgetedAmount + required location (estimatedAmount removed)",
+    "Receipt and invoice uploads stored in the Apps Script project's Google Drive"
   ],
   "performance": [
-    "Status transition: 2 GAS round-trips → 1 (eliminates pre-read when v0.7.8 live)",
-    "Simple field save: unchanged at 1 read + 1 write inside update()"
+    "No additional API calls — schema migration runs on sheet access only",
+    "Evidence upload is a single cost-create request, limited to 5 MB"
   ],
   "deploymentRequired": true,
   "triggerRequired": false,
   "appsScriptRedeploy": true,
   "smokeTests": [
     {
-      "name": "Phase 32 status transition read elimination",
-      "command": "npx tsx --tsconfig tsconfig.json scripts/verify-phase32-status-transition-read-elimination.mts"
+      "name": "CostRecord domain",
+      "command": "npx tsx --tsconfig tsconfig.json scripts/verify-cost-record-domain.mts"
     },
     {
-      "name": "Phase 31 browser smoke",
-      "command": "node scripts/verify-phase31-browser-smoke.cjs"
+      "name": "CostRecord persistence",
+      "command": "npx tsx --tsconfig tsconfig.json scripts/verify-cost-record-persistence.mts"
+    },
+    {
+      "name": "Finance Cost Entry and evidence upload",
+      "command": "npx tsx --tsconfig tsconfig.json scripts/verify-finance-cost-entry.mts"
     }
   ],
   "notes": [
-    "Deploy MaintenanceRepository.gs, MaintenanceService.gs, and WorkOrderMaintenanceMutationService.gs.",
-    "WorkOrderMaintenanceMutationService must unwrap MaintenanceRepository.update() { canonical, previousStatus }.",
-    "Live marker: _buildMarker 2026-09-01-phase32-maintenance-update-v1 on update with _returnPreviousStatus."
+    "MANUAL ACTION REQUIRED: Deploy updated CostRecordRepository.gs and CostRecordService.gs, then create a new Web App version.",
+    "Existing COST_RECORDS rows are preserved; Estimated Amount values migrate to Budgeted Amount on first sheet access.",
+    "New Location column is added without deleting or recreating the sheet.",
+    "Receipt and invoice files are saved privately in the Apps Script project's Google Drive folder named SentraCore Cost Evidence.",
+    "After deployment, run initialiseCostEvidenceStorage() once from the Apps Script editor to authorize Google Drive and create the evidence folder.",
+    "Live GAS verification requires APPS_SCRIPT_URL in .env.local after deploy."
   ]
 }

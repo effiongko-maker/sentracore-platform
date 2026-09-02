@@ -1,4 +1,18 @@
+import type { CostReimbursability } from "@/lib/operational/finance";
 import type { ReimbursementStageId } from "./types";
+
+/** Human labels for reimbursement classification in Finance UI. */
+export const COST_REIMBURSABILITY_LABELS: Record<CostReimbursability, string> = {
+  unknown: "Unknown",
+  reimbursable: "Reimbursable",
+  non_reimbursable: "Non-reimbursable",
+};
+
+/** Paginated cost list on Finance overview. */
+export const FINANCE_COST_LIST_PAGE_SIZE = 20;
+
+/** Keep the dashboard's Recent costs table compact. */
+export const FINANCE_RECENT_COSTS_LIMIT = 10;
 
 /** Single batch fetch — avoids N+1 while covering typical operational volume. */
 export const FINANCE_OVERVIEW_FETCH_SIZE = 100;

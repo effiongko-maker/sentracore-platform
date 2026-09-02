@@ -1,19 +1,21 @@
 Release:
-v0.7.8
+v0.8.3
 
 Title:
-Phase 32 status transition read elimination
+CostRecord receipt and invoice uploads
 
 Generated:
-2026-09-01T15:13:37.951Z
+2026-09-02T10:59:08.567Z
 
 Features
-- Maintenance update returns _previousStatus + buildMarker for single-round-trip status transitions
-- Next.js transition path removes pre-update getMaintenance when status changes
+- COST_RECORDS schema: Location column + Budgeted Amount replaces Estimated Amount
+- Safe in-place migration preserves existing Estimated Amount values into Budgeted Amount
+- CostRecord domain: budgetedAmount + required location (estimatedAmount removed)
+- Receipt and invoice uploads stored in the Apps Script project's Google Drive
 
 Performance
-- Status transition: 2 GAS round-trips → 1 (eliminates pre-read when v0.7.8 live)
-- Simple field save: unchanged at 1 read + 1 write inside update()
+- No additional API calls — schema migration runs on sheet access only
+- Evidence upload is a single cost-create request, limited to 5 MB
 
 Files Changed
 - ROUTER.gs
@@ -24,6 +26,9 @@ Files Changed
 - AssetsController.gs
 - AssetService.gs
 - CatalogCacheService.gs
+- CostRecordRepository.gs
+- CostRecordsController.gs
+- CostRecordService.gs
 - FacilitiesController.gs
 - FacilityRepository.gs
 - FacilityService.gs
@@ -38,6 +43,8 @@ Files Changed
 - MasterDataService.gs
 - OperationalListAudit.gs
 - OperationalRegisterCache.gs
+- OperationalWorkloadController.gs
+- OperationalWorkloadService.gs
 - ReportingSnapshotController.gs
 - ReportingSnapshotRepository.gs
 - ReportingSnapshotService.gs
@@ -68,20 +75,30 @@ YES
 
 Smoke Tests
 
-Phase 32 status transition read elimination:
+CostRecord domain:
 
 ```bash
-npx tsx --tsconfig tsconfig.json scripts/verify-phase32-status-transition-read-elimination.mts
+npx tsx --tsconfig tsconfig.json scripts/verify-cost-record-domain.mts
 ```
 
-Phase 31 browser smoke:
+CostRecord persistence:
 
 ```bash
-node scripts/verify-phase31-browser-smoke.cjs
+npx tsx --tsconfig tsconfig.json scripts/verify-cost-record-persistence.mts
+```
+
+Finance Cost Entry and evidence upload:
+
+```bash
+npx tsx --tsconfig tsconfig.json scripts/verify-finance-cost-entry.mts
 ```
 
 Notes
-- Deploy MaintenanceRepository.gs and MaintenanceService.gs.
-- Live marker: _buildMarker 2026-09-01-phase32-maintenance-update-v1 on update with _returnPreviousStatus.
+- MANUAL ACTION REQUIRED: Deploy updated CostRecordRepository.gs and CostRecordService.gs, then create a new Web App version.
+- Existing COST_RECORDS rows are preserved; Estimated Amount values migrate to Budgeted Amount on first sheet access.
+- New Location column is added without deleting or recreating the sheet.
+- Receipt and invoice files are saved privately in the Apps Script project's Google Drive folder named SentraCore Cost Evidence.
+- After deployment, run initialiseCostEvidenceStorage() once from the Apps Script editor to authorize Google Drive and create the evidence folder.
+- Live GAS verification requires APPS_SCRIPT_URL in .env.local after deploy.
 
 <!-- GENERATED FILE — do not edit by hand. npm run apps-script:pack -->

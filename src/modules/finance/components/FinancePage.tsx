@@ -2,10 +2,12 @@
 
 import "@/styles/finance.css";
 
+import { useState } from "react";
 import { Banknote } from "lucide-react";
 import { ModeFrame } from "@/components/platform";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useFinanceOverview } from "../hooks/useFinanceOverview";
+import { CostRecordFormModal } from "./CostRecordFormModal";
 import { FinanceCoverageSection } from "./FinanceCoverageSection";
 import { FinanceFlowRail } from "./FinanceFlowRail";
 import { FinanceHeader } from "./FinanceHeader";
@@ -17,6 +19,7 @@ import { FinanceSubmissionsSection } from "./FinanceSubmissionsSection";
 
 export function FinancePage() {
   const { overview, loading, error, reload } = useFinanceOverview();
+  const [costModalOpen, setCostModalOpen] = useState(false);
 
   if (error && !loading && !overview) {
     return (
@@ -47,11 +50,14 @@ export function FinancePage() {
           truncated={overview?.meta.truncated ?? false}
           loading={loading}
           onRefresh={() => void reload()}
+          onRecordCost={() => setCostModalOpen(true)}
         />
 
         <FinanceFlowRail
           authorisationCount={overview?.meta.approvalsInView ?? 0}
           awaitingDecisionCount={awaitingDecision}
+          costRecordedCount={overview?.operationalCostSummary?.count ?? 0}
+          costLive={overview?.availability.costRecords ?? false}
           loading={loading}
         />
 
@@ -65,11 +71,19 @@ export function FinancePage() {
           loading={loading}
         />
 
-        <FinanceCoverageSection />
+        <FinanceCoverageSection
+          operationalCostsStatus={
+            overview?.operationalCostSummary
+              ? `${overview.operationalCostSummary.count} recorded`
+              : "Not yet recorded"
+          }
+        />
 
         <div className="fin-layout-main">
           <FinanceOperationalCostSection
             lenses={overview?.operationalCostLenses ?? []}
+            summary={overview?.operationalCostSummary ?? null}
+            recentCosts={overview?.recentCosts ?? []}
             loading={loading}
           />
           <FinanceSubmissionsSection />
@@ -78,6 +92,12 @@ export function FinancePage() {
         <div className="mt-8">
           <FinanceIntelligencePreview />
         </div>
+
+        <CostRecordFormModal
+          open={costModalOpen}
+          onClose={() => setCostModalOpen(false)}
+          onSaved={() => void reload()}
+        />
       </div>
     </ModeFrame>
   );

@@ -82,6 +82,11 @@ export function useAssets() {
         if (result.page !== nextPage) {
           setPage(result.page);
         }
+
+        void AssetService.enrichAssetsWorkload(result.data).then((enriched) => {
+          if (id !== requestId.current) return;
+          setAssets(enriched);
+        });
       } catch (err) {
         if (id !== requestId.current) return;
         setError(

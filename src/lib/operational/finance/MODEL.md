@@ -1,101 +1,230 @@
-# Financial domain foundation (Phase 12)
+# Financial domain foundation
 
-Types and documentation only. **No Finance UI, sheets, tables, payment processing, or approval engines.**
+Types, persistence mapping, and documentation — see MODEL.md.
 
-## Three distinct commercial flows
-
-The FM contract produces three materially different financial flows. Do **not** collapse them into one generic Expense.
-
-### A. Contractual / non-reimbursable cost
-
-Costs PayChex is contractually responsible for (e.g. lift servicing, generator servicing labour covered by the FM contract).
-
-- Represented as a **CostRecord** with `costClass: "non_reimbursable"`
-- Track actual amount spent and financial impact
-- **Not** submitted to NCC as reimbursement merely because they occurred
-
-### B. NCC-reimbursable / client-funded cost
-
-Costs incurred for the facility that NCC agrees to reimburse (e.g. diesel, approved consumables, fumigation materials, approved projects).
+## Canonical financial chain
 
 ```
-ACTUAL COST → MARKUP → SUBMITTED AMOUNT → APPROVAL / SUBMISSION → PAYMENT RECEIVED
+Work / Work Order / Job Order  (operational execution — optional context)
+            ↓
+        CostRecord             (what did this cost us?)
+            ↓
+      CostSubmission           (what are we claiming?)
+            ↓
+   Authority / Approval        (what was authorized?)
+            ↓
+         Payment              (what was received?)
 ```
 
-Critical rule:
+**Do not collapse these concepts.**
+
+| Concept | Question it answers |
+|---------|---------------------|
+| CostRecord | What did this cost us? |
+| CostSubmission | What are we claiming (incl. markup)? |
+| Approval | What was authorized? |
+| Payment | What was received? |
+
+Work, Work Order, and Job Order are **operational execution** references. They are **not** the financial source of truth.
+
+---
+
+## CostRecord
+
+A **CostRecord** represents an actual operational cost incurred or recorded for facility operations.
+
+### Independence
+
+- A CostRecord **may exist without** Work, Work Order, or Job Order.
+- A CostRecord **must not** carry submission status, approval status, payment status, markup, reimbursement percentage, or payment received fields.
+- Linkage to CostSubmission is via `CostSubmission.costRecordIds` — not embedded lifecycle on CostRecord.
+
+### Examples
+
+| Scenario | Context |
+|----------|---------|
+| Diesel for a facility | `facilityId` only |
+| Cleaning materials | `facilityId` + category; optional `departmentId` |
+| Spare part for a Work Order | `facilityId` + `workOrderId` |
+| Labour for a Job Order | `facilityId` + `jobOrderId` (when JO exists) |
+
+### Required fields (domain)
+
+- `costId`, `recordedAt`, `facilityId`, `location`, `description`, `category`, `actualAmount`, `reimbursability`, `evidence`, `recordedBy`
+
+### Optional operational context
+
+- `departmentId`, `workId`, `workOrderId`, `jobOrderId`, `budgetedAmount`
+
+**No rule** requires Work/WO/JO. **No rule** forbids multiple contextual references.
+
+`workId` maps to the Work backing store (Maintenance / `MNT-*` ids in the current architecture).
+
+### Facility vs location
 
 | Field | Meaning |
 |-------|---------|
-| **actualAmount** | What PayChex actually spent |
-| **markupAmount** / rate | Commercial markup where applicable |
-| **submittedAmount** | What PayChex presents to NCC |
-| **approvedAmount** | What NCC approved (may differ from submitted) |
-| **receivedAmount** | What was paid |
+| `facilityId` | Structured facility context — selected from the facility catalogue |
+| `location` | Operational place within/around the facility (free text), e.g. Generator house, rear service area |
 
-**ACTUAL ≠ SUBMITTED ≠ APPROVED ≠ RECEIVED**
+Do not replace `facilityId` with free text. Do not create a location master-data catalogue for CostRecord.
 
-Never overwrite actual with submitted. Never use submitted as the accounting cost.
+### Actual vs budgeted amount
 
-### C. Monthly contract payment
+| Field | Meaning |
+|-------|---------|
+| `budgetedAmount` | Optional — amount budgeted/planned for this cost when a budget exists |
+| `actualAmount` | **Authoritative** incurred/confirmed amount |
 
-Recurring contractual payment owed **to** PayChex under the FM contract.
+Once `actualAmount` is set, it is the sole authoritative monetary value.  
+`getAuthoritativeAmount()` returns `actualAmount` only — **never** falls back to `budgetedAmount`.
 
-- Represented as **ContractPaymentRecord**
-- **Not** a reimbursement expense
-- Conceptual lifecycle (not implemented): Expected → Due → Submitted/Invoiced → Approved/Processing → Received → Outstanding/Overdue
+`budgetedAmount` is **not** an estimate, forecast, quote, claim amount, or reimbursable amount.  
+Do not calculate budget-vs-actual variance in CostRecord — that requires a real budget source.
 
-Exact schedule (often reported around the 10th–15th) and amount are **OPEN** — do not hard-code.
+Budgeted amounts are not payable or reimbursable by themselves.
+
+### Reimbursability
+
+Explicit classification only — **never inferred** from category, Work Order, Job Order, amount, facility, or vendor.
+
+| Value | Meaning |
+|-------|---------|
+| `unknown` | Not yet classified (valid initial state) |
+| `reimbursable` | Eligible for future submission path |
+| `non_reimbursable` | Contractual / non-claimable |
+
+This replaces the Phase 12 `costClass` + `reimbursementEligible` pair on CostRecord.
+
+### Cost categories
+
+Canonical keys (labels in `COST_CATEGORY_LABELS`):
+
+- Diesel / Fuel · Materials · Spare Parts · Labour · Transportation · Equipment · Consumables · Service · Other
+
+Categories describe **what** was purchased. They are not Work Order, Job Order, NCC, PayChex, or Reimbursement dimensions.
+
+### Supporting / originating evidence
+
+Every CostRecord **requires** evidence with a non-empty `reference`.
+
+Optional evidence fields: `evidenceType`, `evidenceDate`, `vendorOrSource`, `documentReference`.
+
+A CostRecord without evidence is **invalid** at the domain layer.
+
+### What CostRecord does NOT contain
+
+- Markup (`markupAmount`, `markupRatePercent`, …)
+- Claim amounts (`submittedAmount`, `approvedAmount`, `receivedAmount`)
+- Submission / approval / payment status
+- `costSubmissionId` (submission links **to** cost, not embedded on cost)
 
 ---
 
-## Conceptual model
+## CostSubmission
+
+A **CostSubmission** represents a reimbursement / claim package: **what costs are we presenting for consideration?**
+
+It references one or more **CostRecords** — it is **not** another CostRecord.
+
+### Core boundary
+
+| Concept | Question |
+|---------|----------|
+| CostRecord | What did we spend? (`actualAmount` is authoritative) |
+| CostSubmission | What are we presenting for reimbursement/claim consideration? |
+| Approval | What was authorized? |
+| Payment | What was actually received? |
+
+**Do not collapse these.**
+
+### Cost relationship
+
+- A submission **references** CostRecords via `costRecordIds[]`.
+- One submission may contain **multiple** CostRecords.
+- A CostRecord is **not** assumed to belong to only one submission (cardinality not restricted).
+- Cost **selection is explicit** — reimbursable CostRecords are **not** auto-included.
+
+### Identity
+
+- `submissionId` — intended format `SUB-YYYY-NNNNNN` (e.g. `SUB-2026-000001`).
+- ID generation belongs to persistence — domain validates format only.
+
+### Lifecycle (submission-owned)
+
+`CostSubmissionLifecycleStatus`:
+
+| Status | Meaning |
+|--------|---------|
+| `draft` | Being prepared |
+| `submitted` | Sent for consideration (includes resubmission after query) |
+| `queried` | Returned for clarification |
+| `cancelled` | Withdrawn |
+
+Query / resubmission path:
 
 ```
-FINANCIAL RECORD (conceptual grouping — not necessarily a persisted entity)
-├── CostRecord
-│   ├── non_reimbursable
-│   └── reimbursable
-│        └── CostSubmission
-│             ├── actualAmount
-│             ├── markup (amount and/or rate)
-│             ├── submittedAmount
-│             ├── submission / approval state
-│             └── payment outcome (received / outstanding)
-│
-└── ContractPaymentRecord
-     ├── contract period
-     ├── expected / submitted / received amounts
-     └── payment state
+draft → submitted → queried → (edit) → submitted
 ```
+
+**Approval and payment are separate domains.**  
+Do **not** encode `approved`, `paid`, or payment receipt on `CostSubmission.status`.
+
+Optional `approvalId` links to Approval — it does not duplicate approval amounts or status.
+
+### Amounts
+
+| Layer | Field | Meaning |
+|-------|-------|---------|
+| CostRecord | `actualAmount` | Authoritative underlying cost |
+| CostSubmission | `claimAmount` | Claim-side amount being presented (optional until finalized) |
+| CostSubmission | `markup` | Policy-driven adjustment — **no hard-coded rates** |
+| Approval | (separate domain) | Authorized amount |
+| Payment | (separate domain) | Received amount |
+
+**ACTUAL (CostRecord) ≠ CLAIM (CostSubmission) ≠ AUTHORIZED (Approval) ≠ RECEIVED (Payment)**
+
+Use `getSubmissionActualCostTotal(costRecords)` to sum underlying actual costs — do not store authoritative actual totals on the submission.
+
+### Reimbursability
+
+`CostRecord.reimbursability` classifies individual costs.  
+A CostSubmission does **not** infer or auto-select reimbursable records.
+
+### Evidence vs submission package
+
+| | CostRecord evidence | Submission package |
+|--|---------------------|-------------------|
+| Question | Why does this cost exist? | What documentation accompanies this claim? |
+| Type | `CostEvidence` (required `reference`) | `CostSubmissionPackage` (optional) |
+
+Do not collapse per-cost evidence into the submission package.
+
+### Context (optional)
+
+- `facilityId`, `departmentId` — contextual, not required when costs span facilities
+- `periodLabel`, `submissionKind` — extensible; **no hard-coded cadence** (monthly window, 90% completion, etc.)
+- Work / WO / JO context may appear on referenced CostRecords or optional `refs`
+
+Job Order is **not required** and has no live persistence.
+
+### What CostSubmission does NOT contain
+
+- Duplicated `actualAmount` as authoritative cost fact
+- `approvedAmount`, `receivedAmount`, `paymentOutcome`, `paymentStatus`
+- Hard-coded markup percentages (NCC 30%, PayChex rates, etc.)
+- Authority role sequences
+- Automatic claim / submission / approval transitions
+
+### Deprecated UI pipeline type
+
+`CostSubmissionStatus` (with `approved`, `paid`, etc.) is retained **only** for Finance UI pipeline visualization spanning the full chain. It is **not** the domain lifecycle on `CostSubmission`.
 
 ---
 
-## Operational linkage
+## ContractPaymentRecord (unchanged boundary)
 
-Intended chain (optional at each step):
-
-```
-ISSUE → TREATMENT → EXECUTION → OUTCOME → COST
-```
-
-and independently:
-
-```
-COST → REIMBURSABLE? → COST SUBMISSION → APPROVAL → PAYMENT
-```
-
-and separately:
-
-```
-CONTRACT → MONTHLY PAYMENT → RECEIVED / OUTSTANDING
-```
-
-One Issue / treatment may produce **multiple CostRecords** with different classes  
-(e.g. generator labour = non-reimbursable; oil/filter = reimbursable).
-
-Optional references only (never invent fake links):
-
-- Issue · Request · Maintenance · Incident · Work Order · Job Order (future)
+Monthly / periodic contract payment **to** PayChex. Distinct from reimbursement and from CostRecord.
 
 ---
 
@@ -103,60 +232,44 @@ Optional references only (never invent fake links):
 
 | Must not | Because |
 |----------|---------|
-| Use Maintenance/WorkOrder/Issue status as reimbursement status | Financial SoT is separate |
-| Use reimbursement/payment state to resolve an Issue | Work completed ≠ payment received |
+| Use operational status as reimbursement status | Financial SoT is separate |
+| Use payment state to resolve an Issue | Work completed ≠ payment received |
 | Use Issue resolution to imply payment received | Operational ≠ financial |
-
----
-
-## Authorities (conceptual — no gates in Phase 12)
-
-| Role | Meaning |
-|------|---------|
-| Annex Director | Internal / local authority |
-| HQ/EVC | Escalated organisational authority |
-| Client/NCC | External client / reimbursement authority |
-| Procurement | Job Order issuing function |
-
-Existing Client/NCC **APR** is **not** the universal financial approval object and is **not** the same as payment status.
 
 ---
 
 ## Work Order / Job Order
 
-- Work Order = execution instrument (may be referenced by cost)
-- Job Order = future / unimplemented (reference reserved only)
+- **Work Order** — execution instrument; optional `workOrderId` on CostRecord
+- **Job Order** — future / unimplemented; `jobOrderId` reserved only
 - Finance does **not** decide WO vs JO
-- No ₦1m threshold
+- WO/JO is **not** the financial source of truth — CostRecord.actualAmount is
 
 ---
 
 ## Source of truth (conceptual)
 
-**Operational:** Request.status · Maintenance.status · Incident.status · WorkOrder.status  
+**Operational:** Request · Maintenance · Incident · WorkOrder status  
 
-**Issue:** derived lens only  
-
-**Financial:** CostRecord.actualAmount · CostSubmission.submittedAmount / approvedAmount / receivedAmount · ContractPaymentRecord.receivedAmount  
+**Financial:** CostRecord.actualAmount · CostSubmission amounts · ContractPaymentRecord.receivedAmount  
 
 ---
 
-## Intelligence readiness (future — not implemented)
+## OPEN decisions (unchanged)
 
-The model should eventually support questions such as: spend totals, contractual vs reimbursable, submitted/approved/outstanding, markup, monthly contract receivables, costs by Issue/facility.
-
-Do **not** change Intelligence in Phase 12.
-
----
-
-## OPEN decisions
-
-- Exact reimbursement categories  
-- Markup calculation rules (%, fixed, none — policy not implemented)  
+- Markup calculation rules  
 - Approved amount semantics  
 - Approval authority for submissions  
 - Payment evidence requirements  
 - Contract payment schedule and amount  
-- Exact entity / persistence naming  
-- Whether non-reimbursable costs need budgeting / variance tracking  
-- Whether Finance integrates with Beacon / existing accounting structures  
+- Persistence naming and stores  
+- Finance integration with external accounting  
+
+---
+
+## Phase history
+
+- **Phase 12** — initial financial types (CostRecord, CostSubmission, ContractPaymentRecord)
+- **Finance domain refinement** — CostRecord semantics tightened: reimbursability, categories, evidence, lifecycle separation, optional execution refs
+- **CostRecord persistence** — `COST_RECORDS` sheet via Apps Script (`cost-records` resource); CostSubmission / ContractPayment still types-only
+- **CostRecord semantic correction** — `budgetedAmount` replaces `estimatedAmount`; required `location`; COST_RECORDS schema migration (16 columns)

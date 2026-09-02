@@ -20,6 +20,12 @@ export {
   type WorkloadBreakdown,
 } from "./deriveOperationalWorkload";
 export {
+  loadBoundedWorkloadSummary,
+  applyAssetWorkloadSummary,
+  applyUserWorkloadSummary,
+  type EntityWorkloadSummary,
+} from "./loadBoundedWorkloadSummary";
+export {
   invalidateOperationalWorkload,
   loadOperationalWorkloadMaps,
   loadOperationalWorkloadSource,

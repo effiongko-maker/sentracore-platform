@@ -1,7 +1,14 @@
 import type { Approval, ApprovalStatus } from "@/modules/approvals/types";
 import { normalizeApprovalStatus } from "@/modules/approvals/lifecycle";
 import {
+  COST_CATEGORY_LABELS,
+  type CostCategory,
+  type CostRecord,
+} from "@/lib/operational/finance";
+import {
   CLIENT_AUTHORISATION_STAGES,
+  COST_REIMBURSABILITY_LABELS,
+  FINANCE_RECENT_COSTS_LIMIT,
   OPERATIONAL_COST_LENSES,
   REIMBURSEMENT_SUBMISSION_STAGES,
 } from "../constants";
@@ -9,6 +16,7 @@ import type {
   FinanceOverview,
   FinancePendingActionItem,
   FinancePipelineStage,
+  FinanceRecentCostRow,
 } from "../types";
 import { formatFinancialAmount, sumAmounts } from "./formatFinancialAmount";
 
@@ -165,8 +173,36 @@ function buildPendingActions(approvals: Approval[]): FinancePendingActionItem[] 
   });
 }
 
+function buildRecentCostRows(records: CostRecord[]): FinanceRecentCostRow[] {
+  return records.slice(0, FINANCE_RECENT_COSTS_LIMIT).map((record) => ({
+    costId: record.costId,
+    recordedAt: record.recordedAt,
+    description: record.description,
+    categoryLabel: COST_CATEGORY_LABELS[record.category as CostCategory],
+    facilityId: record.facilityId,
+    amountLabel: formatFinancialAmount(record.actualAmount, record.currency),
+    reimbursabilityLabel: COST_REIMBURSABILITY_LABELS[record.reimbursability],
+  }));
+}
+
+function buildOperationalCostLenses(records: CostRecord[]) {
+  const count = records.length;
+  const hasRecords = count > 0;
+  const detail = hasRecords
+    ? `${count} recorded cost${count === 1 ? "" : "s"}`
+    : "No cost records yet";
+
+  return OPERATIONAL_COST_LENSES.map((lens) => ({
+    id: lens.id,
+    label: lens.label,
+    available: hasRecords,
+    detail,
+  }));
+}
+
 export function deriveFinanceOverview(
   approvals: Approval[],
+  costRecords: CostRecord[],
   meta: Pick<FinanceOverview["meta"], "totalApprovals" | "truncated">
 ): FinanceOverview {
   const draftRows = approvals.filter(
@@ -191,9 +227,14 @@ export function deriveFinanceOverview(
     awaitingDecision.map((row) => ({ amount: approvalAmount(row) }))
   );
 
+  const costTotal = sumAmounts(
+    costRecords.map((row) => ({ amount: row.actualAmount }))
+  );
+  const costCurrency = costRecords[0]?.currency ?? "NGN";
+
   return {
     availability: {
-      costRecords: false,
+      costRecords: true,
       costSubmissions: false,
       contractPayments: false,
       clientAuthorisation: true,
@@ -234,11 +275,16 @@ export function deriveFinanceOverview(
     reimbursementStages: buildReimbursementStages(),
     clientAuthorisationStages: buildClientAuthorisationStages(approvals),
     pendingActions: buildPendingActions(approvals),
-    operationalCostLenses: OPERATIONAL_COST_LENSES.map((lens) => ({
-      id: lens.id,
-      label: lens.label,
-      available: false,
-    })),
+    operationalCostLenses: buildOperationalCostLenses(costRecords),
+    operationalCostSummary:
+      costRecords.length > 0
+        ? {
+            totalAmount: costTotal,
+            count: costRecords.length,
+            currency: costCurrency,
+          }
+        : null,
+    recentCosts: buildRecentCostRows(costRecords),
     sourceApprovals: approvals,
   };
 }

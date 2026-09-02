@@ -264,3 +264,26 @@ export const LAYER_LABEL: Record<
   execute: "Operations",
   learn: "Insights",
 };
+
+/**
+ * Breadcrumb segments for GlobalCommandBar.
+ * Understand-layer modules (Finance, Intelligence, Reports) are direct workspaces —
+ * no "Understand" parent in the trail (matches OrganisationalCompass sidebar IA).
+ */
+export function resolveBreadcrumbSegments(pathname: string): string[] {
+  const layer = resolveLayerByPath(pathname);
+  const module = resolveModuleByPath(pathname);
+
+  if (module) {
+    if (layer === "understand") {
+      return [module.label];
+    }
+    return [LAYER_LABEL[layer], module.label];
+  }
+
+  if (layer === "platform") {
+    return ["Platform Home"];
+  }
+
+  return [LAYER_LABEL[layer]];
+}
