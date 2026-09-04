@@ -9,6 +9,7 @@ import {
   getActiveWorkspace,
   isPlatformHomePath,
   isWorkspacePreviewPath,
+  resolveCurrentWorkspace,
   type PlatformWorkspace,
 } from "@/lib/platform/workspaces";
 import { cn } from "@/lib/utils";
@@ -16,6 +17,16 @@ import { cn } from "@/lib/utils";
 function workspaceHref(workspace: PlatformWorkspace): string {
   if (workspace.status === "active" && workspace.href) return workspace.href;
   return workspace.previewHref ?? "/";
+}
+
+/** Option status: only the route-current workspace is labelled Active. */
+function optionStatusLabel(
+  workspace: PlatformWorkspace,
+  isCurrent: boolean
+): string {
+  if (isCurrent) return "Active";
+  if (workspace.status === "active") return "";
+  return workspace.statusLabel;
 }
 
 export function WorkspaceSwitcher({
@@ -28,7 +39,8 @@ export function WorkspaceSwitcher({
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const listId = useId();
-  const active = getActiveWorkspace();
+  const currentWorkspace = resolveCurrentWorkspace(pathname);
+  const fallbackActive = getActiveWorkspace();
   const onPlatformLevel =
     isPlatformHomePath(pathname) || isWorkspacePreviewPath(pathname);
 
@@ -61,7 +73,9 @@ export function WorkspaceSwitcher({
       >
         <span className="sc-ws-switcher-copy">
           <span className="sc-ws-switcher-label">
-            {onPlatformLevel ? "Platform" : active.label}
+            {onPlatformLevel
+              ? "Platform"
+              : (currentWorkspace ?? fallbackActive).label}
           </span>
           <span className="sc-ws-switcher-meta">
             {onPlatformLevel ? "Select workspace" : "Active workspace"}
@@ -79,14 +93,8 @@ export function WorkspaceSwitcher({
           <ul className="sc-ws-switcher-list">
             {PLATFORM_WORKSPACES.map((workspace) => {
               const href = workspaceHref(workspace);
-              const isActiveWorkspace = workspace.status === "active";
-              const isCurrent =
-                isActiveWorkspace &&
-                (pathname === workspace.href ||
-                  pathname.startsWith(`${workspace.href}/`) ||
-                  (workspace.id === "operations" &&
-                    pathname !== "/" &&
-                    !pathname.startsWith("/workspaces")));
+              const isCurrent = currentWorkspace?.id === workspace.id;
+              const statusLabel = optionStatusLabel(workspace, isCurrent);
 
               return (
                 <li key={workspace.id}>
@@ -105,14 +113,16 @@ export function WorkspaceSwitcher({
                   >
                     <span className="sc-ws-switcher-option-main">
                       <span className="sc-ws-switcher-option-title">
-                        {isActiveWorkspace ? (
+                        {isCurrent ? (
                           <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
                         ) : null}
                         {workspace.label}
                       </span>
-                      <span className="sc-ws-switcher-option-status">
-                        {workspace.statusLabel}
-                      </span>
+                      {statusLabel ? (
+                        <span className="sc-ws-switcher-option-status">
+                          {statusLabel}
+                        </span>
+                      ) : null}
                     </span>
                   </button>
                 </li>

@@ -19,8 +19,6 @@ export type {
   OperationalNotificationKind,
 } from "./utils/deriveOperationalNotifications";
 
-import type { OperationalNotificationFeed } from "./utils/deriveOperationalNotifications";
-
 export interface WorkspaceQuickAction {
   id: string;
   title: string;
@@ -92,20 +90,42 @@ export interface AttentionModel {
   visible: AttentionMatter[];
   viewAllHref?: string;
   viewAllLabel?: string;
+  /**
+   * True when a major attention source domain failed/timed out.
+   * Queue may omit matters; never treat as a verified empty queue.
+   */
+  incomplete?: boolean;
+}
+
+/**
+ * Per-domain load outcome for Home composition.
+ * false = unavailable (timeout/error) — must not be treated as an empty success.
+ */
+export interface WorkspaceDomainAvailability {
+  workOrders: boolean;
+  incidents: boolean;
+  maintenance: boolean;
 }
 
 export interface OrganisationalPulse {
-  /** Live — open Work in operational flow (maintenance backlog). */
-  openWork: number;
-  /** Live — high/critical priority open Work. */
-  criticalWork: number;
-  openWorkOrders: number;
+  /**
+   * Live — open Work in operational flow (maintenance backlog).
+   * null when Maintenance domain is unavailable.
+   */
+  openWork: number | null;
+  /**
+   * Live — high/critical priority open Work.
+   * null when Maintenance domain is unavailable.
+   */
+  criticalWork: number | null;
+  /** null when Work Orders domain is unavailable. */
+  openWorkOrders: number | null;
   /** Same value as openWork — retained for transitional consumers. */
-  openMaintenance: number;
+  openMaintenance: number | null;
   /** Historical — open legacy Incident records (compatibility only). */
-  legacyOpenIncidents: number;
+  legacyOpenIncidents: number | null;
   /** Historical — critical/high open legacy Incidents (compatibility only). */
-  legacyCriticalIncidents: number;
+  legacyCriticalIncidents: number | null;
   recentActivity: number;
 }
 
@@ -119,12 +139,9 @@ export interface WorkspaceSnapshot {
   operationalState: OperationalState;
   /** Cross-domain intervention queue — distinct from pulse.criticalWork KPI. */
   attention: AttentionModel;
-  /**
-   * Compact “what happened / what needs attention” feed for FM Home.
-   * Derived from existing operational records — not a notification store.
-   */
-  notifications: OperationalNotificationFeed;
   pulse: OrganisationalPulse;
+  /** Core domain availability used to compose this snapshot. */
+  domains: WorkspaceDomainAvailability;
   quickActions: WorkspaceQuickAction[];
   myWork: WorkspaceWorkSummary[];
   schedule: WorkspaceScheduleItem[];

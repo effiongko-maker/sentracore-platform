@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  Bell,
   Building2,
   ClipboardList,
   Database,
@@ -156,6 +157,13 @@ export const OPERATING_LAYERS: OperatingLayer[] = [
 
 /** Routable legacy modules — excluded from command palette / primary layers. */
 const LEGACY_LAYER_MODULES: LayerModule[] = [
+  fm({
+    label: "Notifications",
+    href: "/notifications",
+    icon: Bell,
+    title: "Notifications",
+    description: "Platform attention feed across operational areas",
+  }),
   fm({
     label: "Legacy Maintenance",
     href: "/maintenance",

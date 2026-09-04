@@ -4,13 +4,19 @@
  * Derives high-signal items from existing operational records.
  * Presentation must not reimplement these rules.
  *
- * NCC origin (available today):
- *   Submit Request (`/occupant-requests`) → RequestService.createRequest → RequestRecord.
- *   Request Queue create is retired; open Request intake rows ARE the NCC/Submit Request path.
- *   Issue composition maps these to source "staff_request". No separate NCC column required.
+ * Request / Issue origin (verified):
+ *   Submit Request → RequestService.createRequest → RequestRecord.
+ *   RequestRecord has no dedicated origin/source/NCC column.
+ *   Issue composition maps Request-backed roots to source "staff_request"
+ *   (vs "facility_manager" for standalone Work) — that is not an NCC flag.
+ *   Therefore open intake Requests are classified as generic `new_issue`.
+ *   Do NOT assign `ncc_raised_issue` merely because a Request/Issue row exists.
+ *   `ncc_raised_issue` is reserved for an explicit, reliable NCC-origin signal
+ *   (none persisted today).
  *
  * Unsupported (no reliable persisted signal yet):
  * - Formal escalations (no escalation event/status on Issue/Incident/Work)
+ * - NCC-raised origin (no durable NCC field on Request/Issue)
  */
 
 import type { Incident } from "@/modules/incidents/types";
@@ -29,6 +35,7 @@ export const OPERATIONAL_NOTIFICATION_LIMIT = 5;
 export const OPERATIONAL_NOTIFICATION_RECENT_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type OperationalNotificationKind =
+  /** Reserved — only when an explicit NCC-origin signal exists (none today). */
   | "ncc_raised_issue"
   | "new_issue"
   | "elevated_issue"
@@ -52,10 +59,33 @@ export type OperationalNotification = {
 
 export type OperationalNotificationFeed = {
   total: number;
+  /** Full sorted feed for the unified notifications view. */
+  items: OperationalNotification[];
+  /** Compact slice for the header bell dropdown. */
   visible: OperationalNotification[];
   viewAllHref?: string;
   viewAllLabel?: string;
 };
+
+/** Module / area label for a notification action href (presentation only). */
+export function notificationSourceLabel(href: string): string {
+  if (href.startsWith("/work-orders")) return "Work orders";
+  if (href.startsWith("/work") || href.startsWith("/maintenance")) return "Work";
+  if (href.startsWith("/incidents")) return "Incidents";
+  if (
+    href.startsWith("/issues") ||
+    href.startsWith("/requests") ||
+    href.startsWith("/occupant-requests")
+  ) {
+    return "Issues";
+  }
+  if (href.startsWith("/finance")) return "Finance";
+  if (href.startsWith("/approvals")) return "Approvals";
+  return "Operations";
+}
+
+/** Unified notifications destination — never Issues-only. */
+export const OPERATIONAL_NOTIFICATIONS_HREF = "/notifications";
 
 export type DeriveOperationalNotificationsInput = {
   asOf: string;
@@ -99,10 +129,10 @@ function workOrderDue(row: WorkOrder): string | undefined {
 }
 
 /**
- * Open Request intake rows from Submit Request (NCC path).
- * Durable signal: RequestRecord itself (loaded via RequestService).
+ * Open Request intake rows → generic new issue.
+ * Presence in Requests is not proof of NCC origin.
  */
-function fromNccRaisedRequests(
+function fromOpenIntakeRequests(
   requests: RequestRecord[],
   asOfMs: number
 ): OperationalNotification[] {
@@ -111,14 +141,14 @@ function fromNccRaisedRequests(
     if (row.status !== "submitted" && row.status !== "under_review") continue;
     const at = row.createdAt || row.occurredAt || new Date(asOfMs).toISOString();
     items.push({
-      id: `req-ncc-${row.id}`,
-      kind: "ncc_raised_issue",
-      eventType: "NCC raised issue",
+      id: `req-new-${row.id}`,
+      kind: "new_issue",
+      eventType: "New issue",
       title: row.title?.trim() || row.id,
       at,
       actionLabel: "View issue →",
       href: `/issues?id=${encodeURIComponent(row.id)}`,
-      priority: KIND_PRIORITY.ncc_raised_issue,
+      priority: KIND_PRIORITY.new_issue,
     });
   }
   return items;
@@ -140,7 +170,7 @@ function fromRecentStandaloneWork(
       title: row.title?.trim() || row.id,
       at: row.createdAt,
       actionLabel: "Review →",
-      href: "/work",
+      href: `/work?id=${encodeURIComponent(row.id)}`,
       priority: KIND_PRIORITY.new_issue,
     });
   }
@@ -163,7 +193,7 @@ function fromElevatedOpenWork(
       title: row.title?.trim() || row.id,
       at: row.updatedAt || row.createdAt,
       actionLabel: "Review →",
-      href: "/work",
+      href: `/work?id=${encodeURIComponent(row.id)}`,
       priority: KIND_PRIORITY.elevated_issue,
     });
   }
@@ -178,7 +208,7 @@ function fromElevatedOpenWork(
       title: row.title?.trim() || row.id,
       at: row.reportedAt || row.createdAt,
       actionLabel: "Review →",
-      href: "/incidents",
+      href: `/incidents?id=${encodeURIComponent(row.id)}`,
       priority: KIND_PRIORITY.elevated_issue,
     });
   }
@@ -243,7 +273,7 @@ function fromDeadlinesPassed(
       }`,
       at: row.dueAt || row.updatedAt || row.createdAt,
       actionLabel: "Review →",
-      href: "/work",
+      href: `/work?id=${encodeURIComponent(row.id)}`,
       priority: KIND_PRIORITY.deadline_passed,
     });
   }
@@ -290,7 +320,7 @@ export function deriveOperationalNotifications(
   const requests = input.requests ?? [];
 
   const combined = [
-    ...fromNccRaisedRequests(requests, asOfMs),
+    ...fromOpenIntakeRequests(requests, asOfMs),
     ...fromRecentStandaloneWork(input.maintenance, asOfMs),
     ...fromElevatedOpenWork(input.maintenance, input.incidents),
     ...fromWorkOrdersRaised(input.workOrders, asOfMs),
@@ -300,12 +330,13 @@ export function deriveOperationalNotifications(
   const sorted = sortNotifications(dedupeByEntity(combined));
   const total = sorted.length;
   const visible = sorted.slice(0, OPERATIONAL_NOTIFICATION_LIMIT);
+  const hasOverflow = total > OPERATIONAL_NOTIFICATION_LIMIT;
 
   return {
     total,
+    items: sorted,
     visible,
-    viewAllHref: total > OPERATIONAL_NOTIFICATION_LIMIT ? "/issues" : undefined,
-    viewAllLabel:
-      total > OPERATIONAL_NOTIFICATION_LIMIT ? "View all →" : undefined,
+    viewAllHref: hasOverflow ? OPERATIONAL_NOTIFICATIONS_HREF : undefined,
+    viewAllLabel: hasOverflow ? "View all →" : undefined,
   };
 }

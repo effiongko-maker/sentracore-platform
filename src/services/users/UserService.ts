@@ -17,6 +17,7 @@ import {
   CATALOG_TTL_MS,
   sharedRequest,
   stableRequestKey,
+  WORKLOAD_TTL_MS,
 } from "@/services/cache/sharedRequest";
 import { FacilityService } from "@/services/facilities/FacilityService";
 import {
@@ -272,40 +273,46 @@ async function assertUserPersisted(
  * List uses server-side pagination via Apps Script (Phase 33).
  * Workload overlay is applied separately via enrichUsersWorkload().
  */
+async function getCurrentUserUncached(): Promise<CurrentUser> {
+  const response = await fetch("/api/auth/me", {
+    method: "GET",
+    headers: { Accept: "application/json" },
+    credentials: "same-origin",
+  });
+
+  const text = await response.text();
+  let json: {
+    success?: boolean;
+    message?: string;
+    data?: { identity?: CurrentUser };
+  };
+
+  try {
+    json = JSON.parse(text) as typeof json;
+  } catch {
+    throw new ApiError(
+      `Invalid JSON from /api/auth/me (status ${response.status})`,
+      response.status,
+      text.slice(0, 200)
+    );
+  }
+
+  if (!response.ok || json.success === false || !json.data?.identity) {
+    throw new ApiError(
+      json.message ?? "Failed to load current user",
+      response.status || 401,
+      json
+    );
+  }
+
+  return json.data.identity;
+}
+
 export const UserService = {
   async getCurrentUser(): Promise<CurrentUser> {
-    const response = await fetch("/api/auth/me", {
-      method: "GET",
-      headers: { Accept: "application/json" },
-      credentials: "same-origin",
+    return sharedRequest("auth:currentUser", getCurrentUserUncached, {
+      ttlMs: WORKLOAD_TTL_MS,
     });
-
-    const text = await response.text();
-    let json: {
-      success?: boolean;
-      message?: string;
-      data?: { identity?: CurrentUser };
-    };
-
-    try {
-      json = JSON.parse(text) as typeof json;
-    } catch {
-      throw new ApiError(
-        `Invalid JSON from /api/auth/me (status ${response.status})`,
-        response.status,
-        text.slice(0, 200)
-      );
-    }
-
-    if (!response.ok || json.success === false || !json.data?.identity) {
-      throw new ApiError(
-        json.message ?? "Failed to load current user",
-        response.status || 401,
-        json
-      );
-    }
-
-    return json.data.identity;
   },
 
   async listUsers(params: UserListParams = {}): Promise<PaginatedResult<User>> {

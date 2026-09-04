@@ -112,6 +112,47 @@ export function getWorkspace(id: WorkspaceId): PlatformWorkspace | undefined {
   return PLATFORM_WORKSPACES.find((workspace) => workspace.id === id);
 }
 
+/**
+ * Workspace currently entered for this route.
+ * Distinct from catalog `status: "active"` (product is live/available).
+ */
+export function resolveCurrentWorkspaceId(
+  pathname: string
+): WorkspaceId | null {
+  if (isPlatformHomePath(pathname)) return null;
+
+  if (pathname === "/finance" || pathname.startsWith("/finance/")) {
+    return "finance";
+  }
+
+  if (pathname.startsWith("/workspaces/")) {
+    const slug = pathname.slice("/workspaces/".length).split("/")[0] ?? "";
+    if (slug && getWorkspace(slug as WorkspaceId)) {
+      return slug as WorkspaceId;
+    }
+    return null;
+  }
+
+  // Facility Management home + FM module routes (Finance already handled above).
+  if (
+    pathname === OPERATIONS_HOME.href ||
+    pathname.startsWith(`${OPERATIONS_HOME.href}/`) ||
+    (isOperationsPath(pathname) && !pathname.startsWith("/finance"))
+  ) {
+    return "operations";
+  }
+
+  return null;
+}
+
+export function resolveCurrentWorkspace(
+  pathname: string
+): PlatformWorkspace | null {
+  const id = resolveCurrentWorkspaceId(pathname);
+  return id ? getWorkspace(id) ?? null : null;
+}
+
+/** Primary live workspace for platform marketing surfaces (not route-current). */
 export function getActiveWorkspace(): PlatformWorkspace {
   return PLATFORM_WORKSPACES.find((workspace) => workspace.status === "active")!;
 }
@@ -140,6 +181,7 @@ export function isOperationsPath(pathname: string): boolean {
     pathname.startsWith("/work-orders") ||
     pathname.startsWith("/approvals") ||
     pathname.startsWith("/finance") ||
+    pathname.startsWith("/notifications") ||
     pathname.startsWith("/incidents") ||
     pathname.startsWith("/inventory") ||
     pathname.startsWith("/utilities") ||

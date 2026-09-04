@@ -182,7 +182,10 @@ function staticChecks() {
   assert(page.includes("CostRecordFormModal"), "cost entry modal");
   assert(!page.includes("FinanceFlowRail"), "flow rail removed from home");
   assert(!page.includes("FinanceCoverageSection"), "coverage strip removed");
-  assert(!page.includes("FinanceIntelligencePreview"), "intel placeholder removed");
+  assert(
+    page.includes("FinanceIntelligencePreview"),
+    "Finance Intelligence preview restored on home"
+  );
   assert(!page.includes("Available Cash"), "no treasury concepts");
   assert(!page.includes("bank balance"), "no bank balance");
 

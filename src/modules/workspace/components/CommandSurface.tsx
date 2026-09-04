@@ -20,21 +20,18 @@ import type {
   WorkspaceSnapshot,
 } from "../types";
 import { FinancialPositionSection } from "./FinancialPositionSection";
-import { OperationalNotificationsSection } from "./OperationalNotificationsSection";
 
 const PRIMARY_ACTION_IDS = [
   "log-issue",
-  "request-maintenance",
   "create-work-order",
   "manage-facilities",
 ] as const;
 
 const ACTION_VISUAL: Record<
   (typeof PRIMARY_ACTION_IDS)[number],
-  { icon: LucideIcon; tone: "blue" | "green" | "amber" | "violet" }
+  { icon: LucideIcon; tone: "blue" | "amber" | "violet" }
 > = {
   "log-issue": { icon: Plus, tone: "blue" },
-  "request-maintenance": { icon: Wrench, tone: "green" },
   "create-work-order": { icon: ClipboardList, tone: "amber" },
   "manage-facilities": { icon: Building2, tone: "violet" },
 };
@@ -50,16 +47,31 @@ function firstName(name?: string): string {
   return name.trim().split(/\s+/)[0] ?? "there";
 }
 
-function padCount(value: number): string {
+function padCount(value: number | null | undefined): string {
+  if (value == null) return "—";
   return value < 10 ? `0${value}` : String(value);
 }
 
+function formatMetric(value: number | null | undefined): string {
+  if (value == null) return "—";
+  return String(value);
+}
+
 function heroCriticalWorkMeta(
-  criticalWork: number,
-  attentionTotal: number
+  criticalWork: number | null,
+  attentionTotal: number,
+  attentionIncomplete: boolean
 ): string {
+  if (criticalWork == null) {
+    return attentionIncomplete
+      ? "Work data temporarily unavailable"
+      : "Unavailable";
+  }
   if (criticalWork > 0) {
     return "Require immediate intervention";
+  }
+  if (attentionIncomplete && attentionTotal === 0) {
+    return "Attention picture incomplete";
   }
   if (attentionTotal > 0) {
     return attentionTotal === 1
@@ -94,7 +106,7 @@ function buildHeroCopy(snapshot: WorkspaceSnapshot): {
         attentionTotal === 1
           ? "1 matter requires action across your facilities."
           : `${attentionTotal} matters require action across your facilities.`,
-      line2: `${pulse.criticalWork} critical work · ${pulse.openWork} open work · ${pulse.openWorkOrders} work orders.`,
+      line2: `${formatMetric(pulse.criticalWork)} critical work · ${formatMetric(pulse.openWork)} open work · ${formatMetric(pulse.openWorkOrders)} work orders.`,
     };
   }
 
@@ -104,7 +116,7 @@ function buildHeroCopy(snapshot: WorkspaceSnapshot): {
       line1: operationalState.statement,
       line2:
         operationalState.subtext ??
-        `${pulse.openWork} open work · ${pulse.openWorkOrders} work orders.`,
+        `${formatMetric(pulse.openWork)} open work · ${formatMetric(pulse.openWorkOrders)} work orders.`,
     };
   }
 
@@ -112,7 +124,7 @@ function buildHeroCopy(snapshot: WorkspaceSnapshot): {
     heading: "Your operations are stable",
     line1: "No matters require intervention across your facilities.",
     line2:
-      pulse.openWork > 0
+      (pulse.openWork ?? 0) > 0
         ? `${pulse.openWork} open work item${
             pulse.openWork === 1 ? "" : "s"
           } ${pulse.openWork === 1 ? "is" : "are"} in flow with no urgent escalation.`
@@ -180,13 +192,15 @@ function FacilityBlueprint() {
 function CommandHero({ snapshot }: { snapshot: WorkspaceSnapshot }) {
   const { pulse, attention, currentUser, asOf } = snapshot;
   const attentionTotal = attention.total;
+  const attentionIncomplete = Boolean(attention.incomplete);
   const criticalWork = pulse.criticalWork;
   const copy = buildHeroCopy(snapshot);
   const hour = new Date(asOf).getHours();
   const greeting = `${greetingForHour(hour)}, ${firstName(currentUser.name)}`;
   const live = snapshot.operationalState.tone !== "degraded";
   const updated = formatRelativeTime(asOf);
-  const heroStress = attentionTotal > 0 || criticalWork > 0;
+  const heroStress =
+    attentionTotal > 0 || (criticalWork != null && criticalWork > 0);
 
   return (
     <section
@@ -230,16 +244,24 @@ function CommandHero({ snapshot }: { snapshot: WorkspaceSnapshot }) {
             <p className="sc-fm-hero-critical-value">{padCount(criticalWork)}</p>
             <p className="sc-fm-hero-critical-label">Critical work</p>
             <p className="sc-fm-hero-critical-meta">
-              {heroCriticalWorkMeta(criticalWork, attentionTotal)}
+              {heroCriticalWorkMeta(
+                criticalWork,
+                attentionTotal,
+                attentionIncomplete
+              )}
             </p>
           </Link>
 
           <div className="sc-fm-hero-metric">
-            <p className="sc-fm-hero-metric-value">{pulse.openWork}</p>
+            <p className="sc-fm-hero-metric-value">
+              {formatMetric(pulse.openWork)}
+            </p>
             <p className="sc-fm-hero-metric-label">Open work</p>
           </div>
           <div className="sc-fm-hero-metric">
-            <p className="sc-fm-hero-metric-value">{pulse.openWorkOrders}</p>
+            <p className="sc-fm-hero-metric-value">
+              {formatMetric(pulse.openWorkOrders)}
+            </p>
             <p className="sc-fm-hero-metric-label">Work orders</p>
           </div>
         </div>
@@ -249,6 +271,19 @@ function CommandHero({ snapshot }: { snapshot: WorkspaceSnapshot }) {
 }
 
 function RequiresAttention({ attention }: { attention: AttentionModel }) {
+  const incomplete = Boolean(attention.incomplete);
+  const lede = incomplete
+    ? attention.total === 0
+      ? "Attention picture is incomplete — some operational data is temporarily unavailable."
+      : attention.total === 1
+        ? "1 known matter requires intervention · attention picture is incomplete"
+        : `${attention.total} known matters require intervention · attention picture is incomplete`
+    : attention.total === 0
+      ? "No matters require intervention now"
+      : attention.total === 1
+        ? "1 matter requires intervention now"
+        : `${attention.total} matters require intervention now`;
+
   return (
     <section
       className="sc-fm-attention"
@@ -259,13 +294,7 @@ function RequiresAttention({ attention }: { attention: AttentionModel }) {
           <h2 id="sc-fm-attention-heading" className="sc-fm-panel-title">
             Requires attention
           </h2>
-          <p className="sc-fm-panel-lede">
-            {attention.total === 0
-              ? "No matters require intervention now"
-              : attention.total === 1
-                ? "1 matter requires intervention now"
-                : `${attention.total} matters require intervention now`}
-          </p>
+          <p className="sc-fm-panel-lede">{lede}</p>
         </div>
         {attention.viewAllHref ? (
           <Link href={attention.viewAllHref} className="sc-fm-view-all">
@@ -277,7 +306,11 @@ function RequiresAttention({ attention }: { attention: AttentionModel }) {
 
       {attention.total === 0 ? (
         <div className="sc-fm-attention-empty">
-          <p>The operational queue is clear.</p>
+          <p>
+            {incomplete
+              ? "Some operational sources could not be loaded. Retry Home or open Work directly."
+              : "The operational queue is clear."}
+          </p>
         </div>
       ) : (
         <div className="sc-fm-queue">
@@ -321,9 +354,11 @@ function OperationalPicture({ pulse }: { pulse: OrganisationalPulse }) {
       value: pulse.criticalWork,
       label: "Critical work",
       detail:
-        pulse.criticalWork > 0
-          ? "Require immediate intervention"
-          : "None requiring intervention",
+        pulse.criticalWork == null
+          ? "Temporarily unavailable"
+          : pulse.criticalWork > 0
+            ? "Require immediate intervention"
+            : "None requiring intervention",
       href: "/work",
       tone: "critical" as const,
       icon: AlertTriangle,
@@ -331,7 +366,10 @@ function OperationalPicture({ pulse }: { pulse: OrganisationalPulse }) {
     {
       value: pulse.openWork,
       label: "Open work",
-      detail: "Active work in operational flow",
+      detail:
+        pulse.openWork == null
+          ? "Temporarily unavailable"
+          : "Active work in operational flow",
       href: "/work",
       tone: "blue" as const,
       icon: Wrench,
@@ -339,14 +377,17 @@ function OperationalPicture({ pulse }: { pulse: OrganisationalPulse }) {
     {
       value: pulse.openWorkOrders,
       label: "Work orders",
-      detail: "Assigned and in progress",
+      detail:
+        pulse.openWorkOrders == null
+          ? "Temporarily unavailable"
+          : "Assigned and in progress",
       href: "/work-orders",
       tone: "green" as const,
       icon: ClipboardList,
     },
   ];
 
-  if (pulse.legacyOpenIncidents > 0) {
+  if ((pulse.legacyOpenIncidents ?? 0) > 0) {
     rows.push({
       value: pulse.legacyOpenIncidents,
       label: "Legacy incidents",
@@ -443,7 +484,6 @@ export function CommandSurface({ snapshot }: { snapshot: WorkspaceSnapshot }) {
     <ModeFrame mode="command">
       <div className="sc-fm-home">
         <CommandHero snapshot={snapshot} />
-        <OperationalNotificationsSection feed={snapshot.notifications} />
         <FinancialPositionSection />
         <div className="sc-fm-main">
           <RequiresAttention attention={snapshot.attention} />

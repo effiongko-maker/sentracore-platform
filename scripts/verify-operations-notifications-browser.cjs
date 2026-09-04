@@ -1,5 +1,5 @@
 /**
- * Browser check: /operations Needs attention feed visibility.
+ * Browser check: global notification bell (not Home Needs attention).
  *   node scripts/verify-operations-notifications-browser.cjs
  */
 const { createClient } = require("@supabase/supabase-js");
@@ -55,78 +55,58 @@ async function main() {
     await page.goto(
       `${BASE}/auth/callback?token_hash=${encodeURIComponent(
         linkData.properties.hashed_token
-      )}&type=magiclink&next=/operations`,
-      { waitUntil: "networkidle", timeout: 90000 }
+      )}&type=magiclink&next=/finance`,
+      { waitUntil: "domcontentloaded", timeout: 90000 }
     );
-
-    await page.goto(`${BASE}/operations`, {
-      waitUntil: "networkidle",
+    await page.waitForURL((url) => !url.pathname.includes("/auth/"), {
       timeout: 90000,
     });
 
-    assert(
-      new URL(page.url()).pathname === "/operations",
-      `expected /operations, got ${page.url()}`
-    );
+    // Bell is global header chrome — verify before waiting on Home workspace load.
+    await page.goto(`${BASE}/finance`, {
+      waitUntil: "domcontentloaded",
+      timeout: 90000,
+    });
+    const bell = page.locator(".os-notify-bell");
+    await bell.waitFor({ timeout: 60000 });
+    assert((await bell.count()) === 1, "global notification bell missing");
+    results.push("PASS global notification bell present on /finance");
+
+    await bell.click();
+    await page.locator(".os-notify-panel").waitFor({ timeout: 30000 });
+    results.push("PASS notification panel opens");
+    await page.keyboard.press("Escape").catch(() => undefined);
+    await page.locator("body").click({ position: { x: 8, y: 8 } });
+
+    await page.goto(`${BASE}/operations`, {
+      waitUntil: "domcontentloaded",
+      timeout: 90000,
+    });
+    await page.waitForURL("**/operations", { timeout: 90000 });
     results.push("PASS landed on /operations");
 
-    // Wait for CommandSurface to finish loading
-    await page.locator(".sc-fm-hero").first().waitFor({ timeout: 60000 });
-    results.push("PASS hero present");
-
-    const heading = page.locator("#sc-fm-notify-heading");
-    await heading.waitFor({ timeout: 30000 });
-    assert((await heading.count()) === 1, "Needs attention heading missing");
-    const headingText = (await heading.innerText()).trim();
+    // Header bell remains on Operations
     assert(
-      /Needs attention/i.test(headingText),
-      `unexpected heading: ${headingText}`
+      (await page.locator(".os-notify-bell").count()) === 1,
+      "bell missing on /operations"
     );
-    results.push("PASS Needs attention section in DOM");
+    results.push("PASS bell remains on /operations");
 
-    const box = await page.locator(".sc-fm-notify").boundingBox();
-    assert(box && box.height > 20, `section height too small: ${JSON.stringify(box)}`);
-    results.push(
-      `PASS section visible geometry h=${Math.round(box.height)} y=${Math.round(box.y)}`
-    );
+    // Wait for Home content (workspace can be slow)
+    await page
+      .locator(".sc-fm-hero, #sc-fm-attention-heading")
+      .first()
+      .waitFor({ timeout: 120000 });
 
-    const hero = await page.locator(".sc-fm-hero").boundingBox();
-    assert(hero, "hero missing geometry");
     assert(
-      box.y >= hero.y + hero.height - 4,
-      `notify not below hero (hero.bottom=${hero.y + hero.height}, notify.y=${box.y})`
-    );
-    results.push("PASS Needs attention sits below hero");
-
-    const itemCount = await page.locator(".sc-fm-notify-item").count();
-    const emptyVisible = await page.locator(".sc-fm-notify-empty").count();
-    results.push(
-      itemCount > 0
-        ? `PASS feed has ${itemCount} item(s)`
-        : emptyVisible > 0
-          ? "PASS feed empty-state rendered (no derived notifications)"
-          : "FAIL neither items nor empty state"
+      (await page.locator("#sc-fm-notify-heading").count()) === 0,
+      "Home must not show Needs attention notification feed"
     );
     assert(
-      itemCount > 0 || emptyVisible > 0,
-      "section rendered but no items and no empty state"
+      (await page.locator("#sc-fm-attention-heading").count()) === 1,
+      "Requires attention heading must remain"
     );
-
-    if (itemCount > 0) {
-      const firstEvent = (
-        await page.locator(".sc-fm-notify-event").first().innerText()
-      ).trim();
-      results.push(`INFO top event type: ${firstEvent}`);
-    }
-
-    // Ensure section is scrolled into view for human/screenshot checks
-    await page.locator(".sc-fm-notify").scrollIntoViewIfNeeded();
-    const inView = await page.locator(".sc-fm-notify").evaluate((el) => {
-      const r = el.getBoundingClientRect();
-      return r.top < window.innerHeight && r.bottom > 0 && r.height > 0;
-    });
-    assert(inView, "Needs attention not in viewport after scroll");
-    results.push("PASS Needs attention in viewport after scroll");
+    results.push("PASS Home Requires attention kept; Needs attention removed");
 
     console.log(results.join("\n"));
     console.log("OK verify-operations-notifications-browser");

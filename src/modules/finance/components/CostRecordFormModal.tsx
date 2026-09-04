@@ -160,6 +160,16 @@ export function CostRecordFormModal({
   >([]);
   const [workOrderLoading, setWorkOrderLoading] = useState(false);
 
+  /** NCC Annex deployment scope — same preferred facility as Submit Request. */
+  const scopedFacilityId = useMemo(() => {
+    if (initialValues?.facilityId?.trim()) return initialValues.facilityId.trim();
+    return (
+      facilities.find((facility) => facility.id === "FAC-0001")?.id ??
+      facilities[0]?.id ??
+      ""
+    );
+  }, [facilities, initialValues?.facilityId]);
+
   useEffect(() => {
     if (!open) return;
     setForm(emptyForm(initialValues));
@@ -168,6 +178,15 @@ export function CostRecordFormModal({
     setCreatedRecord(null);
     setFormVersion((current) => current + 1);
   }, [open, initialValues]);
+
+  useEffect(() => {
+    if (!open || !scopedFacilityId) return;
+    setForm((current) =>
+      current.facilityId === scopedFacilityId
+        ? current
+        : { ...current, facilityId: scopedFacilityId }
+    );
+  }, [open, scopedFacilityId]);
 
   useEffect(() => {
     if (!open) return;
@@ -287,7 +306,14 @@ export function CostRecordFormModal({
 
   function validate(): boolean {
     const next: FormErrors = {};
-    if (!form.facilityId.trim()) next.facilityId = "Facility is required";
+    const facilityId = form.facilityId.trim() || scopedFacilityId;
+    if (!facilityId) {
+      next.description =
+        next.description ??
+        (facilitiesLoading
+          ? "Facility context is still loading. Try again in a moment."
+          : "Facility context is unavailable right now.");
+    }
     if (!form.location.trim()) next.location = "Location is required";
     if (!form.description.trim()) {
       next.description = "Description is required";
@@ -331,10 +357,11 @@ export function CostRecordFormModal({
     if (!validate()) return;
 
     const actualAmount = parseOptionalAmount(form.actualAmount);
-    if (actualAmount == null || !recordedBy) return;
+    const facilityId = form.facilityId.trim() || scopedFacilityId;
+    if (actualAmount == null || !recordedBy || !facilityId) return;
 
     const payload: CreateCostRecordInput = {
-      facilityId: form.facilityId.trim(),
+      facilityId,
       location: form.location.trim(),
       description: form.description.trim(),
       category: form.category as CostCategory,
@@ -468,6 +495,7 @@ export function CostRecordFormModal({
             htmlFor="cost-actual-amount"
             required
             error={errors.actualAmount}
+            className="sm:col-span-2"
           >
             <MonetaryInput
               id="cost-actual-amount"
@@ -475,30 +503,6 @@ export function CostRecordFormModal({
               disabled={saving}
               onValueChange={(next) => updateField("actualAmount", next)}
             />
-          </FormField>
-
-          <FormField
-            label="Where?"
-            htmlFor="cost-facility"
-            required
-            error={errors.facilityId}
-          >
-            <select
-              id="cost-facility"
-              className={selectClassName}
-              value={form.facilityId}
-              disabled={saving || facilitiesLoading}
-              onChange={(event) => updateField("facilityId", event.target.value)}
-            >
-              <option value="">
-                {facilitiesLoading ? "Loading facilities…" : "Select facility"}
-              </option>
-              {facilities.map((facility) => (
-                <option key={facility.id} value={facility.id}>
-                  {facility.name}
-                </option>
-              ))}
-            </select>
           </FormField>
 
           <FormField

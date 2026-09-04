@@ -1,10 +1,11 @@
 import type { Approval } from "@/modules/approvals/types";
 import type { Incident } from "@/modules/incidents/types";
 import type { Maintenance } from "@/modules/maintenance/types";
-import type { RequestRecord } from "@/modules/requests/types";
 import type { WorkOrder } from "@/modules/work-orders/types";
 import {
   WORKSPACE_ACTIVITY_LIMIT,
+  WORKSPACE_HOME_DOMAIN_TIMEOUT_MS,
+  WORKSPACE_HOME_POOL_SIZE,
   WORKSPACE_QUICK_ACTIONS,
   WORKSPACE_SCHEDULE_LIMIT,
 } from "@/modules/workspace/constants";
@@ -22,21 +23,17 @@ import type {
   OrganisationalPulse,
   AttentionModel,
 } from "@/modules/workspace/types";
-import { deriveOperationalNotifications } from "@/modules/workspace/utils/deriveOperationalNotifications";
 import { isSameDay, labelize } from "@/modules/workspace/utils";
 import { ApprovalService } from "@/services/approvals/ApprovalService";
 import { FacilityService } from "@/services/facilities/FacilityService";
 import { IncidentService } from "@/services/incidents/IncidentService";
 import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
-import { RequestService } from "@/services/requests/RequestService";
-import { loadAllPages } from "@/services/reporting/loadAllPages";
 import { UserService } from "@/services/users/UserService";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
 import {
   ACTIVE_INCIDENT_STATUSES,
   ACTIVE_MAINTENANCE_STATUSES,
   WORKSPACE_ASSIGNED_WORK_ORDER_STATUSES,
-  deriveOperationalWorkloadMaps,
 } from "@/lib/operational/workload";
 
 const OPEN_WO = WORKSPACE_ASSIGNED_WORK_ORDER_STATUSES;
@@ -203,19 +200,24 @@ function buildActivity(
 }
 
 function buildPulse(
-  incidents: Incident[],
-  maintenance: Maintenance[],
-  workOrders: WorkOrder[],
+  incidents: Incident[] | null,
+  maintenance: Maintenance[] | null,
+  workOrders: WorkOrder[] | null,
   activity: WorkspaceActivityItem[]
 ): OrganisationalPulse {
-  const openWork = maintenance.filter((r) => OPEN_MAINTENANCE.has(r.status))
-    .length;
-  const criticalWork = countCriticalWork(maintenance);
-  const openWorkOrders = workOrders.filter((r) => OPEN_WO.has(r.status)).length;
-  const legacyOpenIncidents = incidents.filter((r) =>
-    OPEN_INCIDENT.has(r.status)
-  ).length;
-  const legacyCriticalIncidents = countLegacyCriticalIncidents(incidents);
+  const openWork = maintenance
+    ? maintenance.filter((r) => OPEN_MAINTENANCE.has(r.status)).length
+    : null;
+  const criticalWork = maintenance ? countCriticalWork(maintenance) : null;
+  const openWorkOrders = workOrders
+    ? workOrders.filter((r) => OPEN_WO.has(r.status)).length
+    : null;
+  const legacyOpenIncidents = incidents
+    ? incidents.filter((r) => OPEN_INCIDENT.has(r.status)).length
+    : null;
+  const legacyCriticalIncidents = incidents
+    ? countLegacyCriticalIncidents(incidents)
+    : null;
 
   return {
     openWork,
@@ -232,16 +234,19 @@ function buildOperationalState(
   pulse: OrganisationalPulse,
   attention: AttentionModel
 ): OperationalState {
-  const hasCriticalWork = pulse.criticalWork > 0;
+  const criticalWork = pulse.criticalWork ?? 0;
+  const openWork = pulse.openWork ?? 0;
+  const openWorkOrders = pulse.openWorkOrders ?? 0;
+  const hasCriticalWork = criticalWork > 0;
   const hasCriticalAttention = attention.criticalCount > 0;
 
   if (hasCriticalWork || hasCriticalAttention) {
     let statement: string;
     if (hasCriticalWork && hasCriticalAttention) {
       const workPart =
-        pulse.criticalWork === 1
+        criticalWork === 1
           ? "One critical work item"
-          : `${pulse.criticalWork} critical work items`;
+          : `${criticalWork} critical work items`;
       const attentionPart =
         attention.criticalCount === 1
           ? "one critical attention matter"
@@ -249,9 +254,9 @@ function buildOperationalState(
       statement = `${workPart} and ${attentionPart} require intervention.`;
     } else if (hasCriticalWork) {
       statement =
-        pulse.criticalWork === 1
+        criticalWork === 1
           ? "One critical work item requires intervention."
-          : `${pulse.criticalWork} critical work items require intervention.`;
+          : `${criticalWork} critical work items require intervention.`;
     } else {
       statement =
         attention.criticalCount === 1
@@ -264,7 +269,7 @@ function buildOperationalState(
         ? attention.total === 1
           ? "1 matter in the attention queue."
           : `${attention.total} matters in the attention queue.`
-        : `${pulse.openWork} open work item${pulse.openWork === 1 ? "" : "s"} across the operation.`;
+        : `${openWork} open work item${openWork === 1 ? "" : "s"} across the operation.`;
 
     return {
       tone: "critical",
@@ -284,17 +289,17 @@ function buildOperationalState(
     };
   }
 
-  const pressure = pulse.openWork + pulse.openWorkOrders;
-  if (pressure >= 12 || pulse.openWork >= 5) {
+  const pressure = openWork + openWorkOrders;
+  if (pressure >= 12 || openWork >= 5) {
     return {
       tone: "attention",
       statement: "Operational pressure is increasing across the organisation.",
-      subtext: `${pulse.openWork} work items and ${pulse.openWorkOrders} work orders in flow.`,
+      subtext: `${openWork} work items and ${openWorkOrders} work orders in flow.`,
     };
   }
 
   const attentionAreas =
-    (pulse.openWork > 4 ? 1 : 0) + (pulse.openWorkOrders > 4 ? 1 : 0);
+    (openWork > 4 ? 1 : 0) + (openWorkOrders > 4 ? 1 : 0);
 
   if (attentionAreas > 0) {
     return {
@@ -314,61 +319,215 @@ function buildOperationalState(
   };
 }
 
-async function loadDomainLists(): Promise<{
-  workOrders: { ok: boolean; data: WorkOrder[] };
-  incidents: { ok: boolean; data: Incident[] };
-  maintenance: { ok: boolean; data: Maintenance[] };
-  approvals: { ok: boolean; data: Approval[] };
-  requests: { ok: boolean; data: RequestRecord[] };
-  facilities: { ok: boolean; data: Array<{ id: string; name: string }> };
-}> {
-  const [workOrders, incidents, maintenance, approvals, requests, facilities] =
-    await Promise.all([
-      loadAllPages((page, pageSize) =>
-        WorkOrderService.listWorkOrders({ page, pageSize })
-      )
-        .then((data) => ({ ok: true as const, data }))
-        .catch(() => ({ ok: false as const, data: [] as WorkOrder[] })),
-      loadAllPages((page, pageSize) =>
-        IncidentService.listIncidents({ page, pageSize })
-      )
-        .then((data) => ({ ok: true as const, data }))
-        .catch(() => ({ ok: false as const, data: [] as Incident[] })),
-      loadAllPages((page, pageSize) =>
-        MaintenanceService.listMaintenance({ page, pageSize })
-      )
-        .then((data) => ({ ok: true as const, data }))
-        .catch(() => ({ ok: false as const, data: [] as Maintenance[] })),
-      loadAllPages((page, pageSize) =>
-        ApprovalService.listApprovals({ page, pageSize })
-      )
-        .then((data) => ({ ok: true as const, data }))
-        .catch(() => ({ ok: false as const, data: [] as Approval[] })),
-      loadAllPages((page, pageSize) =>
-        RequestService.listRequests({ page, pageSize, status: "all" })
-      )
-        .then((data) => ({ ok: true as const, data }))
-        .catch(() => ({ ok: false as const, data: [] as RequestRecord[] })),
-      FacilityService.listFacilities({ page: 1, pageSize: 200 })
-        .then((page) => ({
-          ok: true as const,
-          data: page.data ?? ([] as Array<{ id: string; name: string }>),
-        }))
-        .catch(() => ({
-          ok: false as const,
-          data: [] as Array<{ id: string; name: string }>,
-        })),
-    ]);
+type DomainResult<T> = { ok: boolean; data: T[] };
 
-  return {
+type CoreDomainLists = {
+  workOrders: DomainResult<WorkOrder>;
+  incidents: DomainResult<Incident>;
+  maintenance: DomainResult<Maintenance>;
+};
+
+type NonCoreDomainLists = {
+  approvals: DomainResult<Approval>;
+  facilities: DomainResult<{ id: string; name: string }>;
+};
+
+type DomainLists = CoreDomainLists & NonCoreDomainLists;
+
+type CurrentUserLite = {
+  id?: string;
+  name?: string;
+} | null;
+
+/**
+ * Isolate a single domain fetch: reject OR timeout → ok:false + empty data.
+ * Matches existing catch behaviour so Home can still compose a snapshot
+ * (degraded when a core domain is unavailable).
+ */
+function settleDomain<T>(
+  promise: Promise<DomainResult<T>>,
+  empty: T[],
+  timeoutMs = WORKSPACE_HOME_DOMAIN_TIMEOUT_MS
+): Promise<DomainResult<T>> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve({ ok: false, data: empty });
+    }, timeoutMs);
+
+    promise.then(
+      (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve({ ok: false, data: empty });
+      }
+    );
+  });
+}
+
+/**
+ * Bounded Home domain pools — newest/active slices only.
+ * Does not walk full operational registers (loadAllPages).
+ *
+ * Core for first paint: workOrders, incidents, maintenance.
+ * Non-core: approvals (attention only), facilities (labels only).
+ * Each arm already uses ok:false on failure; settleDomain adds the same for hangs.
+ */
+function startCoreDomainLists(): Promise<CoreDomainLists> {
+  const pool = WORKSPACE_HOME_POOL_SIZE;
+  const emptyWo: WorkOrder[] = [];
+  const emptyInc: Incident[] = [];
+  const emptyMnt: Maintenance[] = [];
+
+  return Promise.all([
+    settleDomain(
+      WorkOrderService.listWorkOrders({ page: 1, pageSize: pool })
+        .then((page) => ({ ok: true as const, data: page.data ?? emptyWo }))
+        .catch(() => ({ ok: false as const, data: emptyWo })),
+      emptyWo
+    ),
+    settleDomain(
+      IncidentService.listIncidents({ page: 1, pageSize: pool })
+        .then((page) => ({ ok: true as const, data: page.data ?? emptyInc }))
+        .catch(() => ({ ok: false as const, data: emptyInc })),
+      emptyInc
+    ),
+    settleDomain(
+      MaintenanceService.listMaintenance({
+        page: 1,
+        pageSize: pool,
+        status: "active",
+      })
+        .then((page) => ({ ok: true as const, data: page.data ?? emptyMnt }))
+        .catch(() => ({ ok: false as const, data: emptyMnt })),
+      emptyMnt
+    ),
+  ]).then(([workOrders, incidents, maintenance]) => ({
+    // Single WO register page (pageSize covers full current register).
+    // Overdue attention/pulse derives client-side from this set — no second getAll.
     workOrders,
     incidents,
     maintenance,
-    approvals,
-    requests,
-    facilities,
+  }));
+}
+
+function startNonCoreDomainLists(): Promise<NonCoreDomainLists> {
+  const pool = WORKSPACE_HOME_POOL_SIZE;
+  const emptyApr: Approval[] = [];
+  const emptyFac: Array<{ id: string; name: string }> = [];
+
+  return Promise.all([
+    settleDomain(
+      ApprovalService.listApprovals({ page: 1, pageSize: pool })
+        .then((page) => ({ ok: true as const, data: page.data ?? emptyApr }))
+        .catch(() => ({ ok: false as const, data: emptyApr })),
+      emptyApr
+    ),
+    settleDomain(
+      FacilityService.listFacilities({ page: 1, pageSize: 200 })
+        .then((page) => ({
+          ok: true as const,
+          data: page.data ?? emptyFac,
+        }))
+        .catch(() => ({ ok: false as const, data: emptyFac })),
+      emptyFac
+    ),
+  ]).then(([approvals, facilities]) => ({ approvals, facilities }));
+}
+
+function emptyNonCoreDomainLists(): NonCoreDomainLists {
+  return {
+    approvals: { ok: true, data: [] },
+    facilities: { ok: true, data: [] },
   };
 }
+
+/** @internal Exported for Home degraded-domain composition verifies. */
+export function composeWorkspaceSnapshot(
+  asOf: string,
+  currentUser: CurrentUserLite,
+  lists: DomainLists
+): WorkspaceSnapshot {
+  const domains = {
+    workOrders: lists.workOrders.ok,
+    incidents: lists.incidents.ok,
+    maintenance: lists.maintenance.ok,
+  };
+  const workOrders = lists.workOrders.ok ? lists.workOrders.data : [];
+  const incidents = lists.incidents.ok ? lists.incidents.data : [];
+  const maintenance = lists.maintenance.ok ? lists.maintenance.data : [];
+  const approvals = lists.approvals.data;
+  const coreFailed =
+    !domains.workOrders || !domains.incidents || !domains.maintenance;
+
+  const userId = currentUser?.id;
+  const facilityNameById = new Map(
+    lists.facilities.data.map((facility) => [facility.id, facility.name])
+  );
+  const activity = buildActivity(workOrders, incidents, maintenance);
+  const pulse = buildPulse(
+    domains.incidents ? incidents : null,
+    domains.maintenance ? maintenance : null,
+    domains.workOrders ? workOrders : null,
+    activity
+  );
+  const attentionBase = buildAttentionModel({
+    asOf,
+    currentUserId: userId,
+    incidents,
+    workOrders,
+    maintenance,
+    approvals,
+    facilityNameById,
+  });
+  // Major attention sources: Work + Work Orders. Failed source ⇒ incomplete queue.
+  const attentionIncomplete = !domains.maintenance || !domains.workOrders;
+  const attention: AttentionModel = {
+    ...attentionBase,
+    incomplete: attentionIncomplete || undefined,
+  };
+
+  const operationalState: OperationalState = coreFailed
+    ? {
+        tone: "degraded",
+        statement: "Operational overview could not be fully loaded.",
+        subtext:
+          "Some live operational data is temporarily unavailable. Retry this page or open a module directly.",
+      }
+    : buildOperationalState(pulse, attention);
+
+  return {
+    asOf,
+    currentUser: {
+      id: currentUser?.id,
+      name: currentUser?.name,
+    },
+    operationalState,
+    attention,
+    pulse,
+    domains,
+    quickActions: WORKSPACE_QUICK_ACTIONS,
+    myWork: buildMyWork(userId, workOrders, incidents, maintenance),
+    schedule: buildSchedule(asOf, workOrders, incidents, maintenance),
+    activity,
+  };
+}
+
+export type WorkspaceProgressiveLoad = {
+  /** Resolves when core operational domains settle (or degrade). */
+  core: Promise<WorkspaceSnapshot>;
+  /** Resolves after non-core domains + currentUser enrich the snapshot. */
+  complete: Promise<WorkspaceSnapshot>;
+};
 
 /**
  * Home composition service.
@@ -376,82 +535,54 @@ async function loadDomainLists(): Promise<{
  * Must not call DashboardService / ReportingService.
  */
 export const WorkspaceService = {
-  async getWorkspace(): Promise<WorkspaceSnapshot> {
+  /**
+   * Progressive Home load: start core + non-core in parallel, paint when core
+   * settles, then enrich. currentUser never blocks first paint.
+   *
+   * Users catalog (full getAll walk) stays off the Home critical path.
+   */
+  beginWorkspaceLoad(): WorkspaceProgressiveLoad {
     const asOf = new Date().toISOString();
 
-    const [currentUser, lists, catalogUsers] = await Promise.all([
-      UserService.getCurrentUser().catch(() => null),
-      loadDomainLists(),
-      UserService.fetchUsersCatalog().catch(() => []),
-    ]);
+    const corePromise = startCoreDomainLists();
+    const nonCorePromise = startNonCoreDomainLists();
+    let latestUser: CurrentUserLite = null;
+    const userPromise = UserService.getCurrentUser()
+      .then((user) => {
+        latestUser = user
+          ? { id: user.id, name: user.name }
+          : null;
+        return latestUser;
+      })
+      .catch(() => {
+        latestUser = null;
+        return null;
+      });
 
-    const workOrders = lists.workOrders.data;
-    const incidents = lists.incidents.data;
-    const maintenance = lists.maintenance.data;
-    const approvals = lists.approvals.data;
-    const coreFailed =
-      !lists.workOrders.ok ||
-      !lists.incidents.ok ||
-      !lists.maintenance.ok;
-
-    const userId = currentUser?.id;
-    const facilityNameById = new Map(
-      lists.facilities.data.map((facility) => [facility.id, facility.name])
+    const core = corePromise.then((coreLists) =>
+      composeWorkspaceSnapshot(asOf, latestUser, {
+        ...coreLists,
+        ...emptyNonCoreDomainLists(),
+      })
     );
-    const userNameById = new Map(
-      catalogUsers.map((user) => [user.id, user.name || user.id])
+
+    const complete = Promise.all([
+      corePromise,
+      nonCorePromise,
+      userPromise,
+    ]).then(([coreLists, nonCoreLists, currentUser]) =>
+      composeWorkspaceSnapshot(asOf, currentUser, {
+        ...coreLists,
+        ...nonCoreLists,
+      })
     );
-    const workloadMaps = deriveOperationalWorkloadMaps({
-      workOrders,
-      maintenance,
-      incidents,
-    });
-    const activity = buildActivity(workOrders, incidents, maintenance);
-    const pulse = buildPulse(incidents, maintenance, workOrders, activity);
-    const attention = buildAttentionModel({
-      asOf,
-      currentUserId: userId,
-      incidents,
-      workOrders,
-      maintenance,
-      approvals,
-      workloadByUserId: workloadMaps.byUserId,
-      userNameById,
-      facilityNameById,
-    });
 
-    const notifications = deriveOperationalNotifications({
-      asOf,
-      requests: lists.requests.data,
-      maintenance,
-      incidents,
-      workOrders,
-    });
+    return { core, complete };
+  },
 
-    const operationalState: OperationalState = coreFailed
-      ? {
-          tone: "degraded",
-          statement: "Operational overview could not be fully loaded.",
-          subtext:
-            "Some live operational data is temporarily unavailable. Retry this page or open a module directly.",
-        }
-      : buildOperationalState(pulse, attention);
-
-    return {
-      asOf,
-      currentUser: {
-        id: currentUser?.id,
-        name: currentUser?.name,
-      },
-      operationalState,
-      attention,
-      notifications,
-      pulse,
-      quickActions: WORKSPACE_QUICK_ACTIONS,
-      myWork: buildMyWork(userId, workOrders, incidents, maintenance),
-      schedule: buildSchedule(asOf, workOrders, incidents, maintenance),
-      activity,
-    };
+  /** Full snapshot (awaits core + non-core + currentUser). */
+  async getWorkspace(): Promise<WorkspaceSnapshot> {
+    return this.beginWorkspaceLoad().complete;
   },
 };
 

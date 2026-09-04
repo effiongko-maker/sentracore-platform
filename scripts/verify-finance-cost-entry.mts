@@ -55,6 +55,13 @@ function main() {
 
   assert(modal.includes("Record cost"), "A open cost entry CTA label");
   assert(modal.includes("What was this for?"), "description label");
+  assert(modal.includes("How much?"), "amount label");
+  assert(!modal.includes('label="Where?"'), "facility selector removed from UX");
+  assert(!modal.includes("cost-facility"), "no facility dropdown field");
+  assert(modal.includes('facility.id === "FAC-0001"'), "uses existing NCC Annex facility id");
+  assert(modal.includes("scopedFacilityId"), "auto facility for NCC Annex deployment");
+  assert(modal.includes("payload: CreateCostRecordInput"), "create payload preserved");
+  assert(modal.includes("facilityId,"), "facilityId still submitted on create");
   assert(modal.includes("COST_CATEGORY_LABELS"), "category validation");
   assert(modal.includes("COST_REIMBURSABILITY_LABELS"), "D reimbursability labels");
   assert(modal.includes("Can we claim this back?"), "reimbursement eligibility label");

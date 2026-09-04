@@ -11,6 +11,7 @@ import {
   WORKSPACE_ASSIGNED_WORK_ORDER_STATUSES,
 } from "../src/lib/operational/workload";
 import { buildAttentionModel } from "../src/modules/workspace/attention";
+import { composeWorkspaceSnapshot } from "../src/services/workspace/WorkspaceService";
 import {
   WORKSPACE_CRITICAL_WORK_ALIGNMENT_PHASE,
   WORKSPACE_OPEN_WORK_ORDER_SCOPE,
@@ -165,6 +166,46 @@ function main() {
     "high-priority work alone is not attention critical severity"
   );
   results.push("PASS Critical Work KPI and attention severity remain distinct");
+
+  // Degraded Home: Maintenance unavailable must not fake zero KPIs / empty attention claim
+  const degraded = composeWorkspaceSnapshot("2026-09-04T12:00:00.000Z", null, {
+    workOrders: {
+      ok: true,
+      data: Array.from({ length: 83 }, (_, i) => ({
+        id: `WO-${i + 1}`,
+        title: `WO ${i + 1}`,
+        type: "corrective" as const,
+        source: "manual" as const,
+        status: "open" as const,
+        priority: "medium" as const,
+        facilityId: "FAC-1",
+        createdAt: "2026-09-01T00:00:00.000Z",
+        updatedAt: "2026-09-01T00:00:00.000Z",
+      })),
+    },
+    incidents: { ok: true, data: [] },
+    maintenance: { ok: false, data: [] },
+    approvals: { ok: true, data: [] },
+    facilities: { ok: true, data: [] },
+  });
+  assert(
+    degraded.operationalState.tone === "degraded",
+    "failed Maintenance keeps degraded/limited state"
+  );
+  assert(degraded.pulse.openWorkOrders === 83, "successful WO count preserved");
+  assert(degraded.pulse.criticalWork === null, "unavailable Maintenance ≠ 0 critical");
+  assert(degraded.pulse.openWork === null, "unavailable Maintenance ≠ 0 open work");
+  assert(degraded.attention.incomplete === true, "attention marked incomplete");
+  assert(
+    command.includes("Attention picture is incomplete") &&
+      command.includes("formatMetric(pulse.openWork)"),
+    "UI shows unavailable metrics and incomplete attention copy"
+  );
+  assert(
+    command.includes("attention.incomplete"),
+    "empty-queue copy gated by incomplete flag"
+  );
+  results.push("PASS degraded Maintenance does not fake zero work/attention");
 
   const intelligence = readSrc("src/lib/intelligence/getOrganisationIntelligence.ts");
   assert(!intelligence.includes("openIncidents"), "intelligence unchanged");

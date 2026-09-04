@@ -1,6 +1,7 @@
 export { ProductShell, AppShell } from "./ProductShell";
 export { OrganisationalCompass } from "./OrganisationalCompass";
 export { GlobalCommandBar } from "./GlobalCommandBar";
+export { GlobalNotificationBell } from "./GlobalNotificationBell";
 export { CommandPalette } from "./CommandPalette";
 export { ModeCanvas } from "./ModeCanvas";
 export { WorkspaceSwitcher } from "./WorkspaceSwitcher";

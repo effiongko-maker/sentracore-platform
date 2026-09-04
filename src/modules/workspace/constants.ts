@@ -9,13 +9,6 @@ export const WORKSPACE_QUICK_ACTIONS: WorkspaceQuickAction[] = [
     icon: "issue",
   },
   {
-    id: "request-maintenance",
-    title: "Request maintenance",
-    description: "Raise work requiring attention",
-    href: "/occupant-requests?type=maintenance",
-    icon: "maintenance",
-  },
-  {
     id: "create-work-order",
     title: "Open work orders",
     description: "Review assigned and in-progress work",
@@ -47,3 +40,16 @@ export const WORKSPACE_QUICK_ACTIONS: WorkspaceQuickAction[] = [
 
 export const WORKSPACE_ACTIVITY_LIMIT = 8;
 export const WORKSPACE_SCHEDULE_LIMIT = 6;
+
+/**
+ * Bounded newest/active pool for Home snapshot composition.
+ * Avoids full-register loadAllPages on the first-paint critical path.
+ */
+export const WORKSPACE_HOME_POOL_SIZE = 100;
+
+/**
+ * Per-domain ceiling for Home list fetches.
+ * On timeout, the domain is treated as unavailable (`ok: false`) using the
+ * existing degraded-snapshot path — same as a rejected request.
+ */
+export const WORKSPACE_HOME_DOMAIN_TIMEOUT_MS = 25_000;

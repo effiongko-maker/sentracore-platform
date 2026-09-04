@@ -16,6 +16,7 @@ import {
   ScanSearch,
   FileCheck2,
   Banknote,
+  Bell,
   type LucideIcon,
 } from "lucide-react";
 import type { AuthEnabledModule } from "@/lib/auth/types";
@@ -190,6 +191,14 @@ export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
  */
 const SECONDARY_NAV_ITEMS: NavItem[] = [
   {
+    label: "Notifications",
+    href: "/notifications",
+    icon: Bell,
+    title: "Notifications",
+    description: "Platform attention feed across operational areas",
+    moduleSlug: FM_MODULE,
+  },
+  {
     label: "Legacy Maintenance",
     href: "/maintenance",
     icon: Wrench,
@@ -250,6 +259,7 @@ const ARCHETYPE_BY_HREF: Record<string, PageArchetypeHint> = {
   "/finance": "snapshot",
   "/requests": "operational-list",
   "/issues": "operational-list",
+  "/notifications": "operational-list",
   "/facilities": "reference-admin",
   "/assets": "reference-admin",
   "/users": "reference-admin",

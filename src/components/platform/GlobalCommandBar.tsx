@@ -10,6 +10,7 @@ import { UserService } from "@/services/users/UserService";
 import type { CurrentUser } from "@/types";
 import { usePlatformShell } from "@/hooks/usePlatformShell";
 import { usePathname } from "next/navigation";
+import { GlobalNotificationBell } from "./GlobalNotificationBell";
 
 export function GlobalCommandBar() {
   const pathname = usePathname();
@@ -77,6 +78,7 @@ export function GlobalCommandBar() {
       </button>
 
       <div className="os-command-actions">
+        <GlobalNotificationBell />
         {user?.organisationName ? (
           <span className="hidden text-xs text-[var(--os-ink-faint)] lg:inline">
             {user.organisationName}

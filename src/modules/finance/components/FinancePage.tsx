@@ -10,6 +10,7 @@ import { formatFinancialAmount } from "../utils/formatFinancialAmount";
 import { useFinanceOverview } from "../hooks/useFinanceOverview";
 import { CostRecordFormModal } from "./CostRecordFormModal";
 import { FinanceHeader, FinanceSummaryRow } from "./FinanceHeader";
+import { FinanceIntelligencePreview } from "./FinanceIntelligencePreview";
 import { FinanceOperationalCostSection } from "./FinanceOperationalCostSection";
 import { FinancePendingActionSection } from "./FinancePendingActionSection";
 import { FinancePositionSection } from "./FinancePositionSection";
@@ -92,6 +93,10 @@ export function FinancePage() {
           loading={loading}
           totalAuthorisations={overview?.meta.totalApprovals ?? 0}
         />
+
+        <div className="fin-v13-footer">
+          <FinanceIntelligencePreview />
+        </div>
 
         <CostRecordFormModal
           open={costModalOpen}
