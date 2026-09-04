@@ -19,6 +19,8 @@ import type {
   WorkspaceQuickAction,
   WorkspaceSnapshot,
 } from "../types";
+import { FinancialPositionSection } from "./FinancialPositionSection";
+import { OperationalNotificationsSection } from "./OperationalNotificationsSection";
 
 const PRIMARY_ACTION_IDS = [
   "log-issue",
@@ -441,6 +443,8 @@ export function CommandSurface({ snapshot }: { snapshot: WorkspaceSnapshot }) {
     <ModeFrame mode="command">
       <div className="sc-fm-home">
         <CommandHero snapshot={snapshot} />
+        <OperationalNotificationsSection feed={snapshot.notifications} />
+        <FinancialPositionSection />
         <div className="sc-fm-main">
           <RequiresAttention attention={snapshot.attention} />
           <OperationalPicture pulse={snapshot.pulse} />

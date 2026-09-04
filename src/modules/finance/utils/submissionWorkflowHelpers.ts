@@ -1,4 +1,8 @@
 import { ApiError } from "@/services/api/ApiResponse";
+import {
+  formatMonetaryFromNumber,
+  parseMonetaryInput,
+} from "./monetaryInput";
 
 export function submissionUserFacingError(error: unknown): string {
   if (error instanceof ApiError) {
@@ -20,13 +24,13 @@ export function submissionUserFacingError(error: unknown): string {
 }
 
 export function parseAmountInput(value: string): number {
-  const normalized = value.replace(/,/g, "").trim();
-  if (!normalized) return 0;
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : NaN;
+  const parsed = parseMonetaryInput(value);
+  if (parsed !== undefined) return parsed;
+  const cleaned = value.replace(/,/g, "").trim();
+  return cleaned ? Number.NaN : 0;
 }
 
 export function formatAmountInput(value: number): string {
   if (!Number.isFinite(value)) return "";
-  return String(value);
+  return formatMonetaryFromNumber(value);
 }

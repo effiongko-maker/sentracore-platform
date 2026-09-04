@@ -13,6 +13,14 @@ export type WorkspaceActivityKind =
   | "maintenance_requested"
   | "work_order_created";
 
+export type {
+  OperationalNotification,
+  OperationalNotificationFeed,
+  OperationalNotificationKind,
+} from "./utils/deriveOperationalNotifications";
+
+import type { OperationalNotificationFeed } from "./utils/deriveOperationalNotifications";
+
 export interface WorkspaceQuickAction {
   id: string;
   title: string;
@@ -111,6 +119,11 @@ export interface WorkspaceSnapshot {
   operationalState: OperationalState;
   /** Cross-domain intervention queue — distinct from pulse.criticalWork KPI. */
   attention: AttentionModel;
+  /**
+   * Compact “what happened / what needs attention” feed for FM Home.
+   * Derived from existing operational records — not a notification store.
+   */
+  notifications: OperationalNotificationFeed;
   pulse: OrganisationalPulse;
   quickActions: WorkspaceQuickAction[];
   myWork: WorkspaceWorkSummary[];

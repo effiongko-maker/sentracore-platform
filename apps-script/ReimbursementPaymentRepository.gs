@@ -122,21 +122,62 @@ var ReimbursementPaymentRepository = (function () {
     return -1;
   }
 
+  /**
+   * Next PAY-{year}-{NNNNNN} from persisted sheet Payment ID values.
+   * Must not use paginated getAll() — that wrapper is not an array.
+   */
   function nextId_() {
     var year = new Date().getFullYear();
-    var all = getAll({});
-    var maxYear = 0;
     var prefix = "PAY-" + year + "-";
-    for (var i = 0; i < all.length; i++) {
-      var id = String(all[i].paymentId || "");
-      if (id.indexOf(prefix) === 0) {
-        var seq = Number(id.slice(prefix.length));
-        if (isFinite(seq) && seq > maxYear) maxYear = seq;
+    var sheet = getSheet_();
+    var values = sheet.getDataRange().getValues();
+    var maxSeq = 0;
+    if (values.length <= 1) {
+      return prefix + "000001";
+    }
+    var headers = values[0];
+    var idCol = -1;
+    for (var c = 0; c < headers.length; c++) {
+      if (String(headers[c]).trim() === "Payment ID") {
+        idCol = c;
+        break;
       }
     }
-    var next = maxYear + 1;
+    if (idCol === -1) return prefix + "000001";
+    for (var r = 1; r < values.length; r++) {
+      var id = String(values[r][idCol] || "").trim();
+      if (id.indexOf(prefix) === 0) {
+        var seq = Number(id.slice(prefix.length));
+        if (isFinite(seq) && seq > maxSeq) maxSeq = seq;
+      }
+    }
+    var next = maxSeq + 1;
     var padded = ("000000" + next).slice(-6);
     return prefix + padded;
+  }
+
+  /**
+   * All receipts for a submission — unpaginated sheet scan.
+   * Used by the authorized-amount ceiling so pageSize=100 cannot undercount.
+   */
+  function listAllBySubmissionId(submissionId) {
+    var id = String(submissionId || "").trim();
+    var rows = [];
+    if (!id) return rows;
+    var sheet = getSheet_();
+    var values = sheet.getDataRange().getValues();
+    if (values.length <= 1) return rows;
+    var headers = values[0];
+    for (var r = 1; r < values.length; r++) {
+      var obj = SheetFieldUtils.rowToSheetObject(headers, values[r]);
+      var paymentId = SheetFieldUtils.cellText(obj["Payment ID"]);
+      if (!paymentId) continue;
+      var canonical = rowToCanonical_(obj);
+      if (String(canonical.submissionId || "") === id) {
+        rows.push(canonical);
+      }
+    }
+    return rows;
   }
 
   function getAll(payload) {
@@ -288,6 +329,7 @@ var ReimbursementPaymentRepository = (function () {
   return {
     getAll: getAll,
     getById: getById,
+    listAllBySubmissionId: listAllBySubmissionId,
     create: create,
     update: update,
   };

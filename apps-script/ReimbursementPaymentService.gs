@@ -2,6 +2,7 @@
  * ReimbursementPaymentService.gs
  *
  * Business rules for reimbursement payment receipts against CostSubmission.
+ * Cumulative receipts must never exceed authorizedAmount.
  */
 
 var ReimbursementPaymentService = (function () {
@@ -50,6 +51,67 @@ var ReimbursementPaymentService = (function () {
     }
   }
 
+  function requireAuthorization_(submissionId) {
+    if (typeof ReimbursementAuthorizationRepository === "undefined") {
+      throw new Error("ReimbursementAuthorizationRepository is unavailable");
+    }
+    var authorization =
+      ReimbursementAuthorizationRepository.getBySubmissionId(submissionId);
+    if (!authorization) {
+      throw new Error(
+        "Authorize this claim before recording payment receipts"
+      );
+    }
+    var authorizedAmount = Number(authorization.authorizedAmount);
+    if (!isFinite(authorizedAmount) || authorizedAmount <= 0) {
+      throw new Error("Authorization has no valid authorizedAmount");
+    }
+    return authorization;
+  }
+
+  function sumExistingPayments_(submissionId, excludePaymentId) {
+    var rows = ReimbursementPaymentRepository.listAllBySubmissionId(
+      submissionId
+    );
+    var paid = 0;
+    var exclude = excludePaymentId ? String(excludePaymentId).trim() : "";
+    for (var i = 0; i < rows.length; i++) {
+      if (exclude && String(rows[i].paymentId || "") === exclude) continue;
+      paid += Number(rows[i].receivedAmount) || 0;
+    }
+    return paid;
+  }
+
+  /**
+   * Source of truth: existing payments + incoming amount must not exceed
+   * authorizedAmount. Exact outstanding payment is allowed.
+   */
+  function assertWithinAuthorizedAmount_(
+    submissionId,
+    incomingAmount,
+    excludePaymentId
+  ) {
+    var authorization = requireAuthorization_(submissionId);
+    var authorizedAmount = Number(authorization.authorizedAmount);
+    var alreadyPaid = sumExistingPayments_(submissionId, excludePaymentId);
+    var incoming = Number(incomingAmount);
+    var outstanding = authorizedAmount - alreadyPaid;
+    var nextTotal = alreadyPaid + incoming;
+
+    if (!isFinite(incoming) || incoming <= 0) {
+      throw new Error("receivedAmount must be a positive number");
+    }
+    if (nextTotal > authorizedAmount) {
+      throw new Error(
+        "Payment exceeds outstanding authorized amount (outstanding " +
+          Math.max(0, outstanding) +
+          ", attempted " +
+          incoming +
+          ")"
+      );
+    }
+  }
+
   function assertSubmissionExists_(submissionId) {
     if (typeof CostSubmissionRepository === "undefined") {
       throw new Error("CostSubmissionRepository is unavailable");
@@ -64,6 +126,7 @@ var ReimbursementPaymentService = (function () {
         "Payments can only be recorded against submitted or queried submissions"
       );
     }
+    requireAuthorization_(submissionId);
     return submission;
   }
 
@@ -92,7 +155,13 @@ var ReimbursementPaymentService = (function () {
       recordedBy: payload.recordedBy,
     };
     validatePaymentShape_(draft, "create");
-    assertSubmissionExists_(String(draft.submissionId).trim());
+    var submissionId = String(draft.submissionId).trim();
+    assertSubmissionExists_(submissionId);
+    assertWithinAuthorizedAmount_(
+      submissionId,
+      draft.receivedAmount,
+      null
+    );
     var created = ReimbursementPaymentRepository.create(draft);
     if (
       typeof ReportingSnapshotService !== "undefined" &&
@@ -136,7 +205,13 @@ var ReimbursementPaymentService = (function () {
         payload.recordedBy != null ? payload.recordedBy : current.recordedBy,
     };
     validatePaymentShape_(merged, "update");
-    assertSubmissionExists_(String(merged.submissionId).trim());
+    var submissionId = String(merged.submissionId).trim();
+    assertSubmissionExists_(submissionId);
+    assertWithinAuthorizedAmount_(
+      submissionId,
+      merged.receivedAmount,
+      paymentId
+    );
     var updated = ReimbursementPaymentRepository.update(paymentId, payload);
     if (
       typeof ReportingSnapshotService !== "undefined" &&

@@ -72,12 +72,11 @@ export function SubmissionDetailsForm({
   return (
     <div className="fin-submission-step">
       <p className="fin-section-lede">
-        Provide the submission context. Facility is inferred from the selected
-        costs — no facility selection is required for this deployment.
+        Add claim period, type, and any supporting document details.
       </p>
 
       <div className="fin-submission-form-grid mt-4">
-        <FormField label="Submission kind" htmlFor="submissionKind">
+        <FormField label="Claim type" htmlFor="submissionKind">
           <input
             id="submissionKind"
             list="submission-kind-suggestions"
@@ -95,7 +94,7 @@ export function SubmissionDetailsForm({
           </datalist>
         </FormField>
 
-        <FormField label="Period label" htmlFor="periodLabel">
+        <FormField label="Claim period" htmlFor="periodLabel">
           <input
             id="periodLabel"
             className={inputClassName}
@@ -106,15 +105,13 @@ export function SubmissionDetailsForm({
         </FormField>
       </div>
 
-      <h3 className="fin-section-title mt-6">Supporting package</h3>
+      <h3 className="fin-section-title mt-6">Supporting documents</h3>
       <p className="fin-section-lede">
-        Submission-level documentation references — separate from individual
-        cost evidence. File upload for package documents is not yet supported
-        on the submission API; record references and notes only.
+        Add any documents or references that support this claim.
       </p>
 
       <div className="fin-submission-form-grid mt-4">
-        <FormField label="Package reference" htmlFor="packageReference">
+        <FormField label="Document reference" htmlFor="packageReference">
           <input
             id="packageReference"
             className={inputClassName}
@@ -126,7 +123,7 @@ export function SubmissionDetailsForm({
           />
         </FormField>
 
-        <FormField label="Package type" htmlFor="packageType">
+        <FormField label="Document type" htmlFor="packageType">
           <input
             id="packageType"
             list="package-type-suggestions"
@@ -142,7 +139,7 @@ export function SubmissionDetailsForm({
           </datalist>
         </FormField>
 
-        <FormField label="Package date" htmlFor="packageDate">
+        <FormField label="Document date" htmlFor="packageDate">
           <input
             id="packageDate"
             type="date"
@@ -153,25 +150,25 @@ export function SubmissionDetailsForm({
         </FormField>
       </div>
 
-      <FormField label="Package notes" htmlFor="packageNotes" className="mt-4">
+      <FormField label="Document notes" htmlFor="packageNotes" className="mt-4">
         <textarea
           id="packageNotes"
           className={`${inputClassName} min-h-[5.5rem] py-2`}
           rows={3}
           value={values.packageNotes}
           onChange={(event) => onChange({ packageNotes: event.target.value })}
-          placeholder="Notes about the supporting package"
+          placeholder="Optional notes about these documents"
         />
       </FormField>
 
-      <FormField label="Submission notes" htmlFor="notes" className="mt-4">
+      <FormField label="Claim notes" htmlFor="notes" className="mt-4">
         <textarea
           id="notes"
           className={`${inputClassName} min-h-[5.5rem] py-2`}
           rows={3}
           value={values.notes}
           onChange={(event) => onChange({ notes: event.target.value })}
-          placeholder="Optional notes for this submission"
+          placeholder="Optional notes for this claim"
         />
       </FormField>
     </div>

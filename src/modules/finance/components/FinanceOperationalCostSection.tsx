@@ -19,11 +19,12 @@ function formatRecordedAt(iso: string): string {
 }
 
 export function FinanceOperationalCostSection({
-  lenses,
+  lenses: _lenses,
   summary,
   recentCosts,
   loading,
 }: {
+  /** Kept for call-site compatibility; not rendered on the overview. */
   lenses: FinanceOperationalCostLens[];
   summary: FinanceOperationalCostSummary | null;
   recentCosts: FinanceRecentCostRow[];
@@ -31,93 +32,59 @@ export function FinanceOperationalCostSection({
 }) {
   const hasCosts = (summary?.totalCount ?? 0) > 0;
   const visible = recentCosts.slice(0, FINANCE_UI_LIST_LIMIT);
-  const hasMore =
-    recentCosts.length > FINANCE_UI_LIST_LIMIT ||
-    (summary?.totalCount ?? 0) > FINANCE_UI_LIST_LIMIT;
 
   return (
     <section className="fin-v13-panel">
       <div className="fin-v13-section-head">
         <div>
           <h2 className="fin-v13-section-title">Operational costs</h2>
-          <p className="fin-v13-section-lede">
-            Newest recorded spend
-            {summary && summary.unknownCount > 0
-              ? ` · ${summary.unknownCount} need classification`
-              : ""}
-            {summary?.truncated ? " · amount is a sample" : ""}.
-          </p>
+          <p className="fin-v13-section-lede">Latest recorded spend.</p>
         </div>
         <Link href="/finance/costs" className="fin-v13-text-action">
-          View all costs →
+          View all →
         </Link>
       </div>
 
       {loading ? (
         <div className="fin-v13-skel-block" />
       ) : hasCosts && summary ? (
-        <>
-          <div className="fin-v13-lenses" aria-label="Cost context">
-            {lenses.map((lens) => (
-              <span key={lens.id} className="fin-v13-lens">
-                {lens.label}
-              </span>
-            ))}
-          </div>
-
-          {visible.length > 0 ? (
-            <>
-              <p className="fin-v13-table-caption">Recent costs</p>
-              <table className="fin-v13-table fin-v13-table--compact">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Description</th>
-                    <th>Category</th>
-                    <th className="fin-v13-num">Amount</th>
-                    <th>Class</th>
-                    <th className="fin-v13-action-col" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {visible.map((row) => (
-                    <tr key={row.costId}>
-                      <td className="fin-v13-muted">
-                        {formatRecordedAt(row.recordedAt)}
-                      </td>
-                      <td>
-                        <span className="fin-v13-item-title">
-                          {row.description}
-                        </span>
-                        <span className="fin-v13-item-meta">{row.costId}</span>
-                      </td>
-                      <td className="fin-v13-muted">{row.categoryLabel}</td>
-                      <td className="fin-v13-num">{row.amountLabel}</td>
-                      <td className="fin-v13-muted">
-                        {row.reimbursabilityLabel}
-                      </td>
-                      <td className="fin-v13-action-col">
-                        <Link
-                          href={`/finance/costs/${encodeURIComponent(row.costId)}`}
-                          className="fin-v13-text-action"
-                        >
-                          Open →
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {hasMore ? (
-                <div className="fin-v13-table-footer">
-                  <Link href="/finance/costs" className="fin-v13-text-action">
-                    View all →
-                  </Link>
-                </div>
-              ) : null}
-            </>
-          ) : null}
-        </>
+        visible.length > 0 ? (
+          <table className="fin-v13-table fin-v13-table--compact">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Description</th>
+                <th className="fin-v13-num">Amount</th>
+                <th>Status</th>
+                <th className="fin-v13-action-col" />
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((row) => (
+                <tr key={row.costId}>
+                  <td className="fin-v13-muted">
+                    {formatRecordedAt(row.recordedAt)}
+                  </td>
+                  <td>
+                    <span className="fin-v13-item-title">{row.description}</span>
+                  </td>
+                  <td className="fin-v13-num">{row.amountLabel}</td>
+                  <td className="fin-v13-muted">{row.reimbursabilityLabel}</td>
+                  <td className="fin-v13-action-col">
+                    <Link
+                      href={`/finance/costs/${encodeURIComponent(row.costId)}`}
+                      className="fin-v13-text-action"
+                    >
+                      Open →
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="fin-v13-empty">No recent costs in view.</p>
+        )
       ) : (
         <p className="fin-v13-empty">No cost records yet.</p>
       )}

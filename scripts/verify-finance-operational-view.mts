@@ -9,6 +9,7 @@ import type { Approval } from "../src/modules/approvals/types";
 import type {
   CostRecord,
   CostSubmission,
+  ReimbursementAuthorization,
   ReimbursementPayment,
 } from "../src/lib/operational/finance";
 import { FINANCIAL_DOMAIN_IMPLEMENTED } from "../src/lib/operational/finance";
@@ -176,18 +177,33 @@ function staticChecks() {
   const page = read("src/modules/finance/components/FinancePage.tsx");
   assert(page.includes("FinancePositionSection"), "position section");
   assert(page.includes("FinanceSubmissionsSection"), "submissions section");
-  assert(page.includes("FinanceFlowRail"), "financial flow rail");
+  assert(page.includes("FinancePendingActionSection"), "needs attention section");
+  assert(page.includes("FinanceSummaryRow"), "finance at a glance");
   assert(page.includes("CostRecordFormModal"), "cost entry modal");
-  assert(page.includes("submissionLive"), "submission live wiring");
-  assert(page.includes("paymentStatusSignal"), "payment signal wiring");
-  assert(page.includes("paymentsStatus"), "coverage payments wiring");
+  assert(!page.includes("FinanceFlowRail"), "flow rail removed from home");
+  assert(!page.includes("FinanceCoverageSection"), "coverage strip removed");
+  assert(!page.includes("FinanceIntelligencePreview"), "intel placeholder removed");
   assert(!page.includes("Available Cash"), "no treasury concepts");
   assert(!page.includes("bank balance"), "no bank balance");
 
   const header = read("src/modules/finance/components/FinanceHeader.tsx");
   assert(header.includes("Record cost"), "record cost action");
+  assert(
+    header.includes("Create reimbursement claim"),
+    "create claim primary action"
+  );
+  assert(header.includes("Finance</h1>"), "Finance title");
   assert(header.includes("In view"), "header not APR-period framed");
   assert(!header.includes("client authorisation records"), "header not APR-centric period");
+  assert(
+    !header.includes("/finance/submissions/new") ||
+      header.includes("Create reimbursement claim"),
+    "create claim remains in header"
+  );
+  assert(
+    !header.includes('href="/approvals"'),
+    "authorisations not duplicated in header"
+  );
 
   const constants = read("src/modules/finance/constants.ts");
   assert(
@@ -216,6 +232,10 @@ function staticChecks() {
   assert(!derive.includes("REIMBURSEMENT_SUBMISSION_STAGES"), "no deprecated stages in derive");
   assert(!derive.includes("approved_awaiting_payment"), "no approved_awaiting_payment");
   assert(derive.includes("submission_queried"), "queried submission attention");
+  assert(
+    derive.includes("submission_awaiting_authorization"),
+    "authorization attention"
+  );
   assert(derive.includes("submission_awaiting_payment"), "payment attention");
   assert(derive.includes("cost_needs_classification"), "unknown classification attention");
   assert(derive.includes("Client authorisation"), "client authorisation wording");
@@ -232,6 +252,8 @@ function staticChecks() {
   );
   assert(position.includes("Client authorisation"), "position separates APR");
   assert(position.includes("not reimbursement approval"), "APR boundary copy");
+  assert(position.includes('href="/approvals"'), "authorisations view all");
+  assert(position.includes("FINANCE_UI_LIST_LIMIT"), "max-5 authorisations");
 
   const flow = read("src/modules/finance/components/FinanceFlowRail.tsx");
   assert(flow.includes("submissionLive"), "submission live prop");
@@ -250,18 +272,29 @@ function staticChecks() {
   );
   assert(submissionsUi.includes("Claim"), "claim column");
   assert(submissionsUi.includes("Outstanding"), "outstanding column");
-  assert(submissionsUi.includes("paymentStatusLabel"), "payment status column");
   assert(submissionsUi.includes("FINANCE_UI_LIST_LIMIT"), "max-5 submissions");
+  assert(
+    !submissionsUi.includes("Create claim"),
+    "create claim not repeated in claims section"
+  );
+  assert(submissionsUi.includes("View all →"), "single view all for claims");
 
   const pendingUi = read(
     "src/modules/finance/components/FinancePendingActionSection.tsx"
   );
   assert(pendingUi.includes("FINANCE_UI_LIST_LIMIT"), "max-5 attention");
+  assert(pendingUi.includes("Open →"), "uniform open action");
+  assert(pendingUi.includes("fin-v13-queue"), "attention queue presentation");
 
   const costsUi = read(
     "src/modules/finance/components/FinanceOperationalCostSection.tsx"
   );
   assert(costsUi.includes("FINANCE_UI_LIST_LIMIT"), "max-5 recent costs");
+  assert(costsUi.includes("Latest recorded spend"), "costs section lede");
+  assert(
+    !costsUi.includes("Record cost"),
+    "record cost not repeated in costs section"
+  );
 
   const intel = read(
     "src/modules/finance/components/FinanceIntelligencePreview.tsx"
@@ -414,12 +447,42 @@ function paymentStateChecks() {
   assert(none.payments.available === true, "payments capability live");
   assert(none.payments.positionDetail === "Not yet recorded", "1. no payment");
   assert(
-    none.pendingActions.some((a) => a.kind === "submission_awaiting_payment"),
-    "unpaid submitted needs payment attention"
+    none.pendingActions.some(
+      (a) => a.kind === "submission_awaiting_authorization"
+    ),
+    "unpaid submitted needs authorization attention"
   );
   assert(
     none.submissions.preview[0]?.outstandingAmount === 100000,
     "full claim outstanding"
+  );
+
+  const authorization: ReimbursementAuthorization = {
+    authorizationId: "AUTH-1",
+    submissionId: "SUB-PAY-1",
+    authorizedAmount: 100000,
+    currency: "NGN",
+    authorizedAt: "2026-09-01T12:00:00.000Z",
+    authorizedBy: "USR-1",
+    recordedAt: "2026-09-01T12:00:00.000Z",
+  };
+
+  const authorizedOnly = deriveFinanceOverview({
+    approvals: [],
+    totalApprovals: 0,
+    costRecords: [cost],
+    totalCostRecords: 1,
+    submissions: [submitted],
+    totalSubmissions: 1,
+    payments: [],
+    totalPayments: 0,
+    authorizations: [authorization],
+  });
+  assert(
+    authorizedOnly.pendingActions.some(
+      (a) => a.kind === "submission_awaiting_payment"
+    ),
+    "authorized unpaid needs payment attention"
   );
 
   const partialPayments: ReimbursementPayment[] = [
@@ -442,6 +505,7 @@ function paymentStateChecks() {
     totalSubmissions: 1,
     payments: partialPayments,
     totalPayments: 1,
+    authorizations: [authorization],
   });
   assert(partial.payments.paymentCount === 1, "2. payment recorded");
   assert(
@@ -459,8 +523,11 @@ function paymentStateChecks() {
     "partial still awaiting payment"
   );
   const partialWorkflow = deriveCostWorkflow(cost, submitted, {
-    paymentRecorded: summarizeSubmissionPayments(submitted, partialPayments)
-      .fullyPaid,
+    paymentRecorded: summarizeSubmissionPayments(
+      submitted,
+      partialPayments,
+      [authorization]
+    ).fullyPaid,
   });
   assert(
     partialWorkflow.eligibility === "submitted",
@@ -488,24 +555,28 @@ function paymentStateChecks() {
     totalSubmissions: 1,
     payments: fullPayments,
     totalPayments: 2,
+    authorizations: [authorization],
   });
   assert(full.payments.paymentCount === 2, "4. multiple receipts counted");
   assert(
-    /fully paid/i.test(full.payments.positionDetail),
-    "3. full payment → fully paid"
+    /fully reimbursed/i.test(full.payments.positionDetail),
+    "3. full payment → fully reimbursed"
   );
   assert(full.submissions.preview[0]?.outstandingAmount === 0, "zero outstanding");
   assert(
-    full.submissions.preview[0]?.paymentStatusLabel === "Fully paid",
-    "fully paid label"
+    full.submissions.preview[0]?.paymentStatusLabel === "Fully reimbursed",
+    "fully reimbursed label"
   );
   assert(
     !full.pendingActions.some((a) => a.kind === "submission_awaiting_payment"),
     "fully paid is not awaiting payment"
   );
   const fullWorkflow = deriveCostWorkflow(cost, submitted, {
-    paymentRecorded: summarizeSubmissionPayments(submitted, fullPayments)
-      .fullyPaid,
+    paymentRecorded: summarizeSubmissionPayments(
+      submitted,
+      fullPayments,
+      [authorization]
+    ).fullyPaid,
   });
   assert(
     fullWorkflow.eligibility === "reimbursed",

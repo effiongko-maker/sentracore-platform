@@ -222,10 +222,14 @@ Optional `approvalId` links to Approval — it does not duplicate approval amoun
 | CostRecord | `actualAmount` | Authoritative underlying cost |
 | CostSubmission | `claimAmount` | Claim-side amount being presented (optional until finalized) |
 | CostSubmission | `markup` | Policy-driven adjustment — **no hard-coded rates** |
-| Approval | (separate domain) | Authorized amount |
-| Payment | (separate domain) | Received amount |
+| Approval | Work Order client authorisation (Approvals module) — not reimbursement |
+| ReimbursementAuthorization | Authorized reimbursement amount for a claim (`authorizedAmount`) |
+| ReimbursementAuthorization | Optional `authorityReference` — traceable memo/board ref (not WO `approvalId`) |
+| Payment | Received amount (`ReimbursementPayment`) |
 
-**ACTUAL (CostRecord) ≠ CLAIM (CostSubmission) ≠ AUTHORIZED (Approval) ≠ RECEIVED (Payment)**
+**ACTUAL (CostRecord) ≠ CLAIM (CostSubmission) ≠ AUTHORIZED (ReimbursementAuthorization) ≠ RECEIVED (Payment)**  
+Work Order Approvals remain a separate domain and must not be treated as reimbursement authorization.  
+Do not reuse `CostSubmission.approvalId` for reimbursement authority.
 
 Use `getSubmissionActualCostTotal(costRecords)` to sum underlying actual costs — do not store authoritative actual totals on the submission.
 
@@ -360,6 +364,7 @@ Monthly / periodic contract payment **to** PayChex. Distinct from reimbursement 
 - **CostRecord persistence** — `COST_RECORDS` sheet via Apps Script (`cost-records` resource); ContractPayment still types-only
 - **CostSubmission persistence** — `COST_SUBMISSIONS` sheet via Apps Script (`cost-submissions` resource)
 - **Reimbursement payment persistence** — `REIMBURSEMENT_PAYMENTS` sheet via Apps Script (`reimbursement-payments` resource); linked by `submissionId`; never stored on CostRecord or CostSubmission status
+- **Reimbursement authorization persistence** — `REIMBURSEMENT_AUTHORIZATIONS` sheet via Apps Script (`reimbursement-authorizations` resource); one authorization per submitted claim; distinct from Work Order Approvals; `authorizedAmount` is the outstanding / fully-reimbursed basis once present; optional `authorityReference` for traceability (not `CostSubmission.approvalId`)
 - **CostSubmission persistence** — `COST_SUBMISSIONS` sheet via Apps Script (`cost-submissions` resource)
 - **CostRecord semantic correction** — `budgetedAmount` replaces `estimatedAmount`; required `location`; COST_RECORDS schema migration (21 columns incl. evidence file metadata)
 - **CostRecord evidence uploads (v0.8.3)** — receipt/invoice files stored in Apps Script Drive; five evidence file columns on sheet

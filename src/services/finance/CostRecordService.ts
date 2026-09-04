@@ -90,6 +90,15 @@ function assertValidForPersistence(
   }
 }
 
+/** Empty optional IDs mean "clear" on update; validation only accepts omit/non-empty. */
+function optionalIdForValidation(
+  value: string | undefined
+): string | undefined {
+  if (value === undefined) return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
 function toPaginatedCostRecords(
   payload: unknown,
   params: CostRecordListParams
@@ -245,6 +254,22 @@ export const CostRecordService = {
         : existing.evidence,
       currency: input.currency ?? existing.currency,
       reimbursability: input.reimbursability ?? existing.reimbursability,
+      departmentId: optionalIdForValidation(
+        input.departmentId !== undefined
+          ? input.departmentId
+          : existing.departmentId
+      ),
+      workId: optionalIdForValidation(
+        input.workId !== undefined ? input.workId : existing.workId
+      ),
+      workOrderId: optionalIdForValidation(
+        input.workOrderId !== undefined
+          ? input.workOrderId
+          : existing.workOrderId
+      ),
+      jobOrderId: optionalIdForValidation(
+        input.jobOrderId !== undefined ? input.jobOrderId : existing.jobOrderId
+      ),
     };
     assertValidForPersistence(merged, "update");
 

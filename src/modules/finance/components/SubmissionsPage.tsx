@@ -35,9 +35,9 @@ export function SubmissionsPage() {
 
   const columns = useMemo<Column<CostSubmission>[]>(
     () => [
-      {
+        {
         key: "submissionId",
-        header: "Submission",
+        header: "Claim",
         render: (row) => (
           <Link
             href={`/finance/submissions/${row.submissionId}`}
@@ -58,14 +58,14 @@ export function SubmissionsPage() {
       },
       {
         key: "periodLabel",
-        header: "Period",
+        header: "Claim period",
         render: (row) => (
           <span className="text-muted">{row.periodLabel ?? "—"}</span>
         ),
       },
       {
         key: "submissionKind",
-        header: "Kind",
+        header: "Claim type",
         render: (row) => (
           <span className="text-muted">{row.submissionKind ?? "—"}</span>
         ),
@@ -111,17 +111,17 @@ export function SubmissionsPage() {
 
         <div className="flex flex-wrap items-start justify-between gap-3">
           <OperateHeader
-            title="Reimbursement submissions"
-            description="Build and track cost reimbursement claims from operational spend."
+            title="Reimbursement claims"
+            description="Prepare and track reimbursement claims from operational costs."
             signalValue={loading ? "—" : total}
-            signalLabel="Submissions"
+            signalLabel="Claims"
           />
           <Link
             href="/finance/submissions/new"
             className="inline-flex h-8 items-center gap-2 rounded-[12px] bg-accent px-3 text-xs font-medium text-white shadow-sc hover:bg-[#1e40af]"
           >
             <Plus className="h-4 w-4" />
-            Create submission
+            Create claim
           </Link>
         </div>
 
@@ -129,7 +129,7 @@ export function SubmissionsPage() {
           {error ? (
             <EmptyState
               icon={FileStack}
-              title="Unable to load submissions"
+              title="Unable to load claims"
               description={error}
               actionLabel="Try again"
               onAction={() => void reload()}
@@ -145,8 +145,8 @@ export function SubmissionsPage() {
               total={total}
               onPageChange={setPage}
               emptyIcon={FileStack}
-              emptyTitle="No submissions yet"
-              emptyDescription="Create a submission to bundle reimbursable costs into a reimbursement claim."
+              emptyTitle="No claims yet"
+              emptyDescription="Create a claim to group reimbursable costs for reimbursement."
             />
           )}
         </StreamSurface>

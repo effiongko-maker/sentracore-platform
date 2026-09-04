@@ -8,6 +8,14 @@ import { resolve } from "node:path";
 import type { CostRecord } from "../src/lib/operational/finance/types";
 import { deriveFinanceOverview } from "../src/modules/finance/utils/deriveFinanceOverview";
 import { validateCostRecord } from "../src/lib/operational/finance";
+import {
+  caretFromKeepableCount,
+  countKeepableChars,
+  formatMonetaryDisplay,
+  formatMonetaryFromNumber,
+  parseMonetaryInput,
+  sanitizeMonetaryInput,
+} from "../src/modules/finance/utils/monetaryInput";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);
@@ -46,17 +54,24 @@ function main() {
   const hook = readSrc("src/modules/finance/hooks/useFinanceOverview.ts");
 
   assert(modal.includes("Record cost"), "A open cost entry CTA label");
-  assert(modal.includes("What was the cost for?"), "description label");
+  assert(modal.includes("What was this for?"), "description label");
   assert(modal.includes("COST_CATEGORY_LABELS"), "category validation");
   assert(modal.includes("COST_REIMBURSABILITY_LABELS"), "D reimbursability labels");
-  assert(modal.includes("Supporting evidence"), "E evidence required label");
+  assert(modal.includes("Can we claim this back?"), "reimbursement eligibility label");
+  assert(modal.includes("More details"), "secondary details section");
+  assert(modal.includes("Receipt or invoice"), "E evidence required label");
+  assert(
+    modal.indexOf("Receipt or invoice") < modal.indexOf("More details"),
+    "receipt/invoice is primary, not under More details"
+  );
   assert(modal.includes('type="file"'), "E receipt upload input");
   assert(modal.includes("application/pdf,image/jpeg,image/png"), "E accepted receipt types");
   assert(modal.includes("toEvidenceUpload"), "E evidence upload encoding");
   assert(modal.includes("Budgeted amount"), "budgeted amount label");
   assert(!modal.includes("Estimated amount"), "no estimated label");
   assert(modal.includes("Location"), "location field");
-  assert(modal.includes("fin-form-amount-row"), "prominent amount row");
+  assert(modal.includes("MonetaryInput"), "comma-formatted actual/budgeted amounts");
+  assert(!modal.includes('type="number"'), "amount fields are not native number inputs");
   assert(modal.includes('option value="none"'), "F standalone default");
   assert(modal.includes('value="work"'), "G work link option");
   assert(modal.includes('value="work_order"'), "H WO link option");
@@ -74,7 +89,7 @@ function main() {
 
   assert(page.includes("CostRecordFormModal"), "finance page wires modal");
   assert(page.includes("onRecordCost"), "record cost entry point");
-  assert(section.includes("Recent costs"), "recent cost list");
+  assert(section.includes("Latest recorded spend"), "recent cost list");
   assert(section.includes('href="/finance/costs"'), "recent costs links to full register");
   assert(costRecordsPage.includes("COST_RECORDS_PAGE_SIZE = 25"), "full cost register paginates");
   assert(hook.includes("CostRecordService.listCostRecords"), "overview loads costs");
@@ -119,6 +134,66 @@ function main() {
       totalSubmissions: 0,
     }).recentCosts.length === 5,
     "recent costs limited to five"
+  );
+
+  assert(
+    formatMonetaryFromNumber(5_625_000) === "5,625,000",
+    "formats millions with commas"
+  );
+  assert(
+    formatMonetaryFromNumber(4_500_000) === "4,500,000",
+    "formats 4.5m with commas"
+  );
+  assert(parseMonetaryInput("5,625,000") === 5_625_000, "parses grouped integer");
+  assert(parseMonetaryInput("4,500,000.50") === 4_500_000.5, "parses grouped decimal");
+  assert(
+    formatMonetaryDisplay(sanitizeMonetaryInput("NGN 5,625,000")) ===
+      "5,625,000",
+    "paste strips currency text"
+  );
+  assert(
+    formatMonetaryDisplay(sanitizeMonetaryInput("5625.")) === "5,625.",
+    "keeps trailing decimal while typing"
+  );
+  assert(parseMonetaryInput("") === undefined, "empty is not a number");
+  const grouped = "5,625,000";
+  assert(countKeepableChars(grouped, 3) === 2, "commas are not keepable");
+  assert(
+    caretFromKeepableCount(grouped, 2) === 3,
+    "caret restored after grouped digit"
+  );
+
+  const costDetail = readSrc("src/modules/finance/components/CostDetailPage.tsx");
+  assert(costDetail.includes("MonetaryInput"), "cost edit uses monetary input");
+  assert(
+    costDetail.includes("selectedWorkOrderId"),
+    "classification save uses selected Work Order ID"
+  );
+  assert(
+    costDetail.includes("selectedWorkId"),
+    "classification save uses selected Work ID"
+  );
+  assert(
+    costDetail.includes("payload.workOrderId = selectedWorkOrderId"),
+    "Work Order selection persists the Work Order ID"
+  );
+  assert(
+    costDetail.includes("payload.workId = selectedWorkId"),
+    "Work selection persists the Work ID"
+  );
+  assert(
+    costDetail.includes('form.relatedLink === "work_order" ? form.workOrderId.trim()'),
+    "Work Order selection maps to workOrderId from select value, not a display label"
+  );
+  assert(
+    costDetail.includes("else if (record.workId)"),
+    "empty workId is only sent when clearing a previous work link"
+  );
+
+  const costService = readSrc("src/services/finance/CostRecordService.ts");
+  assert(
+    costService.includes("optionalIdForValidation"),
+    "empty optional link IDs clear on update without failing validation"
   );
 
   console.log("PASS finance cost entry contracts");

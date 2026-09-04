@@ -21,6 +21,7 @@ export type {
   FinancialOperationalRefs,
   FinancialRecordKind,
   MarkupRepresentation,
+  ReimbursementAuthorization,
   ReimbursementPayment,
   ReimbursementPaymentOutcome,
   ReimbursementPaymentReconciliation,
@@ -101,10 +102,21 @@ export {
   isValidReimbursementPaymentId,
   paymentAppliesToSubmission,
   sumPaymentsForSubmission,
+  evaluatePaymentAgainstAuthorizedAmount,
   validateReimbursementPayment,
   type ReimbursementPaymentValidationOptions,
   type ReimbursementPaymentValidationResult,
 } from "./payment";
+
+export {
+  DEFAULT_REIMBURSEMENT_AUTHORIZATION_CURRENCY,
+  REIMBURSEMENT_AUTHORIZATION_ID_PATTERN,
+  findAuthorizationForSubmission,
+  isValidReimbursementAuthorizationId,
+  validateReimbursementAuthorization,
+  type ReimbursementAuthorizationValidationOptions,
+  type ReimbursementAuthorizationValidationResult,
+} from "./authorization";
 
 export {
   FORBIDDEN_REIMBURSEMENT_PAYMENT_SHEET_HEADERS,
@@ -117,6 +129,18 @@ export {
   type ReimbursementPaymentSheetHeader,
   type RemoteReimbursementPayment,
 } from "./paymentRow";
+
+export {
+  FORBIDDEN_REIMBURSEMENT_AUTHORIZATION_SHEET_HEADERS,
+  REIMBURSEMENT_AUTHORIZATION_SHEET_HEADERS,
+  mapRemoteReimbursementAuthorization,
+  reimbursementAuthorizationToRemotePayload,
+  reimbursementAuthorizationToRow,
+  rowToReimbursementAuthorization,
+  type ReimbursementAuthorizationRow,
+  type ReimbursementAuthorizationSheetHeader,
+  type RemoteReimbursementAuthorization,
+} from "./authorizationRow";
 
 export {
   COST_SUBMISSION_FLOW,

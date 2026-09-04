@@ -52,15 +52,14 @@ export function SubmissionCostSelection({
   return (
     <div className="fin-submission-step">
       <p className="fin-section-lede">
-        Select reimbursable costs to include in this submission. Cost records
-        remain the source of truth — nothing is copied or changed here.
+        Which eligible costs do you want to claim?
       </p>
 
       <div className="fin-submission-toolbar">
         <input
           type="search"
           className="fin-submission-search"
-          placeholder="Search by description, ID, location, category, or work ref…"
+          placeholder="Search eligible costs…"
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
           aria-label="Search eligible costs"
@@ -69,13 +68,13 @@ export function SubmissionCostSelection({
 
       <div className="fin-submission-selection-summary" aria-live="polite">
         <div>
-          <p className="fin-metric-kicker">Selected</p>
+          <p className="fin-metric-kicker">Selected costs</p>
           <p className="fin-metric-value">
             {selectedIds.size} cost{selectedIds.size === 1 ? "" : "s"}
           </p>
         </div>
         <div>
-          <p className="fin-metric-kicker">Actual cost</p>
+          <p className="fin-metric-kicker">Claim amount so far</p>
           <p className="fin-metric-value">
             {formatFinancialAmount(selectedTotal, currency)}
           </p>
@@ -86,8 +85,7 @@ export function SubmissionCostSelection({
         <div className="fin-quiet-panel mt-4">
           <p className="fin-action-title">No reimbursable costs available</p>
           <p className="fin-section-lede" style={{ marginTop: "0.5rem" }}>
-            Record operational costs and classify them as reimbursable before
-            building a submission.
+            Record costs and mark them as reimbursable before creating a claim.
           </p>
         </div>
       ) : (
@@ -164,8 +162,8 @@ export function SubmissionCostSelection({
             Costs needing classification ({needsClassification.length})
           </h3>
           <p className="fin-section-lede" style={{ marginTop: "0.35rem" }}>
-            These costs have unknown reimbursement status. Classify them on the
-            cost record before they can be included in a submission.
+            These costs are not yet marked reimbursable. Classify them on the
+            cost record before they can be added to a claim.
           </p>
           <ul className="fin-submission-muted-list">
             {needsClassification.slice(0, 5).map((record) => (
@@ -184,7 +182,7 @@ export function SubmissionCostSelection({
       {excludedCount > 0 ? (
         <p className="fin-section-lede mt-4">
           {excludedCount} non-reimbursable cost
-          {excludedCount === 1 ? "" : "s"} excluded from selection.
+          {excludedCount === 1 ? "" : "s"} hidden from this list.
         </p>
       ) : null}
     </div>

@@ -2490,6 +2490,231 @@
   color: rgba(148, 163, 184, 0.95);
 }
 
+/* ── Needs attention feed (below hero) ──────────────────────────── */
+
+.sc-fm-notify {
+  padding: 1rem 1.15rem 1.05rem;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(185, 28, 28, 0.12);
+  background: linear-gradient(
+    180deg,
+    rgba(254, 242, 242, 0.55) 0%,
+    #fff 42%
+  );
+  box-shadow: 0 14px 32px -26px rgba(15, 23, 42, 0.35);
+  scroll-margin-top: 1rem;
+}
+
+.sc-fm-notify-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.sc-fm-notify-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--os-ink);
+}
+
+.sc-fm-notify-lede {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--os-text-muted);
+}
+
+.sc-fm-notify-view-all {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--os-accent-ink);
+  text-decoration: none;
+}
+
+.sc-fm-notify-view-all:hover {
+  text-decoration: underline;
+}
+
+.sc-fm-notify-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-top: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.sc-fm-notify-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0.1rem;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.sc-fm-notify-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0.15rem;
+}
+
+.sc-fm-notify-body {
+  min-width: 0;
+}
+
+.sc-fm-notify-event {
+  margin: 0;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--os-text-muted);
+}
+
+.sc-fm-notify-desc {
+  margin: 0.28rem 0 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--os-ink);
+  line-height: 1.35;
+}
+
+.sc-fm-notify-time {
+  margin: 0.22rem 0 0;
+  font-size: 0.75rem;
+  color: var(--os-text-muted);
+}
+
+.sc-fm-notify-action {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--os-accent-ink);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.sc-fm-notify-action:hover {
+  text-decoration: underline;
+}
+
+.sc-fm-notify-empty {
+  margin: 0;
+  padding: 0.55rem 0 0.15rem;
+  font-size: 0.8125rem;
+  color: var(--os-text-muted);
+}
+
+/* ── Financial Position strip (below attention feed) ────────────── */
+
+.sc-fm-finance {
+  padding: 1rem 1.2rem 1.1rem;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  background: #fff;
+  box-shadow: 0 14px 32px -26px rgba(15, 23, 42, 0.35);
+}
+
+.sc-fm-finance-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.sc-fm-finance-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-shrink: 0;
+}
+
+.sc-fm-finance-metrics {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.65rem;
+}
+
+@media (min-width: 720px) {
+  .sc-fm-finance-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.85rem;
+  }
+}
+
+.sc-fm-finance-metric {
+  padding: 0.75rem 0.85rem;
+  border-radius: 0.65rem;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.sc-fm-finance-label {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--os-text-muted);
+}
+
+.sc-fm-finance-value {
+  margin: 0.35rem 0 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--os-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.sc-fm-finance-value--fallback {
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: 0;
+  color: var(--os-text-muted);
+}
+
+.sc-fm-finance-skel {
+  display: block;
+  width: 68%;
+  height: 1.2rem;
+  margin-top: 0.45rem;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    rgba(15, 23, 42, 0.06) 0%,
+    rgba(15, 23, 42, 0.02) 45%,
+    rgba(15, 23, 42, 0.06) 90%
+  );
+  background-size: 200% 100%;
+  animation: sc-fm-finance-shimmer 1.15s ease-in-out infinite;
+}
+
+@keyframes sc-fm-finance-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sc-fm-finance-skel {
+    animation: none;
+  }
+}
+
 /* ── Main operational grid ──────────────────────────────────────── */
 
 .sc-fm-main {
@@ -2543,10 +2768,15 @@
   gap: 0.35rem;
   flex-shrink: 0;
   margin-top: 0.15rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--os-accent-ink);
   text-decoration: none;
+  cursor: pointer;
 }
 
 .sc-fm-view-all:hover {

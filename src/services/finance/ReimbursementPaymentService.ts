@@ -213,8 +213,8 @@ export const ReimbursementPaymentService = {
     assertValidForPersistence(merged, "update");
 
     const payload = {
-      paymentId,
       ...reimbursementPaymentToRemotePayload(input),
+      paymentId,
     };
 
     const updated = await postPayments<RemoteReimbursementPayment>(

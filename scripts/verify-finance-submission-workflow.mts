@@ -185,15 +185,23 @@ function main() {
   }
   results.push("Payment boundary preserved");
 
-  // Package upload limitation documented
+  // Supporting documents copy present on details step
   const detailsForm = readSrc(
     "src/modules/finance/components/SubmissionDetailsForm.tsx"
   );
   assert(
-    /not yet supported/i.test(detailsForm),
-    "package file upload limitation must be documented"
+    /Add any documents or references that support this claim/i.test(detailsForm),
+    "supporting documents guidance must be present"
   );
-  results.push("Package evidence limitation documented");
+  assert(
+    detailsForm.includes('label="Claim type"'),
+    "claim type label"
+  );
+  assert(
+    detailsForm.includes('label="Claim period"'),
+    "claim period label"
+  );
+  results.push("Claim details copy uses business language");
 
   console.log("PASS — Finance CostSubmission workflow verification");
   for (const line of results) {

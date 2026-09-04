@@ -57,7 +57,11 @@ function main() {
   assert(FINANCIAL_DOMAIN_IMPLEMENTED.costSubmissions === true, "submission persistence");
   assert(FINANCIAL_DOMAIN_IMPLEMENTED.ui === true, "first finance view");
   assert(FINANCIAL_DOMAIN_IMPLEMENTED.paymentProcessing === true, "reimbursement payments");
-  assert(FINANCIAL_DOMAIN_IMPLEMENTED.approvalWorkflows === false, "no approvals");
+  assert(FINANCIAL_DOMAIN_IMPLEMENTED.approvalWorkflows === true, "reimbursement authorization");
+  assert(
+    FINANCIAL_DOMAIN_IMPLEMENTED.reimbursementAuthorization === true,
+    "reimbursementAuthorization flag"
+  );
   assert(FINANCIAL_DOMAIN_IMPLEMENTED.jobOrder === false, "no JO");
   results.push("PASS Phase 15; CostRecord + CostSubmission persistence enabled");
 

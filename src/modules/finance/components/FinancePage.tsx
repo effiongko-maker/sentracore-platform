@@ -9,10 +9,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { formatFinancialAmount } from "../utils/formatFinancialAmount";
 import { useFinanceOverview } from "../hooks/useFinanceOverview";
 import { CostRecordFormModal } from "./CostRecordFormModal";
-import { FinanceCoverageSection } from "./FinanceCoverageSection";
-import { FinanceFlowRail } from "./FinanceFlowRail";
 import { FinanceHeader, FinanceSummaryRow } from "./FinanceHeader";
-import { FinanceIntelligencePreview } from "./FinanceIntelligencePreview";
 import { FinanceOperationalCostSection } from "./FinanceOperationalCostSection";
 import { FinancePendingActionSection } from "./FinancePendingActionSection";
 import { FinancePositionSection } from "./FinancePositionSection";
@@ -36,14 +33,8 @@ export function FinancePage() {
     );
   }
 
-  const awaitingDecision =
-    overview?.clientAuthorisationStages.find(
-      (stage) => stage.id === "awaiting_decision"
-    )?.count ?? 0;
-
   const costTotal = overview?.meta.costRecordsTotal ?? 0;
   const submissionTotal = overview?.meta.submissionsTotal ?? 0;
-  const approvalsInView = overview?.meta.approvalsInView ?? 0;
   const summary = overview?.operationalCostSummary ?? null;
   const spendLabel =
     summary && summary.totalCount > 0
@@ -67,6 +58,11 @@ export function FinancePage() {
           onRecordCost={() => setCostModalOpen(true)}
         />
 
+        <FinancePendingActionSection
+          items={overview?.pendingActions ?? []}
+          loading={loading}
+        />
+
         <FinanceSummaryRow
           operationalSpendLabel={loading ? "—" : spendLabel}
           spendIsSample={Boolean(summary?.truncated)}
@@ -75,24 +71,6 @@ export function FinancePage() {
             loading ? "—" : reimbursementsInPreparation
           }
           clientAuthorisationsTotal={overview?.meta.totalApprovals ?? 0}
-          loading={loading}
-        />
-
-        <FinancePendingActionSection
-          items={overview?.pendingActions ?? []}
-          loading={loading}
-        />
-
-        <FinanceFlowRail
-          authorisationCount={approvalsInView}
-          awaitingDecisionCount={awaitingDecision}
-          costRecordedCount={costTotal}
-          costLive={overview?.availability.costRecords ?? false}
-          submissionCount={submissionTotal}
-          submissionLive={overview?.availability.costSubmissions ?? false}
-          paymentStatusSignal={
-            overview?.payments.statusSignal ?? "Not yet recorded"
-          }
           loading={loading}
         />
 
@@ -110,33 +88,10 @@ export function FinancePage() {
         </div>
 
         <FinancePositionSection
-          metrics={overview?.position ?? []}
+          approvals={overview?.sourceApprovals ?? []}
           loading={loading}
           totalAuthorisations={overview?.meta.totalApprovals ?? 0}
-          awaitingDecisionCount={awaitingDecision}
         />
-
-        <div className="fin-v13-footer">
-          <FinanceCoverageSection
-            operationalCostsStatus={
-              costTotal > 0 ? `${costTotal} recorded` : "Not yet recorded"
-            }
-            reimbursementsStatus={
-              submissionTotal > 0
-                ? `${submissionTotal} recorded`
-                : "None recorded yet"
-            }
-            clientAuthorisationsStatus={
-              (overview?.meta.totalApprovals ?? 0) > 0
-                ? `${overview?.meta.totalApprovals} recorded`
-                : "Not yet recorded"
-            }
-            paymentsStatus={
-              overview?.payments.coverageStatus ?? "Not yet recorded"
-            }
-          />
-          <FinanceIntelligencePreview />
-        </div>
 
         <CostRecordFormModal
           open={costModalOpen}

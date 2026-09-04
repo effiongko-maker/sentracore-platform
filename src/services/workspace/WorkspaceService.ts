@@ -1,6 +1,7 @@
 import type { Approval } from "@/modules/approvals/types";
 import type { Incident } from "@/modules/incidents/types";
 import type { Maintenance } from "@/modules/maintenance/types";
+import type { RequestRecord } from "@/modules/requests/types";
 import type { WorkOrder } from "@/modules/work-orders/types";
 import {
   WORKSPACE_ACTIVITY_LIMIT,
@@ -21,11 +22,13 @@ import type {
   OrganisationalPulse,
   AttentionModel,
 } from "@/modules/workspace/types";
+import { deriveOperationalNotifications } from "@/modules/workspace/utils/deriveOperationalNotifications";
 import { isSameDay, labelize } from "@/modules/workspace/utils";
 import { ApprovalService } from "@/services/approvals/ApprovalService";
 import { FacilityService } from "@/services/facilities/FacilityService";
 import { IncidentService } from "@/services/incidents/IncidentService";
 import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
+import { RequestService } from "@/services/requests/RequestService";
 import { loadAllPages } from "@/services/reporting/loadAllPages";
 import { UserService } from "@/services/users/UserService";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
@@ -316,9 +319,10 @@ async function loadDomainLists(): Promise<{
   incidents: { ok: boolean; data: Incident[] };
   maintenance: { ok: boolean; data: Maintenance[] };
   approvals: { ok: boolean; data: Approval[] };
+  requests: { ok: boolean; data: RequestRecord[] };
   facilities: { ok: boolean; data: Array<{ id: string; name: string }> };
 }> {
-  const [workOrders, incidents, maintenance, approvals, facilities] =
+  const [workOrders, incidents, maintenance, approvals, requests, facilities] =
     await Promise.all([
       loadAllPages((page, pageSize) =>
         WorkOrderService.listWorkOrders({ page, pageSize })
@@ -340,6 +344,11 @@ async function loadDomainLists(): Promise<{
       )
         .then((data) => ({ ok: true as const, data }))
         .catch(() => ({ ok: false as const, data: [] as Approval[] })),
+      loadAllPages((page, pageSize) =>
+        RequestService.listRequests({ page, pageSize, status: "all" })
+      )
+        .then((data) => ({ ok: true as const, data }))
+        .catch(() => ({ ok: false as const, data: [] as RequestRecord[] })),
       FacilityService.listFacilities({ page: 1, pageSize: 200 })
         .then((page) => ({
           ok: true as const,
@@ -351,7 +360,14 @@ async function loadDomainLists(): Promise<{
         })),
     ]);
 
-  return { workOrders, incidents, maintenance, approvals, facilities };
+  return {
+    workOrders,
+    incidents,
+    maintenance,
+    approvals,
+    requests,
+    facilities,
+  };
 }
 
 /**
@@ -404,6 +420,14 @@ export const WorkspaceService = {
       facilityNameById,
     });
 
+    const notifications = deriveOperationalNotifications({
+      asOf,
+      requests: lists.requests.data,
+      maintenance,
+      incidents,
+      workOrders,
+    });
+
     const operationalState: OperationalState = coreFailed
       ? {
           tone: "degraded",
@@ -421,6 +445,7 @@ export const WorkspaceService = {
       },
       operationalState,
       attention,
+      notifications,
       pulse,
       quickActions: WORKSPACE_QUICK_ACTIONS,
       myWork: buildMyWork(userId, workOrders, incidents, maintenance),

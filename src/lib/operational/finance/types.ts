@@ -308,7 +308,33 @@ export type FinancialRecordKind =
   | "cost"
   | "cost_submission"
   | "contract_payment"
-  | "reimbursement_payment";
+  | "reimbursement_payment"
+  | "reimbursement_authorization";
+
+/**
+ * Reimbursement authorization against a CostSubmission claim.
+ * Distinct from Work Order client authorisation (Approvals module).
+ * Does not live on CostSubmission.status.
+ */
+export type ReimbursementAuthorization = {
+  /** Canonical identity (e.g. AUTH-2026-000001 when persisted). */
+  authorizationId: string;
+  /** CostSubmission this authorization applies to. */
+  submissionId: string;
+  /** Authorized reimbursement amount — SoT for outstanding once set. */
+  authorizedAmount: number;
+  currency: FinancialCurrencyCode;
+  /** When authorization was recorded (ISO). */
+  authorizedAt: string;
+  authorizedBy: string;
+  /**
+   * Traceable authority reference (memo, board ref, etc.).
+   * Distinct from `authorizationId` and from WO `CostSubmission.approvalId`.
+   */
+  authorityReference?: string;
+  notes?: string;
+  recordedAt: string;
+};
 
 /**
  * Reimbursement payment received against a CostSubmission.

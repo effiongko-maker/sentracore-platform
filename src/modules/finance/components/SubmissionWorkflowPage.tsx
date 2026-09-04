@@ -39,9 +39,9 @@ import { SubmissionReviewPanel } from "./SubmissionReviewPanel";
 type WorkflowStep = "select" | "details" | "claim" | "review";
 
 const STEPS: Array<{ id: WorkflowStep; label: string }> = [
-  { id: "select", label: "Select costs" },
-  { id: "details", label: "Submission details" },
-  { id: "claim", label: "Claim & markup" },
+  { id: "select", label: "Choose costs" },
+  { id: "details", label: "Claim details" },
+  { id: "claim", label: "Claim amount" },
   { id: "review", label: "Review" },
 ];
 
@@ -101,13 +101,13 @@ export function SubmissionWorkflowPage({
         if (cancelled) return;
         if (!record) {
           setExisting(null);
-          setFormError("This submission could not be found.");
+          setFormError("This claim could not be found.");
           return;
         }
         if (record.status !== "draft" && record.status !== "queried") {
           setExisting(record);
           setFormError(
-            "Only draft or queried submissions can be edited here."
+            "Only draft or queried claims can be edited here."
           );
           return;
         }
@@ -128,7 +128,7 @@ export function SubmissionWorkflowPage({
       })
       .catch(() => {
         if (!cancelled) {
-          setFormError("Unable to load this submission.");
+          setFormError("Unable to load this claim.");
         }
       })
       .finally(() => {
@@ -298,8 +298,8 @@ export function SubmissionWorkflowPage({
         if (status === "submitted") {
           toast({
             type: "success",
-            title: "Submission submitted",
-            description: `${record.submissionId} sent for reimbursement consideration.`,
+            title: "Claim submitted",
+            description: `${record.submissionId} has been submitted for reimbursement.`,
           });
           router.push(
             `/finance/submissions/${record.submissionId}?submitted=1`
@@ -308,7 +308,7 @@ export function SubmissionWorkflowPage({
           toast({
             type: "success",
             title: "Draft saved",
-            description: `${record.submissionId} saved as draft.`,
+            description: `${record.submissionId} saved as a draft.`,
           });
           router.push(`/finance/submissions/${record.submissionId}`);
         }
@@ -343,9 +343,9 @@ export function SubmissionWorkflowPage({
     return (
       <ModeFrame mode="act">
         <EmptyState
-          title="Submission not editable"
-          description={formError ?? "This submission cannot be edited."}
-          actionLabel="View submission"
+          title="Claim not editable"
+          description={formError ?? "This claim cannot be edited."}
+          actionLabel="View claim"
           onAction={() =>
             router.push(`/finance/submissions/${submissionId}`)
           }
@@ -367,13 +367,13 @@ export function SubmissionWorkflowPage({
             className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
           >
             <ArrowLeft className="h-4 w-4" />
-            {submissionId ? "Back to submission" : "Back to submissions"}
+            {submissionId ? "Back to claim" : "Back to claims"}
           </Link>
         </div>
 
         <OperateHeader
-          title={isEdit ? "Edit submission" : "Create submission"}
-          description="Select reimbursable costs, confirm markup, and submit a reimbursement claim."
+          title={isEdit ? "Edit claim" : "Create reimbursement claim"}
+          description="Select the costs you want reimbursed, add claim details, then confirm the amount."
         />
 
         <nav className="fin-submission-steps mt-4" aria-label="Workflow steps">

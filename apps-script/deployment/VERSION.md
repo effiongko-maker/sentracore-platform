@@ -1,23 +1,19 @@
 Release:
-v0.8.5.1
+v0.8.6.3
 
 Title:
-Reimbursement payment service deploy recovery
+Unique reimbursement payment IDs and complete ceiling sum
 
 Generated:
-2026-09-02T21:41:47.754Z
+2026-09-03T14:52:57.313Z
 
 Features
-- REIMBURSEMENT_PAYMENTS sheet with 11-column canonical schema
-- Reimbursement payment domain: getAll, getById, create, update against CostSubmission
-- reimbursement-payments Apps Script resource + Next.js /api/reimbursement-payments proxy
-- CostSubmission lifecycle transition guards: draft→submitted→queried→submitted
-- Payment never stored on CostRecord or CostSubmission status
-- Pack/checklist orders Repository → Service → Controller and calls out the payment triad
+- ReimbursementPaymentRepository.nextId_() assigns PAY-{year}-{NNNNNN} from the persisted Payment ID column, not the paginated getAll() wrapper
+- Authorized-amount ceiling sums every receipt for the submission via listAllBySubmissionId (not the first 100 list page)
+- Submission Detail Record payment uses a synchronous lock so rapid double-click cannot fire two creates
 
 Performance
-- Same list/pagination pattern as cost-submissions — single sheet read per getAll
-- Payments filtered by submissionId without joining CostRecord amounts
+- nextId_ and ceiling sum scan REIMBURSEMENT_PAYMENTS sheet rows; public getAll pageSize remains capped at 100
 
 Files Changed
 - ROUTER.gs
@@ -29,6 +25,7 @@ Files Changed
 - IncidentRepository.gs
 - MaintenanceRepository.gs
 - MasterDataRepository.gs
+- ReimbursementAuthorizationRepository.gs
 - ReimbursementPaymentRepository.gs
 - ReportingSnapshotRepository.gs
 - RequestRepository.gs
@@ -44,6 +41,7 @@ Files Changed
 - MaintenanceService.gs
 - MasterDataService.gs
 - OperationalWorkloadService.gs
+- ReimbursementAuthorizationService.gs
 - ReimbursementPaymentService.gs
 - ReportingSnapshotService.gs
 - RequestService.gs
@@ -60,6 +58,7 @@ Files Changed
 - MaintenanceController.gs
 - MasterDataController.gs
 - OperationalWorkloadController.gs
+- ReimbursementAuthorizationsController.gs
 - ReimbursementPaymentsController.gs
 - ReportingSnapshotController.gs
 - RequestsController.gs
@@ -83,36 +82,35 @@ YES
 
 Smoke Tests
 
-Financial domain foundation:
-
-```bash
-npx tsx --tsconfig tsconfig.json scripts/verify-financial-domain-foundation.mts
-```
-
 Finance reimbursement payment:
 
 ```bash
 npx tsx --tsconfig tsconfig.json scripts/verify-finance-reimbursement-payment.mts
 ```
 
+Finance reimbursement authorization:
+
+```bash
+npx tsx --tsconfig tsconfig.json scripts/verify-finance-reimbursement-authorization.mts
+```
+
 Notes
-- MANUAL DEPLOYMENT REQUIRED: Add/replace ReimbursementPaymentService.gs from this pack (likely omitted in the partial v0.8.5 paste). Also confirm Repository + Controller + ROUTER.
-- Service definition is unchanged — still `var ReimbursementPaymentService = (function () { ... })();`, same pattern as CostSubmissionService.
-- File load order does not cause this ReferenceError for IIFE modules; missing file does.
-- REIMBURSEMENT_PAYMENTS sheet is auto-created on first access — does not modify COST_RECORDS or COST_SUBMISSIONS schemas.
-- Partial payments are supported via multiple payment rows per submission; outstanding = claim − sum(received).
-- Reimbursed on Cost workflow only when linked submission claim is fully paid.
+- MANUAL DEPLOYMENT REQUIRED: Replace ReimbursementPaymentRepository.gs and ReimbursementPaymentService.gs from this pack, then new Web App version.
+- Root fix: nextId_ scans sheet Payment ID cells. Do not iterate getAll({}) as an array.
+- Ceiling: listAllBySubmissionId so pageSize=100 cannot undercount receipts.
+- Do not auto-delete duplicate PAY-2026-000001 test rows.
 
 Deployment semantics
 - `deploymentRequired`: Pack intent: a new Web App deploy is required to apply this source release when cutting from the repo. Not a live deployment status flag.
-- `appsScriptRedeploy`: Required — live project recognises reimbursement-payments but is missing ReimbursementPaymentService.gs (ReferenceError at runtime).
+- `appsScriptRedeploy`: Required — replace ReimbursementPaymentRepository.gs and ReimbursementPaymentService.gs and cut a new Web App version.
 
 Live verification (read-only audit)
-- Method: Partial live probe — ROUTER + Controller present; Service global missing
+- Method: scripts/verify-finance-reimbursement-payment.mts live GAS round-trip (create ×3 → retrieve → aggregate → update → retrieve)
 - resourceLive: no
 - Notes:
-  - Observed live error: ReimbursementPaymentService is not defined.
-  - Root cause: ReimbursementPaymentService.gs was not present/loaded in the Apps Script project (source/pack already define it correctly).
-  - Redeploy must include ReimbursementPaymentRepository.gs, ReimbursementPaymentService.gs, and ReimbursementPaymentsController.gs, then a new Web App version.
+  - Deploy must include updated ReimbursementPaymentRepository.gs and ReimbursementPaymentService.gs, then a new Web App version.
+  - No sheet schema change — REIMBURSEMENT_PAYMENTS columns unchanged.
+  - Existing duplicate PAY-2026-000001 rows are bad test data from the previous nextId_ bug; clean them manually after deploy.
+  - Live proof of PAY-YYYY-000001 → 000002 → 000003 requires no remaining PAY-{year}-* rows (or the script reports the next consecutive IDs from current max seq).
 
 <!-- GENERATED FILE — do not edit by hand. npm run apps-script:pack -->

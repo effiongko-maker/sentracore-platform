@@ -7,6 +7,7 @@ import {
   type CostRecord,
   type CostSubmission,
   type CostSubmissionLifecycleStatus,
+  type ReimbursementAuthorization,
   type ReimbursementPayment,
 } from "@/lib/operational/finance";
 import {
@@ -138,14 +139,19 @@ function countByLifecycle(
 function buildSubmissionSnapshot(
   submissions: CostSubmission[],
   total: number,
-  payments: ReimbursementPayment[]
+  payments: ReimbursementPayment[],
+  authorizations: ReimbursementAuthorization[]
 ): FinanceSubmissionSnapshot {
   const truncated = total > submissions.length;
   const counts = countByLifecycle(submissions);
   const preview: FinanceSubmissionPreviewRow[] = submissions
     .slice(0, FINANCE_SUBMISSIONS_PREVIEW_SIZE)
     .map((submission) => {
-      const payment = summarizeSubmissionPayments(submission, payments);
+      const payment = summarizeSubmissionPayments(
+        submission,
+        payments,
+        authorizations
+      );
       return {
         submissionId: submission.submissionId,
         status: submission.status,
@@ -176,13 +182,18 @@ function buildPendingActions(options: {
   submissions: CostSubmission[];
   submissionsTruncated: boolean;
   payments: ReimbursementPayment[];
+  authorizations: ReimbursementAuthorization[];
 }): FinancePendingActionItem[] {
   const items: FinancePendingActionItem[] = [];
   const referencedCostIds = buildReferencedCostIds(options.submissions);
   const reimbursableAwaitingSafe = !options.submissionsTruncated;
 
   for (const submission of options.submissions) {
-    const payment = summarizeSubmissionPayments(submission, options.payments);
+    const payment = summarizeSubmissionPayments(
+      submission,
+      options.payments,
+      options.authorizations
+    );
 
     if (submission.status === "queried") {
       items.push({
@@ -216,22 +227,40 @@ function buildPendingActions(options: {
       submission.status === "submitted" &&
       !payment.fullyPaid
     ) {
-      // Fully paid claims must not appear as awaiting payment.
-      items.push({
-        id: `submission-payment-${submission.submissionId}`,
-        kind: "submission_awaiting_payment",
-        title: submission.submissionId,
-        submissionId: submission.submissionId,
-        amountLabel: formatFinancialAmount(
-          payment.outstandingAmount,
-          submission.currency
-        ),
-        stageLabel: payment.hasPayment
-          ? "Partially paid — outstanding remains"
-          : "Submitted — awaiting payment",
-        ageLabel: ageLabel(submission.submittedAt ?? submission.createdAt),
-        href: `/finance/submissions/${encodeURIComponent(submission.submissionId)}`,
-      });
+      if (!payment.isAuthorized) {
+        items.push({
+          id: `submission-auth-${submission.submissionId}`,
+          kind: "submission_awaiting_authorization",
+          title: submission.submissionId,
+          submissionId: submission.submissionId,
+          amountLabel:
+            submission.claimAmount != null
+              ? formatFinancialAmount(
+                  submission.claimAmount,
+                  submission.currency
+                )
+              : undefined,
+          stageLabel: "Submitted — awaiting authorization",
+          ageLabel: ageLabel(submission.submittedAt ?? submission.createdAt),
+          href: `/finance/submissions/${encodeURIComponent(submission.submissionId)}`,
+        });
+      } else {
+        items.push({
+          id: `submission-payment-${submission.submissionId}`,
+          kind: "submission_awaiting_payment",
+          title: submission.submissionId,
+          submissionId: submission.submissionId,
+          amountLabel: formatFinancialAmount(
+            payment.outstandingAmount,
+            submission.currency
+          ),
+          stageLabel: payment.hasPayment
+            ? "Partially paid — outstanding remains"
+            : "Authorized — awaiting payment",
+          ageLabel: ageLabel(submission.submittedAt ?? submission.createdAt),
+          href: `/finance/submissions/${encodeURIComponent(submission.submissionId)}`,
+        });
+      }
     }
   }
 
@@ -326,10 +355,11 @@ function buildPendingActions(options: {
     client_authorisation_awaiting: 1,
     client_authorisation_returned: 2,
     cost_needs_classification: 3,
-    submission_awaiting_payment: 4,
-    cost_awaiting_submission: 5,
-    submission_draft: 6,
-    client_authorisation_draft: 7,
+    submission_awaiting_authorization: 4,
+    submission_awaiting_payment: 5,
+    cost_awaiting_submission: 6,
+    submission_draft: 7,
+    client_authorisation_draft: 8,
   };
 
   return items
@@ -512,6 +542,7 @@ export type DeriveFinanceOverviewInput = {
   totalSubmissions: number;
   payments?: ReimbursementPayment[];
   totalPayments?: number;
+  authorizations?: ReimbursementAuthorization[];
 };
 
 export function deriveFinanceOverview(
@@ -527,6 +558,7 @@ export function deriveFinanceOverview(
   } = input;
   const payments = input.payments ?? [];
   const totalPayments = input.totalPayments ?? payments.length;
+  const authorizations = input.authorizations ?? [];
 
   const costTruncated = totalCostRecords > costRecords.length;
   const submissionsTruncated = totalSubmissions > submissions.length;
@@ -539,13 +571,15 @@ export function deriveFinanceOverview(
   const submissionSnapshot = buildSubmissionSnapshot(
     submissions,
     totalSubmissions,
-    payments
+    payments,
+    authorizations
   );
   const paymentSnapshot = buildFinancePaymentOverviewState({
     submissions,
     submissionsTruncated,
     payments,
     totalPayments,
+    authorizations,
     currency,
   });
 
@@ -594,6 +628,7 @@ export function deriveFinanceOverview(
       submissions,
       submissionsTruncated,
       payments,
+      authorizations,
     }),
     operationalCostLenses: buildOperationalCostLenses(
       costRecords,

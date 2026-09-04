@@ -45,18 +45,18 @@ export function SubmissionReviewPanel({
   return (
     <div className="fin-submission-step">
       <section className="fin-submission-review-block">
-        <h3 className="fin-section-title">Submission</h3>
+        <h3 className="fin-section-title">Claim details</h3>
         <dl className="fin-submission-review-dl">
           <div>
-            <dt>Submission kind</dt>
+            <dt>Claim type</dt>
             <dd>{details.submissionKind.trim() || "—"}</dd>
           </div>
           <div>
-            <dt>Period</dt>
+            <dt>Claim period</dt>
             <dd>{details.periodLabel.trim() || "—"}</dd>
           </div>
           <div>
-            <dt>Package reference</dt>
+            <dt>Document reference</dt>
             <dd>{details.packageReference.trim() || "—"}</dd>
           </div>
         </dl>
@@ -67,7 +67,7 @@ export function SubmissionReviewPanel({
           Costs ({selectedCosts.length})
         </h3>
         <p className="fin-section-lede">
-          Underlying actual cost:{" "}
+          Total actual cost:{" "}
           <strong>{formatFinancialAmount(actualCost, currency)}</strong>
         </p>
         <ul className="fin-submission-cost-list">
@@ -101,7 +101,7 @@ export function SubmissionReviewPanel({
       </section>
 
       <section className="fin-submission-review-block mt-4">
-        <h3 className="fin-section-title">Claim</h3>
+        <h3 className="fin-section-title">Claim amount</h3>
         <dl className="fin-submission-review-dl">
           <div>
             <dt>Actual cost</dt>
@@ -115,39 +115,39 @@ export function SubmissionReviewPanel({
             </dd>
           </div>
           <div>
-            <dt>Claim amount</dt>
+            <dt>Claim total</dt>
             <dd>{formatFinancialAmount(claimAmount, currency)}</dd>
           </div>
         </dl>
       </section>
 
       <section className="fin-submission-review-block mt-4">
-        <h3 className="fin-section-title">Supporting package</h3>
+        <h3 className="fin-section-title">Supporting documents</h3>
         {isCostSubmissionPackagePresent(pkg) ? (
           <dl className="fin-submission-review-dl">
             <div>
-              <dt>Reference</dt>
+              <dt>Document reference</dt>
               <dd>{pkg?.reference ?? "—"}</dd>
             </div>
             <div>
-              <dt>Type</dt>
+              <dt>Document type</dt>
               <dd>{pkg?.packageType ?? "—"}</dd>
             </div>
             <div>
-              <dt>Date</dt>
+              <dt>Document date</dt>
               <dd>{pkg?.packageDate ?? "—"}</dd>
             </div>
             <div>
-              <dt>Notes</dt>
+              <dt>Document notes</dt>
               <dd>{pkg?.notes ?? "—"}</dd>
             </div>
           </dl>
         ) : (
-          <p className="fin-section-lede">No package metadata recorded.</p>
+          <p className="fin-section-lede">No supporting documents recorded.</p>
         )}
         {details.notes.trim() ? (
           <p className="fin-section-lede mt-2">
-            Submission notes: {details.notes.trim()}
+            Claim notes: {details.notes.trim()}
           </p>
         ) : null}
       </section>

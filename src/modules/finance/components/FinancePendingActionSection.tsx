@@ -1,24 +1,72 @@
 import Link from "next/link";
-import { Clock3 } from "lucide-react";
 import { FINANCE_UI_LIST_LIMIT } from "../constants";
 import type { FinancePendingActionItem } from "../types";
 
-const KIND_LABEL: Record<FinancePendingActionItem["kind"], string> = {
-  submission_queried: "Submission",
-  submission_awaiting_payment: "Submission",
-  submission_draft: "Submission",
-  cost_needs_classification: "Cost",
-  cost_awaiting_submission: "Cost",
-  client_authorisation_awaiting: "Client authorisation",
-  client_authorisation_returned: "Client authorisation",
-  client_authorisation_draft: "Client authorisation",
-};
+function attentionCopy(item: FinancePendingActionItem): {
+  title: string;
+  context: string;
+} {
+  switch (item.kind) {
+    case "cost_needs_classification":
+      return {
+        title: "New cost needs classification",
+        context: item.title,
+      };
+    case "cost_awaiting_submission":
+      return {
+        title: "Cost ready to claim",
+        context: item.title,
+      };
+    case "submission_queried":
+      return {
+        title: "Claim queried",
+        context: item.title,
+      };
+    case "submission_awaiting_authorization":
+      return {
+        title: "Claim awaiting authorization",
+        context: item.title,
+      };
+    case "submission_awaiting_payment":
+      return {
+        title: "Claim awaiting payment",
+        context: item.title,
+      };
+    case "submission_draft":
+      return {
+        title: "Draft claim to finish",
+        context: item.title,
+      };
+    case "client_authorisation_awaiting":
+      return {
+        title: "Client authorisation awaiting decision",
+        context: item.title,
+      };
+    case "client_authorisation_returned":
+      return {
+        title: "Client authorisation returned",
+        context: item.title,
+      };
+    case "client_authorisation_draft":
+      return {
+        title: "Client authorisation draft",
+        context: item.title,
+      };
+    default:
+      return { title: item.title, context: item.stageLabel };
+  }
+}
 
-function actionLabel(kind: FinancePendingActionItem["kind"]): string {
-  if (kind === "submission_queried") return "Review →";
-  if (kind === "submission_awaiting_payment") return "Open →";
-  if (kind === "submission_draft") return "Continue →";
-  return "Open →";
+function viewAllHref(items: FinancePendingActionItem[]): string {
+  const hasSubmission = items.some((item) =>
+    item.kind.startsWith("submission_")
+  );
+  if (hasSubmission) return "/finance/submissions";
+  const hasAuth = items.some((item) =>
+    item.kind.startsWith("client_authorisation_")
+  );
+  if (hasAuth) return "/approvals";
+  return "/finance/costs";
 }
 
 export function FinancePendingActionSection({
@@ -32,24 +80,20 @@ export function FinancePendingActionSection({
   const hasMore = items.length > FINANCE_UI_LIST_LIMIT;
 
   return (
-    <section className="fin-v13-attention">
+    <section className="fin-v13-attention" aria-labelledby="fin-attention-heading">
       <div className="fin-v13-section-head">
         <div>
-          <h2 className="fin-v13-section-title">Needs attention</h2>
+          <h2 id="fin-attention-heading" className="fin-v13-section-title">
+            Needs attention
+          </h2>
           <p className="fin-v13-section-lede">
-            Exceptions and review work across costs, submissions, and client
-            authorisation.
+            Things that need your action next.
           </p>
         </div>
         {hasMore ? (
-          <div className="fin-v13-view-all-group">
-            <span className="fin-v13-muted">
-              Showing {FINANCE_UI_LIST_LIMIT} of {items.length}
-            </span>
-            <Link href="/finance/costs" className="fin-v13-text-action">
-              View all →
-            </Link>
-          </div>
+          <Link href={viewAllHref(items)} className="fin-v13-text-action">
+            View all →
+          </Link>
         ) : null}
       </div>
 
@@ -60,81 +104,35 @@ export function FinancePendingActionSection({
           ))}
         </div>
       ) : items.length === 0 ? (
-        <div className="fin-v13-empty-inline">
-          <Clock3 className="h-3.5 w-3.5" />
-          <span>Nothing needs action right now</span>
-        </div>
+        <p className="fin-v13-empty">Nothing needs action right now</p>
       ) : (
-        <>
-          <table className="fin-v13-table">
-            <thead>
-              <tr>
-                <th>Type</th>
-                <th>Item</th>
-                <th className="fin-v13-num">Amount</th>
-                <th>Status</th>
-                <th className="fin-v13-action-col" />
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((item) => (
-                <tr key={item.id}>
-                  <td className="fin-v13-type">{KIND_LABEL[item.kind]}</td>
-                  <td>
-                    <p className="fin-v13-item-title">{item.title}</p>
-                    <p className="fin-v13-item-meta">
-                      {item.workOrderId ? (
-                        <>
-                          <Link
-                            href={`/work-orders?id=${encodeURIComponent(item.workOrderId)}`}
-                            className="fin-v13-text-action"
-                          >
-                            {item.workOrderId}
-                          </Link>
-                          {item.facilityId ? ` · ${item.facilityId}` : null}
-                        </>
-                      ) : item.costId ? (
-                        <>
-                          {item.costId}
-                          {item.facilityId ? ` · ${item.facilityId}` : null}
-                        </>
-                      ) : item.submissionId ? (
-                        item.submissionId
-                      ) : null}
-                      {item.ageLabel ? ` · ${item.ageLabel}` : null}
-                    </p>
-                  </td>
-                  <td className="fin-v13-num">{item.amountLabel ?? "—"}</td>
-                  <td className="fin-v13-status">{item.stageLabel}</td>
-                  <td className="fin-v13-action-col">
-                    <Link href={item.href} className="fin-v13-text-action">
-                      {actionLabel(item.kind)}
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {hasMore ? (
-            <div className="fin-v13-table-footer">
-              <Link href="/finance/costs" className="fin-v13-text-action">
-                Costs
-              </Link>
-              <span className="fin-v13-dot" aria-hidden="true">
-                ·
-              </span>
-              <Link href="/finance/submissions" className="fin-v13-text-action">
-                Submissions
-              </Link>
-              <span className="fin-v13-dot" aria-hidden="true">
-                ·
-              </span>
-              <Link href="/approvals" className="fin-v13-text-action">
-                Authorisations
-              </Link>
-            </div>
-          ) : null}
-        </>
+        <ul className="fin-v13-queue">
+          {visible.map((item) => {
+            const copy = attentionCopy(item);
+            return (
+              <li key={item.id} className="fin-v13-queue-row">
+                <div className="fin-v13-queue-main">
+                  <p className="fin-v13-queue-title">{copy.title}</p>
+                  <p className="fin-v13-queue-context">{copy.context}</p>
+                </div>
+                <div className="fin-v13-queue-meta">
+                  {item.amountLabel ? (
+                    <span className="fin-v13-queue-amount">{item.amountLabel}</span>
+                  ) : null}
+                  {item.ageLabel ? (
+                    <span className="fin-v13-queue-age">{item.ageLabel}</span>
+                  ) : null}
+                  {item.stageLabel ? (
+                    <span className="fin-v13-queue-status">{item.stageLabel}</span>
+                  ) : null}
+                </div>
+                <Link href={item.href} className="fin-v13-queue-action">
+                  Open →
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </section>
   );

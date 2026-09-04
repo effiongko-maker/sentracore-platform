@@ -42,6 +42,7 @@ export type FinancePendingActionKind =
   | "cost_needs_classification"
   | "cost_awaiting_submission"
   | "submission_queried"
+  | "submission_awaiting_authorization"
   | "submission_awaiting_payment"
   | "submission_draft"
   | "client_authorisation_draft"

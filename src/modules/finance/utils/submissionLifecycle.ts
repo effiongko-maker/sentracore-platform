@@ -21,11 +21,11 @@ export function submissionLifecycleDescription(
 ): string {
   switch (status) {
     case "draft":
-      return "Being prepared — costs and claim can still be edited.";
+      return "Still being prepared — you can edit costs and the claim amount.";
     case "submitted":
-      return "Sent for reimbursement consideration.";
+      return "Claim submitted — awaiting reimbursement authorization, then payment.";
     case "queried":
-      return "Returned for clarification — review the query and update before resubmitting.";
+      return "Returned for clarification — update the claim, then resubmit.";
     case "cancelled":
       return "Withdrawn.";
     default:
@@ -65,8 +65,39 @@ export function canQuerySubmission(
   return canQueryCostSubmission({ status });
 }
 
-export function canRecordPaymentForSubmission(
-  status: CostSubmissionLifecycleStatus
+/** Reimbursement authorization — only submitted claims; not WO Approvals. */
+export function canAuthorizeSubmission(
+  status: CostSubmissionLifecycleStatus,
+  isAuthorized: boolean
 ): boolean {
-  return status === "submitted" || status === "queried";
+  return status === "submitted" && !isAuthorized;
+}
+
+export function canReviseAuthorization(
+  status: CostSubmissionLifecycleStatus,
+  isAuthorized: boolean
+): boolean {
+  return status === "submitted" && isAuthorized;
+}
+
+/** Payment receipts require an existing reimbursement authorization. */
+export function canRecordPaymentForSubmission(
+  status: CostSubmissionLifecycleStatus,
+  isAuthorized: boolean
+): boolean {
+  return (
+    (status === "submitted" || status === "queried") && isAuthorized
+  );
+}
+
+/**
+ * Receipt correction uses the same updatePayment gate as create
+ * (submitted | queried, and authorized). Unlike Record payment, the UI still
+ * offers this when the claim is already fully reimbursed.
+ */
+export function canCorrectPaymentForSubmission(
+  status: CostSubmissionLifecycleStatus,
+  isAuthorized: boolean
+): boolean {
+  return canRecordPaymentForSubmission(status, isAuthorized);
 }

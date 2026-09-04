@@ -27,6 +27,7 @@ export const CacheNamespaces = {
   costRecordsList: "list:cost-records",
   costSubmissionsList: "list:cost-submissions",
   reimbursementPaymentsList: "list:reimbursement-payments",
+  reimbursementAuthorizationsList: "list:reimbursement-authorizations",
 } as const;
 
 export function invalidateUsersCatalog(): void {
@@ -154,6 +155,14 @@ export function invalidateReimbursementPaymentsLists(): void {
 
 export function onReimbursementPaymentMutation(): void {
   invalidateReimbursementPaymentsLists();
+}
+
+export function invalidateReimbursementAuthorizationsLists(): void {
+  invalidateSharedRequests(CacheNamespaces.reimbursementAuthorizationsList);
+}
+
+export function onReimbursementAuthorizationMutation(): void {
+  invalidateReimbursementAuthorizationsLists();
 }
 
 export function onUserMutation(): void {

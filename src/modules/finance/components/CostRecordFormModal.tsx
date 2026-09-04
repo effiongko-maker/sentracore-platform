@@ -29,7 +29,12 @@ import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 import { UserService } from "@/services/users/UserService";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
 import { COST_REIMBURSABILITY_LABELS } from "../constants";
+import { MonetaryInput } from "./MonetaryInput";
 import { formatFinancialAmount } from "../utils/formatFinancialAmount";
+import {
+  formatMonetaryFromNumber,
+  parseMonetaryInput,
+} from "../utils/monetaryInput";
 
 type RelatedLink = "none" | "work" | "work_order";
 
@@ -72,9 +77,13 @@ function emptyForm(initial?: Partial<CreateCostRecordInput>): CostEntryForm {
     description: initial?.description ?? "",
     category: initial?.category ?? "",
     actualAmount:
-      initial?.actualAmount != null ? String(initial.actualAmount) : "",
+      initial?.actualAmount != null
+        ? formatMonetaryFromNumber(initial.actualAmount)
+        : "",
     budgetedAmount:
-      initial?.budgetedAmount != null ? String(initial.budgetedAmount) : "",
+      initial?.budgetedAmount != null
+        ? formatMonetaryFromNumber(initial.budgetedAmount)
+        : "",
     currency: initial?.currency ?? DEFAULT_COST_RECORD_CURRENCY,
     reimbursability: initial?.reimbursability ?? "unknown",
     evidenceReference: initial?.evidence?.reference ?? "",
@@ -100,10 +109,7 @@ function userFacingError(error: unknown): string {
 }
 
 function parseOptionalAmount(value: string): number | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  const amount = Number(trimmed);
-  return Number.isFinite(amount) ? amount : undefined;
+  return parseMonetaryInput(value);
 }
 
 const MAX_EVIDENCE_FILE_BYTES = 5 * 1024 * 1024;
@@ -388,7 +394,7 @@ export function CostRecordFormModal({
       description={
         phase === "success"
           ? "The operational cost has been saved."
-          : "Record an operational cost for facility operations."
+          : "Add a cost you spent on operations. Only the essentials are up front."
       }
       footer={
         phase === "success" ? (
@@ -437,12 +443,8 @@ export function CostRecordFormModal({
           className="grid gap-5 sm:grid-cols-2"
           onSubmit={(event) => void handleSubmit(event)}
         >
-          <div className="sm:col-span-2">
-            <p className="fin-form-kicker">What was the cost?</p>
-          </div>
-
           <FormField
-            label="What was the cost for?"
+            label="What was this for?"
             htmlFor="cost-description"
             required
             error={errors.description}
@@ -462,88 +464,21 @@ export function CostRecordFormModal({
           </FormField>
 
           <FormField
-            label="Category"
-            htmlFor="cost-category"
+            label="How much?"
+            htmlFor="cost-actual-amount"
             required
-            error={errors.category}
-            className="sm:col-span-2"
+            error={errors.actualAmount}
           >
-            <select
-              id="cost-category"
-              className={selectClassName}
-              value={form.category}
+            <MonetaryInput
+              id="cost-actual-amount"
+              value={form.actualAmount}
               disabled={saving}
-              onChange={(event) =>
-                updateField("category", event.target.value as CostCategory | "")
-              }
-            >
-              <option value="">Select category</option>
-              {COST_CATEGORIES.map((category) => (
-                <option key={category} value={category}>
-                  {COST_CATEGORY_LABELS[category]}
-                </option>
-              ))}
-            </select>
-          </FormField>
-
-          <div className="fin-form-amount-row sm:col-span-2">
-            <FormField
-              label="Actual amount"
-              htmlFor="cost-actual-amount"
-              required
-              error={errors.actualAmount}
-            >
-              <input
-                id="cost-actual-amount"
-                type="number"
-                min={0}
-                step="0.01"
-                className={inputClassName}
-                value={form.actualAmount}
-                disabled={saving}
-                onChange={(event) =>
-                  updateField("actualAmount", event.target.value)
-                }
-              />
-            </FormField>
-
-            <FormField
-              label="Budgeted amount"
-              htmlFor="cost-budgeted-amount"
-              hint="Optional — enter the amount that was budgeted for this cost."
-              error={errors.budgetedAmount}
-            >
-              <input
-                id="cost-budgeted-amount"
-                type="number"
-                min={0}
-                step="0.01"
-                className={inputClassName}
-                value={form.budgetedAmount}
-                disabled={saving}
-                onChange={(event) =>
-                  updateField("budgetedAmount", event.target.value)
-                }
-              />
-            </FormField>
-          </div>
-
-          <FormField label="Currency" htmlFor="cost-currency">
-            <input
-              id="cost-currency"
-              className={inputClassName}
-              value={form.currency}
-              disabled
-              readOnly
+              onValueChange={(next) => updateField("actualAmount", next)}
             />
           </FormField>
 
-          <div className="sm:col-span-2">
-            <p className="fin-form-kicker">Where did it happen?</p>
-          </div>
-
           <FormField
-            label="Facility"
+            label="Where?"
             htmlFor="cost-facility"
             required
             error={errors.facilityId}
@@ -567,110 +502,34 @@ export function CostRecordFormModal({
           </FormField>
 
           <FormField
-            label="Location"
-            htmlFor="cost-location"
+            label="What kind of cost?"
+            htmlFor="cost-category"
             required
-            error={errors.location}
+            error={errors.category}
+            className="sm:col-span-2"
           >
-            <input
-              id="cost-location"
-              className={inputClassName}
-              value={form.location}
-              disabled={saving}
-              placeholder="Generator house / rear service area"
-              onChange={(event) => updateField("location", event.target.value)}
-            />
-          </FormField>
-
-          <FormField label="Department" htmlFor="cost-department">
-            <MasterDataSelect
-              id="cost-department"
-              entity="departments"
-              value={form.departmentId}
-              onChange={(value) => updateField("departmentId", value)}
-              facilityId={form.facilityId || undefined}
-              enabled={Boolean(form.facilityId)}
-              disabled={saving || !form.facilityId}
-              allowEmpty
-              emptyOptionLabel="No department"
-            />
-          </FormField>
-
-          <div className="sm:col-span-2">
-            <p className="fin-form-kicker">What was it related to?</p>
-          </div>
-
-          <FormField label="Related work (optional)" htmlFor="cost-related-link">
             <select
-              id="cost-related-link"
+              id="cost-category"
               className={selectClassName}
-              value={form.relatedLink}
+              value={form.category}
               disabled={saving}
-              onChange={(event) => {
-                const value = event.target.value as RelatedLink;
-                updateField("relatedLink", value);
-                if (value !== "work") updateField("workId", "");
-                if (value !== "work_order") updateField("workOrderId", "");
-              }}
+              onChange={(event) =>
+                updateField("category", event.target.value as CostCategory | "")
+              }
             >
-              <option value="none">None</option>
-              <option value="work">Work</option>
-              <option value="work_order">Work Order</option>
+              <option value="">Select category</option>
+              {COST_CATEGORIES.map((category) => (
+                <option key={category} value={category}>
+                  {COST_CATEGORY_LABELS[category]}
+                </option>
+              ))}
             </select>
           </FormField>
 
-          {form.relatedLink === "work" ? (
-            <FormField
-              label="Work"
-              htmlFor="cost-work-id"
-              error={errors.workId}
-              className="sm:col-span-2"
-            >
-              <SearchableSelect
-                id="cost-work-id"
-                aria-label="Work"
-                value={form.workId}
-                onChange={(value) => updateField("workId", value)}
-                options={workOptions}
-                allowEmpty
-                emptyOptionLabel="Select work"
-                searchPlaceholder="Search by reference or title…"
-                loading={workLoading}
-                disabled={saving}
-              />
-            </FormField>
-          ) : null}
-
-          {form.relatedLink === "work_order" ? (
-            <FormField
-              label="Work Order"
-              htmlFor="cost-work-order-id"
-              error={errors.workOrderId}
-              className="sm:col-span-2"
-            >
-              <SearchableSelect
-                id="cost-work-order-id"
-                aria-label="Work Order"
-                value={form.workOrderId}
-                onChange={(value) => updateField("workOrderId", value)}
-                options={workOrderOptions}
-                allowEmpty
-                emptyOptionLabel="Select work order"
-                searchPlaceholder="Search by reference or title…"
-                loading={workOrderLoading}
-                disabled={saving}
-              />
-            </FormField>
-          ) : null}
-
-          <div className="sm:col-span-2">
-            <p className="fin-form-kicker">Reimbursement</p>
-          </div>
-
           <FormField
-            label="Reimbursement classification"
+            label="Can we claim this back?"
             htmlFor="cost-reimbursability"
-            hint="You can leave this as Unknown if the reimbursement treatment has not yet been established."
+            hint="Leave as Unknown if you are not sure yet."
             className="sm:col-span-2"
           >
             <select
@@ -695,42 +554,180 @@ export function CostRecordFormModal({
             </select>
           </FormField>
 
-          <div className="sm:col-span-2">
-            <p className="fin-form-kicker">Supporting evidence</p>
-          </div>
-
           <FormField
             label="Receipt or invoice"
             htmlFor="cost-evidence"
             required
-            hint="Upload a PDF, JPEG, or PNG (up to 5 MB). You can also record a reference when no file is available."
+            hint="Upload a PDF, JPEG, or PNG (up to 5 MB), or enter a reference."
             error={errors.evidenceReference}
             className="sm:col-span-2"
           >
-            <input
-              key={formVersion}
-              id="cost-evidence"
-              type="file"
-              accept="application/pdf,image/jpeg,image/png"
-              className={inputClassName}
-              disabled={saving}
-              onChange={(event) =>
-                updateField("evidenceFile", event.target.files?.[0] ?? null)
-              }
-            />
-            {form.evidenceFile ? (
-              <p className="fin-form-hint">Selected: {form.evidenceFile.name}</p>
-            ) : null}
-            <input
-              id="cost-evidence-reference"
-              aria-label="Invoice or receipt reference"
-              className={`${inputClassName} mt-2`}
-              value={form.evidenceReference}
-              disabled={saving}
-              placeholder="Or enter the invoice / receipt reference"
-              onChange={(event) => updateField("evidenceReference", event.target.value)}
-            />
+            <div className="fin-form-evidence">
+              <input
+                key={formVersion}
+                id="cost-evidence"
+                type="file"
+                accept="application/pdf,image/jpeg,image/png"
+                className={inputClassName}
+                disabled={saving}
+                onChange={(event) =>
+                  updateField("evidenceFile", event.target.files?.[0] ?? null)
+                }
+              />
+              {form.evidenceFile ? (
+                <p className="fin-form-hint">
+                  Selected: {form.evidenceFile.name}
+                </p>
+              ) : null}
+              <input
+                id="cost-evidence-reference"
+                aria-label="Invoice or receipt reference"
+                className={`${inputClassName} mt-2`}
+                value={form.evidenceReference}
+                disabled={saving}
+                placeholder="Or enter the invoice / receipt reference"
+                onChange={(event) =>
+                  updateField("evidenceReference", event.target.value)
+                }
+              />
+            </div>
           </FormField>
+
+          <details
+            className="fin-form-more sm:col-span-2"
+            open={Boolean(
+              errors.location ||
+                errors.budgetedAmount ||
+                errors.workId ||
+                errors.workOrderId
+            )}
+          >
+            <summary className="fin-form-more-summary">More details</summary>
+            <div className="fin-form-more-body grid gap-5 sm:grid-cols-2">
+              <FormField
+                label="Budgeted amount"
+                htmlFor="cost-budgeted-amount"
+                hint="Optional — what was budgeted for this cost."
+                error={errors.budgetedAmount}
+              >
+                <MonetaryInput
+                  id="cost-budgeted-amount"
+                  value={form.budgetedAmount}
+                  disabled={saving}
+                  onValueChange={(next) => updateField("budgetedAmount", next)}
+                />
+              </FormField>
+
+              <FormField label="Currency" htmlFor="cost-currency">
+                <input
+                  id="cost-currency"
+                  className={inputClassName}
+                  value={form.currency}
+                  disabled
+                  readOnly
+                />
+              </FormField>
+
+              <FormField
+                label="Location"
+                htmlFor="cost-location"
+                required
+                error={errors.location}
+              >
+                <input
+                  id="cost-location"
+                  className={inputClassName}
+                  value={form.location}
+                  disabled={saving}
+                  placeholder="Generator house / rear service area"
+                  onChange={(event) =>
+                    updateField("location", event.target.value)
+                  }
+                />
+              </FormField>
+
+              <FormField label="Department" htmlFor="cost-department">
+                <MasterDataSelect
+                  id="cost-department"
+                  entity="departments"
+                  value={form.departmentId}
+                  onChange={(value) => updateField("departmentId", value)}
+                  facilityId={form.facilityId || undefined}
+                  enabled={Boolean(form.facilityId)}
+                  disabled={saving || !form.facilityId}
+                  allowEmpty
+                  emptyOptionLabel="No department"
+                />
+              </FormField>
+
+              <FormField
+                label="Maintenance / work classification"
+                htmlFor="cost-related-link"
+                className="sm:col-span-2"
+              >
+                <select
+                  id="cost-related-link"
+                  className={selectClassName}
+                  value={form.relatedLink}
+                  disabled={saving}
+                  onChange={(event) => {
+                    const value = event.target.value as RelatedLink;
+                    updateField("relatedLink", value);
+                    if (value !== "work") updateField("workId", "");
+                    if (value !== "work_order") updateField("workOrderId", "");
+                  }}
+                >
+                  <option value="none">None</option>
+                  <option value="work">Work</option>
+                  <option value="work_order">Work Order</option>
+                </select>
+              </FormField>
+
+              {form.relatedLink === "work" ? (
+                <FormField
+                  label="Work"
+                  htmlFor="cost-work-id"
+                  error={errors.workId}
+                  className="sm:col-span-2"
+                >
+                  <SearchableSelect
+                    id="cost-work-id"
+                    aria-label="Work"
+                    value={form.workId}
+                    onChange={(value) => updateField("workId", value)}
+                    options={workOptions}
+                    allowEmpty
+                    emptyOptionLabel="Select work"
+                    searchPlaceholder="Search by reference or title…"
+                    loading={workLoading}
+                    disabled={saving}
+                  />
+                </FormField>
+              ) : null}
+
+              {form.relatedLink === "work_order" ? (
+                <FormField
+                  label="Work Order"
+                  htmlFor="cost-work-order-id"
+                  error={errors.workOrderId}
+                  className="sm:col-span-2"
+                >
+                  <SearchableSelect
+                    id="cost-work-order-id"
+                    aria-label="Work Order"
+                    value={form.workOrderId}
+                    onChange={(value) => updateField("workOrderId", value)}
+                    options={workOrderOptions}
+                    allowEmpty
+                    emptyOptionLabel="Select work order"
+                    searchPlaceholder="Search by reference or title…"
+                    loading={workOrderLoading}
+                    disabled={saving}
+                  />
+                </FormField>
+              ) : null}
+            </div>
+          </details>
         </form>
       )}
     </Modal>

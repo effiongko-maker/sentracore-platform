@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Release: **v0.8.5.1** — Reimbursement payment service deploy recovery
+Release: **v0.8.6.3** — Unique reimbursement payment IDs and complete ceiling sum
 
 Use this checklist with `DEPLOYMENT_PACK.md` open. Someone unfamiliar
 with the project should be able to deploy from these steps alone.
@@ -34,6 +34,7 @@ Current pack file list:
 - [ ] `IncidentRepository.gs`
 - [ ] `MaintenanceRepository.gs`
 - [ ] `MasterDataRepository.gs`
+- [ ] `ReimbursementAuthorizationRepository.gs`
 - [ ] `ReimbursementPaymentRepository.gs`
 - [ ] `ReportingSnapshotRepository.gs`
 - [ ] `RequestRepository.gs`
@@ -49,6 +50,7 @@ Current pack file list:
 - [ ] `MaintenanceService.gs`
 - [ ] `MasterDataService.gs`
 - [ ] `OperationalWorkloadService.gs`
+- [ ] `ReimbursementAuthorizationService.gs`
 - [ ] `ReimbursementPaymentService.gs`
 - [ ] `ReportingSnapshotService.gs`
 - [ ] `RequestService.gs`
@@ -65,6 +67,7 @@ Current pack file list:
 - [ ] `MaintenanceController.gs`
 - [ ] `MasterDataController.gs`
 - [ ] `OperationalWorkloadController.gs`
+- [ ] `ReimbursementAuthorizationsController.gs`
 - [ ] `ReimbursementPaymentsController.gs`
 - [ ] `ReportingSnapshotController.gs`
 - [ ] `RequestsController.gs`
@@ -114,6 +117,7 @@ For each file that already exists in Apps Script, **replace the entire contents*
 - [ ] Replace `IncidentRepository.gs`
 - [ ] Replace `MaintenanceRepository.gs`
 - [ ] Replace `MasterDataRepository.gs`
+- [ ] Replace `ReimbursementAuthorizationRepository.gs`
 - [ ] Replace `ReimbursementPaymentRepository.gs`
 - [ ] Replace `ReportingSnapshotRepository.gs`
 - [ ] Replace `RequestRepository.gs`
@@ -129,6 +133,7 @@ For each file that already exists in Apps Script, **replace the entire contents*
 - [ ] Replace `MaintenanceService.gs`
 - [ ] Replace `MasterDataService.gs`
 - [ ] Replace `OperationalWorkloadService.gs`
+- [ ] Replace `ReimbursementAuthorizationService.gs`
 - [ ] Replace `ReimbursementPaymentService.gs`
 - [ ] Replace `ReportingSnapshotService.gs`
 - [ ] Replace `RequestService.gs`
@@ -145,6 +150,7 @@ For each file that already exists in Apps Script, **replace the entire contents*
 - [ ] Replace `MaintenanceController.gs`
 - [ ] Replace `MasterDataController.gs`
 - [ ] Replace `OperationalWorkloadController.gs`
+- [ ] Replace `ReimbursementAuthorizationsController.gs`
 - [ ] Replace `ReimbursementPaymentsController.gs`
 - [ ] Replace `ReportingSnapshotController.gs`
 - [ ] Replace `RequestsController.gs`
@@ -207,16 +213,16 @@ A **new Web App version** is REQUIRED.
 
 With `npm run dev` running:
 
-### Financial domain foundation
-
-```bash
-npx tsx --tsconfig tsconfig.json scripts/verify-financial-domain-foundation.mts
-```
-
 ### Finance reimbursement payment
 
 ```bash
 npx tsx --tsconfig tsconfig.json scripts/verify-finance-reimbursement-payment.mts
+```
+
+### Finance reimbursement authorization
+
+```bash
+npx tsx --tsconfig tsconfig.json scripts/verify-finance-reimbursement-authorization.mts
 ```
 
 Expected checks:

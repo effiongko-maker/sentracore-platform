@@ -5,6 +5,7 @@ export { SubmissionsPage } from "./components/SubmissionsPage";
 export { SubmissionWorkflowPage } from "./components/SubmissionWorkflowPage";
 export { SubmissionDetailPage } from "./components/SubmissionDetailPage";
 export { useFinanceOverview } from "./hooks/useFinanceOverview";
+export { useFinancialPosition } from "./hooks/useFinancialPosition";
 export { useSubmissionCostPool } from "./hooks/useSubmissionCostPool";
 export { useCostSubmissionsList } from "./hooks/useCostSubmissionsList";
 export {
@@ -28,6 +29,16 @@ export type {
 } from "./types";
 export { deriveFinanceOverview } from "./utils/deriveFinanceOverview";
 export {
+  deriveFinancialPositionSnapshot,
+  type FinancialPositionSnapshot,
+  type FinancialPositionSnapshotInput,
+} from "./utils/deriveFinancialPositionSnapshot";
+export {
   formatFinancialAmount,
   sumAmounts,
 } from "./utils/formatFinancialAmount";
+export {
+  formatMonetaryDisplay,
+  formatMonetaryFromNumber,
+  parseMonetaryInput,
+} from "./utils/monetaryInput";

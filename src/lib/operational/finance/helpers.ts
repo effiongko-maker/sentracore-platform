@@ -26,7 +26,12 @@ export const FINANCIAL_DOMAIN_IMPLEMENTED = {
   ui: true,
   /** Reimbursement payment receipts against CostSubmission (REIMBURSEMENT_PAYMENTS). */
   paymentProcessing: true,
-  approvalWorkflows: false,
+  /**
+   * Reimbursement authorization of CostSubmission claims
+   * (REIMBURSEMENT_AUTHORIZATIONS) — not Work Order Approvals.
+   */
+  approvalWorkflows: true,
+  reimbursementAuthorization: true,
   jobOrder: false,
 } as const;
 
@@ -90,8 +95,8 @@ export function assertDistinctCommercialAmounts(submission: {
 
 /**
  * Conceptual outstanding = basis − received (when received known).
- * Prefer authorizedAmount from Approval when present; else claimAmount.
- * Does not invent payment transactions.
+ * Prefer authorizedAmount from ReimbursementAuthorization when present;
+ * else claimAmount. Does not invent payment transactions.
  */
 export function deriveOutstandingAmount(options: {
   claimAmount?: number;

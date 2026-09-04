@@ -1,5 +1,7 @@
 import { FormField, inputClassName } from "@/components/forms/FormField";
+import { MonetaryInput } from "./MonetaryInput";
 import { formatFinancialAmount } from "../utils/formatFinancialAmount";
+import { parseMonetaryInput } from "../utils/monetaryInput";
 
 export function SubmissionClaimForm({
   actualCost,
@@ -16,7 +18,7 @@ export function SubmissionClaimForm({
   onMarkupAmountChange: (value: string) => void;
   onMarkupPercentChange: (value: string) => void;
 }) {
-  const markupAmount = Number(markupAmountInput.replace(/,/g, ""));
+  const markupAmount = parseMonetaryInput(markupAmountInput) ?? 0;
   const claimAmount =
     actualCost +
     (Number.isFinite(markupAmount) && markupAmount > 0 ? markupAmount : 0);
@@ -24,18 +26,16 @@ export function SubmissionClaimForm({
   return (
     <div className="fin-submission-step">
       <p className="fin-section-lede">
-        Enter the markup for this submission. SentraCore calculates the
-        complementary value — no default policy rate is applied.
+        Confirm the claim amount. Selected costs stay as recorded — add markup
+        only if needed.
       </p>
 
       <div className="fin-submission-claim-grid mt-4">
         <FormField label="Markup amount" htmlFor="markupAmount">
-          <input
+          <MonetaryInput
             id="markupAmount"
-            inputMode="decimal"
-            className={inputClassName}
             value={markupAmountInput}
-            onChange={(event) => onMarkupAmountChange(event.target.value)}
+            onValueChange={onMarkupAmountChange}
             placeholder="0"
           />
         </FormField>
@@ -54,7 +54,7 @@ export function SubmissionClaimForm({
 
       <div className="fin-submission-claim-summary mt-6" aria-live="polite">
         <div className="fin-submission-claim-row">
-          <span>Actual cost</span>
+          <span>Selected costs</span>
           <strong>{formatFinancialAmount(actualCost, currency)}</strong>
         </div>
         <div className="fin-submission-claim-row">
@@ -74,11 +74,6 @@ export function SubmissionClaimForm({
           <strong>{formatFinancialAmount(claimAmount, currency)}</strong>
         </div>
       </div>
-
-      <p className="fin-section-lede mt-4">
-        Claim amount is always actual cost plus markup. It cannot be edited
-        independently.
-      </p>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApprovalService } from "@/modules/approvals/services/ApprovalService";
 import { CostRecordService } from "@/services/finance/CostRecordService";
 import { CostSubmissionService } from "@/services/finance/CostSubmissionService";
+import { ReimbursementAuthorizationService } from "@/services/finance/ReimbursementAuthorizationService";
 import { ReimbursementPaymentService } from "@/services/finance/ReimbursementPaymentService";
 import {
   FINANCE_COST_POOL_FETCH_SIZE,
@@ -24,27 +25,36 @@ export function useFinanceOverview() {
     setError(null);
 
     try {
-      const [approvalResult, costResult, submissionResult, paymentResult] =
-        await Promise.all([
-          ApprovalService.listApprovals({
-            page: 1,
-            pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
-            status: "all",
-            sort: "newest",
-          }),
-          CostRecordService.listCostRecords({
-            page: 1,
-            pageSize: FINANCE_COST_POOL_FETCH_SIZE,
-          }),
-          CostSubmissionService.listCostSubmissions({
-            page: 1,
-            pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
-          }),
-          ReimbursementPaymentService.listPayments({
-            page: 1,
-            pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
-          }),
-        ]);
+      const [
+        approvalResult,
+        costResult,
+        submissionResult,
+        paymentResult,
+        authorizationResult,
+      ] = await Promise.all([
+        ApprovalService.listApprovals({
+          page: 1,
+          pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
+          status: "all",
+          sort: "newest",
+        }),
+        CostRecordService.listCostRecords({
+          page: 1,
+          pageSize: FINANCE_COST_POOL_FETCH_SIZE,
+        }),
+        CostSubmissionService.listCostSubmissions({
+          page: 1,
+          pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
+        }),
+        ReimbursementPaymentService.listPayments({
+          page: 1,
+          pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
+        }),
+        ReimbursementAuthorizationService.listAuthorizations({
+          page: 1,
+          pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
+        }),
+      ]);
 
       if (id !== requestId.current) return;
 
@@ -58,6 +68,7 @@ export function useFinanceOverview() {
           totalSubmissions: submissionResult.total,
           payments: paymentResult.data,
           totalPayments: paymentResult.total,
+          authorizations: authorizationResult.data,
         })
       );
     } catch (err) {

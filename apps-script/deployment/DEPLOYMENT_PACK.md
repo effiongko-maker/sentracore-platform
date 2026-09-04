@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Generated: 2026-09-02T21:41:47.739Z
+Generated: 2026-09-03T14:52:57.298Z
 
 This document is the **single source of truth** for copying Apps Script
 source into the Google Apps Script project.
@@ -26,6 +26,7 @@ Then follow `DEPLOYMENT_CHECKLIST.md`.
 - IncidentRepository.gs
 - MaintenanceRepository.gs
 - MasterDataRepository.gs
+- ReimbursementAuthorizationRepository.gs
 - ReimbursementPaymentRepository.gs
 - ReportingSnapshotRepository.gs
 - RequestRepository.gs
@@ -41,6 +42,7 @@ Then follow `DEPLOYMENT_CHECKLIST.md`.
 - MaintenanceService.gs
 - MasterDataService.gs
 - OperationalWorkloadService.gs
+- ReimbursementAuthorizationService.gs
 - ReimbursementPaymentService.gs
 - ReportingSnapshotService.gs
 - RequestService.gs
@@ -57,6 +59,7 @@ Then follow `DEPLOYMENT_CHECKLIST.md`.
 - MaintenanceController.gs
 - MasterDataController.gs
 - OperationalWorkloadController.gs
+- ReimbursementAuthorizationsController.gs
 - ReimbursementPaymentsController.gs
 - ReportingSnapshotController.gs
 - RequestsController.gs
@@ -87,7 +90,8 @@ ROUTER.gs
  *   resource: "users" | "facilities" | "assets" | "work-orders" |
  *             "incidents" | "maintenance" | "approvals" | "requests" |
  *             "master-data" | "reporting-snapshot" | "operational-workload" |
- *             "cost-records" | "cost-submissions" | "reimbursement-payments",
+ *             "cost-records" | "cost-submissions" | "reimbursement-payments" |
+ *             "reimbursement-authorizations",
  *   action: string,
  *   payload: object
  * }
@@ -187,12 +191,14 @@ function doPost(e) {
       result = CostSubmissionsController.handle(action, payload);
     } else if (resource === "reimbursement-payments") {
       result = ReimbursementPaymentsController.handle(action, payload);
+    } else if (resource === "reimbursement-authorizations") {
+      result = ReimbursementAuthorizationsController.handle(action, payload);
     } else {
       result = jsonResponse_(
         false,
         resource
           ? "Unknown module: " + resource
-          : "Missing resource. Expected users|facilities|assets|work-orders|incidents|maintenance|approvals|requests|master-data|reporting-snapshot|operational-workload|cost-records|cost-submissions|reimbursement-payments.",
+          : "Missing resource. Expected users|facilities|assets|work-orders|incidents|maintenance|approvals|requests|master-data|reporting-snapshot|operational-workload|cost-records|cost-submissions|reimbursement-payments|reimbursement-authorizations.",
         null,
         { errorClass: "validation", retryable: false }
       );
@@ -240,6 +246,7 @@ function doGet() {
       "cost-records",
       "cost-submissions",
       "reimbursement-payments",
+      "reimbursement-authorizations",
     ],
     builds: builds,
   });
@@ -3875,6 +3882,323 @@ var MasterDataRepository = (function () {
 
 ======================================
 FILE:
+ReimbursementAuthorizationRepository.gs
+======================================
+
+```javascript
+/**
+ * ReimbursementAuthorizationRepository.gs
+ *
+ * Sheet: REIMBURSEMENT_AUTHORIZATIONS
+ * Authorization of CostSubmission claims — not Work Order Approvals.
+ * Never written onto CostRecord or CostSubmission status.
+ *
+ * ID format: AUTH-{YYYY}-{NNNNNN}
+ */
+
+var ReimbursementAuthorizationRepository = (function () {
+  var SHEET_NAME = "REIMBURSEMENT_AUTHORIZATIONS";
+  var HEADERS = [
+    "Authorization ID",
+    "Submission ID",
+    "Authorized Amount",
+    "Currency",
+    "Authorized At",
+    "Authorized By",
+    "Authority Reference",
+    "Notes",
+    "Recorded At",
+  ];
+
+  function readAmount_(raw) {
+    if (raw === "" || raw == null) return undefined;
+    var amount = Number(raw);
+    return isFinite(amount) ? amount : undefined;
+  }
+
+  function getSheet_() {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName(SHEET_NAME);
+    if (!sheet) {
+      sheet = ss.insertSheet(SHEET_NAME);
+      sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+      return sheet;
+    }
+    ensureHeaders_(sheet);
+    return sheet;
+  }
+
+  function ensureHeaders_(sheet) {
+    var headerMap = SheetFieldUtils.getHeaderMap(sheet);
+    var lastCol = Math.max(1, sheet.getLastColumn());
+    var added = 0;
+    for (var i = 0; i < HEADERS.length; i++) {
+      var name = HEADERS[i];
+      if (!SheetFieldUtils.hasHeader(headerMap, name)) {
+        sheet.getRange(1, lastCol + 1 + added).setValue(name);
+        added++;
+      }
+    }
+    return SheetFieldUtils.getHeaderMap(sheet);
+  }
+
+  function rowToCanonical_(sheetRow) {
+    return {
+      authorizationId: SheetFieldUtils.cellText(sheetRow["Authorization ID"]),
+      submissionId: SheetFieldUtils.cellText(sheetRow["Submission ID"]),
+      authorizedAmount: readAmount_(sheetRow["Authorized Amount"]),
+      currency: SheetFieldUtils.cellText(sheetRow["Currency"]) || "NGN",
+      authorizedAt: SheetFieldUtils.cellText(sheetRow["Authorized At"]),
+      authorizedBy: SheetFieldUtils.cellText(sheetRow["Authorized By"]),
+      authorityReference:
+        SheetFieldUtils.cellText(sheetRow["Authority Reference"]) || undefined,
+      notes: SheetFieldUtils.cellText(sheetRow["Notes"]) || undefined,
+      recordedAt: SheetFieldUtils.cellText(sheetRow["Recorded At"]),
+    };
+  }
+
+  function canonicalToFields_(canonical) {
+    return {
+      "Authorization ID": canonical.authorizationId || "",
+      "Submission ID": canonical.submissionId || "",
+      "Authorized Amount":
+        canonical.authorizedAmount != null ? canonical.authorizedAmount : "",
+      Currency: canonical.currency || "NGN",
+      "Authorized At": canonical.authorizedAt || "",
+      "Authorized By": canonical.authorizedBy || "",
+      "Authority Reference": canonical.authorityReference || "",
+      Notes: canonical.notes || "",
+      "Recorded At": canonical.recordedAt || "",
+    };
+  }
+
+  function writeRow_(sheet, rowIndex, canonical) {
+    var headerMap = ensureHeaders_(sheet);
+    var lastCol = sheet.getLastColumn();
+    var fields = canonicalToFields_(canonical);
+    var row = SheetFieldUtils.buildRowFromFieldsStrict(
+      headerMap,
+      lastCol,
+      fields
+    );
+    sheet.getRange(rowIndex, 1, 1, lastCol).setValues([row]);
+  }
+
+  function findRowIndex_(authorizationId) {
+    var sheet = getSheet_();
+    var values = sheet.getDataRange().getValues();
+    if (values.length <= 1) return -1;
+    var headers = values[0];
+    var idCol = -1;
+    for (var c = 0; c < headers.length; c++) {
+      if (String(headers[c]).trim() === "Authorization ID") {
+        idCol = c;
+        break;
+      }
+    }
+    if (idCol === -1) return -1;
+    for (var r = 1; r < values.length; r++) {
+      if (String(values[r][idCol] || "").trim() === String(authorizationId)) {
+        return r + 1;
+      }
+    }
+    return -1;
+  }
+
+  function findBySubmissionId_(submissionId) {
+    var id = String(submissionId || "").trim();
+    if (!id) return null;
+    var sheet = getSheet_();
+    var values = sheet.getDataRange().getValues();
+    if (values.length <= 1) return null;
+    var headers = values[0];
+    var matches = [];
+    for (var r = 1; r < values.length; r++) {
+      var obj = SheetFieldUtils.rowToSheetObject(headers, values[r]);
+      if (SheetFieldUtils.cellText(obj["Submission ID"]) === id) {
+        matches.push(rowToCanonical_(obj));
+      }
+    }
+    if (!matches.length) return null;
+    matches.sort(function (a, b) {
+      return String(b.authorizedAt || b.recordedAt || "").localeCompare(
+        String(a.authorizedAt || a.recordedAt || "")
+      );
+    });
+    return matches[0];
+  }
+
+  function nextId_() {
+    var year = new Date().getFullYear();
+    var all = getAll({ page: 1, pageSize: 10000 });
+    var rows = all.data || [];
+    var maxYear = 0;
+    var prefix = "AUTH-" + year + "-";
+    for (var i = 0; i < rows.length; i++) {
+      var id = String(rows[i].authorizationId || "");
+      if (id.indexOf(prefix) === 0) {
+        var seq = Number(id.slice(prefix.length));
+        if (isFinite(seq) && seq > maxYear) maxYear = seq;
+      }
+    }
+    var next = maxYear + 1;
+    var padded = ("000000" + next).slice(-6);
+    return prefix + padded;
+  }
+
+  function getAll(payload) {
+    payload = payload || {};
+    var page = Math.max(1, Number(payload.page) || 1);
+    var pageSize = Math.max(1, Math.min(100, Number(payload.pageSize) || 25));
+    var submissionId = payload.submissionId
+      ? String(payload.submissionId).trim()
+      : "";
+    var search = payload.search
+      ? String(payload.search).trim().toLowerCase()
+      : "";
+
+    var sheet = getSheet_();
+    var values = sheet.getDataRange().getValues();
+    var rows = [];
+    if (values.length > 1) {
+      var headers = values[0];
+      for (var r = 1; r < values.length; r++) {
+        var obj = SheetFieldUtils.rowToSheetObject(headers, values[r]);
+        var authorizationId = SheetFieldUtils.cellText(obj["Authorization ID"]);
+        if (!authorizationId) continue;
+        rows.push(rowToCanonical_(obj));
+      }
+    }
+
+    rows.sort(function (a, b) {
+      return String(b.authorizedAt || "").localeCompare(
+        String(a.authorizedAt || "")
+      );
+    });
+
+    if (submissionId) {
+      rows = rows.filter(function (row) {
+        return String(row.submissionId || "") === submissionId;
+      });
+    }
+    if (search) {
+      rows = rows.filter(function (row) {
+        return (
+          String(row.authorizationId || "")
+            .toLowerCase()
+            .indexOf(search) >= 0 ||
+          String(row.submissionId || "")
+            .toLowerCase()
+            .indexOf(search) >= 0
+        );
+      });
+    }
+
+    var total = rows.length;
+    var start = (page - 1) * pageSize;
+    var data = rows.slice(start, start + pageSize);
+    return {
+      data: data,
+      page: page,
+      pageSize: pageSize,
+      total: total,
+      totalPages: Math.max(1, Math.ceil(total / pageSize) || 1),
+    };
+  }
+
+  function getById(authorizationId) {
+    var id = String(authorizationId || "").trim();
+    if (!id) throw new Error("authorizationId is required");
+    var rowIndex = findRowIndex_(id);
+    if (rowIndex < 0) throw new Error("Authorization not found: " + id);
+    var sheet = getSheet_();
+    var values = sheet.getDataRange().getValues();
+    var headers = values[0];
+    return rowToCanonical_(
+      SheetFieldUtils.rowToSheetObject(headers, values[rowIndex - 1])
+    );
+  }
+
+  function getBySubmissionId(submissionId) {
+    return findBySubmissionId_(submissionId);
+  }
+
+  function mergeCanonical_(current, payload) {
+    payload = payload || {};
+    return {
+      authorizationId: current.authorizationId,
+      submissionId:
+        payload.submissionId != null
+          ? String(payload.submissionId).trim()
+          : current.submissionId,
+      authorizedAmount:
+        payload.authorizedAmount !== undefined
+          ? readAmount_(payload.authorizedAmount)
+          : current.authorizedAmount,
+      currency:
+        payload.currency != null ? payload.currency : current.currency,
+      authorizedAt:
+        payload.authorizedAt != null
+          ? payload.authorizedAt
+          : current.authorizedAt,
+      authorizedBy:
+        payload.authorizedBy != null
+          ? payload.authorizedBy
+          : current.authorizedBy,
+      authorityReference:
+        payload.authorityReference !== undefined
+          ? payload.authorityReference || undefined
+          : current.authorityReference,
+      notes:
+        payload.notes !== undefined ? payload.notes || undefined : current.notes,
+      recordedAt: current.recordedAt,
+    };
+  }
+
+  function create(payload) {
+    payload = payload || {};
+    var sheet = getSheet_();
+    var now = new Date().toISOString();
+    var authorizationId = nextId_();
+    var canonical = {
+      authorizationId: authorizationId,
+      submissionId: String(payload.submissionId || "").trim(),
+      authorizedAmount: readAmount_(payload.authorizedAmount),
+      currency: payload.currency || "NGN",
+      authorizedAt: payload.authorizedAt || now,
+      authorizedBy: payload.authorizedBy || "",
+      authorityReference: payload.authorityReference || undefined,
+      notes: payload.notes || undefined,
+      recordedAt: payload.recordedAt || now,
+    };
+    var rowIndex = sheet.getLastRow() + 1;
+    writeRow_(sheet, rowIndex, canonical);
+    return canonical;
+  }
+
+  function update(authorizationId, payload) {
+    var rowIndex = findRowIndex_(authorizationId);
+    if (rowIndex === -1) return null;
+    var current = getById(authorizationId);
+    if (!current) return null;
+    var merged = mergeCanonical_(current, payload || {});
+    var sheet = getSheet_();
+    writeRow_(sheet, rowIndex, merged);
+    return merged;
+  }
+
+  return {
+    getAll: getAll,
+    getById: getById,
+    getBySubmissionId: getBySubmissionId,
+    create: create,
+    update: update,
+  };
+})();
+```
+
+======================================
+FILE:
 ReimbursementPaymentRepository.gs
 ======================================
 
@@ -4003,21 +4327,62 @@ var ReimbursementPaymentRepository = (function () {
     return -1;
   }
 
+  /**
+   * Next PAY-{year}-{NNNNNN} from persisted sheet Payment ID values.
+   * Must not use paginated getAll() — that wrapper is not an array.
+   */
   function nextId_() {
     var year = new Date().getFullYear();
-    var all = getAll({});
-    var maxYear = 0;
     var prefix = "PAY-" + year + "-";
-    for (var i = 0; i < all.length; i++) {
-      var id = String(all[i].paymentId || "");
-      if (id.indexOf(prefix) === 0) {
-        var seq = Number(id.slice(prefix.length));
-        if (isFinite(seq) && seq > maxYear) maxYear = seq;
+    var sheet = getSheet_();
+    var values = sheet.getDataRange().getValues();
+    var maxSeq = 0;
+    if (values.length <= 1) {
+      return prefix + "000001";
+    }
+    var headers = values[0];
+    var idCol = -1;
+    for (var c = 0; c < headers.length; c++) {
+      if (String(headers[c]).trim() === "Payment ID") {
+        idCol = c;
+        break;
       }
     }
-    var next = maxYear + 1;
+    if (idCol === -1) return prefix + "000001";
+    for (var r = 1; r < values.length; r++) {
+      var id = String(values[r][idCol] || "").trim();
+      if (id.indexOf(prefix) === 0) {
+        var seq = Number(id.slice(prefix.length));
+        if (isFinite(seq) && seq > maxSeq) maxSeq = seq;
+      }
+    }
+    var next = maxSeq + 1;
     var padded = ("000000" + next).slice(-6);
     return prefix + padded;
+  }
+
+  /**
+   * All receipts for a submission — unpaginated sheet scan.
+   * Used by the authorized-amount ceiling so pageSize=100 cannot undercount.
+   */
+  function listAllBySubmissionId(submissionId) {
+    var id = String(submissionId || "").trim();
+    var rows = [];
+    if (!id) return rows;
+    var sheet = getSheet_();
+    var values = sheet.getDataRange().getValues();
+    if (values.length <= 1) return rows;
+    var headers = values[0];
+    for (var r = 1; r < values.length; r++) {
+      var obj = SheetFieldUtils.rowToSheetObject(headers, values[r]);
+      var paymentId = SheetFieldUtils.cellText(obj["Payment ID"]);
+      if (!paymentId) continue;
+      var canonical = rowToCanonical_(obj);
+      if (String(canonical.submissionId || "") === id) {
+        rows.push(canonical);
+      }
+    }
+    return rows;
   }
 
   function getAll(payload) {
@@ -4169,6 +4534,7 @@ var ReimbursementPaymentRepository = (function () {
   return {
     getAll: getAll,
     getById: getById,
+    listAllBySubmissionId: listAllBySubmissionId,
     create: create,
     update: update,
   };
@@ -8666,6 +9032,246 @@ var OperationalWorkloadService = (function () {
 
 ======================================
 FILE:
+ReimbursementAuthorizationService.gs
+======================================
+
+```javascript
+/**
+ * ReimbursementAuthorizationService.gs
+ *
+ * Business rules for reimbursement authorization of CostSubmission claims.
+ * Distinct from Work Order client authorisation (Approvals).
+ */
+
+var ReimbursementAuthorizationService = (function () {
+  function validateAuthorizationShape_(authorization, context) {
+    authorization = authorization || {};
+    var errors = [];
+
+    if (context === "update") {
+      if (
+        !authorization.authorizationId ||
+        !String(authorization.authorizationId).trim()
+      ) {
+        errors.push("authorizationId is required");
+      } else if (
+        !/^AUTH-\d{4}-\d{6}$/i.test(String(authorization.authorizationId))
+      ) {
+        errors.push("authorizationId must match AUTH-YYYY-NNNNNN format");
+      }
+    }
+
+    if (!authorization.submissionId || !String(authorization.submissionId).trim()) {
+      errors.push("submissionId is required");
+    } else if (!/^SUB-\d{4}-\d{6}$/i.test(String(authorization.submissionId))) {
+      errors.push("submissionId must match SUB-YYYY-NNNNNN format");
+    }
+
+    if (
+      authorization.authorizedAmount == null ||
+      authorization.authorizedAmount === "" ||
+      !isFinite(Number(authorization.authorizedAmount)) ||
+      Number(authorization.authorizedAmount) <= 0
+    ) {
+      errors.push("authorizedAmount must be a positive number");
+    }
+
+    if (!authorization.currency || !String(authorization.currency).trim()) {
+      errors.push("currency is required");
+    }
+    if (!authorization.authorizedAt || !String(authorization.authorizedAt).trim()) {
+      errors.push("authorizedAt is required");
+    }
+    if (!authorization.authorizedBy || !String(authorization.authorizedBy).trim()) {
+      errors.push("authorizedBy is required");
+    }
+    if (!authorization.recordedAt || !String(authorization.recordedAt).trim()) {
+      errors.push("recordedAt is required");
+    }
+
+    if (errors.length) {
+      throw new Error(
+        "Invalid reimbursement authorization: " + errors.join("; ")
+      );
+    }
+  }
+
+  function assertSubmissionAuthorizable_(submissionId) {
+    if (typeof CostSubmissionRepository === "undefined") {
+      throw new Error("CostSubmissionRepository is unavailable");
+    }
+    var submission = CostSubmissionRepository.getById(submissionId);
+    if (!submission) {
+      throw new Error("CostSubmission not found: " + submissionId);
+    }
+    var status = String(submission.status || "").toLowerCase();
+    if (status !== "submitted") {
+      throw new Error(
+        "Only submitted claims can be authorized (queried claims must be resubmitted first)"
+      );
+    }
+    return submission;
+  }
+
+  function sumReceivedForSubmission_(submissionId) {
+    if (typeof ReimbursementPaymentRepository === "undefined") {
+      throw new Error("ReimbursementPaymentRepository is unavailable");
+    }
+    var rows = ReimbursementPaymentRepository.listAllBySubmissionId(submissionId);
+    var total = 0;
+    for (var i = 0; i < rows.length; i++) {
+      total += Number(rows[i].receivedAmount) || 0;
+    }
+    return total;
+  }
+
+  function assertAuthorizationNotBelowReceived_(submissionId, authorizedAmount) {
+    var paid = sumReceivedForSubmission_(submissionId);
+    var nextAuthorizedAmount = Number(authorizedAmount);
+    if (nextAuthorizedAmount < paid) {
+      throw new Error(
+        "Authorized amount cannot be lower than received payments (received " +
+          paid +
+          ", attempted " +
+          nextAuthorizedAmount +
+          ")"
+      );
+    }
+  }
+
+  function getAll(payload) {
+    return ReimbursementAuthorizationRepository.getAll(payload || {});
+  }
+
+  function getById(payload) {
+    payload = payload || {};
+    return ReimbursementAuthorizationRepository.getById(payload.authorizationId);
+  }
+
+  function getBySubmissionId(payload) {
+    payload = payload || {};
+    var submissionId = String(payload.submissionId || "").trim();
+    if (!submissionId) throw new Error("submissionId is required");
+    return ReimbursementAuthorizationRepository.getBySubmissionId(submissionId);
+  }
+
+  function create(payload) {
+    payload = payload || {};
+    var now = new Date().toISOString();
+    var submissionId = String(payload.submissionId || "").trim();
+    var submission = assertSubmissionAuthorizable_(submissionId);
+    var existing =
+      ReimbursementAuthorizationRepository.getBySubmissionId(submissionId);
+    if (existing) {
+      throw new Error(
+        "Claim already authorized (" +
+          existing.authorizationId +
+          "). Update the existing authorization instead."
+      );
+    }
+
+    var authorizedAmount =
+      payload.authorizedAmount != null
+        ? payload.authorizedAmount
+        : submission.claimAmount;
+    var draft = {
+      submissionId: submissionId,
+      authorizedAmount: authorizedAmount,
+      currency: payload.currency || submission.currency || "NGN",
+      authorizedAt: payload.authorizedAt || now,
+      authorizedBy: payload.authorizedBy,
+      authorityReference: payload.authorityReference,
+      notes: payload.notes,
+      recordedAt: payload.recordedAt || now,
+    };
+    validateAuthorizationShape_(draft, "create");
+    var created = ReimbursementAuthorizationRepository.create(draft);
+    if (
+      typeof ReportingSnapshotService !== "undefined" &&
+      ReportingSnapshotService.notifyDomainChanged
+    ) {
+      ReportingSnapshotService.notifyDomainChanged(
+        "reimbursement-authorizations"
+      );
+    }
+    return created;
+  }
+
+  function update(payload) {
+    payload = payload || {};
+    var authorizationId = String(payload.authorizationId || "").trim();
+    if (!authorizationId) throw new Error("authorizationId is required");
+    var current =
+      ReimbursementAuthorizationRepository.getById(authorizationId);
+    if (!current) {
+      throw new Error("Authorization not found: " + authorizationId);
+    }
+    assertSubmissionAuthorizable_(
+      String(
+        payload.submissionId != null
+          ? payload.submissionId
+          : current.submissionId
+      ).trim()
+    );
+    var merged = {
+      authorizationId: current.authorizationId,
+      submissionId:
+        payload.submissionId != null
+          ? payload.submissionId
+          : current.submissionId,
+      authorizedAmount:
+        payload.authorizedAmount !== undefined
+          ? payload.authorizedAmount
+          : current.authorizedAmount,
+      currency:
+        payload.currency != null ? payload.currency : current.currency,
+      authorizedAt:
+        payload.authorizedAt != null
+          ? payload.authorizedAt
+          : current.authorizedAt,
+      authorizedBy:
+        payload.authorizedBy != null
+          ? payload.authorizedBy
+          : current.authorizedBy,
+      authorityReference:
+        payload.authorityReference !== undefined
+          ? payload.authorityReference
+          : current.authorityReference,
+      notes: payload.notes !== undefined ? payload.notes : current.notes,
+      recordedAt: current.recordedAt,
+    };
+    validateAuthorizationShape_(merged, "update");
+    assertAuthorizationNotBelowReceived_(
+      String(merged.submissionId || "").trim(),
+      merged.authorizedAmount
+    );
+    var updated = ReimbursementAuthorizationRepository.update(
+      authorizationId,
+      payload
+    );
+    if (
+      typeof ReportingSnapshotService !== "undefined" &&
+      ReportingSnapshotService.notifyDomainChanged
+    ) {
+      ReportingSnapshotService.notifyDomainChanged(
+        "reimbursement-authorizations"
+      );
+    }
+    return updated;
+  }
+
+  return {
+    getAll: getAll,
+    getById: getById,
+    getBySubmissionId: getBySubmissionId,
+    create: create,
+    update: update,
+  };
+})();
+```
+
+======================================
+FILE:
 ReimbursementPaymentService.gs
 ======================================
 
@@ -8674,6 +9280,7 @@ ReimbursementPaymentService.gs
  * ReimbursementPaymentService.gs
  *
  * Business rules for reimbursement payment receipts against CostSubmission.
+ * Cumulative receipts must never exceed authorizedAmount.
  */
 
 var ReimbursementPaymentService = (function () {
@@ -8722,6 +9329,67 @@ var ReimbursementPaymentService = (function () {
     }
   }
 
+  function requireAuthorization_(submissionId) {
+    if (typeof ReimbursementAuthorizationRepository === "undefined") {
+      throw new Error("ReimbursementAuthorizationRepository is unavailable");
+    }
+    var authorization =
+      ReimbursementAuthorizationRepository.getBySubmissionId(submissionId);
+    if (!authorization) {
+      throw new Error(
+        "Authorize this claim before recording payment receipts"
+      );
+    }
+    var authorizedAmount = Number(authorization.authorizedAmount);
+    if (!isFinite(authorizedAmount) || authorizedAmount <= 0) {
+      throw new Error("Authorization has no valid authorizedAmount");
+    }
+    return authorization;
+  }
+
+  function sumExistingPayments_(submissionId, excludePaymentId) {
+    var rows = ReimbursementPaymentRepository.listAllBySubmissionId(
+      submissionId
+    );
+    var paid = 0;
+    var exclude = excludePaymentId ? String(excludePaymentId).trim() : "";
+    for (var i = 0; i < rows.length; i++) {
+      if (exclude && String(rows[i].paymentId || "") === exclude) continue;
+      paid += Number(rows[i].receivedAmount) || 0;
+    }
+    return paid;
+  }
+
+  /**
+   * Source of truth: existing payments + incoming amount must not exceed
+   * authorizedAmount. Exact outstanding payment is allowed.
+   */
+  function assertWithinAuthorizedAmount_(
+    submissionId,
+    incomingAmount,
+    excludePaymentId
+  ) {
+    var authorization = requireAuthorization_(submissionId);
+    var authorizedAmount = Number(authorization.authorizedAmount);
+    var alreadyPaid = sumExistingPayments_(submissionId, excludePaymentId);
+    var incoming = Number(incomingAmount);
+    var outstanding = authorizedAmount - alreadyPaid;
+    var nextTotal = alreadyPaid + incoming;
+
+    if (!isFinite(incoming) || incoming <= 0) {
+      throw new Error("receivedAmount must be a positive number");
+    }
+    if (nextTotal > authorizedAmount) {
+      throw new Error(
+        "Payment exceeds outstanding authorized amount (outstanding " +
+          Math.max(0, outstanding) +
+          ", attempted " +
+          incoming +
+          ")"
+      );
+    }
+  }
+
   function assertSubmissionExists_(submissionId) {
     if (typeof CostSubmissionRepository === "undefined") {
       throw new Error("CostSubmissionRepository is unavailable");
@@ -8736,6 +9404,7 @@ var ReimbursementPaymentService = (function () {
         "Payments can only be recorded against submitted or queried submissions"
       );
     }
+    requireAuthorization_(submissionId);
     return submission;
   }
 
@@ -8764,7 +9433,13 @@ var ReimbursementPaymentService = (function () {
       recordedBy: payload.recordedBy,
     };
     validatePaymentShape_(draft, "create");
-    assertSubmissionExists_(String(draft.submissionId).trim());
+    var submissionId = String(draft.submissionId).trim();
+    assertSubmissionExists_(submissionId);
+    assertWithinAuthorizedAmount_(
+      submissionId,
+      draft.receivedAmount,
+      null
+    );
     var created = ReimbursementPaymentRepository.create(draft);
     if (
       typeof ReportingSnapshotService !== "undefined" &&
@@ -8808,7 +9483,13 @@ var ReimbursementPaymentService = (function () {
         payload.recordedBy != null ? payload.recordedBy : current.recordedBy,
     };
     validatePaymentShape_(merged, "update");
-    assertSubmissionExists_(String(merged.submissionId).trim());
+    var submissionId = String(merged.submissionId).trim();
+    assertSubmissionExists_(submissionId);
+    assertWithinAuthorizedAmount_(
+      submissionId,
+      merged.receivedAmount,
+      paymentId
+    );
     var updated = ReimbursementPaymentRepository.update(paymentId, payload);
     if (
       typeof ReportingSnapshotService !== "undefined" &&
@@ -12659,6 +13340,79 @@ var OperationalWorkloadController = (function () {
       return jsonResponse_(
         false,
         error.message || "Operational workload request failed.",
+        null
+      );
+    }
+  }
+
+  return {
+    handle: handle,
+  };
+})();
+```
+
+======================================
+FILE:
+ReimbursementAuthorizationsController.gs
+======================================
+
+```javascript
+/**
+ * ReimbursementAuthorizationsController.gs
+ *
+ * Entry for module/resource === "reimbursement-authorizations".
+ */
+
+var ReimbursementAuthorizationsController = (function () {
+  function handle(action, payload) {
+    try {
+      switch (String(action || "getAll")) {
+        case "getAll":
+          return jsonResponse_(
+            true,
+            "Reimbursement authorizations retrieved.",
+            ReimbursementAuthorizationService.getAll(payload)
+          );
+
+        case "getById":
+          return jsonResponse_(
+            true,
+            "Reimbursement authorization retrieved.",
+            ReimbursementAuthorizationService.getById(payload)
+          );
+
+        case "getBySubmissionId":
+          return jsonResponse_(
+            true,
+            "Reimbursement authorization retrieved.",
+            ReimbursementAuthorizationService.getBySubmissionId(payload)
+          );
+
+        case "create":
+          return jsonResponse_(
+            true,
+            "Reimbursement authorization recorded.",
+            ReimbursementAuthorizationService.create(payload)
+          );
+
+        case "update":
+          return jsonResponse_(
+            true,
+            "Reimbursement authorization updated.",
+            ReimbursementAuthorizationService.update(payload)
+          );
+
+        default:
+          return jsonResponse_(
+            false,
+            "Unknown reimbursement-authorizations action: " + action,
+            null
+          );
+      }
+    } catch (error) {
+      return jsonResponse_(
+        false,
+        error.message || "Reimbursement authorizations request failed.",
         null
       );
     }

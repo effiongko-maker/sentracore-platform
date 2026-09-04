@@ -24,36 +24,43 @@ export function FinanceHeader({
     <header className="fin-v13-header">
       <div className="fin-v13-header-row">
         <div className="min-w-0">
-          <p className="fin-eyebrow">Finance</p>
-          <h1 className="fin-title fin-title--compact">
-            Operational financial position
-          </h1>
+          <h1 className="fin-title fin-title--compact">Finance</h1>
           <p className="fin-lede fin-lede--compact">
-            Operational spend, reimbursement preparation, and client
-            authorisation.
+            Track operational costs, submit reimbursement claims, and record
+            client payments.
           </p>
           {asOf ? (
             <p className="fin-v13-asof">In view as of {asOf}</p>
           ) : null}
         </div>
         <div className="fin-v13-actions">
-          <Button type="button" size="sm" onClick={onRecordCost} disabled={loading}>
+          <Button
+            type="button"
+            size="sm"
+            onClick={onRecordCost}
+            disabled={loading}
+          >
             <Plus className="h-4 w-4" />
             Record cost
           </Button>
+          <Link
+            href="/finance/submissions/new"
+            className="fin-v13-btn-secondary"
+            aria-disabled={loading || undefined}
+          >
+            <Plus className="h-4 w-4" />
+            Create reimbursement claim
+          </Link>
           <Button
             type="button"
             variant="ghost"
             size="sm"
             onClick={onRefresh}
             disabled={loading}
+            aria-label="Refresh finance data"
           >
             <RefreshCw className="h-4 w-4" />
-            Refresh
           </Button>
-          <Link href="/approvals" className="fin-v13-text-action">
-            Client authorisations
-          </Link>
         </div>
       </div>
     </header>
@@ -76,30 +83,38 @@ export function FinanceSummaryRow({
   loading: boolean;
 }) {
   return (
-    <section className="fin-v13-summary" aria-label="Financial summary">
-      <div className="fin-v13-summary-item">
-        <p className="fin-v13-metric-label">
-          Operational spend{spendIsSample ? " (sample)" : ""}
-        </p>
-        <p className="fin-v13-metric-value">{operationalSpendLabel}</p>
+    <section
+      className="fin-v13-glance"
+      aria-label="Finance at a glance"
+    >
+      <div className="fin-v13-section-head fin-v13-section-head--tight">
+        <h2 className="fin-v13-section-title">Finance at a glance</h2>
       </div>
-      <div className="fin-v13-summary-item">
-        <p className="fin-v13-metric-label">Costs recorded</p>
-        <p className="fin-v13-metric-value">
-          {loading ? "—" : costRecordsTotal}
-        </p>
-      </div>
-      <div className="fin-v13-summary-item">
-        <p className="fin-v13-metric-label">Reimbursement in preparation</p>
-        <p className="fin-v13-metric-value">
-          {loading ? "—" : reimbursementsInPreparation}
-        </p>
-      </div>
-      <div className="fin-v13-summary-item">
-        <p className="fin-v13-metric-label">Client authorisations</p>
-        <p className="fin-v13-metric-value">
-          {loading ? "—" : clientAuthorisationsTotal}
-        </p>
+      <div className="fin-v13-summary fin-v13-summary--cards">
+        <div className="fin-v13-summary-item">
+          <p className="fin-v13-metric-label">
+            Operational spend{spendIsSample ? " (sample)" : ""}
+          </p>
+          <p className="fin-v13-metric-value">{operationalSpendLabel}</p>
+        </div>
+        <div className="fin-v13-summary-item">
+          <p className="fin-v13-metric-label">Costs recorded</p>
+          <p className="fin-v13-metric-value">
+            {loading ? "—" : costRecordsTotal}
+          </p>
+        </div>
+        <div className="fin-v13-summary-item">
+          <p className="fin-v13-metric-label">Reimbursement</p>
+          <p className="fin-v13-metric-value">
+            {loading ? "—" : reimbursementsInPreparation}
+          </p>
+        </div>
+        <div className="fin-v13-summary-item">
+          <p className="fin-v13-metric-label">Client authorisations</p>
+          <p className="fin-v13-metric-value">
+            {loading ? "—" : clientAuthorisationsTotal}
+          </p>
+        </div>
       </div>
     </section>
   );

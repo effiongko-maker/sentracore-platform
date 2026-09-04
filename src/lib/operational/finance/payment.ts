@@ -81,6 +81,59 @@ export function sumPaymentsForSubmission(
     .reduce((sum, payment) => sum + (payment.receivedAmount || 0), 0);
 }
 
+/**
+ * Cumulative payment ceiling against authorizedAmount.
+ * Exact payment (incoming === outstanding) is allowed; any excess is rejected.
+ */
+export function evaluatePaymentAgainstAuthorizedAmount(options: {
+  authorizedAmount: number;
+  alreadyPaid: number;
+  incomingAmount: number;
+}):
+  | { allowed: true; outstanding: number; nextTotal: number }
+  | {
+      allowed: false;
+      outstanding: number;
+      nextTotal: number;
+      message: string;
+    } {
+  const authorizedAmount = Number(options.authorizedAmount);
+  const alreadyPaid = Math.max(0, Number(options.alreadyPaid) || 0);
+  const incomingAmount = Number(options.incomingAmount);
+  const outstanding = authorizedAmount - alreadyPaid;
+  const nextTotal = alreadyPaid + incomingAmount;
+
+  if (!Number.isFinite(authorizedAmount) || authorizedAmount <= 0) {
+    return {
+      allowed: false,
+      outstanding,
+      nextTotal,
+      message: "Authorization has no valid authorizedAmount",
+    };
+  }
+  if (!Number.isFinite(incomingAmount) || incomingAmount <= 0) {
+    return {
+      allowed: false,
+      outstanding: Math.max(0, outstanding),
+      nextTotal,
+      message: "receivedAmount must be a positive number",
+    };
+  }
+  if (nextTotal > authorizedAmount) {
+    return {
+      allowed: false,
+      outstanding: Math.max(0, outstanding),
+      nextTotal,
+      message: `Payment exceeds outstanding authorized amount (outstanding ${Math.max(0, outstanding)}, attempted ${incomingAmount})`,
+    };
+  }
+  return {
+    allowed: true,
+    outstanding: Math.max(0, outstanding),
+    nextTotal,
+  };
+}
+
 export function paymentAppliesToSubmission(
   payment: Pick<ReimbursementPayment, "submissionId">,
   submissionId: string

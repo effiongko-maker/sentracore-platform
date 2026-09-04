@@ -8,6 +8,9 @@ export type {
   WorkspaceWorkSummary,
   AttentionMatter,
   AttentionModel,
+  OperationalNotification,
+  OperationalNotificationFeed,
+  OperationalNotificationKind,
 } from "./types";
 export { WORKSPACE_QUICK_ACTIONS } from "./constants";
 export {
@@ -16,6 +19,10 @@ export {
   countCriticalWork,
   countLegacyCriticalIncidents,
 } from "./attention";
+export {
+  OPERATIONAL_NOTIFICATION_LIMIT,
+  deriveOperationalNotifications,
+} from "./utils/deriveOperationalNotifications";
 export {
   WORKSPACE_INCIDENT_COMPAT,
   WORKSPACE_INCIDENT_RETARGET_PHASE,

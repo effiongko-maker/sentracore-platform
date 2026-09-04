@@ -29,11 +29,17 @@ import {
   type UpdateCostRecordInput,
 } from "@/services/finance/CostRecordService";
 import { CostSubmissionService } from "@/services/finance/CostSubmissionService";
+import { ReimbursementAuthorizationService } from "@/services/finance/ReimbursementAuthorizationService";
 import { ReimbursementPaymentService } from "@/services/finance/ReimbursementPaymentService";
 import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
 import { COST_REIMBURSABILITY_LABELS } from "../constants";
+import { MonetaryInput } from "./MonetaryInput";
 import { formatFinancialAmount } from "../utils/formatFinancialAmount";
+import {
+  formatMonetaryFromNumber,
+  parseMonetaryInput,
+} from "../utils/monetaryInput";
 import {
   deriveCostWorkflow,
   findSubmissionForCost,
@@ -43,7 +49,10 @@ import {
   summarizeSubmissionPayments,
 } from "../utils/submissionPayment";
 import { SUBMISSION_LIFECYCLE_LABELS } from "../utils/submissionLifecycle";
-import type { ReimbursementPayment } from "@/lib/operational/finance/types";
+import type {
+  ReimbursementAuthorization,
+  ReimbursementPayment,
+} from "@/lib/operational/finance/types";
 
 type RelatedLink = "none" | "work" | "work_order";
 
@@ -75,10 +84,7 @@ function formatTimestamp(iso?: string): string {
 }
 
 function parseOptionalAmount(value: string): number | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  const amount = Number(trimmed);
-  return Number.isFinite(amount) ? amount : undefined;
+  return parseMonetaryInput(value);
 }
 
 function formFromRecord(record: CostRecord): ClassificationForm {
@@ -90,9 +96,11 @@ function formFromRecord(record: CostRecord): ClassificationForm {
   return {
     description: record.description,
     category: record.category,
-    actualAmount: String(record.actualAmount),
+    actualAmount: formatMonetaryFromNumber(record.actualAmount),
     budgetedAmount:
-      record.budgetedAmount != null ? String(record.budgetedAmount) : "",
+      record.budgetedAmount != null
+        ? formatMonetaryFromNumber(record.budgetedAmount)
+        : "",
     facilityId: record.facilityId,
     location: record.location,
     departmentId: record.departmentId ?? "",
@@ -121,6 +129,9 @@ export function CostDetailPage({ costId }: { costId: string }) {
   const [linkedPayments, setLinkedPayments] = useState<ReimbursementPayment[]>(
     []
   );
+  const [linkedAuthorizations, setLinkedAuthorizations] = useState<
+    ReimbursementAuthorization[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -141,15 +152,21 @@ export function CostDetailPage({ costId }: { costId: string }) {
     setLoading(true);
     setError(null);
     try {
-      const [cost, submissionsPage, paymentsPage] = await Promise.all([
-        CostRecordService.getCostRecord(costId),
-        CostSubmissionService.listCostSubmissions({ page: 1, pageSize: 100 }),
-        ReimbursementPaymentService.listPayments({ page: 1, pageSize: 100 }),
-      ]);
+      const [cost, submissionsPage, paymentsPage, authorizationsPage] =
+        await Promise.all([
+          CostRecordService.getCostRecord(costId),
+          CostSubmissionService.listCostSubmissions({ page: 1, pageSize: 100 }),
+          ReimbursementPaymentService.listPayments({ page: 1, pageSize: 100 }),
+          ReimbursementAuthorizationService.listAuthorizations({
+            page: 1,
+            pageSize: 100,
+          }),
+        ]);
       if (!cost) {
         setRecord(null);
         setLinkedSubmission(null);
         setLinkedPayments([]);
+        setLinkedAuthorizations([]);
         setError("This cost could not be found.");
         return;
       }
@@ -165,12 +182,20 @@ export function CostDetailPage({ costId }: { costId: string }) {
             )
           : []
       );
+      setLinkedAuthorizations(
+        linked
+          ? authorizationsPage.data.filter(
+              (row) => row.submissionId === linked.submissionId
+            )
+          : []
+      );
       setForm(formFromRecord(cost));
       setEditing(cost.reimbursability === "unknown");
     } catch (err) {
       setRecord(null);
       setLinkedSubmission(null);
       setLinkedPayments([]);
+      setLinkedAuthorizations([]);
       setError(
         err instanceof Error ? err.message : "Unable to load this cost."
       );
@@ -256,8 +281,12 @@ export function CostDetailPage({ costId }: { costId: string }) {
 
   const paymentSummary = useMemo(() => {
     if (!linkedSubmission) return null;
-    return summarizeSubmissionPayments(linkedSubmission, linkedPayments);
-  }, [linkedSubmission, linkedPayments]);
+    return summarizeSubmissionPayments(
+      linkedSubmission,
+      linkedPayments,
+      linkedAuthorizations
+    );
+  }, [linkedSubmission, linkedPayments, linkedAuthorizations]);
 
   const workflow = useMemo(
     () =>
@@ -338,6 +367,11 @@ export function CostDetailPage({ costId }: { costId: string }) {
     const actualAmount = parseOptionalAmount(form.actualAmount);
     if (actualAmount == null) return;
 
+    const selectedWorkId =
+      form.relatedLink === "work" ? form.workId.trim() : "";
+    const selectedWorkOrderId =
+      form.relatedLink === "work_order" ? form.workOrderId.trim() : "";
+
     const payload: UpdateCostRecordInput = {
       facilityId: form.facilityId.trim(),
       location: form.location.trim(),
@@ -346,11 +380,28 @@ export function CostDetailPage({ costId }: { costId: string }) {
       actualAmount,
       reimbursability: form.reimbursability,
       evidence: { reference: form.evidenceReference.trim() },
-      departmentId: form.departmentId.trim() || "",
-      workId: form.relatedLink === "work" ? form.workId.trim() : "",
-      workOrderId:
-        form.relatedLink === "work_order" ? form.workOrderId.trim() : "",
     };
+
+    if (form.departmentId.trim()) {
+      payload.departmentId = form.departmentId.trim();
+    } else if (record.departmentId) {
+      // Clear only when a previous department must be removed.
+      payload.departmentId = "";
+    }
+
+    // Persist the active operational link ID. Never send empty workId/workOrderId
+    // unless clearing a previously stored value (empty means "clear" on update).
+    if (selectedWorkId) {
+      payload.workId = selectedWorkId;
+    } else if (record.workId) {
+      payload.workId = "";
+    }
+
+    if (selectedWorkOrderId) {
+      payload.workOrderId = selectedWorkOrderId;
+    } else if (record.workOrderId) {
+      payload.workOrderId = "";
+    }
 
     const budgetedAmount = parseOptionalAmount(form.budgetedAmount);
     if (budgetedAmount != null) payload.budgetedAmount = budgetedAmount;
@@ -714,17 +765,11 @@ export function CostDetailPage({ costId }: { costId: string }) {
               required
               error={errors.actualAmount}
             >
-              <input
+              <MonetaryInput
                 id="cost-edit-actual"
-                type="number"
-                min={0}
-                step="0.01"
-                className={inputClassName}
                 value={form.actualAmount}
                 disabled={saving}
-                onChange={(event) =>
-                  updateField("actualAmount", event.target.value)
-                }
+                onValueChange={(next) => updateField("actualAmount", next)}
               />
             </FormField>
 
@@ -733,17 +778,11 @@ export function CostDetailPage({ costId }: { costId: string }) {
               htmlFor="cost-edit-budgeted"
               error={errors.budgetedAmount}
             >
-              <input
+              <MonetaryInput
                 id="cost-edit-budgeted"
-                type="number"
-                min={0}
-                step="0.01"
-                className={inputClassName}
                 value={form.budgetedAmount}
                 disabled={saving}
-                onChange={(event) =>
-                  updateField("budgetedAmount", event.target.value)
-                }
+                onValueChange={(next) => updateField("budgetedAmount", next)}
               />
             </FormField>
 

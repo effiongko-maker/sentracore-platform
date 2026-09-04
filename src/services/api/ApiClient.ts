@@ -131,6 +131,12 @@ export class ApiClient {
                                     endpoint: "/api/reimbursement-payments",
                                     resource: "reimbursement-payments",
                                   }
+                                : path === "/reimbursement-authorizations"
+                                  ? {
+                                      endpoint:
+                                        "/api/reimbursement-authorizations",
+                                      resource: "reimbursement-authorizations",
+                                    }
                           : null;
 
     if (liveProxy) {
