@@ -23,6 +23,7 @@ export function MasterDataTable({
   onView,
   onEdit,
   onDeactivate,
+  canMutate = true,
 }: {
   entity: MasterDataEntity;
   items: MasterDataItem[];
@@ -34,6 +35,7 @@ export function MasterDataTable({
   onView: (item: MasterDataItem) => void;
   onEdit: (item: MasterDataItem) => void;
   onDeactivate: (item: MasterDataItem) => void;
+  canMutate?: boolean;
 }) {
   const { facilities, buildings, floors, ready } =
     useMasterDataRelationMaps(true);
@@ -135,6 +137,7 @@ export function MasterDataTable({
             onView={() => onView(item)}
             onEdit={() => onEdit(item)}
             onDeactivate={() => onDeactivate(item)}
+            canMutate={canMutate}
           />
         ),
       }
@@ -150,6 +153,7 @@ export function MasterDataTable({
     onView,
     onEdit,
     onDeactivate,
+    canMutate,
   ]);
 
   return (

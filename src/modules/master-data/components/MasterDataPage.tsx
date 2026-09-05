@@ -1,5 +1,6 @@
 "use client";
 
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { Database } from "lucide-react";
 import { useState } from "react";
 import {
@@ -22,6 +23,9 @@ import { ViewMasterDataModal } from "./ViewMasterDataModal";
 
 export function MasterDataPage() {
   const { toast } = useToast();
+  const { can } = useOperatingAccess();
+  const canCreateOps = can("ops.create");
+  const canMutateOps = can("ops.edit");
   const [entity, setEntity] = useState<MasterDataEntity>("departments");
   const {
     items,
@@ -126,6 +130,7 @@ export function MasterDataPage() {
         loading={loading}
         onClearAll={clearAll}
         onCreate={() => setModal({ type: "create" })}
+        canCreate={canCreateOps}
         createLabel={`New ${singular.toLowerCase()}`}
       />
 
@@ -140,6 +145,7 @@ export function MasterDataPage() {
       ) : (
         <StreamSurface>
           <MasterDataTable
+            canMutate={canMutateOps}
             entity={entity}
             items={items}
             loading={loading}

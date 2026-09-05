@@ -1,350 +1,224 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
-import { createPortal } from "react-dom";
+import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
   Building2,
   CalendarDays,
-  CircleDot,
-  ClipboardList,
+  Database,
   HardHat,
   Headphones,
-  Package,
+  Layers,
+  Lock,
+  Network,
+  Scale,
   TrendingUp,
-  Wrench,
-  X,
   type LucideIcon,
 } from "lucide-react";
 import {
-  getActiveWorkspace,
   PLATFORM_WORKSPACES,
   type PlatformWorkspace,
   type WorkspaceId,
+  type WorkspaceStatus,
 } from "@/lib/platform/workspaces";
 import { cn } from "@/lib/utils";
 
-const ACTIVE_CAPABILITIES: {
+/** Platform Home display order — FM first, then remaining catalog environments. */
+const ENVIRONMENT_DISPLAY_ORDER: WorkspaceId[] = [
+  "operations",
+  "finance",
+  "ecc-operations",
+  "construction",
+  "projects-events",
+];
+
+const ENV_ICON: Record<WorkspaceId, LucideIcon> = {
+  operations: Building2,
+  finance: TrendingUp,
+  "ecc-operations": Headphones,
+  construction: HardHat,
+  "projects-events": CalendarDays,
+};
+
+const PLATFORM_PILLARS: Array<{
   label: string;
   detail: string;
   icon: LucideIcon;
-}[] = [
+}> = [
   {
-    label: "Facilities",
-    detail: "Locations, spaces and occupancy",
-    icon: Building2,
+    label: "Connected",
+    detail: "A unified view across operating environments",
+    icon: Network,
   },
   {
-    label: "Assets",
-    detail: "Equipment, systems and inventory",
-    icon: Package,
+    label: "Secure",
+    detail: "Role-based access with clear accountability",
+    icon: Lock,
   },
   {
-    label: "Issues",
-    detail: "What needs attention across the estate",
-    icon: CircleDot,
-  },
-  {
-    label: "Work",
-    detail: "Active work in progress",
-    icon: Wrench,
-  },
-  {
-    label: "Work Orders",
-    detail: "Assigned and in-progress work",
-    icon: ClipboardList,
+    label: "Scalable",
+    detail: "Designed for growth and new capabilities",
+    icon: Scale,
   },
 ];
 
-const ENV_VISUAL: Record<
-  Exclude<WorkspaceId, "operations">,
-  { icon: LucideIcon; tone: "blue" | "green" | "amber" | "violet" }
-> = {
-  "ecc-operations": { icon: Headphones, tone: "blue" },
-  finance: { icon: TrendingUp, tone: "green" },
-  construction: { icon: HardHat, tone: "amber" },
-  "projects-events": { icon: CalendarDays, tone: "violet" },
-};
+const HERO_VISUAL_SRC = "/platform/hero-architecture.jpg";
 
-function PlatformSignal() {
+function orderedEnvironments(): PlatformWorkspace[] {
+  const byId = new Map(PLATFORM_WORKSPACES.map((w) => [w.id, w]));
+  const ordered: PlatformWorkspace[] = [];
+  for (const id of ENVIRONMENT_DISPLAY_ORDER) {
+    const workspace = byId.get(id);
+    if (workspace) ordered.push(workspace);
+  }
+  for (const workspace of PLATFORM_WORKSPACES) {
+    if (!ENVIRONMENT_DISPLAY_ORDER.includes(workspace.id)) {
+      ordered.push(workspace);
+    }
+  }
+  return ordered;
+}
+
+function statusTone(status: WorkspaceStatus): "live" | "dev" | "planned" {
+  if (status === "active") return "live";
+  if (status === "in_development") return "dev";
+  return "planned";
+}
+
+function statusBadgeLabel(workspace: PlatformWorkspace): string {
+  if (workspace.status === "active") return "Live";
+  return workspace.statusLabel;
+}
+
+function EnvironmentCard({ workspace }: { workspace: PlatformWorkspace }) {
+  const Icon = ENV_ICON[workspace.id] ?? Database;
+  const tone = statusTone(workspace.status);
+  const isLive = workspace.status === "active";
+  const enterHref = workspace.href;
+
   return (
-    <div className="sc-ph-signal" aria-hidden>
-      <div className="sc-ph-signal-glow" />
-      <div className="sc-ph-signal-stage">
-        <span className="sc-ph-signal-plane is-1" />
-        <span className="sc-ph-signal-plane is-2" />
-        <span className="sc-ph-signal-plane is-3 is-accent">
-          <span className="sc-ph-signal-spark s1" />
-          <span className="sc-ph-signal-spark s2" />
-          <span className="sc-ph-signal-spark s3" />
+    <article
+      className={cn(
+        "sc-ph-env",
+        isLive ? "sc-ph-env-live" : "sc-ph-env-quiet"
+      )}
+    >
+      <p className={cn("sc-ph-env-status", `sc-ph-env-status-${tone}`)}>
+        <span className="sc-ph-env-status-dot" aria-hidden />
+        {statusBadgeLabel(workspace)}
+      </p>
+      <div className="sc-ph-env-heading">
+        <span className="sc-ph-env-icon" aria-hidden>
+          <Icon className="h-4 w-4" strokeWidth={1.75} />
         </span>
-        <span className="sc-ph-signal-plane is-4" />
-        <span className="sc-ph-signal-plane is-5" />
+        <h3 className="sc-ph-env-title">{workspace.title}</h3>
       </div>
+      <p className="sc-ph-env-desc">{workspace.description}</p>
+      {isLive && enterHref ? (
+        <Link href={enterHref} className="sc-ph-env-cta">
+          Enter {workspace.title}
+          <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+        </Link>
+      ) : (
+        <span className="sc-ph-env-soon" aria-disabled="true">
+          Coming soon
+        </span>
+      )}
+    </article>
+  );
+}
+
+function PlatformHeroVisual() {
+  return (
+    <div className="sc-ph-hero-visual">
+      <Image
+        src={HERO_VISUAL_SRC}
+        alt="Architectural glass towers with People, Places, Operations, Possibilities — a more connected tomorrow."
+        fill
+        priority
+        sizes="(min-width: 960px) min(28rem, 38vw), (min-width: 640px) 90vw, 100vw"
+        className="sc-ph-hero-image"
+      />
     </div>
   );
 }
 
-function GateBlueprint() {
-  return (
-    <svg
-      className="sc-ph-gate-blueprint"
-      viewBox="0 0 420 280"
-      fill="none"
-      aria-hidden
-    >
-      <g stroke="currentColor" strokeWidth="1">
-        <path d="M40 240 L40 110 L120 70 L200 110 L200 240 Z" opacity="0.55" />
-        <path d="M120 70 L120 240" opacity="0.35" />
-        <path d="M40 150 L200 150" opacity="0.3" />
-        <path d="M40 190 L200 190" opacity="0.25" />
-        <rect x="70" y="165" width="28" height="22" opacity="0.4" />
-        <rect x="130" y="165" width="28" height="22" opacity="0.4" />
-        <rect x="70" y="205" width="28" height="35" opacity="0.45" />
-        <rect x="130" y="205" width="28" height="35" opacity="0.45" />
-
-        <path d="M210 240 L210 95 L290 55 L370 95 L370 240 Z" opacity="0.7" />
-        <path d="M290 55 L290 240" opacity="0.4" />
-        <path d="M210 135 L370 135" opacity="0.35" />
-        <path d="M210 175 L370 175" opacity="0.3" />
-        <path d="M210 210 L370 210" opacity="0.28" />
-        <rect x="235" y="150" width="30" height="20" opacity="0.5" />
-        <rect x="285" y="150" width="30" height="20" opacity="0.5" />
-        <rect x="335" y="150" width="20" height="20" opacity="0.45" />
-        <rect x="235" y="185" width="30" height="20" opacity="0.45" />
-        <rect x="285" y="185" width="30" height="20" opacity="0.45" />
-        <rect x="250" y="215" width="40" height="25" opacity="0.55" />
-
-        <path d="M160 240 L160 130 L210 100" opacity="0.25" />
-        <circle cx="290" cy="95" r="3" fill="currentColor" opacity="0.5" />
-        <circle cx="120" cy="90" r="2.5" fill="currentColor" opacity="0.35" />
-      </g>
-    </svg>
-  );
-}
-
-function EnvironmentCard({
-  workspace,
-  onOpen,
-}: {
-  workspace: PlatformWorkspace;
-  onOpen: (workspace: PlatformWorkspace) => void;
-}) {
-  const visual = ENV_VISUAL[workspace.id as Exclude<WorkspaceId, "operations">];
-  const Icon = visual.icon;
-  const developing = workspace.status === "in_development";
-
-  return (
-    <button
-      type="button"
-      className={cn(
-        "sc-ph-card",
-        `sc-ph-card-${visual.tone}`,
-        developing ? "sc-ph-card-strong" : "sc-ph-card-quiet"
-      )}
-      onClick={() => onOpen(workspace)}
-    >
-      <div className="sc-ph-card-top">
-        <span className="sc-ph-card-icon" aria-hidden>
-          <Icon className="h-4 w-4" />
-        </span>
-        <span className="sc-ph-card-status">{workspace.statusLabel}</span>
-      </div>
-      <h3 className="sc-ph-card-title">{workspace.title}</h3>
-      <p className="sc-ph-card-desc">{workspace.description}</p>
-      {workspace.capabilities?.length ? (
-        <ul className="sc-ph-card-tags">
-          {workspace.capabilities.map((tag) => (
-            <li key={tag}>{tag}</li>
-          ))}
-        </ul>
-      ) : null}
-      {workspace.statusDetail ? (
-        <p className="sc-ph-card-footer">
-          <span>{workspace.statusLabel}</span>
-          <span aria-hidden> — </span>
-          <span>{workspace.statusDetail}</span>
-        </p>
-      ) : null}
-    </button>
-  );
-}
-
-function EnvironmentPanel({
-  workspace,
-  onClose,
-}: {
-  workspace: PlatformWorkspace;
-  onClose: () => void;
-}) {
-  const [mounted, setMounted] = useState(false);
-  const titleId = useId();
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-    };
-  }, [onClose]);
-
-  if (!mounted) return null;
-
-  return createPortal(
-    <div className="sc-ph-panel-root">
-      <button
-        type="button"
-        className="sc-ph-panel-backdrop"
-        aria-label="Close"
-        onClick={onClose}
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="sc-ph-panel"
-      >
-        <button
-          type="button"
-          className="sc-ph-panel-close"
-          onClick={onClose}
-          aria-label="Close"
-        >
-          <X className="h-4 w-4" />
-        </button>
-        <p className="sc-ph-insight-status">{workspace.statusLabel}</p>
-        <h2 id={titleId} className="sc-ph-panel-title">
-          {workspace.title}
-        </h2>
-        <p className="sc-ph-insight-body">{workspace.description}</p>
-        {workspace.statusDetail ? (
-          <p className="sc-ph-insight-meta">{workspace.statusDetail}</p>
-        ) : null}
-      </div>
-    </div>,
-    document.body
-  );
-}
-
 export function PlatformHomePage() {
-  const active = getActiveWorkspace();
-  const others = PLATFORM_WORKSPACES.filter((w) => w.status !== "active");
-  const [selected, setSelected] = useState<PlatformWorkspace | null>(null);
-  const gateId = useId();
+  const environments = orderedEnvironments();
 
   return (
     <div className="sc-ph">
-      <header className="sc-ph-intro">
-        <div className="sc-ph-intro-copy">
+      <header className="sc-ph-hero">
+        <div className="sc-ph-hero-copy">
           <p className="sc-ph-eyebrow">SentraCore Platform</p>
           <h1 className="sc-ph-title">
-            Operate the organisation from one connected platform
+            One platform. Multiple operating environments.
           </h1>
           <p className="sc-ph-lede">
             SentraCore brings specialised operating environments together to
             help the organisation manage activity, information and decisions
             across the business.
           </p>
+
+          <ul className="sc-ph-pillars">
+            {PLATFORM_PILLARS.map((pillar) => {
+              const Icon = pillar.icon;
+              return (
+                <li key={pillar.label} className="sc-ph-pillar">
+                  <span className="sc-ph-pillar-icon" aria-hidden>
+                    <Icon className="h-4 w-4" strokeWidth={1.75} />
+                  </span>
+                  <span className="sc-ph-pillar-copy">
+                    <span className="sc-ph-pillar-label">{pillar.label}</span>
+                    <span className="sc-ph-pillar-detail">{pillar.detail}</span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
         </div>
-        <PlatformSignal />
+        <PlatformHeroVisual />
       </header>
 
-      <section className="sc-ph-gate" aria-labelledby={gateId}>
-        <div className="sc-ph-gate-surface">
-          <div className="sc-ph-gate-main">
-            <GateBlueprint />
-            <div className="sc-ph-gate-main-inner">
-              <p className="sc-ph-gate-badge">
-                <span className="sc-ph-gate-badge-dot" aria-hidden />
-                Active environment
-              </p>
-              <div className="sc-ph-gate-heading">
-                <span className="sc-ph-gate-mark" aria-hidden>
-                  <Building2 className="h-5 w-5" />
-                </span>
-                <h2 id={gateId} className="sc-ph-gate-title">
-                  Facility Management
-                </h2>
-              </div>
-              <p className="sc-ph-gate-desc">{active.description}</p>
-              <Link
-                href={active.href ?? "/operations"}
-                className="sc-ph-gate-cta"
-              >
-                Enter Facility Management
-                <ArrowRight className="h-4 w-4" aria-hidden />
-              </Link>
-            </div>
-          </div>
-
-          <aside className="sc-ph-gate-rail" aria-label="Capabilities">
-            <ul className="sc-ph-capability-list">
-              {ACTIVE_CAPABILITIES.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <li key={item.label} className="sc-ph-capability-item">
-                    <span className="sc-ph-capability-icon" aria-hidden>
-                      <Icon className="h-4 w-4" strokeWidth={1.75} />
-                    </span>
-                    <span className="sc-ph-capability-copy">
-                      <span className="sc-ph-capability-label">{item.label}</span>
-                      <span className="sc-ph-capability-detail">
-                        {item.detail}
-                      </span>
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          </aside>
-        </div>
-      </section>
-
       <section
-        className="sc-ph-ecosystem"
-        aria-labelledby="expanding-platform-heading"
+        className="sc-ph-environments"
+        aria-labelledby="operating-environments-heading"
+        id="operating-environments"
       >
-        <div className="sc-ph-ecosystem-header">
-          <div>
-            <h2
-              id="expanding-platform-heading"
-              className="sc-ph-section-label"
-            >
-              Expanding the platform
-            </h2>
-            <p className="sc-ph-section-lede">
-              Specialised operating environments are being developed to support
-              the wider work of the organisation.
-            </p>
-          </div>
+        <div className="sc-ph-environments-header">
+          <h2
+            id="operating-environments-heading"
+            className="sc-ph-section-label"
+          >
+            Operating environments
+          </h2>
         </div>
 
-        <div className="sc-ph-card-row">
-          {others.map((workspace) => (
-            <EnvironmentCard
-              key={workspace.id}
-              workspace={workspace}
-              onOpen={setSelected}
-            />
+        <div className="sc-ph-env-grid">
+          {environments.map((workspace) => (
+            <EnvironmentCard key={workspace.id} workspace={workspace} />
           ))}
         </div>
       </section>
 
-      {selected ? (
-        <EnvironmentPanel
-          workspace={selected}
-          onClose={() => setSelected(null)}
-        />
-      ) : null}
+      <section className="sc-ph-next" aria-label="Platform outlook">
+        <div className="sc-ph-next-main">
+          <span className="sc-ph-next-mark" aria-hidden>
+            <Layers className="h-5 w-5" strokeWidth={1.6} />
+          </span>
+          <div>
+            <h2 className="sc-ph-next-title">Built for what&apos;s next.</h2>
+            <p className="sc-ph-next-body">
+              SentraCore is evolving. More specialised operating environments
+              will be added as the organisation grows.
+            </p>
+          </div>
+        </div>
+        <p className="sc-ph-next-aside">
+          Same organisation. A smarter way to operate.
+        </p>
+      </section>
     </div>
   );
 }

@@ -20,6 +20,7 @@ export async function submitOccupantMaintenanceRequest(
   return executeAction({
     name: "occupant.maintenance.request",
     module: "facility_management",
+    requiredCapability: "requests.view",
     input: form,
     handler: async (context, rawInput) => {
       const actor = getOccupantActor();
@@ -52,6 +53,7 @@ export async function submitOccupantIncidentReport(
   return executeAction({
     name: "occupant.incident.report",
     module: "facility_management",
+    requiredCapability: "requests.view",
     input: form,
     handler: async (context, rawInput) => {
       const actor = getOccupantActor();

@@ -1,5 +1,6 @@
 "use client";
 
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { Building2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -21,6 +22,8 @@ import { ViewFacilityModal } from "./ViewFacilityModal";
 
 export function FacilitiesPage() {
   const { toast } = useToast();
+  const { can } = useOperatingAccess();
+  const canMutateOps = can("ops.edit");
   const openId = useQueryRecordId();
   const {
     facilities,
@@ -115,6 +118,7 @@ export function FacilitiesPage() {
       ) : (
         <StreamSurface>
           <FacilitiesTable
+            canMutate={canMutateOps}
             facilities={facilities}
             loading={loading}
             page={page}
@@ -142,7 +146,11 @@ export function FacilitiesPage() {
         open={modal.type === "view"}
         facility={modal.type === "view" ? modal.facility : null}
         onClose={() => setModal({ type: "closed" })}
-        onEdit={(facility) => setModal({ type: "edit", facility })}
+        onEdit={
+          canMutateOps
+            ? (facility) => setModal({ type: "edit", facility })
+            : undefined
+        }
       />
 
       <ConfirmDialog

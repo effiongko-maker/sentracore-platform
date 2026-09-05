@@ -15,10 +15,13 @@ import { FinanceOperationalCostSection } from "./FinanceOperationalCostSection";
 import { FinancePendingActionSection } from "./FinancePendingActionSection";
 import { FinancePositionSection } from "./FinancePositionSection";
 import { FinanceSubmissionsSection } from "./FinanceSubmissionsSection";
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 
 export function FinancePage() {
   const { overview, loading, error, reload } = useFinanceOverview();
   const [costModalOpen, setCostModalOpen] = useState(false);
+  const { can } = useOperatingAccess();
+  const canMutateFinance = can("finance.create");
 
   if (error && !loading && !overview) {
     return (
@@ -57,6 +60,7 @@ export function FinancePage() {
           loading={loading}
           onRefresh={() => void reload()}
           onRecordCost={() => setCostModalOpen(true)}
+          canMutateFinance={canMutateFinance}
         />
 
         <FinancePendingActionSection
@@ -99,7 +103,7 @@ export function FinancePage() {
         </div>
 
         <CostRecordFormModal
-          open={costModalOpen}
+          open={costModalOpen && canMutateFinance}
           onClose={() => setCostModalOpen(false)}
           onSaved={() => void reload()}
         />

@@ -20,6 +20,11 @@ import type {
   WorkspaceSnapshot,
 } from "../types";
 import { FinancialPositionSection } from "./FinancialPositionSection";
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
+import {
+  accessCan,
+  resolveAccessVisibility,
+} from "@/lib/access";
 
 const PRIMARY_ACTION_IDS = [
   "log-issue",
@@ -442,9 +447,19 @@ function OperationalPicture({ pulse }: { pulse: OrganisationalPulse }) {
 }
 
 function NextActions({ actions }: { actions: WorkspaceQuickAction[] }) {
+  const { access, can, loading } = useOperatingAccess();
   const items = PRIMARY_ACTION_IDS.map((id) =>
     actions.find((action) => action.id === id)
   ).filter(Boolean) as WorkspaceQuickAction[];
+
+  const visible = items.filter((action) => {
+    if (loading || !access) return false;
+    if (action.id === "log-issue") return can("ops.create");
+    // Browse WO / facilities — view only
+    return can("ops.view");
+  });
+
+  if (visible.length === 0) return null;
 
   return (
     <section className="sc-fm-actions" aria-labelledby="sc-fm-actions-heading">
@@ -454,7 +469,7 @@ function NextActions({ actions }: { actions: WorkspaceQuickAction[] }) {
       <p className="sc-fm-panel-lede">Take action or explore key areas</p>
 
       <div className="sc-fm-actions-grid">
-        {items.map((action) => {
+        {visible.map((action) => {
           const visual = ACTION_VISUAL[action.id as keyof typeof ACTION_VISUAL];
           const Icon = visual?.icon ?? ClipboardList;
           return (
@@ -480,11 +495,18 @@ function NextActions({ actions }: { actions: WorkspaceQuickAction[] }) {
 }
 
 export function CommandSurface({ snapshot }: { snapshot: WorkspaceSnapshot }) {
+  const { access, loading } = useOperatingAccess();
+  const visibility =
+    !loading && access ? resolveAccessVisibility(access) : null;
+  const showFinance =
+    Boolean(visibility?.surfaces.has("finance")) ||
+    (access ? accessCan(access, "finance.view") : false);
+
   return (
     <ModeFrame mode="command">
       <div className="sc-fm-home">
         <CommandHero snapshot={snapshot} />
-        <FinancialPositionSection />
+        {showFinance ? <FinancialPositionSection /> : null}
         <div className="sc-fm-main">
           <RequiresAttention attention={snapshot.attention} />
           <OperationalPicture pulse={snapshot.pulse} />

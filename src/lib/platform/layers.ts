@@ -18,6 +18,11 @@ import {
 import type { AuthEnabledModule } from "@/lib/auth/types";
 import type { PlatformModuleSlug } from "@/lib/actions/types";
 import { hasModule } from "@/lib/actions/moduleAccess";
+import {
+  canSeeHref,
+  type AccessVisibility,
+} from "@/lib/access/visibility";
+import { FM_FINANCE_HOME } from "@/lib/platform/workspaces";
 
 export type OperatingLayerId =
   | "understand"
@@ -55,8 +60,8 @@ export const OPERATING_LAYERS: OperatingLayer[] = [
     label: "Understand",
     modules: [
       fm({
-        label: "Finance",
-        href: "/finance",
+        label: FM_FINANCE_HOME.label,
+        href: FM_FINANCE_HOME.href,
         icon: Banknote,
         title: "Finance",
         description:
@@ -187,19 +192,29 @@ export const COMMAND_HOME = {
 
 export function filterOperatingLayers(
   layers: OperatingLayer[],
-  enabledModules: AuthEnabledModule[] | null
+  enabledModules: AuthEnabledModule[] | null,
+  visibility?: AccessVisibility | null
 ): OperatingLayer[] {
-  if (!enabledModules) return layers;
+  const moduleFiltered = !enabledModules
+    ? layers
+    : layers
+        .map((layer) => ({
+          ...layer,
+          modules: layer.modules.filter(
+            (mod) =>
+              mod.comingSoon ||
+              !mod.moduleSlug ||
+              hasModule(enabledModules, mod.moduleSlug)
+          ),
+        }))
+        .filter((layer) => layer.modules.length > 0);
 
-  return layers
+  if (!visibility) return moduleFiltered;
+
+  return moduleFiltered
     .map((layer) => ({
       ...layer,
-      modules: layer.modules.filter(
-        (mod) =>
-          mod.comingSoon ||
-          !mod.moduleSlug ||
-          hasModule(enabledModules, mod.moduleSlug)
-      ),
+      modules: layer.modules.filter((mod) => canSeeHref(visibility, mod.href)),
     }))
     .filter((layer) => layer.modules.length > 0);
 }

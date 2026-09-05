@@ -17,9 +17,15 @@ function treatmentLabel(kind: string): string {
 export function IssueOperationalPanel({
   view,
   loading,
+  canCreate = true,
+  canMutate = true,
 }: {
   view: IssueOperationalView | null;
   loading?: boolean;
+  /** ops.create — log / create work style actions */
+  canCreate?: boolean;
+  /** ops.edit — treat / cancel style actions */
+  canMutate?: boolean;
 }) {
   if (loading) {
     return (
@@ -40,15 +46,13 @@ export function IssueOperationalPanel({
   }
 
   const { issue, outcome, executions, actions } = view;
-  const primaryActions = actions.filter(
-    (a) =>
-      a.available &&
-      a.href &&
-      (a.id === "treat" ||
-        a.id === "create_work" ||
-        a.id === "view_treatment" ||
-        a.id === "cancel")
-  );
+  const primaryActions = actions.filter((a) => {
+    if (!a.available || !a.href) return false;
+    if (a.id === "view_treatment") return true;
+    if (a.id === "create_work") return canCreate;
+    if (a.id === "treat" || a.id === "cancel") return canMutate;
+    return false;
+  });
 
   return (
     <div className="space-y-4 rounded-lg border border-[var(--sc-border)] bg-[var(--sc-surface)] p-5">

@@ -45,6 +45,7 @@ interface UserRowActionsProps {
   onView: (user: User) => void;
   onEdit: (user: User) => void;
   onDeactivate: (user: User) => void;
+  canManage?: boolean;
 }
 
 export function UserRowActions({
@@ -54,6 +55,7 @@ export function UserRowActions({
   onView,
   onEdit,
   onDeactivate,
+  canManage = true,
 }: UserRowActionsProps) {
   const [mounted, setMounted] = useState(false);
   const [coords, setCoords] = useState<MenuCoords | null>(null);
@@ -136,31 +138,35 @@ export function UserRowActions({
               <Eye className="h-3.5 w-3.5 text-muted" />
               View
             </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-slate-50"
-              onClick={() => {
-                onOpenChange(false);
-                onEdit(user);
-              }}
-            >
-              <Pencil className="h-3.5 w-3.5 text-muted" />
-              Edit
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              disabled={!canDeactivate}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-              onClick={() => {
-                onOpenChange(false);
-                onDeactivate(user);
-              }}
-            >
-              <UserX className="h-3.5 w-3.5" />
-              Deactivate
-            </button>
+            {canManage ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-slate-50"
+                onClick={() => {
+                  onOpenChange(false);
+                  onEdit(user);
+                }}
+              >
+                <Pencil className="h-3.5 w-3.5 text-muted" />
+                Edit
+              </button>
+            ) : null}
+            {canManage ? (
+              <button
+                type="button"
+                role="menuitem"
+                disabled={!canDeactivate}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                onClick={() => {
+                  onOpenChange(false);
+                  onDeactivate(user);
+                }}
+              >
+                <UserX className="h-3.5 w-3.5" />
+                Deactivate
+              </button>
+            ) : null}
           </div>,
           document.body
         )

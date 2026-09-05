@@ -28,6 +28,7 @@ export async function createApprovalFromWorkOrder(
   return executeAction({
     name: "approval.create_from_work_order",
     module: "facility_management",
+    requiredCapability: "approvals.manage",
     input: { workOrderId, overrides },
     handler: async (context, rawInput) => {
       const id = String(rawInput.workOrderId || "").trim();
@@ -137,6 +138,7 @@ export async function updateApprovalRecord(
   return executeAction({
     name: "approval.update",
     module: "facility_management",
+    requiredCapability: "approvals.manage",
     input: { approvalId, input },
     handler: async (_context, rawInput) => {
       const id = String(rawInput.approvalId || "").trim();

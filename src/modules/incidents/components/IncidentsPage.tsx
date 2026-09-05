@@ -1,5 +1,6 @@
 "use client";
 
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -20,6 +21,9 @@ import { ViewIncidentModal } from "./ViewIncidentModal";
 export function IncidentsPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { can } = useOperatingAccess();
+  const canCreateOps = can("ops.create");
+  const canMutateOps = can("ops.edit");
   const openId = useQueryRecordId();
   const {
     incidents,
@@ -96,8 +100,8 @@ export function IncidentsPage() {
           description="Legacy incident records — view and manage historical events. Log new issues from Issues."
           countValue={total}
           countLabel="Active events"
-          actionLabel="Log issue"
-          onAction={() => router.push("/issues")}
+          actionLabel={canCreateOps ? "Log issue" : undefined}
+          onAction={canCreateOps ? () => router.push("/issues") : undefined}
           loading={loading}
         />
 
@@ -129,6 +133,7 @@ export function IncidentsPage() {
         ) : (
           <StreamSurface>
             <IncidentsTable
+              canMutate={canMutateOps}
               incidents={incidents}
               loading={loading}
               page={page}

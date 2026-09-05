@@ -1,5 +1,6 @@
 "use client";
 
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { FileCheck2 } from "lucide-react";
 import { useState } from "react";
 import {
@@ -24,6 +25,8 @@ import { ViewApprovalModal } from "./ViewApprovalModal";
 
 export function ApprovalsPage() {
   const { toast } = useToast();
+  const { can } = useOperatingAccess();
+  const canManageApprovals = can("approvals.manage");
   const {
     items,
     loading,
@@ -115,6 +118,7 @@ export function ApprovalsPage() {
           />
         ) : (
           <ApprovalsTable
+            canManage={canManageApprovals}
             items={items}
             loading={loading}
             page={page}
@@ -138,11 +142,27 @@ export function ApprovalsPage() {
         open={modal.type === "view"}
         approval={modal.type === "view" ? modal.approval : null}
         onClose={() => setModal({ type: "closed" })}
-        onEdit={(approval) => setModal({ type: "edit", approval })}
+        onEdit={
+          canManageApprovals
+            ? (approval) => setModal({ type: "edit", approval })
+            : undefined
+        }
         onPackage={(approval) => setModal({ type: "package", approval })}
-        onSubmit={(approval) => setModal({ type: "submit", approval })}
-        onFollowUp={(approval) => setModal({ type: "follow_up", approval })}
-        onDecision={(approval) => setModal({ type: "decision", approval })}
+        onSubmit={
+          canManageApprovals
+            ? (approval) => setModal({ type: "submit", approval })
+            : undefined
+        }
+        onFollowUp={
+          canManageApprovals
+            ? (approval) => setModal({ type: "follow_up", approval })
+            : undefined
+        }
+        onDecision={
+          canManageApprovals
+            ? (approval) => setModal({ type: "decision", approval })
+            : undefined
+        }
       />
 
       {modal.type === "edit" ? (

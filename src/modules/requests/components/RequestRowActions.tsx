@@ -10,6 +10,7 @@ interface RequestRowActionsProps {
   onView: (request: RequestRecord) => void;
   onEdit: (request: RequestRecord) => void;
   onDeactivate: (request: RequestRecord) => void;
+  canMutate?: boolean;
 }
 
 export function RequestRowActions({
@@ -17,6 +18,7 @@ export function RequestRowActions({
   onView,
   onEdit,
   onDeactivate,
+  canMutate = true,
 }: RequestRowActionsProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -77,6 +79,7 @@ export function RequestRowActions({
             <Eye className="h-3.5 w-3.5 text-muted" />
             View
           </button>
+          {canMutate ? (
           <button
             type="button"
             role="menuitem"
@@ -89,6 +92,8 @@ export function RequestRowActions({
             <Pencil className="h-3.5 w-3.5 text-muted" />
             Edit details
           </button>
+          ) : null}
+          {canMutate ? (
           <button
             type="button"
             role="menuitem"
@@ -102,6 +107,7 @@ export function RequestRowActions({
             <Inbox className="h-3.5 w-3.5" />
             Cancel request
           </button>
+          ) : null}
         </div>
       ) : null}
     </div>

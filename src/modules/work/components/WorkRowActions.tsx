@@ -34,6 +34,8 @@ interface WorkRowActionsProps {
   onView: (work: Maintenance) => void;
   onTreat: (work: Maintenance) => void;
   onCancel: (work: Maintenance) => void;
+  /** When false, hide Treat / Cancel (view-only actors). */
+  canMutate?: boolean;
 }
 
 export function WorkRowActions({
@@ -41,6 +43,7 @@ export function WorkRowActions({
   onView,
   onTreat,
   onCancel,
+  canMutate = true,
 }: WorkRowActionsProps) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -115,31 +118,35 @@ export function WorkRowActions({
               <Eye className="h-3.5 w-3.5 text-muted" />
               View
             </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-slate-50"
-              onClick={() => {
-                setOpen(false);
-                onTreat(work);
-              }}
-            >
-              <Play className="h-3.5 w-3.5 text-muted" />
-              Treat
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              disabled={!canCancel}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-              onClick={() => {
-                setOpen(false);
-                onCancel(work);
-              }}
-            >
-              <AlertTriangle className="h-3.5 w-3.5" />
-              Cancel
-            </button>
+            {canMutate ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-slate-50"
+                onClick={() => {
+                  setOpen(false);
+                  onTreat(work);
+                }}
+              >
+                <Play className="h-3.5 w-3.5 text-muted" />
+                Treat
+              </button>
+            ) : null}
+            {canMutate ? (
+              <button
+                type="button"
+                role="menuitem"
+                disabled={!canCancel}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                onClick={() => {
+                  setOpen(false);
+                  onCancel(work);
+                }}
+              >
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Cancel
+              </button>
+            ) : null}
           </div>,
           document.body
         )

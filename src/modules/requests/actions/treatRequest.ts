@@ -209,6 +209,7 @@ export async function createMaintenanceFromRequest(input: {
   return executeAction({
     name: "request.treatment.create_maintenance",
     module: "facility_management",
+    requiredCapability: "ops.edit",
     input,
     handler: async (context, raw) => {
       const validated = validateMaintenanceInput(raw.maintenance);
@@ -237,6 +238,7 @@ export async function createIncidentFromRequest(input: {
   return executeAction({
     name: "request.treatment.create_incident",
     module: "facility_management",
+    requiredCapability: "ops.edit",
     input,
     handler: async (context, raw) => {
       assertNewIncidentCreateAllowed("createIncidentFromRequest");
@@ -267,6 +269,7 @@ export async function linkMaintenanceToRequest(input: {
   return executeAction({
     name: "request.treatment.link_maintenance",
     module: "facility_management",
+    requiredCapability: "ops.edit",
     input,
     handler: async (context, raw) =>
       orchestrateLinkMaintenanceToRequest({
@@ -284,6 +287,7 @@ export async function linkIncidentToRequest(input: {
   return executeAction({
     name: "request.treatment.link_incident",
     module: "facility_management",
+    requiredCapability: "ops.edit",
     input,
     handler: async (context, raw) =>
       orchestrateLinkIncidentToRequest({
@@ -300,6 +304,7 @@ export async function resolveRequest(input: {
   return executeAction({
     name: "request.treatment.resolve",
     module: "facility_management",
+    requiredCapability: "ops.edit",
     input,
     handler: async (context, raw) =>
       orchestrateResolveRequest({
@@ -315,6 +320,7 @@ export async function cancelRequest(input: {
   return executeAction({
     name: "request.treatment.cancel",
     module: "facility_management",
+    requiredCapability: "ops.edit",
     input,
     handler: async (context, raw) =>
       orchestrateCancelRequest({
@@ -330,6 +336,7 @@ export async function startRequestReview(input: {
   return executeAction({
     name: "request.treatment.start_review",
     module: "facility_management",
+    requiredCapability: "ops.edit",
     input,
     handler: async (context, raw) =>
       orchestrateStartRequestReview({
@@ -345,6 +352,7 @@ export async function getRequestTreatmentDetail(input: {
   return executeAction({
     name: "request.treatment.get_detail",
     module: "facility_management",
+    requiredCapability: "ops.view",
     input,
     handler: async (_context, raw) =>
       loadRequestTreatmentDetail(raw.requestId),
@@ -362,6 +370,7 @@ export async function searchMaintenanceForRequestLink(input: {
   return executeAction({
     name: "request.treatment.search_maintenance",
     module: "facility_management",
+    requiredCapability: "ops.view",
     input,
     handler: async (_context, raw) => searchLinkableMaintenance(raw),
   });
@@ -378,6 +387,7 @@ export async function searchIncidentsForRequestLink(input: {
   return executeAction({
     name: "request.treatment.search_incidents",
     module: "facility_management",
+    requiredCapability: "ops.view",
     input,
     handler: async (_context, raw) => searchLinkableIncidents(raw),
   });

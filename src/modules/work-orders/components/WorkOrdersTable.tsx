@@ -26,6 +26,7 @@ interface WorkOrdersTableProps {
   onView: (workOrder: WorkOrder) => void;
   onEdit: (workOrder: WorkOrder) => void;
   onDeactivate: (workOrder: WorkOrder) => void;
+  canMutate?: boolean;
 }
 
 function FacilityLabel({ id }: { id: string }) {
@@ -52,6 +53,7 @@ export function WorkOrdersTable({
   onView,
   onEdit,
   onDeactivate,
+  canMutate = true,
 }: WorkOrdersTableProps) {
   const columns = useMemo<Column<WorkOrder>[]>(
     () => [
@@ -132,11 +134,12 @@ export function WorkOrdersTable({
             onView={onView}
             onEdit={onEdit}
             onDeactivate={onDeactivate}
+            canMutate={canMutate}
           />
         ),
       },
     ],
-    [onView, onEdit, onDeactivate]
+    [onView, onEdit, onDeactivate, canMutate]
   );
 
   return (

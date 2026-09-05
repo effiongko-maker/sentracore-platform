@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { gateApiCapability } from "@/lib/access/gateApi";
 import {
   postToAppsScript,
   type AppsScriptProxyBody,
@@ -6,9 +7,13 @@ import {
 
 /**
  * Server-only proxy: bounded People / Asset workload summaries.
+ * Requires ops.view (operational register context).
  */
 export async function POST(request: Request) {
   try {
+    const gate = await gateApiCapability("ops.view");
+    if (!gate.ok) return gate.response;
+
     let body: AppsScriptProxyBody = {};
 
     try {

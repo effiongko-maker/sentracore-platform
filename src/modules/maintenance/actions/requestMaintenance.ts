@@ -137,6 +137,7 @@ export async function requestMaintenance(
   return executeAction({
     name: "maintenance.request",
     module: "facility_management",
+    requiredCapability: "ops.create",
     input,
     departmentId: options.departmentId,
     handler: async (context, rawInput) => {

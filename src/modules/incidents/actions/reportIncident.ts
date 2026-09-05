@@ -150,6 +150,7 @@ export async function reportIncident(
   return executeAction({
     name: "incident.report",
     module: "facility_management",
+    requiredCapability: "ops.create",
     input,
     departmentId: options.departmentId,
     handler: async (context, rawInput) => {

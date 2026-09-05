@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { gateApiCapability } from "@/lib/access/gateApi";
+import { capabilityForRequestsProxyAction } from "@/lib/access/operationalApiGate";
 import {
   postToAppsScript,
   type AppsScriptProxyBody,
@@ -7,6 +9,7 @@ import {
 /**
  * Server-only proxy: browser → /api/requests → Apps Script.
  *
+ * Reads: requests.view. Creates: ops.create. Updates: ops.edit.
  * Treatment mutations (status / relationship arrays) must use
  * request.treatment.* server actions — blocked here for client proxies.
  */
@@ -33,6 +36,10 @@ export async function POST(request: Request) {
     }
 
     const action = String(body.action || "getAll");
+    const capability = capabilityForRequestsProxyAction(action);
+    const gate = await gateApiCapability(capability);
+    if (!gate.ok) return gate.response;
+
     if (action === "update" || action === "create" || action === "deactivate") {
       const payload =
         body.payload && typeof body.payload === "object"

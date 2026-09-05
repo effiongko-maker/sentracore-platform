@@ -11,9 +11,14 @@ import {
 import { useToast } from "@/components/ui/Toast";
 import { useFacilityOptions } from "@/hooks/useFacilityOptions";
 import {
-  USER_ROLE_SUGGESTIONS,
-  USER_SPECIALIZATIONS,
-  USER_STATUSES,
+  V1_DEPLOYED_FACILITY_NAME,
+  V1_OPERATING_ROLE_OPTIONS,
+  parseV1OperatingRole,
+  v1OperatingRoleLabel,
+} from "@/lib/access";
+import {
+  DEFAULT_USER_SPECIALIZATION,
+  USER_MANAGE_STATUSES,
 } from "../constants";
 import { UserService } from "../services/UserService";
 import {
@@ -57,11 +62,24 @@ export function UserFormModal({
   useEffect(() => {
     if (!open || facilities.length === 0) return;
     setForm((current) => {
-      const resolved = resolveFacilityDisplayName(current.facility, facilities);
-      if (!resolved || resolved === current.facility) return current;
-      return { ...current, facility: resolved === "-" ? "" : resolved };
+      if (current.facility.trim()) {
+        const resolved = resolveFacilityDisplayName(
+          current.facility,
+          facilities
+        );
+        if (!resolved || resolved === current.facility) return current;
+        return { ...current, facility: resolved === "-" ? "" : resolved };
+      }
+      if (mode === "create") {
+        const preferred =
+          facilities.find((item) => item.name === V1_DEPLOYED_FACILITY_NAME) ??
+          facilities.find((item) => item.id === "FAC-0001") ??
+          facilities[0];
+        if (preferred) return { ...current, facility: preferred.name };
+      }
+      return current;
     });
-  }, [open, facilities]);
+  }, [open, facilities, mode]);
 
   function updateField<K extends keyof CreateUserInput>(
     key: K,
@@ -79,9 +97,10 @@ export function UserFormModal({
       next.email = "Enter a valid email address";
     }
     if (!form.role.trim()) next.role = "Role is required";
-    if (!form.specialization.trim()) {
-      next.specialization = "Specialization is required";
+    else if (!parseV1OperatingRole(form.role)) {
+      next.role = "Select a V1 operating role";
     }
+    if (!form.facility.trim()) next.facility = "Facility is required";
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -94,18 +113,21 @@ export function UserFormModal({
     submitLock.current = true;
     setSaving(true);
     try {
-      const facilityName = form.facility.trim()
-        ? resolveFacilityDisplayName(form.facility, facilities)
-        : "-";
+      const roleSlug = parseV1OperatingRole(form.role);
+      const facilityName = resolveFacilityDisplayName(
+        form.facility,
+        facilities
+      );
 
       const payload: CreateUserInput = {
         ...form,
         name: form.name.trim(),
         email: form.email.trim(),
         phone: form.phone?.trim() || undefined,
-        role: form.role.trim(),
-        specialization: form.specialization.trim(),
-        facility: facilityName,
+        role: roleSlug ? v1OperatingRoleLabel(roleSlug) : form.role.trim(),
+        specialization:
+          form.specialization.trim() || DEFAULT_USER_SPECIALIZATION,
+        facility: facilityName === "-" ? "" : facilityName,
       };
 
       if (mode === "edit" && user) {
@@ -142,6 +164,9 @@ export function UserFormModal({
 
   const isEdit = mode === "edit";
   const facilitySelectValue = form.facility.trim();
+  const roleSelectValue =
+    parseV1OperatingRole(form.role) ??
+    (form.role.trim() ? "__legacy__" : "");
 
   return (
     <Modal
@@ -152,8 +177,8 @@ export function UserFormModal({
       title={isEdit ? "Edit user" : "New user"}
       description={
         isEdit
-          ? "Update profile details, assignment, and access status."
-          : "Add a person to the People register with their role and facility assignment."
+          ? "Update name, role, status, and facility assignment."
+          : "Add a person with name, email, role, status, and facility."
       }
       size="lg"
       footer={
@@ -193,6 +218,7 @@ export function UserFormModal({
           htmlFor="user-email"
           required
           error={errors.email}
+          className="sm:col-span-2"
         >
           <input
             id="user-email"
@@ -204,64 +230,68 @@ export function UserFormModal({
           />
         </FormField>
 
-        <FormField label="Phone" htmlFor="user-phone">
-          <input
-            id="user-phone"
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            className={inputClassName}
-            placeholder="e.g. 08077960315"
-            value={form.phone ?? ""}
-            onChange={(event) => updateField("phone", event.target.value)}
-          />
-        </FormField>
-
         <FormField
           label="Role"
           htmlFor="user-role"
           required
           error={errors.role}
         >
-          <input
+          <select
             id="user-role"
-            list="user-role-suggestions"
-            className={inputClassName}
-            placeholder="e.g. Facility Manager"
-            value={form.role}
-            onChange={(event) => updateField("role", event.target.value)}
-          />
-          <datalist id="user-role-suggestions">
-            {USER_ROLE_SUGGESTIONS.map((value) => (
-              <option key={value} value={value} />
+            className={selectClassName}
+            value={roleSelectValue === "__legacy__" ? "" : roleSelectValue}
+            onChange={(event) => {
+              const slug = parseV1OperatingRole(event.target.value);
+              updateField(
+                "role",
+                slug ? v1OperatingRoleLabel(slug) : event.target.value
+              );
+            }}
+          >
+            <option value="">Select role…</option>
+            {roleSelectValue === "__legacy__" ? (
+              <option value="" disabled>
+                Current: {form.role} (choose a V1 role)
+              </option>
+            ) : null}
+            {V1_OPERATING_ROLE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
             ))}
-          </datalist>
+          </select>
+        </FormField>
+
+        <FormField label="Status" htmlFor="user-status" required>
+          <select
+            id="user-status"
+            className={selectClassName}
+            value={
+              USER_MANAGE_STATUSES.includes(form.status)
+                ? form.status
+                : form.status === "suspended" || form.status === "pending"
+                  ? "inactive"
+                  : "active"
+            }
+            onChange={(event) =>
+              updateField("status", event.target.value as UserStatus)
+            }
+          >
+            {USER_MANAGE_STATUSES.map((value) => (
+              <option key={value} value={value}>
+                {labelize(value)}
+              </option>
+            ))}
+          </select>
         </FormField>
 
         <FormField
-          label="Specialization"
-          htmlFor="user-specialization"
+          label="Facility"
+          htmlFor="user-facility"
           required
-          error={errors.specialization}
+          error={errors.facility}
+          className="sm:col-span-2"
         >
-          <input
-            id="user-specialization"
-            list="user-specialization-suggestions"
-            className={inputClassName}
-            placeholder="e.g. HVAC"
-            value={form.specialization}
-            onChange={(event) =>
-              updateField("specialization", event.target.value)
-            }
-          />
-          <datalist id="user-specialization-suggestions">
-            {USER_SPECIALIZATIONS.map((value) => (
-              <option key={value} value={value} />
-            ))}
-          </datalist>
-        </FormField>
-
-        <FormField label="Facility" htmlFor="user-facility">
           <select
             id="user-facility"
             className={selectClassName}
@@ -272,7 +302,7 @@ export function UserFormModal({
             disabled={facilitiesLoading}
           >
             <option value="">
-              {facilitiesLoading ? "Loading facilities…" : "None / organisation-wide"}
+              {facilitiesLoading ? "Loading facilities…" : "Select facility…"}
             </option>
             {facilitySelectValue &&
             !facilities.some((item) => item.name === facilitySelectValue) ? (
@@ -281,23 +311,6 @@ export function UserFormModal({
             {facilities.map((item) => (
               <option key={item.id} value={item.name}>
                 {item.name}
-              </option>
-            ))}
-          </select>
-        </FormField>
-
-        <FormField label="Status" htmlFor="user-status" required>
-          <select
-            id="user-status"
-            className={selectClassName}
-            value={form.status}
-            onChange={(event) =>
-              updateField("status", event.target.value as UserStatus)
-            }
-          >
-            {USER_STATUSES.map((value) => (
-              <option key={value} value={value}>
-                {labelize(value)}
               </option>
             ))}
           </select>

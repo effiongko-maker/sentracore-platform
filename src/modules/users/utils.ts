@@ -42,7 +42,7 @@ export function toCreateFormValues(user?: User | null) {
     email: user?.email ?? "",
     phone: user?.phone ?? "",
     role: user?.role ?? "",
-    specialization: user?.specialization ?? "",
+    specialization: user?.specialization ?? "General Operations",
     facility:
       user?.facility && user.facility !== "-"
         ? user.facility

@@ -25,6 +25,7 @@ interface IncidentsTableProps {
   onView: (incident: Incident) => void;
   onEdit: (incident: Incident) => void;
   onDeactivate: (incident: Incident) => void;
+  canMutate?: boolean;
 }
 
 function LocationCell({ incident }: { incident: Incident }) {
@@ -56,6 +57,7 @@ export function IncidentsTable({
   onView,
   onEdit,
   onDeactivate,
+  canMutate = true,
 }: IncidentsTableProps) {
   const columns = useMemo<Column<Incident>[]>(
     () => [
@@ -141,11 +143,12 @@ export function IncidentsTable({
             onView={onView}
             onEdit={onEdit}
             onDeactivate={onDeactivate}
+            canMutate={canMutate}
           />
         ),
       },
     ],
-    [onView, onEdit, onDeactivate]
+    [onView, onEdit, onDeactivate, canMutate]
   );
 
   return (

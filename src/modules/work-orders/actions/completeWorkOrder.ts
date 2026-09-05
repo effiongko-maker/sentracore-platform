@@ -16,6 +16,7 @@ export async function completeWorkOrder(
   return executeAction({
     name: "work_order.complete",
     module: "facility_management",
+    requiredCapability: "ops.edit",
     input,
     handler: async (context, rawInput) => {
       if (!rawInput.workOrderId?.trim()) {

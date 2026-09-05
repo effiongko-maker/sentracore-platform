@@ -8,7 +8,9 @@ import {
 } from "@/lib/platform/layers";
 import { cn } from "@/lib/utils";
 import { usePlatformSession } from "@/hooks/usePlatformSession";
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { usePlatformShell } from "@/hooks/usePlatformShell";
+import { resolveAccessVisibility } from "@/lib/access";
 
 type PaletteAction = {
   id: string;
@@ -16,6 +18,8 @@ type PaletteAction = {
   description?: string;
   href: string;
   group: string;
+  /** When set, only shown if the actor has this mutation capability. */
+  requireCapability?: "ops.create";
 };
 
 const CREATE_ACTIONS: PaletteAction[] = [
@@ -25,6 +29,7 @@ const CREATE_ACTIONS: PaletteAction[] = [
     description: "Act",
     href: "/issues",
     group: "Create",
+    requireCapability: "ops.create",
   },
   {
     id: "create-maintenance",
@@ -32,6 +37,7 @@ const CREATE_ACTIONS: PaletteAction[] = [
     description: "Act",
     href: "/occupant-requests?type=maintenance",
     group: "Create",
+    requireCapability: "ops.create",
   },
   {
     id: "create-work-order",
@@ -45,12 +51,19 @@ const CREATE_ACTIONS: PaletteAction[] = [
 export function CommandPalette() {
   const router = useRouter();
   const { enabledModules } = usePlatformSession();
+  const { access, can, loading: accessLoading } = useOperatingAccess();
   const { commandPaletteOpen, closeCommandPalette } = usePlatformShell();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
 
   const actions = useMemo(() => {
-    const layers = filterOperatingLayers(OPERATING_LAYERS, enabledModules);
+    const visibility =
+      !accessLoading && access ? resolveAccessVisibility(access) : null;
+    const layers = filterOperatingLayers(
+      OPERATING_LAYERS,
+      enabledModules,
+      visibility
+    );
     const nav: PaletteAction[] = [
       {
         id: "nav-platform",
@@ -81,8 +94,14 @@ export function CommandPalette() {
       }
     }
 
-    return [...CREATE_ACTIONS, ...nav];
-  }, [enabledModules]);
+    const creates = CREATE_ACTIONS.filter((action) => {
+      if (!action.requireCapability) return true;
+      if (accessLoading || !access) return false;
+      return can(action.requireCapability);
+    });
+
+    return [...creates, ...nav];
+  }, [enabledModules, access, accessLoading, can]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

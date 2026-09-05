@@ -53,6 +53,7 @@ export async function trackOccupantRequest(
   return executeAction({
     name: "occupant.request.track",
     module: "facility_management",
+    requiredCapability: "requests.view",
     input,
     handler: async (_context, raw) => {
       const reference = raw.reference.trim().toUpperCase();

@@ -10,6 +10,7 @@ import {
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { ViewWorkOrderModal } from "@/modules/work-orders/components/ViewWorkOrderModal";
 import type { WorkOrder } from "@/modules/work-orders/types";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
@@ -23,6 +24,9 @@ import { ViewUserModal } from "./ViewUserModal";
 
 export function UsersPage() {
   const { toast } = useToast();
+  const { can, loading: accessLoading } = useOperatingAccess();
+  const canView = can("users.view");
+  const canManage = can("users.manage");
   const {
     users,
     loading,
@@ -93,6 +97,22 @@ export function UsersPage() {
     }
   }
 
+  if (!accessLoading && !canView) {
+    return (
+      <ModeFrame mode="organise">
+        <ExploreHeader
+          title="People"
+          description="People across the operation — roles, access, and facility relationships."
+        />
+        <EmptyState
+          icon={Users}
+          title="Access restricted"
+          description="Your role cannot view the People register."
+        />
+      </ModeFrame>
+    );
+  }
+
   return (
     <ModeFrame mode="organise">
       <ExploreHeader
@@ -117,6 +137,7 @@ export function UsersPage() {
         loading={loading}
         onClearAll={clearFilters}
         onCreate={() => setModal({ type: "create" })}
+        canCreate={canManage}
       />
 
       {error ? (
@@ -143,23 +164,30 @@ export function UsersPage() {
               setViewWorkOrder(workOrder);
               setViewWorkOrderId(workOrder.id);
             }}
+            canManage={canManage}
           />
         </StreamSurface>
       )}
 
-      <UserFormModal
-        open={modal.type === "create" || modal.type === "edit"}
-        mode={modal.type === "edit" ? "edit" : "create"}
-        user={modal.type === "edit" ? modal.user : null}
-        onClose={() => setModal({ type: "closed" })}
-        onSaved={reload}
-      />
+      {canManage ? (
+        <UserFormModal
+          open={modal.type === "create" || modal.type === "edit"}
+          mode={modal.type === "edit" ? "edit" : "create"}
+          user={modal.type === "edit" ? modal.user : null}
+          onClose={() => setModal({ type: "closed" })}
+          onSaved={reload}
+        />
+      ) : null}
 
       <ViewUserModal
         open={modal.type === "view"}
         user={modal.type === "view" ? modal.user : null}
         onClose={() => setModal({ type: "closed" })}
-        onEdit={(user) => setModal({ type: "edit", user })}
+        onEdit={
+          canManage
+            ? (user) => setModal({ type: "edit", user })
+            : undefined
+        }
       />
 
       <ViewWorkOrderModal
@@ -172,7 +200,7 @@ export function UsersPage() {
       />
 
       <ConfirmDialog
-        open={modal.type === "deactivate"}
+        open={modal.type === "deactivate" && canManage}
         onClose={() => setModal({ type: "closed" })}
         onConfirm={handleDeactivate}
         title="Deactivate user?"

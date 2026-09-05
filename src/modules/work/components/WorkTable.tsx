@@ -36,6 +36,7 @@ interface WorkTableProps {
   onView: (work: Maintenance) => void;
   onTreat: (work: Maintenance) => void;
   onCancel: (work: Maintenance) => void;
+  canMutate?: boolean;
 }
 
 function FacilityCell({ row }: { row: Maintenance }) {
@@ -62,6 +63,7 @@ export function WorkTable({
   onView,
   onTreat,
   onCancel,
+  canMutate = true,
 }: WorkTableProps) {
   const columns = useMemo<Column<Maintenance>[]>(
     () => [
@@ -173,11 +175,12 @@ export function WorkTable({
             onView={onView}
             onTreat={onTreat}
             onCancel={onCancel}
+            canMutate={canMutate}
           />
         ),
       },
     ],
-    [onView, onTreat, onCancel, page, total, linkedWorkOrdersById, linkedWorkOrdersLoading]
+    [onView, onTreat, onCancel, canMutate, page, total, linkedWorkOrdersById, linkedWorkOrdersLoading]
   );
 
   const emptyTitle =

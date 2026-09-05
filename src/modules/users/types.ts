@@ -1,6 +1,6 @@
 export type UserStatus = "active" | "inactive" | "pending" | "suspended";
 
-/** Sheet role labels are free-form (e.g. CEO, Facility Manager). */
+/** Sheet role labels — V1 uses Facility Manager / FM Staff / Liaison Officer / Finance / NCC / Client. */
 export type UserRole = string;
 
 export interface User {
@@ -55,7 +55,8 @@ export type UserSort = "newest";
 
 /**
  * Compact chrome identity for the signed-in platform user.
- * Role is a display label from platform role assignments (not FM sheet roles).
+ * Display role from Supabase assignments. Operating role for access is
+ * `/api/access/me` (People register matched by email).
  */
 export interface CurrentUser {
   id: string;

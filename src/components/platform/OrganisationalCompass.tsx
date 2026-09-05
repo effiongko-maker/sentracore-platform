@@ -10,7 +10,6 @@ import {
   resolveLayerByPath,
 } from "@/lib/platform/layers";
 import {
-  getActiveWorkspace,
   isOperationsPath,
   isPlatformHomePath,
   isWorkspacePreviewPath,
@@ -18,16 +17,42 @@ import {
 } from "@/lib/platform/workspaces";
 import { cn } from "@/lib/utils";
 import { usePlatformSession } from "@/hooks/usePlatformSession";
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { usePlatformShell } from "@/hooks/usePlatformShell";
+import {
+  resolveAccessVisibility,
+  canSeeSurface,
+} from "@/lib/access";
 import { AppFooter } from "@/components/layout/AppFooter";
 import { SentraCoreLogo } from "@/components/brand";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
+/** Platform chrome only — FM destinations (People, Master Data) live in OPERATING_LAYERS. */
+const PLATFORM_NAV = [
+  {
+    label: "Platform Home",
+    href: PLATFORM_HOME.href,
+    icon: Home,
+    match: (pathname: string) => isPlatformHomePath(pathname),
+  },
+] as const;
+
 export function OrganisationalCompass() {
   const pathname = usePathname();
   const { enabledModules } = usePlatformSession();
+  const { access, loading: accessLoading } = useOperatingAccess();
   const { mobileNavOpen, closeMobileNav } = usePlatformShell();
-  const layers = filterOperatingLayers(OPERATING_LAYERS, enabledModules);
+  const visibility =
+    !accessLoading && access ? resolveAccessVisibility(access) : null;
+  const layers = filterOperatingLayers(
+    OPERATING_LAYERS,
+    enabledModules,
+    visibility
+  );
+  const showCommandHome =
+    !visibility ||
+    canSeeSurface(visibility, "home") ||
+    canSeeSurface(visibility, "operations");
   const activeLayer = resolveLayerByPath(pathname);
   const inOperations = isOperationsPath(pathname);
   const atPlatformLevel =
@@ -36,8 +61,8 @@ export function OrganisationalCompass() {
     pathname === COMMAND_HOME.href ||
     pathname.startsWith(`${COMMAND_HOME.href}/`);
   const isPlatformHome = isPlatformHomePath(pathname);
-  const activeWorkspace = getActiveWorkspace();
 
+  const platformLinks = PLATFORM_NAV;
   return (
     <>
       {mobileNavOpen ? (
@@ -82,18 +107,20 @@ export function OrganisationalCompass() {
         {inOperations ? (
           <div className="os-compass-scroll">
             <p className="os-compass-workspace-caption">Facility Management</p>
-            <Link
-              href={COMMAND_HOME.href}
-              onClick={closeMobileNav}
-              className={cn(
-                "os-compass-home",
-                isOpsHome && "os-compass-home-active"
-              )}
-              aria-current={isOpsHome ? "page" : undefined}
-            >
-              <Home className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
-              <span>{COMMAND_HOME.label}</span>
-            </Link>
+            {showCommandHome ? (
+              <Link
+                href={COMMAND_HOME.href}
+                onClick={closeMobileNav}
+                className={cn(
+                  "os-compass-home",
+                  isOpsHome && "os-compass-home-active"
+                )}
+                aria-current={isOpsHome ? "page" : undefined}
+              >
+                <Home className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                <span>{COMMAND_HOME.label}</span>
+              </Link>
+            ) : null}
 
             {layers.map((layer) => {
               const isGroupActive = activeLayer === layer.id;
@@ -152,25 +179,28 @@ export function OrganisationalCompass() {
           </div>
         ) : atPlatformLevel ? (
           <div className="os-compass-scroll">
-            <div className="os-compass-platform-active">
-              <p className="os-compass-platform-active-name">
-                {activeWorkspace.label}
-              </p>
-              <p className="os-compass-platform-active-meta">Active workspace</p>
+            <p className="os-compass-group-label">Platform</p>
+            <div className="os-compass-modules">
+              {platformLinks.map((item) => {
+                const Icon = item.icon;
+                const active = item.match(pathname);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={closeMobileNav}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "os-compass-module",
+                      active && "os-compass-module-active"
+                    )}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
             </div>
-
-            <Link
-              href={PLATFORM_HOME.href}
-              onClick={closeMobileNav}
-              className={cn(
-                "os-compass-home",
-                isPlatformHome && "os-compass-home-active"
-              )}
-              aria-current={isPlatformHome ? "page" : undefined}
-            >
-              <Home className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
-              <span>{PLATFORM_HOME.label}</span>
-            </Link>
           </div>
         ) : (
           <div className="os-compass-scroll">

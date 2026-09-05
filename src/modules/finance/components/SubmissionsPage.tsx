@@ -13,6 +13,7 @@ import { formatFinancialAmount } from "../utils/formatFinancialAmount";
 import {
   SUBMISSION_LIFECYCLE_LABELS,
 } from "../utils/submissionLifecycle";
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 
 function formatTimestamp(iso?: string): string {
   if (!iso) return "—";
@@ -27,6 +28,8 @@ function formatTimestamp(iso?: string): string {
 
 export function SubmissionsPage() {
   const [page, setPage] = useState(1);
+  const { can } = useOperatingAccess();
+  const canCreateClaim = can("finance.create");
   const { submissions, total, totalPages, loading, error, reload } =
     useCostSubmissionsList({
       page,
@@ -116,13 +119,15 @@ export function SubmissionsPage() {
             signalValue={loading ? "—" : total}
             signalLabel="Claims"
           />
-          <Link
-            href="/finance/submissions/new"
-            className="inline-flex h-8 items-center gap-2 rounded-[12px] bg-accent px-3 text-xs font-medium text-white shadow-sc hover:bg-[#1e40af]"
-          >
-            <Plus className="h-4 w-4" />
-            Create claim
-          </Link>
+          {canCreateClaim ? (
+            <Link
+              href="/finance/submissions/new"
+              className="inline-flex h-8 items-center gap-2 rounded-[12px] bg-accent px-3 text-xs font-medium text-white shadow-sc hover:bg-[#1e40af]"
+            >
+              <Plus className="h-4 w-4" />
+              Create claim
+            </Link>
+          ) : null}
         </div>
 
         <StreamSurface className="mt-4">

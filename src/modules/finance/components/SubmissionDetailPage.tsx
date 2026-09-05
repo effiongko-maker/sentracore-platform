@@ -13,6 +13,9 @@ import { ModeFrame, OperateHeader, StreamSurface } from "@/components/platform";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
+import { ProtectedActionDialog } from "@/components/security/ProtectedActionDialog";
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
+import type { ProtectedMutationProof } from "@/lib/access/protectedMutationProof";
 import {
   getSubmissionActualCostTotal,
   getSubmissionCostCount,
@@ -100,6 +103,27 @@ export function SubmissionDetailPage({
   const justSubmitted = searchParams.get("submitted") === "1";
   const costPool = useSubmissionCostPool();
   const { toast } = useToast();
+  const { can } = useOperatingAccess();
+  const canAuthorizeFinance = can("finance.authorize");
+  const canPayFinance = can("finance.pay");
+  const canCreateFinance = can("finance.create");
+  const canSubmitFinance = can("finance.submit");
+  const [pendingProtected, setPendingProtected] = useState<
+    null | "revise_auth" | "correct_payment"
+  >(null);
+  const [pendingAuthDraft, setPendingAuthDraft] = useState<{
+    amount: number;
+    authorityReference?: string;
+    notes?: string;
+  } | null>(null);
+  const [pendingPaymentDraft, setPendingPaymentDraft] = useState<{
+    paymentId: string;
+    receivedAmount: number;
+    receivedAt: string;
+    reference?: string;
+    method?: string;
+    notes?: string;
+  } | null>(null);
 
   const [submission, setSubmission] = useState<CostSubmission | null>(null);
   const [payments, setPayments] = useState<ReimbursementPayment[]>([]);
@@ -365,31 +389,26 @@ export function SubmissionDetailPage({
       });
       return;
     }
+    if (authorization) {
+      setPendingAuthDraft({
+        amount,
+        authorityReference: authAuthorityReference.trim() || undefined,
+        notes: authNotes.trim() || undefined,
+      });
+      setPendingProtected("revise_auth");
+      return;
+    }
     setActing(true);
     try {
-      if (authorization) {
-        await ReimbursementAuthorizationService.updateAuthorization(
-          authorization.authorizationId,
-          {
-            authorizedAmount: amount,
-            authorityReference: authAuthorityReference.trim() || undefined,
-            notes: authNotes.trim() || undefined,
-            authorizedBy: userId,
-            authorizedAt: new Date().toISOString(),
-          }
-        );
-        toast({ type: "success", title: "Authorization updated" });
-      } else {
-        await ReimbursementAuthorizationService.createAuthorization({
-          submissionId: submission.submissionId,
-          authorizedAmount: amount,
-          currency,
-          authorityReference: authAuthorityReference.trim() || undefined,
-          notes: authNotes.trim() || undefined,
-          authorizedBy: userId,
-        });
-        toast({ type: "success", title: "Claim authorized" });
-      }
+      await ReimbursementAuthorizationService.createAuthorization({
+        submissionId: submission.submissionId,
+        authorizedAmount: amount,
+        currency,
+        authorityReference: authAuthorityReference.trim() || undefined,
+        notes: authNotes.trim() || undefined,
+        authorizedBy: userId,
+      });
+      toast({ type: "success", title: "Claim authorized" });
       setShowAuthForm(false);
       setAuthAuthorityReference("");
       setAuthNotes("");
@@ -400,6 +419,40 @@ export function SubmissionDetailPage({
         title: "Unable to authorize",
         description: err instanceof Error ? err.message : "Try again.",
       });
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function completeAuthorizeRevise(proof: {
+    stepUpPassword?: string;
+  }) {
+    if (!submission || !userId || !authorization || !pendingAuthDraft) {
+      throw new Error("Nothing to revise.");
+    }
+    setActing(true);
+    try {
+      const protectedProof: ProtectedMutationProof = {
+        actionId: "finance.authorization.revise",
+        stepUpPassword: proof.stepUpPassword,
+      };
+      await ReimbursementAuthorizationService.updateAuthorization(
+        authorization.authorizationId,
+        {
+          authorizedAmount: pendingAuthDraft.amount,
+          authorityReference: pendingAuthDraft.authorityReference,
+          notes: pendingAuthDraft.notes,
+          authorizedBy: userId,
+          authorizedAt: new Date().toISOString(),
+        },
+        protectedProof
+      );
+      toast({ type: "success", title: "Authorization updated" });
+      setShowAuthForm(false);
+      setAuthAuthorityReference("");
+      setAuthNotes("");
+      setPendingAuthDraft(null);
+      await load();
     } finally {
       setActing(false);
     }
@@ -485,29 +538,30 @@ export function SubmissionDetailPage({
         toast({ type: "error", title: "Payment date is required" });
         return;
       }
-      setActing(true);
       if (isCorrection && editingPaymentId) {
-        await ReimbursementPaymentService.updatePayment(editingPaymentId, {
+        setPendingPaymentDraft({
+          paymentId: editingPaymentId,
           receivedAmount: amount,
-          receivedAt: new Date(paymentDate).toISOString(),
-          reference: paymentReference.trim(),
-          notes: paymentNotes.trim(),
-          recordedBy: userId,
-        });
-        toast({ type: "success", title: "Payment corrected" });
-      } else {
-        await ReimbursementPaymentService.createPayment({
-          submissionId: submission.submissionId,
-          receivedAmount: amount,
-          currency,
           receivedAt: new Date(paymentDate).toISOString(),
           reference: paymentReference.trim() || undefined,
           method: paymentMethod.trim() || undefined,
           notes: paymentNotes.trim() || undefined,
-          recordedBy: userId,
         });
-        toast({ type: "success", title: "Payment recorded" });
+        setPendingProtected("correct_payment");
+        return;
       }
+      setActing(true);
+      await ReimbursementPaymentService.createPayment({
+        submissionId: submission.submissionId,
+        receivedAmount: amount,
+        currency,
+        receivedAt: new Date(paymentDate).toISOString(),
+        reference: paymentReference.trim() || undefined,
+        method: paymentMethod.trim() || undefined,
+        notes: paymentNotes.trim() || undefined,
+        recordedBy: userId,
+      });
+      toast({ type: "success", title: "Payment recorded" });
       closePaymentForm();
       await load();
     } catch (err) {
@@ -520,6 +574,39 @@ export function SubmissionDetailPage({
       });
     } finally {
       paymentSubmitLock.current = false;
+      setActing(false);
+    }
+  }
+
+  async function completePaymentCorrect(proof: {
+    stepUpPassword?: string;
+  }) {
+    if (!userId || !pendingPaymentDraft) {
+      throw new Error("Nothing to correct.");
+    }
+    setActing(true);
+    try {
+      const protectedProof: ProtectedMutationProof = {
+        actionId: "finance.payment.correct",
+        stepUpPassword: proof.stepUpPassword,
+      };
+      await ReimbursementPaymentService.updatePayment(
+        pendingPaymentDraft.paymentId,
+        {
+          receivedAmount: pendingPaymentDraft.receivedAmount,
+          receivedAt: pendingPaymentDraft.receivedAt,
+          reference: pendingPaymentDraft.reference,
+          method: pendingPaymentDraft.method,
+          notes: pendingPaymentDraft.notes,
+          recordedBy: userId,
+        },
+        protectedProof
+      );
+      toast({ type: "success", title: "Payment corrected" });
+      setPendingPaymentDraft(null);
+      closePaymentForm();
+      await load();
+    } finally {
       setActing(false);
     }
   }
@@ -689,7 +776,7 @@ export function SubmissionDetailPage({
                   Actions
                 </h3>
                 <div className="fin-detail-actions-row">
-                {editable ? (
+                {editable && canCreateFinance ? (
                   <Link
                     href={`/finance/submissions/${submissionId}/edit`}
                     className="fin-detail-action fin-detail-action--primary"
@@ -700,7 +787,7 @@ export function SubmissionDetailPage({
                       : "Continue editing"}
                   </Link>
                 ) : null}
-                {canSubmitSubmission(submission.status) ? (
+                {canSubmitFinance && canSubmitSubmission(submission.status) ? (
                   <Button
                     type="button"
                     size="sm"
@@ -713,7 +800,7 @@ export function SubmissionDetailPage({
                       : "Submit"}
                   </Button>
                 ) : null}
-                {canQuerySubmission(submission.status) ? (
+                {canCreateFinance && canQuerySubmission(submission.status) ? (
                   <Button
                     type="button"
                     size="sm"
@@ -725,7 +812,8 @@ export function SubmissionDetailPage({
                     Mark queried
                   </Button>
                 ) : null}
-                {canAuthorizeSubmission(
+                {canAuthorizeFinance &&
+                canAuthorizeSubmission(
                   submission.status,
                   paymentSummary.isAuthorized
                 ) ? (
@@ -742,7 +830,8 @@ export function SubmissionDetailPage({
                     Authorize claim
                   </Button>
                 ) : null}
-                {canReviseAuthorization(
+                {canAuthorizeFinance &&
+                canReviseAuthorization(
                   submission.status,
                   paymentSummary.isAuthorized
                 ) && !paymentSummary.fullyPaid ? (
@@ -760,7 +849,8 @@ export function SubmissionDetailPage({
                     Review authorization
                   </Button>
                 ) : null}
-                {canRecordPaymentForSubmission(
+                {canPayFinance &&
+                canRecordPaymentForSubmission(
                   submission.status,
                   paymentSummary.isAuthorized
                 ) && !paymentSummary.fullyPaid ? (
@@ -1142,6 +1232,56 @@ export function SubmissionDetailPage({
           </>
         )}
       </div>
+      <ProtectedActionDialog
+        open={pendingProtected === "revise_auth"}
+        actionId="finance.authorization.revise"
+        title="Authorize authorization revise"
+        description="Revising an authorized reimbursement amount is a protected action."
+        confirmLabel="Authorize revise"
+        onClose={() => {
+          setPendingProtected(null);
+          setPendingAuthDraft(null);
+        }}
+        onConfirm={async (proof) => {
+          try {
+            await completeAuthorizeRevise(proof);
+            setPendingProtected(null);
+          } catch (err) {
+            toast({
+              type: "error",
+              title: "Unable to revise authorization",
+              description:
+                err instanceof Error ? err.message : "Try again.",
+            });
+            throw err;
+          }
+        }}
+      />
+      <ProtectedActionDialog
+        open={pendingProtected === "correct_payment"}
+        actionId="finance.payment.correct"
+        title="Authorize payment correction"
+        description="Correcting a recorded reimbursement payment is a protected action."
+        confirmLabel="Authorize correction"
+        onClose={() => {
+          setPendingProtected(null);
+          setPendingPaymentDraft(null);
+        }}
+        onConfirm={async (proof) => {
+          try {
+            await completePaymentCorrect(proof);
+            setPendingProtected(null);
+          } catch (err) {
+            toast({
+              type: "error",
+              title: "Unable to correct payment",
+              description:
+                err instanceof Error ? err.message : "Try again.",
+            });
+            throw err;
+          }
+        }}
+      />
     </ModeFrame>
   );
 }

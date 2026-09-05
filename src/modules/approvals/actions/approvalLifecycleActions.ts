@@ -57,6 +57,7 @@ export async function submitApprovalRequest(
   return executeAction({
     name: "approval.submit",
     module: "facility_management",
+    requiredCapability: "approvals.manage",
     input: { approvalId, input },
     handler: async (context, raw) => {
       const id = String(raw.approvalId || "").trim();
@@ -158,6 +159,7 @@ export async function recordApprovalFollowUp(
   return executeAction({
     name: "approval.follow_up",
     module: "facility_management",
+    requiredCapability: "approvals.manage",
     input: { approvalId, input },
     handler: async (context, raw) => {
       const id = String(raw.approvalId || "").trim();
@@ -236,6 +238,11 @@ export async function recordApprovalDecision(
   return executeAction({
     name: "approval.record_decision",
     module: "facility_management",
+    protected: true,
+    protectedActionId: "approval.record_decision",
+    requiredCapability: "approvals.manage",
+    getStepUpPassword: (raw) =>
+      (raw.input as RecordApprovalDecisionInput | undefined)?.stepUpPassword,
     input: { approvalId, input },
     handler: async (context, raw) => {
       const id = String(raw.approvalId || "").trim();
@@ -317,6 +324,10 @@ export async function recordApprovalDecision(
             approvedAmount: payload.approvedAmount,
             decisionReference: payload.decisionReference,
             decisionDocumentFileName: payload.decisionDocument?.fileName,
+            authorityMode: context.protectedAuthority?.mode ?? null,
+            authorityLabel: context.protectedAuthority?.label ?? null,
+            operatingRole: context.operatingAccess?.role ?? null,
+            protectedActionId: "approval.record_decision",
           },
         }),
       });
@@ -330,6 +341,12 @@ export async function recordApprovalDecision(
           data: approvalEventData(approval, {
             decision: payload.decision,
             decisionReference: payload.decisionReference ?? null,
+            protectedActionId: "approval.record_decision",
+            authorityMode: context.protectedAuthority?.mode ?? null,
+            authorityLabel: context.protectedAuthority?.label ?? null,
+            operatingRole: context.operatingAccess?.role ?? null,
+            platformRole: context.operatingAccess?.platformRole ?? null,
+            isSuperAdmin: context.operatingAccess?.isSuperAdmin ?? false,
           }),
         });
       } catch {
@@ -347,6 +364,7 @@ export async function cancelApprovalRequest(
   return executeAction({
     name: "approval.cancel",
     module: "facility_management",
+    requiredCapability: "approvals.manage",
     input: { approvalId },
     handler: async (context, raw) => {
       const id = String(raw.approvalId || "").trim();

@@ -7,11 +7,14 @@ export function FinanceHeader({
   loading,
   onRefresh,
   onRecordCost,
+  canMutateFinance = true,
 }: {
   derivedAt?: string;
   loading: boolean;
   onRefresh: () => void;
   onRecordCost: () => void;
+  /** When false, hide Record cost / Create claim (view-only actors). */
+  canMutateFinance?: boolean;
 }) {
   const asOf = derivedAt
     ? new Date(derivedAt).toLocaleString("en-GB", {
@@ -34,23 +37,27 @@ export function FinanceHeader({
           ) : null}
         </div>
         <div className="fin-v13-actions">
-          <Button
-            type="button"
-            size="sm"
-            onClick={onRecordCost}
-            disabled={loading}
-          >
-            <Plus className="h-4 w-4" />
-            Record cost
-          </Button>
-          <Link
-            href="/finance/submissions/new"
-            className="fin-v13-btn-secondary"
-            aria-disabled={loading || undefined}
-          >
-            <Plus className="h-4 w-4" />
-            Create reimbursement claim
-          </Link>
+          {canMutateFinance ? (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                onClick={onRecordCost}
+                disabled={loading}
+              >
+                <Plus className="h-4 w-4" />
+                Record cost
+              </Button>
+              <Link
+                href="/finance/submissions/new"
+                className="fin-v13-btn-secondary"
+                aria-disabled={loading || undefined}
+              >
+                <Plus className="h-4 w-4" />
+                Create reimbursement claim
+              </Link>
+            </>
+          ) : null}
           <Button
             type="button"
             variant="ghost"

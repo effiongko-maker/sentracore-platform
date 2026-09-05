@@ -1,5 +1,6 @@
 "use client";
 
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { Wrench } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -25,6 +26,9 @@ import { ViewMaintenanceModal } from "./ViewMaintenanceModal";
 
 export function MaintenancePage() {
   const { toast } = useToast();
+  const { can } = useOperatingAccess();
+  const canCreateOps = can("ops.create");
+  const canMutateOps = can("ops.edit");
   const openId = useQueryRecordId();
   const {
     items,
@@ -154,6 +158,7 @@ export function MaintenancePage() {
         loading={loading}
         onClearAll={clearAll}
         onCreate={() => setModal({ type: "create" })}
+        canCreate={canCreateOps}
       />
 
       {error ? (
@@ -167,6 +172,7 @@ export function MaintenancePage() {
       ) : (
         <StreamSurface>
           <MaintenanceTable
+            canMutate={canMutateOps}
             items={items}
             loading={loading}
             page={page}

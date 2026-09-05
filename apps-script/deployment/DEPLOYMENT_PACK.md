@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Generated: 2026-09-03T14:52:57.298Z
+Generated: 2026-09-04T12:55:50.178Z
 
 This document is the **single source of truth** for copying Apps Script
 source into the Google Apps Script project.
@@ -7002,6 +7002,46 @@ var CostRecordService = (function () {
       .replace(/\s+/g, "_");
   }
 
+  /**
+   * V1 lock: reject updates when the cost is on a non-draft, non-cancelled claim.
+   * Draft claims do not lock. Authoritative — do not rely on the UI alone.
+   */
+  function allowsProtectedCostUnlock_(payload) {
+    payload = payload || {};
+    var action = String(payload._protectedAction || "");
+    var mode = String(payload._authorityMode || "");
+    return (
+      action === "finance.cost.unlock_edit" &&
+      (mode === "facility_manager" || mode === "platform_override")
+    );
+  }
+
+  function assertCostRecordEditable_(costId, payload) {
+    if (allowsProtectedCostUnlock_(payload)) return;
+    if (typeof CostSubmissionRepository === "undefined") return;
+    var rows = CostSubmissionRepository.getAll() || [];
+    var target = String(costId || "");
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      var status = String(row.status || "").toLowerCase();
+      if (status === "draft" || status === "cancelled") continue;
+      var ids = row.costRecordIds || [];
+      for (var j = 0; j < ids.length; j++) {
+        if (String(ids[j]) === target) {
+          throw new Error(
+            "Cost record " +
+              target +
+              " cannot be edited because it is part of reimbursement claim " +
+              String(row.submissionId || "") +
+              " (" +
+              status +
+              ")."
+          );
+        }
+      }
+    }
+  }
+
   function validateCreatePayload_(payload) {
     payload = payload || {};
     if (!payload.facilityId || !String(payload.facilityId).trim()) {
@@ -7250,6 +7290,7 @@ var CostRecordService = (function () {
     payload = payload || {};
     var costId = payload.costId || payload.id;
     if (!costId) throw new Error("Cost id is required.");
+    assertCostRecordEditable_(costId, payload);
     if (payload.category != null && !VALID_CATEGORIES[normalizeEnum_(payload.category)]) {
       throw new Error("Invalid cost category: " + payload.category);
     }

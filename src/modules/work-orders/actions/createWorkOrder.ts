@@ -13,6 +13,7 @@ export async function createWorkOrder(
   return executeAction({
     name: "work_order.create",
     module: "facility_management",
+    requiredCapability: "ops.create",
     input,
     handler: async (context, rawInput) => {
       const title = rawInput.title?.trim() ?? "";

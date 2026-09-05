@@ -13,6 +13,7 @@ export async function triageIncident(
   return executeAction({
     name: "incident.triage",
     module: "facility_management",
+    requiredCapability: "ops.edit",
     input,
     handler: async (context, rawInput) => {
       if (!rawInput.incidentId?.trim()) {

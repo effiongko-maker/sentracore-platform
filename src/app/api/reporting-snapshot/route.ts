@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { gateApiCapability } from "@/lib/access/gateApi";
 import {
   postToAppsScript,
   type AppsScriptProxyBody,
@@ -11,16 +12,27 @@ import {
  * Can later point at a database-backed repository without changing
  * DashboardService → ReportingService application architecture.
  *
+ * Requires ops.view or finance.view (reporting is operational/finance drill-down).
+ *
  * Operational diagnostics (read-only):
  *   GET  /api/reporting-snapshot?action=diagnostics
  *   POST /api/reporting-snapshot  { "action": "diagnostics" }
  */
+
+async function requireReportingReadAccess() {
+  const ops = await gateApiCapability("ops.view");
+  if (ops.ok) return ops;
+  return gateApiCapability("finance.view");
+}
 
 async function proxyReportingSnapshot(
   body: AppsScriptProxyBody,
   defaultAction: string
 ) {
   try {
+    const gate = await requireReportingReadAccess();
+    if (!gate.ok) return gate.response;
+
     const data = await postToAppsScript(
       body,
       { resource: "reporting-snapshot", action: defaultAction },

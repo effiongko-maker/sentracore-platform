@@ -28,6 +28,7 @@ interface AssetsTableProps {
   onView: (asset: Asset) => void;
   onEdit: (asset: Asset) => void;
   onDeactivate: (asset: Asset) => void;
+  canMutate?: boolean;
 }
 
 export function AssetsTable({
@@ -40,6 +41,7 @@ export function AssetsTable({
   onView,
   onEdit,
   onDeactivate,
+  canMutate = true,
 }: AssetsTableProps) {
   const columns = useMemo<Column<Asset>[]>(
     () => [
@@ -112,11 +114,12 @@ export function AssetsTable({
             onView={onView}
             onEdit={onEdit}
             onDeactivate={onDeactivate}
+            canMutate={canMutate}
           />
         ),
       },
     ],
-    [onView, onEdit, onDeactivate]
+    [onView, onEdit, onDeactivate, canMutate]
   );
 
   return (

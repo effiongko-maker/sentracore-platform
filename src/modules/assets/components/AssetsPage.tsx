@@ -1,5 +1,6 @@
 "use client";
 
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { Package } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -21,6 +22,9 @@ import { ViewAssetModal } from "./ViewAssetModal";
 
 export function AssetsPage() {
   const { toast } = useToast();
+  const { can } = useOperatingAccess();
+  const canCreateOps = can("ops.create");
+  const canMutateOps = can("ops.edit");
   const openId = useQueryRecordId();
   const {
     assets,
@@ -112,6 +116,7 @@ export function AssetsPage() {
         loading={loading}
         onClearAll={clearAll}
         onCreate={() => setModal({ type: "create" })}
+        canCreate={canCreateOps}
       />
 
       {error ? (
@@ -125,6 +130,7 @@ export function AssetsPage() {
       ) : (
         <StreamSurface>
           <AssetsTable
+            canMutate={canMutateOps}
             assets={assets}
             loading={loading}
             page={page}

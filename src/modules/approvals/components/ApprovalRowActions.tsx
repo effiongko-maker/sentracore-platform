@@ -56,6 +56,8 @@ interface ApprovalRowActionsProps {
   onFollowUp: (approval: Approval) => void;
   onDecision: (approval: Approval) => void;
   onDeactivate: (approval: Approval) => void;
+  /** When false, hide lifecycle mutations (view + print package remain). */
+  canManage?: boolean;
 }
 
 export function ApprovalRowActions({
@@ -67,6 +69,7 @@ export function ApprovalRowActions({
   onFollowUp,
   onDecision,
   onDeactivate,
+  canManage = true,
 }: ApprovalRowActionsProps) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -170,7 +173,7 @@ export function ApprovalRowActions({
               <FileText className="h-3.5 w-3.5 text-muted" />
               Print package
             </button>
-            {actions.canSubmit ? (
+            {canManage && actions.canSubmit ? (
               <button
                 type="button"
                 role="menuitem"
@@ -184,7 +187,7 @@ export function ApprovalRowActions({
                 Mark as submitted
               </button>
             ) : null}
-            {actions.canFollowUp ? (
+            {canManage && actions.canFollowUp ? (
               <button
                 type="button"
                 role="menuitem"
@@ -198,7 +201,7 @@ export function ApprovalRowActions({
                 Record follow-up
               </button>
             ) : null}
-            {actions.canRecordDecision ? (
+            {canManage && actions.canRecordDecision ? (
               <button
                 type="button"
                 role="menuitem"
@@ -212,7 +215,7 @@ export function ApprovalRowActions({
                 Record decision
               </button>
             ) : null}
-            {actions.canEdit ? (
+            {canManage && actions.canEdit ? (
               <button
                 type="button"
                 role="menuitem"
@@ -226,19 +229,21 @@ export function ApprovalRowActions({
                 {actions.canEditSubmission ? "Edit submission details" : "Edit"}
               </button>
             ) : null}
-            <button
-              type="button"
-              role="menuitem"
-              disabled={!actions.canCancel}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-              onClick={() => {
-                setOpen(false);
-                onDeactivate(approval);
-              }}
-            >
-              <AlertTriangle className="h-3.5 w-3.5" />
-              Cancel
-            </button>
+            {canManage ? (
+              <button
+                type="button"
+                role="menuitem"
+                disabled={!actions.canCancel}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                onClick={() => {
+                  setOpen(false);
+                  onDeactivate(approval);
+                }}
+              >
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Cancel
+              </button>
+            ) : null}
           </div>,
           document.body
         )

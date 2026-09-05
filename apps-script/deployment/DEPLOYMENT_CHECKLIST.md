@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Release: **v0.8.6.3** — Unique reimbursement payment IDs and complete ceiling sum
+Release: **v0.8.6.5** — Protected cost unlock for FM authorization / Super Admin override
 
 Use this checklist with `DEPLOYMENT_PACK.md` open. Someone unfamiliar
 with the project should be able to deploy from these steps alone.
@@ -213,16 +213,16 @@ A **new Web App version** is REQUIRED.
 
 With `npm run dev` running:
 
-### Finance reimbursement payment
+### Protected actions
 
 ```bash
-npx tsx --tsconfig tsconfig.json scripts/verify-finance-reimbursement-payment.mts
+npx tsx --tsconfig tsconfig.json scripts/verify-protected-actions.mts
 ```
 
-### Finance reimbursement authorization
+### Finance cost workflow lock
 
 ```bash
-npx tsx --tsconfig tsconfig.json scripts/verify-finance-reimbursement-authorization.mts
+npx tsx --tsconfig tsconfig.json scripts/verify-finance-cost-workflow.mts
 ```
 
 Expected checks:

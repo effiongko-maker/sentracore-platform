@@ -1,5 +1,6 @@
 "use client";
 
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { Inbox } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ModeFrame, StreamSurface } from "@/components/platform";
@@ -19,6 +20,8 @@ import { ViewRequestModal } from "./ViewRequestModal";
 
 export function RequestsPage() {
   const { toast } = useToast();
+  const { can } = useOperatingAccess();
+  const canMutateOps = can("ops.edit");
   const openId = useQueryRecordId();
   const {
     requests,
@@ -116,6 +119,7 @@ export function RequestsPage() {
         ) : (
           <StreamSurface>
             <RequestsTable
+              canMutate={canMutateOps}
               requests={requests}
               loading={loading}
               page={page}

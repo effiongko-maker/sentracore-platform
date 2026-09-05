@@ -48,6 +48,7 @@ interface MasterDataToolbarProps {
   loading?: boolean;
   onClearAll: () => void;
   onCreate: () => void;
+  canCreate?: boolean;
   createLabel: string;
 }
 
@@ -100,6 +101,7 @@ export function MasterDataToolbar({
   loading,
   onClearAll,
   onCreate,
+  canCreate = true,
   createLabel,
 }: MasterDataToolbarProps) {
   const { facilities } = useFacilityOptions();
@@ -227,6 +229,7 @@ export function MasterDataToolbar({
         sortOptions={MASTER_DATA_SORT_OPTIONS}
         onSortChange={(value) => onSortChange?.(value as MasterDataSort)}
         leadingActions={
+          canCreate ? (
           <Button
             type="button"
             size="sm"
@@ -236,6 +239,7 @@ export function MasterDataToolbar({
             <Plus className="h-3.5 w-3.5" aria-hidden />
             {createLabel}
           </Button>
+          ) : undefined
         }
         filterPanel={
           <>

@@ -29,6 +29,7 @@ interface ApprovalsTableProps {
   onFollowUp: (approval: Approval) => void;
   onDecision: (approval: Approval) => void;
   onDeactivate: (approval: Approval) => void;
+  canManage?: boolean;
 }
 
 function FacilityLabel({ id }: { id?: string }) {
@@ -50,6 +51,7 @@ export function ApprovalsTable({
   onFollowUp,
   onDecision,
   onDeactivate,
+  canManage = true,
 }: ApprovalsTableProps) {
   const columns = useMemo<Column<Approval>[]>(
     () => [
@@ -147,11 +149,12 @@ export function ApprovalsTable({
             onFollowUp={onFollowUp}
             onDecision={onDecision}
             onDeactivate={onDeactivate}
+            canManage={canManage}
           />
         ),
       },
     ],
-    [onView, onEdit, onPackage, onSubmit, onFollowUp, onDecision, onDeactivate]
+    [onView, onEdit, onPackage, onSubmit, onFollowUp, onDecision, onDeactivate, canManage]
   );
 
   return (

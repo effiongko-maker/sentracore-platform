@@ -10,6 +10,8 @@ interface IncidentRowActionsProps {
   onView: (incident: Incident) => void;
   onEdit: (incident: Incident) => void;
   onDeactivate: (incident: Incident) => void;
+  /** When false, hide Investigate / Cancel (view-only actors). */
+  canMutate?: boolean;
 }
 
 export function IncidentRowActions({
@@ -17,6 +19,7 @@ export function IncidentRowActions({
   onView,
   onEdit,
   onDeactivate,
+  canMutate = true,
 }: IncidentRowActionsProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -77,31 +80,35 @@ export function IncidentRowActions({
             <Eye className="h-3.5 w-3.5 text-muted" />
             View
           </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-slate-50"
-            onClick={() => {
-              setOpen(false);
-              onEdit(incident);
-            }}
-          >
-            <Pencil className="h-3.5 w-3.5 text-muted" />
-            Investigate
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            disabled={!canDeactivate}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-            onClick={() => {
-              setOpen(false);
-              onDeactivate(incident);
-            }}
-          >
-            <AlertTriangle className="h-3.5 w-3.5" />
-            Cancel
-          </button>
+          {canMutate ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-slate-50"
+              onClick={() => {
+                setOpen(false);
+                onEdit(incident);
+              }}
+            >
+              <Pencil className="h-3.5 w-3.5 text-muted" />
+              Investigate
+            </button>
+          ) : null}
+          {canMutate ? (
+            <button
+              type="button"
+              role="menuitem"
+              disabled={!canDeactivate}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              onClick={() => {
+                setOpen(false);
+                onDeactivate(incident);
+              }}
+            >
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Cancel
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

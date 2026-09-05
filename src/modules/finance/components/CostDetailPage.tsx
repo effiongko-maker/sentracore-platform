@@ -14,7 +14,10 @@ import { ModeFrame, OperateHeader, StreamSurface } from "@/components/platform";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
+import { ProtectedActionDialog } from "@/components/security/ProtectedActionDialog";
 import { useFacilityOptions } from "@/hooks/useFacilityOptions";
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
+import type { ProtectedMutationProof } from "@/lib/access/protectedMutationProof";
 import {
   COST_CATEGORIES,
   COST_CATEGORY_LABELS,
@@ -41,6 +44,8 @@ import {
   parseMonetaryInput,
 } from "../utils/monetaryInput";
 import {
+  canEditCostRecord,
+  costRecordLockReason,
   deriveCostWorkflow,
   findSubmissionForCost,
 } from "../utils/costWorkflow";
@@ -121,6 +126,10 @@ function userFacingError(error: unknown): string {
 
 export function CostDetailPage({ costId }: { costId: string }) {
   const { toast } = useToast();
+  const { can } = useOperatingAccess();
+  const canUnlockProtected =
+    can("fm.authorize_protected") || can("platform.admin_override");
+  const canMutateFinance = can("finance.create");
   const { facilities, loading: facilitiesLoading } = useFacilityOptions(true);
 
   const [record, setRecord] = useState<CostRecord | null>(null);
@@ -135,6 +144,9 @@ export function CostDetailPage({ costId }: { costId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [unlockProof, setUnlockProof] =
+    useState<ProtectedMutationProof | null>(null);
+  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
   const [form, setForm] = useState<ClassificationForm | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
   const [saving, setSaving] = useState(false);
@@ -298,6 +310,8 @@ export function CostDetailPage({ costId }: { costId: string }) {
     [record, linkedSubmission, paymentSummary?.fullyPaid]
   );
 
+  const canEdit = canEditCostRecord(linkedSubmission) && canMutateFinance;
+  const lockReason = costRecordLockReason(linkedSubmission);
   const primaryPayment = linkedPayments[0] ?? null;
 
   const workOptions = useMemo(
@@ -408,13 +422,23 @@ export function CostDetailPage({ costId }: { costId: string }) {
 
     setSaving(true);
     try {
+      const locked = !canEditCostRecord(linkedSubmission);
+      if (locked && !unlockProof) {
+        throw new ApiError(
+          costRecordLockReason(linkedSubmission) ??
+            "This cost cannot be edited because it is part of a submitted reimbursement claim.",
+          409
+        );
+      }
       const updated = await CostRecordService.updateCostRecord(
         record.costId,
-        payload
+        payload,
+        locked ? unlockProof : null
       );
       setRecord(updated);
       setForm(formFromRecord(updated));
       setEditing(false);
+      setUnlockProof(null);
       toast({
         type: "success",
         title: "Cost updated",
@@ -646,7 +670,7 @@ export function CostDetailPage({ costId }: { costId: string }) {
               against the linked submission and the claim is fully paid.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              {!editing ? (
+              {canEdit && !editing ? (
                 <Button
                   type="button"
                   size="sm"
@@ -661,7 +685,22 @@ export function CostDetailPage({ costId }: { costId: string }) {
                     : "Edit classification"}
                 </Button>
               ) : null}
-              {workflow.canStartSubmission ? (
+              {!canEdit && lockReason ? (
+                <div className="w-full space-y-2">
+                  <p className="fin-form-hint">{lockReason}</p>
+                  {canUnlockProtected ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowUnlockDialog(true)}
+                    >
+                      Unlock & edit
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+              {workflow.canStartSubmission && canMutateFinance ? (
                 <Link
                   href={`/finance/submissions/new?costId=${encodeURIComponent(record.costId)}`}
                   className="fin-v13-btn-primary"
@@ -674,7 +713,7 @@ export function CostDetailPage({ costId }: { costId: string }) {
         </StreamSurface>
       </div>
 
-      {editing ? (
+      {editing && (canEdit || unlockProof) ? (
         <StreamSurface className="mt-4">
           <form
             className="grid gap-5 sm:grid-cols-2"
@@ -938,6 +977,7 @@ export function CostDetailPage({ costId }: { costId: string }) {
                   setForm(formFromRecord(record));
                   setErrors({});
                   setEditing(false);
+                  setUnlockProof(null);
                 }}
               >
                 Cancel
@@ -949,6 +989,24 @@ export function CostDetailPage({ costId }: { costId: string }) {
           </form>
         </StreamSurface>
       ) : null}
+      <ProtectedActionDialog
+        open={showUnlockDialog}
+        actionId="finance.cost.unlock_edit"
+        title="Unlock locked cost"
+        description="This cost is part of a non-draft reimbursement claim. Unlocking to edit is a protected action."
+        confirmLabel="Authorize unlock"
+        onClose={() => setShowUnlockDialog(false)}
+        onConfirm={async (proof) => {
+          setUnlockProof({
+            actionId: "finance.cost.unlock_edit",
+            stepUpPassword: proof.stepUpPassword,
+          });
+          setForm(formFromRecord(record!));
+          setErrors({});
+          setEditing(true);
+          setShowUnlockDialog(false);
+        }}
+      />
     </ModeFrame>
   );
 }

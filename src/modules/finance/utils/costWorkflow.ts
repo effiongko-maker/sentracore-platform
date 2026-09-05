@@ -72,6 +72,35 @@ export function findSubmissionForCost(
 }
 
 /**
+ * V1 lock: a cost is editable only when it is not part of a non-draft claim.
+ * Draft claims do not lock. Cancelled claims are ignored by findSubmissionForCost.
+ * Submitted / queried (and therefore authorised/paid chains) lock the cost.
+ */
+export function canEditCostRecord(
+  linkedSubmission: Pick<CostSubmission, "status"> | null | undefined
+): boolean {
+  if (!linkedSubmission) return true;
+  return linkedSubmission.status === "draft";
+}
+
+export function costRecordLockReason(
+  linkedSubmission: Pick<CostSubmission, "submissionId" | "status"> | null | undefined
+): string | null {
+  if (canEditCostRecord(linkedSubmission)) return null;
+  const status = linkedSubmission?.status ?? "submitted";
+  const id = linkedSubmission?.submissionId;
+  const statusLabel =
+    status === "queried"
+      ? "queried"
+      : status === "submitted"
+        ? "submitted"
+        : status;
+  return id
+    ? `This cost cannot be edited because it is part of reimbursement claim ${id} (${statusLabel}).`
+    : "This cost cannot be edited because it is part of a submitted reimbursement claim.";
+}
+
+/**
  * Derive workflow state from CostRecord + optional linked submission.
  * `paymentRecorded` stays false until Payment exists in the product.
  */

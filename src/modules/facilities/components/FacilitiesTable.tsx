@@ -19,6 +19,7 @@ interface FacilitiesTableProps {
   onView: (facility: Facility) => void;
   onEdit: (facility: Facility) => void;
   onDeactivate: (facility: Facility) => void;
+  canMutate?: boolean;
 }
 
 export function FacilitiesTable({
@@ -31,6 +32,7 @@ export function FacilitiesTable({
   onView,
   onEdit,
   onDeactivate,
+  canMutate = true,
 }: FacilitiesTableProps) {
   const columns = useMemo<Column<Facility>[]>(
     () => [
@@ -96,11 +98,12 @@ export function FacilitiesTable({
             onView={onView}
             onEdit={onEdit}
             onDeactivate={onDeactivate}
+            canMutate={canMutate}
           />
         ),
       },
     ],
-    [onView, onEdit, onDeactivate]
+    [onView, onEdit, onDeactivate, canMutate]
   );
 
   return (

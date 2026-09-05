@@ -12,6 +12,8 @@ import type { ReimbursementAuthorization } from "@/lib/operational/finance/types
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
 import { postToAppsScriptData } from "@/services/api/appsScriptProxy";
+import { mergeProtectedProof } from "@/lib/access/protectedMutationProof";
+import type { ProtectedMutationProof } from "@/lib/access/protectedMutationProof";
 import {
   CacheNamespaces,
   onReimbursementAuthorizationMutation,
@@ -215,12 +217,25 @@ export const ReimbursementAuthorizationService = {
 
   async updateAuthorization(
     authorizationId: string,
-    input: UpdateReimbursementAuthorizationInput
+    input: UpdateReimbursementAuthorizationInput,
+    protectedProof?: ProtectedMutationProof | null
   ): Promise<ReimbursementAuthorization> {
     const existing =
       await ReimbursementAuthorizationService.getAuthorization(authorizationId);
     if (!existing) {
       throw new ApiError(`Authorization ${authorizationId} not found.`, 404);
+    }
+    if (!protectedProof) {
+      throw new ApiError(
+        "Revising a reimbursement authorization requires Facility Manager authorization or System Administrator override.",
+        403
+      );
+    }
+    if (protectedProof.actionId !== "finance.authorization.revise") {
+      throw new ApiError(
+        "Authorization revise requires finance.authorization.revise.",
+        403
+      );
     }
     const merged: ReimbursementAuthorization = {
       ...existing,
@@ -231,10 +246,15 @@ export const ReimbursementAuthorizationService = {
     };
     assertValidForPersistence(merged, "update");
     const updated =
-      await postAuthorizations<RemoteReimbursementAuthorization>("update", {
-        authorizationId,
-        ...reimbursementAuthorizationToRemotePayload(input),
-      });
+      await postAuthorizations<RemoteReimbursementAuthorization>("update", 
+        mergeProtectedProof(
+          {
+            authorizationId,
+            ...reimbursementAuthorizationToRemotePayload(input),
+          },
+          protectedProof
+        )
+      );
     onReimbursementAuthorizationMutation();
     return mapRemoteReimbursementAuthorization(updated);
   },

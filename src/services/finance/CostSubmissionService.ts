@@ -19,6 +19,8 @@ import type {
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
 import { postToAppsScriptData } from "@/services/api/appsScriptProxy";
+import { mergeProtectedProof } from "@/lib/access/protectedMutationProof";
+import type { ProtectedMutationProof } from "@/lib/access/protectedMutationProof";
 import {
   CacheNamespaces,
   onCostSubmissionMutation,
@@ -225,7 +227,8 @@ export const CostSubmissionService = {
 
   async updateCostSubmission(
     submissionId: string,
-    input: UpdateCostSubmissionInput
+    input: UpdateCostSubmissionInput,
+    protectedProof?: ProtectedMutationProof | null
   ): Promise<CostSubmission> {
     const existing = await CostSubmissionService.getCostSubmission(submissionId);
     if (!existing) {
@@ -239,6 +242,26 @@ export const CostSubmissionService = {
         throw new ApiError(
           error instanceof Error ? error.message : "Invalid lifecycle transition",
           400
+        );
+      }
+    }
+
+    const transitioningAway =
+      input.status != null && input.status !== existing.status;
+    const requiresProtected =
+      existing.status === "submitted" && !transitioningAway;
+
+    if (requiresProtected) {
+      if (!protectedProof) {
+        throw new ApiError(
+          "Editing a submitted claim requires Facility Manager authorization or System Administrator override.",
+          403
+        );
+      }
+      if (protectedProof.actionId !== "finance.claim.edit_submitted") {
+        throw new ApiError(
+          "Submitted claim edits require finance.claim.edit_submitted authorization.",
+          403
         );
       }
     }
@@ -257,10 +280,13 @@ export const CostSubmissionService = {
     };
     assertValidForPersistence(merged, "update");
 
-    const payload = {
-      submissionId,
-      ...costSubmissionToRemotePayload(input),
-    };
+    const payload = mergeProtectedProof(
+      {
+        submissionId,
+        ...costSubmissionToRemotePayload(input),
+      },
+      requiresProtected ? protectedProof : null
+    );
 
     const updated = await postCostSubmissions<RemoteCostSubmission>(
       "update",

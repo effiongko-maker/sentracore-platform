@@ -12,6 +12,8 @@ import type { ReimbursementPayment } from "@/lib/operational/finance/types";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
 import { postToAppsScriptData } from "@/services/api/appsScriptProxy";
+import { mergeProtectedProof } from "@/lib/access/protectedMutationProof";
+import type { ProtectedMutationProof } from "@/lib/access/protectedMutationProof";
 import {
   CacheNamespaces,
   onReimbursementPaymentMutation,
@@ -192,11 +194,24 @@ export const ReimbursementPaymentService = {
 
   async updatePayment(
     paymentId: string,
-    input: UpdateReimbursementPaymentInput
+    input: UpdateReimbursementPaymentInput,
+    protectedProof?: ProtectedMutationProof | null
   ): Promise<ReimbursementPayment> {
     const existing = await ReimbursementPaymentService.getPayment(paymentId);
     if (!existing) {
       throw new ApiError(`Payment ${paymentId} not found.`, 404);
+    }
+    if (!protectedProof) {
+      throw new ApiError(
+        "Correcting a reimbursement payment requires Facility Manager authorization or System Administrator override.",
+        403
+      );
+    }
+    if (protectedProof.actionId !== "finance.payment.correct") {
+      throw new ApiError(
+        "Payment correction requires finance.payment.correct.",
+        403
+      );
     }
 
     const merged: ReimbursementPayment = {
@@ -212,10 +227,13 @@ export const ReimbursementPaymentService = {
     };
     assertValidForPersistence(merged, "update");
 
-    const payload = {
-      ...reimbursementPaymentToRemotePayload(input),
-      paymentId,
-    };
+    const payload = mergeProtectedProof(
+      {
+        ...reimbursementPaymentToRemotePayload(input),
+        paymentId,
+      },
+      protectedProof
+    );
 
     const updated = await postPayments<RemoteReimbursementPayment>(
       "update",

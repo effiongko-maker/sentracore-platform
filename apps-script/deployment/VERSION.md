@@ -1,19 +1,17 @@
 Release:
-v0.8.6.3
+v0.8.6.5
 
 Title:
-Unique reimbursement payment IDs and complete ceiling sum
+Protected cost unlock for FM authorization / Super Admin override
 
 Generated:
-2026-09-03T14:52:57.313Z
+2026-09-04T12:55:50.191Z
 
 Features
-- ReimbursementPaymentRepository.nextId_() assigns PAY-{year}-{NNNNNN} from the persisted Payment ID column, not the paginated getAll() wrapper
-- Authorized-amount ceiling sums every receipt for the submission via listAllBySubmissionId (not the first 100 list page)
-- Submission Detail Record payment uses a synchronous lock so rapid double-click cannot fire two creates
+- CostRecordService.update allows exceptional unlock when Next.js attaches verified _protectedAction=finance.cost.unlock_edit with _authorityMode facility_manager or platform_override
+- Default lock for non-draft claims remains; unlock is not global
 
 Performance
-- nextId_ and ceiling sum scan REIMBURSEMENT_PAYMENTS sheet rows; public getAll pageSize remains capped at 100
 
 Files Changed
 - ROUTER.gs
@@ -82,35 +80,30 @@ YES
 
 Smoke Tests
 
-Finance reimbursement payment:
+Protected actions:
 
 ```bash
-npx tsx --tsconfig tsconfig.json scripts/verify-finance-reimbursement-payment.mts
+npx tsx --tsconfig tsconfig.json scripts/verify-protected-actions.mts
 ```
 
-Finance reimbursement authorization:
+Finance cost workflow lock:
 
 ```bash
-npx tsx --tsconfig tsconfig.json scripts/verify-finance-reimbursement-authorization.mts
+npx tsx --tsconfig tsconfig.json scripts/verify-finance-cost-workflow.mts
 ```
 
 Notes
-- MANUAL DEPLOYMENT REQUIRED: Replace ReimbursementPaymentRepository.gs and ReimbursementPaymentService.gs from this pack, then new Web App version.
-- Root fix: nextId_ scans sheet Payment ID cells. Do not iterate getAll({}) as an array.
-- Ceiling: listAllBySubmissionId so pageSize=100 cannot undercount receipts.
-- Do not auto-delete duplicate PAY-2026-000001 test rows.
+- V1 protected actions: exceptional cost unlock only changes Apps Script; other protected actions are Next.js authoritative.
 
 Deployment semantics
 - `deploymentRequired`: Pack intent: a new Web App deploy is required to apply this source release when cutting from the repo. Not a live deployment status flag.
-- `appsScriptRedeploy`: Required — replace ReimbursementPaymentRepository.gs and ReimbursementPaymentService.gs and cut a new Web App version.
+- `appsScriptRedeploy`: Required — replace CostRecordService.gs and cut a new Web App version.
 
 Live verification (read-only audit)
-- Method: scripts/verify-finance-reimbursement-payment.mts live GAS round-trip (create ×3 → retrieve → aggregate → update → retrieve)
+- Method: scripts/verify-protected-actions.mts plus finance verifies
 - resourceLive: no
 - Notes:
-  - Deploy must include updated ReimbursementPaymentRepository.gs and ReimbursementPaymentService.gs, then a new Web App version.
-  - No sheet schema change — REIMBURSEMENT_PAYMENTS columns unchanged.
-  - Existing duplicate PAY-2026-000001 rows are bad test data from the previous nextId_ bug; clean them manually after deploy.
-  - Live proof of PAY-YYYY-000001 → 000002 → 000003 requires no remaining PAY-{year}-* rows (or the script reports the next consecutive IDs from current max seq).
+  - Deploy must include updated CostRecordService.gs, then a new Web App version.
+  - No sheet schema change.
 
 <!-- GENERATED FILE — do not edit by hand. npm run apps-script:pack -->

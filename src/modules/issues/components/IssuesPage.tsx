@@ -7,6 +7,7 @@ import { OperationalPageHeader } from "@/components/operational";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { useQueryRecordId } from "@/hooks/useQueryRecordId";
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import {
   buildIssueOperationalView,
   composeIssueFromIncident,
@@ -73,6 +74,9 @@ function pageNumbers(current: number, totalPages: number): (number | "…")[] {
  */
 export function IssuesPage() {
   const openId = useQueryRecordId();
+  const { can } = useOperatingAccess();
+  const canCreateOps = can("ops.create");
+  const canMutateOps = can("ops.edit");
   const [items, setItems] = useState<UnifiedIssueListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -313,8 +317,8 @@ export function IssuesPage() {
           countValue={items.length}
           countLabel="In view"
           loading={loading}
-          actionLabel="Log Issue"
-          onAction={() => setLogOpen(true)}
+          actionLabel={canCreateOps ? "Log Issue" : undefined}
+          onAction={canCreateOps ? () => setLogOpen(true) : undefined}
         />
 
         {error ? (
@@ -442,6 +446,8 @@ export function IssuesPage() {
             <IssueOperationalPanel
               view={view}
               loading={detailLoading && !view}
+              canCreate={canCreateOps}
+              canMutate={canMutateOps}
             />
           </div>
         )}

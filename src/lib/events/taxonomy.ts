@@ -29,6 +29,8 @@ export const OperationalEventTypes = {
   FACILITY_APPROVAL_PARTIALLY_APPROVED: "facility.approval_partially_approved",
   FACILITY_APPROVAL_REJECTED: "facility.approval_rejected",
   FACILITY_APPROVAL_CANCELLED: "facility.approval_cancelled",
+  FACILITY_PROTECTED_ACTION_AUTHORIZED:
+    "facility.protected_action_authorized",
   FACILITY_REQUEST_CREATED: "facility.request_created",
   FACILITY_REQUEST_UPDATED: "facility.request_updated",
   FACILITY_REQUEST_STATUS_CHANGED: "facility.request_status_changed",

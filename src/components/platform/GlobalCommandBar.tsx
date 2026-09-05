@@ -6,6 +6,10 @@ import { signOut } from "@/lib/auth/actions";
 import {
   resolveBreadcrumbSegments,
 } from "@/lib/platform/layers";
+import {
+  isPlatformHomePath,
+  isWorkspacePreviewPath,
+} from "@/lib/platform/workspaces";
 import { UserService } from "@/services/users/UserService";
 import type { CurrentUser } from "@/types";
 import { usePlatformShell } from "@/hooks/usePlatformShell";
@@ -19,6 +23,8 @@ export function GlobalCommandBar() {
   const [pending, startTransition] = useTransition();
 
   const breadcrumb = resolveBreadcrumbSegments(pathname);
+  const isPlatformSurface =
+    isPlatformHomePath(pathname) || isWorkspacePreviewPath(pathname);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,19 +72,23 @@ export function GlobalCommandBar() {
         </div>
       </div>
 
-      <button
-        type="button"
-        className="os-command-trigger"
-        onClick={openCommandPalette}
-        aria-label="Open command palette"
-      >
-        <Search className="h-4 w-4 shrink-0 opacity-50" aria-hidden />
-        <span>Search or jump to…</span>
-        <kbd className="os-command-kbd">⌘K</kbd>
-      </button>
+      {isPlatformSurface ? (
+        <div className="os-command-platform-spacer" aria-hidden />
+      ) : (
+        <button
+          type="button"
+          className="os-command-trigger"
+          onClick={openCommandPalette}
+          aria-label="Open command palette"
+        >
+          <Search className="h-4 w-4 shrink-0 opacity-50" aria-hidden />
+          <span>Search or jump to…</span>
+          <kbd className="os-command-kbd">⌘K</kbd>
+        </button>
+      )}
 
       <div className="os-command-actions">
-        <GlobalNotificationBell />
+        {isPlatformSurface ? null : <GlobalNotificationBell />}
         {user?.organisationName ? (
           <span className="hidden text-xs text-[var(--os-ink-faint)] lg:inline">
             {user.organisationName}

@@ -31,6 +31,7 @@ interface MaintenanceTableProps {
   onView: (maintenance: Maintenance) => void;
   onEdit: (maintenance: Maintenance) => void;
   onDeactivate: (maintenance: Maintenance) => void;
+  canMutate?: boolean;
 }
 
 function FacilityCell({ row }: { row: Maintenance }) {
@@ -60,6 +61,7 @@ export function MaintenanceTable({
   onView,
   onEdit,
   onDeactivate,
+  canMutate = true,
 }: MaintenanceTableProps) {
   const columns = useMemo<Column<Maintenance>[]>(
     () => [
@@ -153,11 +155,12 @@ export function MaintenanceTable({
             onView={onView}
             onEdit={onEdit}
             onDeactivate={onDeactivate}
+            canMutate={canMutate}
           />
         ),
       },
     ],
-    [onView, onEdit, onDeactivate, page, total]
+    [onView, onEdit, onDeactivate, canMutate, page, total]
   );
 
   return (

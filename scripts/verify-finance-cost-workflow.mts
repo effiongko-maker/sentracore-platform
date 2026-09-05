@@ -7,6 +7,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { CostRecord, CostSubmission } from "../src/lib/operational/finance/types";
 import {
+  canEditCostRecord,
+  costRecordLockReason,
   deriveCostWorkflow,
   findSubmissionForCost,
 } from "../src/modules/finance/utils/costWorkflow";
@@ -125,6 +127,60 @@ function main() {
     { paymentRecorded: true }
   );
   assert(reimbursed.eligibility === "reimbursed", "reimbursed when payment true");
+
+  // G1 — cost edit lock once on a non-draft claim
+  assert(
+    canEditCostRecord(null),
+    "unlinked cost remains editable"
+  );
+  assert(
+    canEditCostRecord({ status: "draft" }),
+    "draft claim does not lock cost"
+  );
+  assert(
+    !canEditCostRecord({ status: "submitted" }),
+    "submitted claim locks cost"
+  );
+  assert(
+    !canEditCostRecord({ status: "queried" }),
+    "queried (non-draft) claim locks cost"
+  );
+  assert(
+    !canEditCostRecord(linked),
+    "linked submitted claim locks cost via findSubmissionForCost"
+  );
+  assert(
+    costRecordLockReason(linked)?.includes("SUB-2026-000001"),
+    "lock reason cites claim id"
+  );
+
+  const draftLinked = findSubmissionForCost("COST-2026-000099", [
+    { ...submission, status: "draft" },
+  ]);
+  assert(
+    canEditCostRecord(draftLinked),
+    "draft-linked cost remains editable"
+  );
+
+  assert(detail.includes("canEditCostRecord"), "detail uses edit lock");
+  assert(detail.includes("costRecordLockReason"), "detail shows lock reason");
+  assert(
+    !detail.includes("Edit classification") || detail.includes("canEdit"),
+    "edit CTA gated by canEdit"
+  );
+
+  const costService = readSrc("src/services/finance/CostRecordService.ts");
+  assert(
+    costService.includes("canEditCostRecord") &&
+      costService.includes("409"),
+    "CostRecordService rejects locked updates"
+  );
+  const gs = readSrc("apps-script/CostRecordService.gs");
+  assert(
+    gs.includes("assertCostRecordEditable_") &&
+      gs.includes("CostSubmissionRepository.getAll"),
+    "Apps Script enforces cost edit lock"
+  );
 
   console.log("PASS — Finance cost workflow verification");
 }

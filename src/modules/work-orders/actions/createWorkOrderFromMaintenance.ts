@@ -16,6 +16,7 @@ export async function createWorkOrderFromMaintenance(
   return executeAction({
     name: "work_order.create_from_maintenance",
     module: "facility_management",
+    requiredCapability: "ops.create",
     input: { maintenanceId },
     handler: async (context, rawInput) => {
       const id = rawInput.maintenanceId?.trim() ?? "";

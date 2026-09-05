@@ -96,8 +96,21 @@ function main() {
 
   const platformHome = readSrc("src/modules/platform/components/PlatformHomePage.tsx");
   assert(!platformHome.includes('"Incidents"'), "platform home no incidents");
-  assert(platformHome.includes('"Issues"'), "platform home issues");
-  results.push("PASS PlatformHomePage retargeted to Issues/Work");
+  assert(
+    platformHome.includes("Operating environments") ||
+      platformHome.includes("operating-environments"),
+    "platform home environments section"
+  );
+  const workspacesCatalog = readSrc("src/lib/platform/workspaces.ts");
+  assert(
+    workspacesCatalog.includes('"Issues"'),
+    "FM workspace capabilities retain Issues"
+  );
+  assert(
+    /issues/i.test(workspacesCatalog),
+    "FM environment copy references issues"
+  );
+  results.push("PASS PlatformHomePage platform environments; Issues retained in FM catalog");
 
   const workspaces = readSrc("src/lib/platform/workspaces.ts");
   assert(workspaces.includes('pathname.startsWith("/incidents")'), "ops path incidents");

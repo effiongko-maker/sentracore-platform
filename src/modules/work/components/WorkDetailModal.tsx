@@ -38,6 +38,8 @@ interface WorkDetailModalProps {
   onTreat?: (work: Maintenance) => void;
   onUpdated?: (work: Maintenance) => void;
   onOpenWorkOrder?: (workOrderId: string) => void;
+  /** ops.create — Create Work Order control */
+  canCreateWorkOrder?: boolean;
 }
 
 function Detail({ label, value }: { label: string; value: React.ReactNode }) {
@@ -77,6 +79,7 @@ export function WorkDetailModal({
   onTreat,
   onUpdated,
   onOpenWorkOrder,
+  canCreateWorkOrder = true,
 }: WorkDetailModalProps) {
   const { toast } = useToast();
   const [creatingWorkOrder, setCreatingWorkOrder] = useState(false);
@@ -257,14 +260,16 @@ export function WorkDetailModal({
                   <div className="space-y-2">
                     <p className="text-sm text-muted">No work order linked yet</p>
                     <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        loading={creatingWorkOrder}
-                        onClick={() => void handleCreateWorkOrder()}
-                      >
-                        Create Work Order
-                      </Button>
+                      {canCreateWorkOrder ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          loading={creatingWorkOrder}
+                          onClick={() => void handleCreateWorkOrder()}
+                        >
+                          Create Work Order
+                        </Button>
+                      ) : null}
                       {onTreat ? (
                         <Button
                           type="button"

@@ -7,14 +7,19 @@ import { filterNavGroups, NAV_GROUPS } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "@/hooks/useSidebar";
 import { usePlatformSession } from "@/hooks/usePlatformSession";
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { getNavContextByPath } from "@/lib/navigation";
+import { resolveAccessVisibility } from "@/lib/access";
 import { SentraCoreLogo } from "@/components/brand";
 
 export function Sidebar() {
   const pathname = usePathname();
   const { collapsed, mobileOpen, closeMobile, toggleCollapsed } = useSidebar();
   const { enabledModules } = usePlatformSession();
-  const navGroups = filterNavGroups(NAV_GROUPS, enabledModules);
+  const { access, loading: accessLoading } = useOperatingAccess();
+  const visibility =
+    !accessLoading && access ? resolveAccessVisibility(access) : null;
+  const navGroups = filterNavGroups(NAV_GROUPS, enabledModules, visibility);
   const isIntelligence = getNavContextByPath(pathname).archetype === "briefing";
 
   return (

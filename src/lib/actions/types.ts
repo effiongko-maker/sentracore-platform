@@ -4,6 +4,10 @@ import type {
   AuthProfile,
   AuthRoleAssignment,
 } from "@/lib/auth/types";
+import type { AccessCapability } from "@/lib/access/capabilities";
+import type { OperatingAccess } from "@/lib/access/resolveAccess";
+import type { ProtectedActionId } from "@/lib/access/protectedActions";
+import type { ProtectedActionAuthority } from "@/lib/access/resolveAccess";
 
 /**
  * Known platform module slugs (registry).
@@ -74,6 +78,15 @@ export type ActionContext = {
   /** Enabled module row for the action's required module. */
   module: AuthEnabledModule;
   authz: ActionAuthz;
+  /**
+   * People-register operating access. Always set by resolveActionContext /
+   * executeAction in production; optional on script stubs.
+   */
+  operatingAccess?: OperatingAccess;
+  /**
+   * Set when a protected action completed FM step-up or platform override.
+   */
+  protectedAuthority?: ProtectedActionAuthority | null;
   /** UTC ISO timestamp when the context was resolved. */
   now: string;
 };
@@ -86,5 +99,19 @@ export type ActionDefinition<TInput, TData> = {
   input?: TInput;
   /** Optional department to resolve safely into context. */
   departmentId?: string | null;
+  /**
+   * When true (or when protectedActionId is set), requires
+   * resolveProtectedActionAuthority + FM step-up or Super Admin override.
+   */
+  protected?: boolean;
+  /** Registry id when this action is a V1 protected action. */
+  protectedActionId?: ProtectedActionId;
+  /** Base capability required in addition to module access. */
+  requiredCapability?: AccessCapability;
+  /**
+   * For protected actions: read step-up password from input.
+   * Password is never logged or emitted.
+   */
+  getStepUpPassword?: (input: TInput) => string | null | undefined;
   handler: (context: ActionContext, input: TInput) => Promise<TData>;
 };

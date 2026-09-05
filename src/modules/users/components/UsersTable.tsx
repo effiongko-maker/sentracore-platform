@@ -36,6 +36,7 @@ interface UsersTableProps {
   onEdit: (user: User) => void;
   onDeactivate: (user: User) => void;
   onViewWorkOrder: (workOrder: WorkOrder) => void;
+  canManage?: boolean;
 }
 
 export function UsersTable({
@@ -49,6 +50,7 @@ export function UsersTable({
   onEdit,
   onDeactivate,
   onViewWorkOrder,
+  canManage = true,
 }: UsersTableProps) {
   const [overlay, setOverlay] = useState<OpenOverlay>(null);
 
@@ -146,11 +148,12 @@ export function UsersTable({
             onView={onView}
             onEdit={onEdit}
             onDeactivate={onDeactivate}
+            canManage={canManage}
           />
         ),
       },
     ],
-    [onView, onEdit, onDeactivate, onViewWorkOrder, overlay]
+    [onView, onEdit, onDeactivate, onViewWorkOrder, overlay, canManage]
   );
 
   return (

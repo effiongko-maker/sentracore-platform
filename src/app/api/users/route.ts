@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { gateApiCapability } from "@/lib/access/gateApi";
+import { isWriteAction } from "@/lib/access/server";
 import {
   postToAppsScript,
   type AppsScriptProxyBody,
@@ -6,7 +8,7 @@ import {
 
 /**
  * Server-only proxy: browser → /api/users → Apps Script.
- * Frontend must never call Apps Script directly.
+ * Reads require users.view; mutations require users.manage.
  */
 
 export async function POST(request: Request) {
@@ -18,6 +20,11 @@ export async function POST(request: Request) {
     } catch {
       body = {};
     }
+
+    const action = String(body.action ?? "getAll");
+    const capability = isWriteAction(action) ? "users.manage" : "users.view";
+    const gate = await gateApiCapability(capability);
+    if (!gate.ok) return gate.response;
 
     const data = await postToAppsScript(
       body,

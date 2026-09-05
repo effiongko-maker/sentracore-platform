@@ -5,6 +5,7 @@ import { ActionError } from "./errors";
 import { createActionAuthz } from "./authz";
 import type { ActionContext, ActionDepartment, PlatformModuleSlug } from "./types";
 import { requireModule } from "./moduleAccess";
+import { resolveOperatingAccess } from "@/lib/access/server";
 
 /**
  * Resolve authenticated ActionContext from the current session.
@@ -44,6 +45,7 @@ export async function resolveActionContext(options: {
     session.roleAssignments,
     session.organisation.id
   );
+  const operatingAccess = await resolveOperatingAccess(session);
 
   const department = await resolveDepartmentContext({
     organisationId: session.organisation.id,
@@ -61,6 +63,8 @@ export async function resolveActionContext(options: {
     department,
     module,
     authz,
+    operatingAccess,
+    protectedAuthority: null,
     now: new Date().toISOString(),
   };
 }

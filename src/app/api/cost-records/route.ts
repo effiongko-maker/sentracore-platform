@@ -1,46 +1,16 @@
-import { NextResponse } from "next/server";
-import {
-  postToAppsScript,
-  type AppsScriptProxyBody,
-} from "@/services/api/appsScriptProxy";
+import { postFinanceProxyWithProtection } from "@/lib/access/postFinanceProxyWithProtection";
 
 /**
  * Server-only proxy: browser → /api/cost-records → Apps Script.
+ * Writes require finance.create.
+ * Locked-cost unlock requires finance.cost.unlock_edit (+ FM step-up / SA override).
  */
 
 export async function POST(request: Request) {
-  try {
-    let body: AppsScriptProxyBody = {};
-
-    try {
-      body = (await request.json()) as AppsScriptProxyBody;
-    } catch {
-      body = {};
-    }
-
-    const data = await postToAppsScript(
-      body,
-      { resource: "cost-records", action: "getAll" },
-      "api/cost-records"
-    );
-
-    return NextResponse.json(data, {
-      status: 200,
-      headers: { "Cache-Control": "no-store" },
-    });
-  } catch (error) {
-    console.error("[api/cost-records] proxy error:", error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        message:
-          error instanceof Error
-            ? error.message
-            : "Unable to reach Apps Script.",
-        data: null,
-      },
-      { status: 502 }
-    );
-  }
+  return postFinanceProxyWithProtection({
+    request,
+    resource: "cost-records",
+    logPrefix: "api/cost-records",
+    writeCapability: "finance.create",
+  });
 }

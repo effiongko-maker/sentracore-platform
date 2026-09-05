@@ -22,6 +22,11 @@ import {
 import type { AuthEnabledModule } from "@/lib/auth/types";
 import type { PlatformModuleSlug } from "@/lib/actions/types";
 import { hasModule } from "@/lib/actions/moduleAccess";
+import {
+  canSeeHref,
+  type AccessVisibility,
+} from "@/lib/access/visibility";
+import { FM_FINANCE_HOME } from "@/lib/platform/workspaces";
 
 export type NavGroupId =
   | "home"
@@ -151,8 +156,8 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Understand",
     items: [
       item({
-        label: "Finance",
-        href: "/finance",
+        label: FM_FINANCE_HOME.label,
+        href: FM_FINANCE_HOME.href,
         icon: Banknote,
         title: "Finance",
         description:
@@ -325,19 +330,27 @@ export function getNavItemByPath(pathname: string): NavItem {
 
 export function filterNavGroups(
   groups: NavGroup[],
-  enabledModules: AuthEnabledModule[] | null
+  enabledModules: AuthEnabledModule[] | null,
+  visibility?: AccessVisibility | null
 ): NavGroup[] {
-  if (!enabledModules) {
-    return groups;
-  }
+  const moduleFiltered = !enabledModules
+    ? groups
+    : groups
+        .map((group) => ({
+          ...group,
+          items: group.items.filter(
+            (entry) =>
+              !entry.moduleSlug || hasModule(enabledModules, entry.moduleSlug)
+          ),
+        }))
+        .filter((group) => group.items.length > 0);
 
-  return groups
+  if (!visibility) return moduleFiltered;
+
+  return moduleFiltered
     .map((group) => ({
       ...group,
-      items: group.items.filter(
-        (entry) =>
-          !entry.moduleSlug || hasModule(enabledModules, entry.moduleSlug)
-      ),
+      items: group.items.filter((entry) => canSeeHref(visibility, entry.href)),
     }))
     .filter((group) => group.items.length > 0);
 }

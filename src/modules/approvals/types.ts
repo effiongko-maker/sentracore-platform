@@ -209,4 +209,6 @@ export interface RecordApprovalDecisionInput {
   decisionReference?: string;
   decisionNotes?: string;
   decisionDocument?: ApprovalAttachmentRef;
+  /** FM step-up password — omitted for Super Admin override. */
+  stepUpPassword?: string;
 }

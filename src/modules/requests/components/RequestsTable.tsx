@@ -20,6 +20,7 @@ interface RequestsTableProps {
   onView: (request: RequestRecord) => void;
   onEdit: (request: RequestRecord) => void;
   onDeactivate: (request: RequestRecord) => void;
+  canMutate?: boolean;
 }
 
 function FacilityLabel({ id }: { id: string }) {
@@ -36,6 +37,7 @@ export function RequestsTable({
   onView,
   onEdit,
   onDeactivate,
+  canMutate = true,
 }: RequestsTableProps) {
   const columns = useMemo<Column<RequestRecord>[]>(
     () => [
@@ -116,11 +118,12 @@ export function RequestsTable({
             onView={onView}
             onEdit={onEdit}
             onDeactivate={onDeactivate}
+            canMutate={canMutate}
           />
         ),
       },
     ],
-    [onView, onEdit, onDeactivate]
+    [onView, onEdit, onDeactivate, canMutate]
   );
 
   return (

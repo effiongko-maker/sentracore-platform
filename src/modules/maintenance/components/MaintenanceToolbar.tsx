@@ -51,6 +51,7 @@ interface MaintenanceToolbarProps {
   loading?: boolean;
   onClearAll: () => void;
   onCreate: () => void;
+  canCreate?: boolean;
 }
 
 function countActiveFilters(filters: {
@@ -92,6 +93,7 @@ export function MaintenanceToolbar({
   loading,
   onClearAll,
   onCreate,
+  canCreate = true,
 }: MaintenanceToolbarProps) {
   const { facilities } = useFacilityOptions();
   const [users, setUsers] = useState<User[]>([]);
@@ -223,6 +225,7 @@ export function MaintenanceToolbar({
         sortOptions={MAINTENANCE_SORT_OPTIONS}
         onSortChange={(value) => onSortChange(value as MaintenanceSort)}
         leadingActions={
+          canCreate ? (
           <Button
             type="button"
             size="sm"
@@ -232,6 +235,7 @@ export function MaintenanceToolbar({
             <Plus className="h-3.5 w-3.5" aria-hidden />
             New maintenance
           </Button>
+          ) : undefined
         }
         filterPanel={
           <>

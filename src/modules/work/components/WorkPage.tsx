@@ -1,5 +1,6 @@
 "use client";
 
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { Wrench } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -40,6 +41,9 @@ type WorkModalState =
  */
 export function WorkPage() {
   const { toast } = useToast();
+  const { can } = useOperatingAccess();
+  const canMutateOps = can("ops.edit");
+  const canCreateOps = can("ops.create");
   const openId = useQueryRecordId();
   const {
     items,
@@ -233,6 +237,7 @@ export function WorkPage() {
       ) : (
         <StreamSurface>
           <WorkTable
+            canMutate={canMutateOps}
             items={items}
             loading={loading}
             page={page}
@@ -254,11 +259,16 @@ export function WorkPage() {
         linkedWorkOrdersById={linkedWorkOrdersById}
         linkedWorkOrdersLoading={linkedWorkOrdersLoading}
         onClose={() => setModal({ type: "closed" })}
-        onTreat={(row) => setModal({ type: "treat", work: row })}
+        onTreat={
+          canMutateOps
+            ? (row) => setModal({ type: "treat", work: row })
+            : undefined
+        }
         onUpdated={handleWorkUpdated}
         onOpenWorkOrder={(workOrderId) => {
           setViewWorkOrderId(workOrderId);
         }}
+        canCreateWorkOrder={canCreateOps}
       />
 
       <MaintenanceFormModal

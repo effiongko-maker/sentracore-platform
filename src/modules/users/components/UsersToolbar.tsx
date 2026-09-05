@@ -32,6 +32,7 @@ interface UsersToolbarProps {
   loading?: boolean;
   onClearAll: () => void;
   onCreate: () => void;
+  canCreate?: boolean;
 }
 
 function countActiveFilters(filters: {
@@ -62,6 +63,7 @@ export function UsersToolbar({
   loading,
   onClearAll,
   onCreate,
+  canCreate = true,
 }: UsersToolbarProps) {
   const { facilities } = useFacilityOptions();
   const [filterOpen, setFilterOpen] = useState(false);
@@ -135,15 +137,17 @@ export function UsersToolbar({
         sortOptions={USER_SORT_OPTIONS}
         onSortChange={(value) => onSortChange(value as UserSort)}
         leadingActions={
-          <Button
-            type="button"
-            size="sm"
-            className="h-9 shrink-0 rounded-md px-3.5 text-[0.8125rem] font-semibold shadow-none"
-            onClick={onCreate}
-          >
-            <Plus className="h-3.5 w-3.5" aria-hidden />
-            New user
-          </Button>
+          canCreate ? (
+            <Button
+              type="button"
+              size="sm"
+              className="h-9 shrink-0 rounded-md px-3.5 text-[0.8125rem] font-semibold shadow-none"
+              onClick={onCreate}
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+              New user
+            </Button>
+          ) : null
         }
         filterPanel={
           <>

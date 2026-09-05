@@ -1,18 +1,19 @@
 import type { UserStatus } from "./types";
 import type { UserSort } from "./types";
+import { V1_OPERATING_ROLE_LABELS } from "@/lib/access";
 
-/** Default suggestions for new users — sheet roles are free-form. */
+/** V1 operating role labels stored on the People register. */
 export const USER_ROLE_SUGGESTIONS = [
-  "CEO",
-  "Facility Manager",
-  "Liaison Officer",
-  "Technical",
-  "Cleaning Supervisor",
-  "Admin",
-  "Manager",
-  "Supervisor",
-  "Technician",
+  V1_OPERATING_ROLE_LABELS.facility_manager,
+  V1_OPERATING_ROLE_LABELS.fm_staff,
+  V1_OPERATING_ROLE_LABELS.liaison_officer,
+  V1_OPERATING_ROLE_LABELS.finance,
+  V1_OPERATING_ROLE_LABELS.ncc_client,
+  V1_OPERATING_ROLE_LABELS.executive,
 ] as const;
+
+/** Create/edit status options for V1 (Active / Inactive). */
+export const USER_MANAGE_STATUSES: UserStatus[] = ["active", "inactive"];
 
 export const USER_STATUSES: UserStatus[] = [
   "active",
@@ -52,3 +53,6 @@ export const USER_SORT_OPTIONS: Array<{ value: UserSort; label: string }> = [
 ];
 
 export const DEFAULT_USER_SORT: UserSort = "newest";
+
+/** Default specialization when create form omits the field. */
+export const DEFAULT_USER_SPECIALIZATION = "General Operations";

@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
 import { useQueryRecordId } from "@/hooks/useQueryRecordId";
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
 import { useWorkOrders } from "../hooks/useWorkOrders";
 import type { WorkOrderModalState } from "../types";
@@ -21,6 +22,9 @@ import { ViewWorkOrderModal } from "./ViewWorkOrderModal";
 
 export function WorkOrdersPage() {
   const { toast } = useToast();
+  const { can } = useOperatingAccess();
+  const canCreateOps = can("ops.create");
+  const canMutateOps = can("ops.edit");
   const openId = useQueryRecordId();
   const {
     workOrders,
@@ -129,6 +133,7 @@ export function WorkOrdersPage() {
         loading={loading}
         onClearAll={clearAll}
         onCreate={() => setModal({ type: "create" })}
+        canCreate={canCreateOps}
       />
 
       {error ? (
@@ -153,6 +158,7 @@ export function WorkOrdersPage() {
             onDeactivate={(workOrder) =>
               setModal({ type: "deactivate", workOrder })
             }
+            canMutate={canMutateOps}
           />
         </StreamSurface>
       )}
@@ -171,7 +177,11 @@ export function WorkOrdersPage() {
         open={modal.type === "view"}
         workOrder={modal.type === "view" ? modal.workOrder : null}
         onClose={() => setModal({ type: "closed" })}
-        onEdit={(workOrder) => setModal({ type: "edit", workOrder })}
+        onEdit={
+          canMutateOps
+            ? (workOrder) => setModal({ type: "edit", workOrder })
+            : undefined
+        }
       />
 
       <ConfirmDialog

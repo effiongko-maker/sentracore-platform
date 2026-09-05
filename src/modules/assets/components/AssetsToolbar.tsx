@@ -36,6 +36,7 @@ interface AssetsToolbarProps {
   loading?: boolean;
   onClearAll: () => void;
   onCreate: () => void;
+  canCreate?: boolean;
 }
 
 function countActiveFilters(filters: {
@@ -65,6 +66,7 @@ export function AssetsToolbar({
   loading,
   onClearAll,
   onCreate,
+  canCreate = true,
 }: AssetsToolbarProps) {
   const { facilities } = useFacilityOptions();
   const [filterOpen, setFilterOpen] = useState(false);
@@ -142,6 +144,7 @@ export function AssetsToolbar({
         sortOptions={ASSET_SORT_OPTIONS}
         onSortChange={(value) => onSortChange(value as AssetSort)}
         leadingActions={
+          canCreate ? (
           <Button
             type="button"
             size="sm"
@@ -151,6 +154,7 @@ export function AssetsToolbar({
             <Plus className="h-3.5 w-3.5" aria-hidden />
             New asset
           </Button>
+          ) : undefined
         }
         filterPanel={
           <>

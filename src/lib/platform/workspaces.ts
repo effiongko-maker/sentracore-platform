@@ -44,7 +44,7 @@ export const PLATFORM_WORKSPACES: PlatformWorkspace[] = [
     status: "active",
     statusLabel: "Active",
     description:
-      "Manage facilities, assets, issues, work and operational execution from one connected environment.",
+      "Manage facilities, assets, issues, work and operational execution across your environments.",
     href: OPERATIONS_HOME.href,
     capabilities: [
       "Facilities",
@@ -67,19 +67,24 @@ export const PLATFORM_WORKSPACES: PlatformWorkspace[] = [
     capabilities: ["Reporting", "Monitoring", "Centre Operations"],
   },
   {
+    /**
+     * Platform-level Finance workspace (SentraCore → Finance).
+     * Distinct from Facility Management → Finance (`FM_FINANCE_HOME` / `/finance`).
+     * Must never share the FM Finance route.
+     */
     id: "finance",
     label: "Finance",
     title: "Finance",
-    status: "active",
-    statusLabel: "Active",
+    status: "in_development",
+    statusLabel: "In development",
+    statusDetail: "Being built for your organisation",
     description:
-      "Operational financial position — costs, reimbursement submissions, client authorisation, and payment across facility operations.",
-    href: "/finance",
+      "Organisation-wide financial operations, planning and reporting.",
+    previewHref: "/workspaces/finance",
     capabilities: [
-      "Operational costs",
-      "Reimbursement submissions",
-      "Client authorisation",
-      "Payment position",
+      "Financial controls",
+      "Organisation reporting",
+      "Platform finance activity",
     ],
   },
   {
@@ -90,7 +95,7 @@ export const PLATFORM_WORKSPACES: PlatformWorkspace[] = [
     statusLabel: "Planned",
     statusDetail: "Coming to SentraCore",
     description:
-      "Manage construction activity, site operations, progress and project delivery.",
+      "Project delivery, contractors and site management.",
     previewHref: "/workspaces/construction",
     capabilities: ["Sites", "Progress", "Cost"],
   },
@@ -102,11 +107,20 @@ export const PLATFORM_WORKSPACES: PlatformWorkspace[] = [
     statusLabel: "Planned",
     statusDetail: "Coming to SentraCore",
     description:
-      "Plan, coordinate and manage projects, programmes and events across the organisation.",
+      "Plan and execute projects, events and strategic initiatives.",
     previewHref: "/workspaces/projects-events",
     capabilities: ["Projects", "Tasks", "Events"],
   },
 ];
+
+/**
+ * Facility Management → Finance home.
+ * Owned by the Facility Management (`operations`) workspace — not platform Finance.
+ */
+export const FM_FINANCE_HOME = {
+  label: "Finance",
+  href: "/finance",
+} as const;
 
 export function getWorkspace(id: WorkspaceId): PlatformWorkspace | undefined {
   return PLATFORM_WORKSPACES.find((workspace) => workspace.id === id);
@@ -121,10 +135,7 @@ export function resolveCurrentWorkspaceId(
 ): WorkspaceId | null {
   if (isPlatformHomePath(pathname)) return null;
 
-  if (pathname === "/finance" || pathname.startsWith("/finance/")) {
-    return "finance";
-  }
-
+  // Platform Finance workspace entry (never /finance — that is FM Finance).
   if (pathname.startsWith("/workspaces/")) {
     const slug = pathname.slice("/workspaces/".length).split("/")[0] ?? "";
     if (slug && getWorkspace(slug as WorkspaceId)) {
@@ -133,11 +144,13 @@ export function resolveCurrentWorkspaceId(
     return null;
   }
 
-  // Facility Management home + FM module routes (Finance already handled above).
+  // Facility Management home + FM module routes (including FM Finance).
   if (
     pathname === OPERATIONS_HOME.href ||
     pathname.startsWith(`${OPERATIONS_HOME.href}/`) ||
-    (isOperationsPath(pathname) && !pathname.startsWith("/finance"))
+    pathname === FM_FINANCE_HOME.href ||
+    pathname.startsWith(`${FM_FINANCE_HOME.href}/`) ||
+    isOperationsPath(pathname)
   ) {
     return "operations";
   }

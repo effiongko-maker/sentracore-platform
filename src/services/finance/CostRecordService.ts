@@ -14,6 +14,13 @@ import type {
   CostRecord,
   CostReimbursability,
 } from "@/lib/operational/finance/types";
+import {
+  canEditCostRecord,
+  costRecordLockReason,
+  findSubmissionForCost,
+} from "@/modules/finance/utils/costWorkflow";
+import { mergeProtectedProof } from "@/lib/access/protectedMutationProof";
+import type { ProtectedMutationProof } from "@/lib/access/protectedMutationProof";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
 import {
@@ -27,6 +34,7 @@ import {
   sharedRequest,
   stableRequestKey,
 } from "@/services/cache/sharedRequest";
+import { CostSubmissionService } from "@/services/finance/CostSubmissionService";
 
 export type CostRecordListParams = {
   page?: number;
@@ -236,11 +244,45 @@ export const CostRecordService = {
 
   async updateCostRecord(
     costId: string,
-    input: UpdateCostRecordInput
+    input: UpdateCostRecordInput,
+    protectedProof?: ProtectedMutationProof | null
   ): Promise<CostRecord> {
     const existing = await CostRecordService.getCostRecord(costId);
     if (!existing) {
       throw new ApiError(`Cost record ${costId} not found.`, 404);
+    }
+
+    let locked = false;
+    // Defense in depth — Apps Script also enforces. Bounded list may miss older claims.
+    try {
+      const submissionsPage = await CostSubmissionService.listCostSubmissions({
+        page: 1,
+        pageSize: 200,
+        status: "all",
+      });
+      const linked = findSubmissionForCost(
+        costId,
+        submissionsPage.data ?? []
+      );
+      locked = !canEditCostRecord(linked);
+      if (locked && !protectedProof) {
+        throw new ApiError(
+          costRecordLockReason(linked) ??
+            "This cost cannot be edited because it is part of a submitted reimbursement claim.",
+          409
+        );
+      }
+      if (locked && protectedProof && protectedProof.actionId !== "finance.cost.unlock_edit") {
+        throw new ApiError(
+          "Editing a locked cost requires finance.cost.unlock_edit authorization.",
+          403
+        );
+      }
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 409 || err.status === 403)) {
+        throw err;
+      }
+      // If submission lookup fails, still attempt update — Apps Script is authoritative.
     }
 
     const merged: CostRecord = {
@@ -283,10 +325,17 @@ export const CostRecordService = {
           }
         : undefined,
     };
-    const payload = {
-      costId,
-      ...costRecordToRemotePayload(remoteInput),
-    };
+    const payload = mergeProtectedProof(
+      {
+        costId,
+        ...costRecordToRemotePayload(remoteInput),
+      },
+      locked
+        ? protectedProof ?? {
+            actionId: "finance.cost.unlock_edit",
+          }
+        : null
+    );
 
     const updated = await postCostRecords<RemoteCostRecord>("update", payload);
     const record = mapRemoteCostRecord(updated);

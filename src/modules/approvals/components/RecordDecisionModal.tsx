@@ -5,6 +5,7 @@ import { Modal } from "@/components/modals/Modal";
 import { FormField, inputClassName } from "@/components/forms/FormField";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { recordApprovalDecision } from "../actions/approvalLifecycleActions";
 import type {
   Approval,
@@ -44,6 +45,9 @@ export function RecordDecisionModal({
   onSaved,
 }: RecordDecisionModalProps) {
   const { toast } = useToast();
+  const { access, can } = useOperatingAccess();
+  const isSuperAdmin =
+    Boolean(access?.hasAdminOverride) || can("platform.admin_override");
   const [decision, setDecision] =
     useState<ApprovalDecisionOutcome>("approved");
   const [decisionAt, setDecisionAt] = useState(toLocalDateTimeValue());
@@ -53,11 +57,21 @@ export function RecordDecisionModal({
   const [reference, setReference] = useState("");
   const [notes, setNotes] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [stepUpPassword, setStepUpPassword] = useState("");
   const [saving, setSaving] = useState(false);
 
   if (!approval) return null;
 
   async function handleSave() {
+    if (!isSuperAdmin && !stepUpPassword.trim()) {
+      toast({
+        type: "error",
+        title: "Authorization required",
+        description:
+          "Enter your Facility Manager password to record this decision.",
+      });
+      return;
+    }
     setSaving(true);
     try {
       const amount =
@@ -76,6 +90,7 @@ export function RecordDecisionModal({
         decisionReference: reference.trim() || undefined,
         decisionNotes: notes.trim() || undefined,
         decisionDocument: await fileToRef(file),
+        stepUpPassword: isSuperAdmin ? undefined : stepUpPassword,
       });
       if (!result.success || !result.data) {
         throw new Error(
@@ -89,6 +104,7 @@ export function RecordDecisionModal({
         title: "Decision recorded",
         description: `${result.data.approval.id} — ${decision.replace(/_/g, " ")}.`,
       });
+      setStepUpPassword("");
       onSaved(result.data.approval);
       onClose();
     } catch (err) {
@@ -116,7 +132,7 @@ export function RecordDecisionModal({
             Cancel
           </Button>
           <Button onClick={() => void handleSave()} loading={saving}>
-            Save decision
+            {isSuperAdmin ? "Override & save" : "Authorize & save"}
           </Button>
         </>
       }
@@ -166,14 +182,6 @@ export function RecordDecisionModal({
                   : undefined
               }
             />
-            {decision === "partially_approved" &&
-            approval.approvalAmount != null ? (
-              <p className="mt-1 text-xs text-muted">
-                Requested / estimated:{" "}
-                {approval.currency ? `${approval.currency} ` : ""}
-                {approval.approvalAmount.toLocaleString()}
-              </p>
-            ) : null}
           </FormField>
         ) : null}
         <FormField
@@ -202,14 +210,32 @@ export function RecordDecisionModal({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
-            placeholder={
-              decision === "rejected" ? "Rejection reason / notes" : undefined
-            }
           />
         </FormField>
+        {isSuperAdmin ? (
+          <p className="rounded-lg border border-border/80 bg-slate-50 px-3 py-2 text-sm text-foreground">
+            System Administrator override — Facility Manager password is not
+            required. Recorded as platform override.
+          </p>
+        ) : (
+          <FormField
+            label="Facility Manager password"
+            htmlFor="apr-dec-step-up"
+            required
+          >
+            <input
+              id="apr-dec-step-up"
+              type="password"
+              autoComplete="current-password"
+              className={inputClassName}
+              value={stepUpPassword}
+              onChange={(e) => setStepUpPassword(e.target.value)}
+            />
+          </FormField>
+        )}
         <p className="text-xs text-muted">
           Recording a decision does not complete or cancel the linked Work
-          Order. Approval answers whether work may proceed.
+          Order. This is a protected action.
         </p>
       </div>
     </Modal>

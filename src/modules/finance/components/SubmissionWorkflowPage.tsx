@@ -8,6 +8,7 @@ import { ModeFrame, OperateHeader } from "@/components/platform";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { DEFAULT_COST_SUBMISSION_CURRENCY } from "@/lib/operational/finance/costSubmission";
 import type { CostSubmission } from "@/lib/operational/finance/types";
 import { CostSubmissionService } from "@/services/finance/CostSubmissionService";
@@ -59,6 +60,8 @@ export function SubmissionWorkflowPage({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const { can, loading: accessLoading } = useOperatingAccess();
+  const canCreateFinance = can("finance.create");
   const isEdit = Boolean(submissionId);
   const costPool = useSubmissionCostPool();
 
@@ -338,6 +341,19 @@ export function SubmissionWorkflowPage({
     existing &&
     existing.status !== "draft" &&
     existing.status !== "queried";
+
+  if (!accessLoading && !canCreateFinance) {
+    return (
+      <ModeFrame mode="act">
+        <EmptyState
+          title="Access restricted"
+          description="You do not have permission to create or edit reimbursement claims."
+          actionLabel="Back to claims"
+          onAction={() => router.push("/finance/submissions")}
+        />
+      </ModeFrame>
+    );
+  }
 
   if (blocked) {
     return (

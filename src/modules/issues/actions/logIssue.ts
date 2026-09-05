@@ -67,6 +67,7 @@ export async function logIssue(
   return executeAction({
     name: "issue.log",
     module: "facility_management",
+    requiredCapability: "ops.create",
     input,
     handler: async (context, raw) => {
       const title = raw.title?.trim() ?? "";

@@ -58,6 +58,7 @@ interface WorkOrdersToolbarProps {
   loading?: boolean;
   onClearAll: () => void;
   onCreate: () => void;
+  canCreate?: boolean;
 }
 
 function countActiveFilters(filters: {
@@ -103,6 +104,7 @@ export function WorkOrdersToolbar({
   loading,
   onClearAll,
   onCreate,
+  canCreate = true,
 }: WorkOrdersToolbarProps) {
   const [facilities, setFacilities] = useState<
     WorkOrderFilterCatalogFacility[]
@@ -360,15 +362,17 @@ export function WorkOrdersToolbar({
         sortOptions={WORK_ORDER_SORT_OPTIONS}
         onSortChange={(value) => onSortChange(value as WorkOrderSort)}
         leadingActions={
-          <Button
-            type="button"
-            size="sm"
-            className="h-9 shrink-0 rounded-md px-3.5 text-[0.8125rem] font-semibold shadow-none"
-            onClick={onCreate}
-          >
-            <Plus className="h-3.5 w-3.5" aria-hidden />
-            New work order
-          </Button>
+          canCreate ? (
+            <Button
+              type="button"
+              size="sm"
+              className="h-9 shrink-0 rounded-md px-3.5 text-[0.8125rem] font-semibold shadow-none"
+              onClick={onCreate}
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+              New work order
+            </Button>
+          ) : undefined
         }
         filterPanel={
           <>
