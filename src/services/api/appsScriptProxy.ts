@@ -91,7 +91,7 @@ export async function postToAppsScript(
     });
   }
 
-  const response = await fetch(APPS_SCRIPT_URL, {
+  let response = await fetch(APPS_SCRIPT_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -100,6 +100,25 @@ export async function postToAppsScript(
     body: payload,
     redirect: "manual",
   });
+  
+  if (response.status === 301 || response.status === 302 || response.status === 303) {
+    const location = response.headers.get("location");
+  
+    if (!location) {
+      throw new Error(
+        `Apps Script redirect missing Location header (${response.status})`
+      );
+    }
+  
+    response = await fetch(location, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: payload,
+    });
+  }
 
   const text = await response.text();
 
