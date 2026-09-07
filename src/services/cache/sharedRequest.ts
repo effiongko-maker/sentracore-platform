@@ -21,6 +21,14 @@ export const CATALOG_TTL_MS = 60_000;
 /** Short TTL for derived operational workload maps (not long-lived). */
 export const WORKLOAD_TTL_MS = 30_000;
 
+/**
+ * Short TTL for People-register row used by operating access gates.
+ * Coalesces concurrent /operations proxy gates onto one Apps Script users lookup;
+ * avoids repeating the same authoritative email search on every API request.
+ * Failures are never cached (sharedRequest contract).
+ */
+export const ACCESS_SHEET_USER_TTL_MS = 30_000;
+
 export type SharedRequestOptions = {
   /** When > 0, successful results are reused until expiry. Default 0 (inflight only). */
   ttlMs?: number;

@@ -145,7 +145,8 @@ function toPaginatedCostRecords(
 
 async function postCostRecords<T>(
   action: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  options?: { signal?: AbortSignal }
 ): Promise<T> {
   if (typeof window === "undefined") {
     return postToAppsScriptData(
@@ -159,31 +160,40 @@ async function postCostRecords<T>(
     ) as Promise<T>;
   }
 
-  const response = await apiClient.post<T>("/cost-records", {
-    resource: "cost-records",
-    action,
-    payload,
-  });
+  const response = await apiClient.post<T>(
+    "/cost-records",
+    {
+      resource: "cost-records",
+      action,
+      payload,
+    },
+    { signal: options?.signal }
+  );
   return response.data as T;
 }
 
 export const CostRecordService = {
   async listCostRecords(
-    params: CostRecordListParams = {}
+    params: CostRecordListParams = {},
+    options?: { signal?: AbortSignal }
   ): Promise<PaginatedResult<CostRecord>> {
     const key = stableRequestKey(CacheNamespaces.costRecordsList, params);
     return sharedRequest(key, async () => {
-      const data = await postCostRecords<unknown>("getAll", {
-        page: params.page ?? 1,
-        pageSize: params.pageSize ?? 8,
-        search: params.search,
-        facilityId: params.facilityId,
-        category: params.category,
-        reimbursability: params.reimbursability,
-        workId: params.workId,
-        workOrderId: params.workOrderId,
-        jobOrderId: params.jobOrderId,
-      });
+      const data = await postCostRecords<unknown>(
+        "getAll",
+        {
+          page: params.page ?? 1,
+          pageSize: params.pageSize ?? 8,
+          search: params.search,
+          facilityId: params.facilityId,
+          category: params.category,
+          reimbursability: params.reimbursability,
+          workId: params.workId,
+          workOrderId: params.workOrderId,
+          jobOrderId: params.jobOrderId,
+        },
+        { signal: options?.signal }
+      );
       return toPaginatedCostRecords(data, params);
     });
   },

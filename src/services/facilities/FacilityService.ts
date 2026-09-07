@@ -105,7 +105,8 @@ function toPaginatedFacilities(
  */
 export const FacilityService = {
   async listFacilities(
-    params: FacilityListParams = {}
+    params: FacilityListParams = {},
+    options?: { signal?: AbortSignal }
   ): Promise<PaginatedResult<Facility>> {
     const key = stableRequestKey(CacheNamespaces.facilities, {
       page: params.page ?? 1,
@@ -117,11 +118,15 @@ export const FacilityService = {
     return sharedRequest(
       key,
       async () => {
-        const response = await apiClient.post<unknown>("/facilities", {
-          resource: "facilities",
-          action: "getAll",
-          payload: params,
-        });
+        const response = await apiClient.post<unknown>(
+          "/facilities",
+          {
+            resource: "facilities",
+            action: "getAll",
+            payload: params,
+          },
+          { signal: options?.signal }
+        );
         return toPaginatedFacilities(response.data, params);
       },
       { ttlMs: CATALOG_TTL_MS }

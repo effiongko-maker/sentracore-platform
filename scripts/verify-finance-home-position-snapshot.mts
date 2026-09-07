@@ -150,18 +150,17 @@ function main() {
 
   // Complete pool
   const complete = deriveFinancialPositionSnapshot({
-    costRecords,
-    totalCostRecords: costRecords.length,
-    submissions: subs,
-    totalSubmissions: subs.length,
-    payments: pays,
-    totalPayments: pays.length,
-    authorizations: auths,
-    totalAuthorizations: auths.length,
+    costs: { available: true, data: costRecords, total: costRecords.length },
+    submissions: { available: true, data: subs, total: subs.length },
+    payments: { available: true, data: pays, total: pays.length },
+    authorizations: { available: true, data: auths, total: auths.length },
   });
 
   assert(complete.spentAmount === 150_000, "Spent = Σ actualAmount");
   assert(complete.openClaimCount === 2, "only submitted|queried open claims");
+  assert(complete.spentAvailable === true, "spent available");
+  assert(complete.expectedAvailable === true, "expected available");
+  assert(complete.outstandingAvailable === true, "outstanding available");
 
   const s1 = summarizeSubmissionPayments(subs[0]!, pays, auths);
   const s2 = summarizeSubmissionPayments(subs[1]!, pays, auths);
@@ -191,14 +190,10 @@ function main() {
 
   // Truncated pools → honesty flags
   const sample = deriveFinancialPositionSnapshot({
-    costRecords,
-    totalCostRecords: 250,
-    submissions: subs,
-    totalSubmissions: 40,
-    payments: pays,
-    totalPayments: 15,
-    authorizations: auths,
-    totalAuthorizations: 12,
+    costs: { available: true, data: costRecords, total: 250 },
+    submissions: { available: true, data: subs, total: 40 },
+    payments: { available: true, data: pays, total: 15 },
+    authorizations: { available: true, data: auths, total: 12 },
   });
   assert(sample.isSample === true, "truncated totals must mark isSample");
   assert(sample.costsTruncated === true, "costsTruncated when total > length");
@@ -217,6 +212,46 @@ function main() {
   assert(
     sample.spentAmount === 150_000,
     "sample spent still sums loaded rows only"
+  );
+
+  // Partial source failure — successful metrics survive; failed never become 0
+  const costsOnly = deriveFinancialPositionSnapshot({
+    costs: { available: true, data: costRecords, total: costRecords.length },
+    submissions: { available: false },
+    payments: { available: false },
+    authorizations: { available: false },
+  });
+  assert(costsOnly.spentAvailable === true, "costs-only: spent available");
+  assert(costsOnly.spentAmount === 150_000, "costs-only: spent preserved");
+  assert(costsOnly.expectedAvailable === false, "costs-only: expected unavailable");
+  assert(costsOnly.outstandingAvailable === false, "costs-only: outstanding unavailable");
+  assert(costsOnly.expectedReimbursementAmount === null, "expected not 0 when unavailable");
+  assert(
+    costsOnly.outstandingReimbursementAmount === null,
+    "outstanding not 0 when unavailable"
+  );
+  assert(costsOnly.expectedLabel === null, "expected label null when unavailable");
+  assert(costsOnly.outstandingLabel === null, "outstanding label null when unavailable");
+
+  const paymentsDown = deriveFinancialPositionSnapshot({
+    costs: { available: true, data: costRecords, total: costRecords.length },
+    submissions: { available: true, data: subs, total: subs.length },
+    payments: { available: false },
+    authorizations: { available: true, data: auths, total: auths.length },
+  });
+  assert(paymentsDown.spentAvailable === true, "payments-down: spent ok");
+  assert(paymentsDown.expectedAvailable === true, "payments-down: expected ok");
+  assert(
+    paymentsDown.expectedReimbursementAmount === 180_000 + 80_000,
+    "payments-down: expected still derived"
+  );
+  assert(
+    paymentsDown.outstandingAvailable === false,
+    "payments-down: outstanding unavailable without payments"
+  );
+  assert(
+    paymentsDown.outstandingReimbursementAmount === null,
+    "payments-down: outstanding not fabricated as 0"
   );
 
   // Mount + hook contracts (no Apps Script / Platform Home / Finance page edits)
@@ -272,6 +307,19 @@ function main() {
   assert(
     !hook.includes("ApprovalService"),
     "Home snapshot must not load Approvals"
+  );
+  assert(
+    hook.includes("settleSource") && hook.includes("signalHomeFinanceSettled"),
+    "Home Finance settles per-source and signals finance gate"
+  );
+  assert(
+    hook.includes("HOME_FINANCE_SOURCE_TIMEOUT_MS") &&
+      hook.includes("AbortController"),
+    "Home Finance per-source timeout + abort"
+  );
+  assert(
+    !hook.includes("Promise.all([\n        CostRecordService"),
+    "Home Finance must not all-or-nothing on raw service Promise.all"
   );
 
   const css = read("src/styles/sentracore-os.css");

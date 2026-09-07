@@ -331,7 +331,8 @@ export const IncidentService = {
   },
 
   async listIncidents(
-    params: IncidentListParams = {}
+    params: IncidentListParams = {},
+    options?: { signal?: AbortSignal }
   ): Promise<PaginatedResult<Incident>> {
     const key = stableRequestKey(CacheNamespaces.incidentsList, {
       page: params.page ?? 1,
@@ -356,11 +357,15 @@ export const IncidentService = {
         );
         return toPaginatedIncidents(data, params);
       }
-      const response = await apiClient.post<unknown>("/incidents", {
-        resource: "incidents",
-        action: "getAll",
-        payload: params,
-      });
+      const response = await apiClient.post<unknown>(
+        "/incidents",
+        {
+          resource: "incidents",
+          action: "getAll",
+          payload: params,
+        },
+        { signal: options?.signal }
+      );
       return toPaginatedIncidents(response.data, params);
     });
   },

@@ -8,7 +8,8 @@ import { signalHomeWorkspaceSettled } from "../utils/homeWorkspaceReady";
 /**
  * Facility Management Home loader.
  * Critical path: paint when core domains (WO / incidents / maintenance) settle.
- * Non-core (approvals, facilities, currentUser) enrich without re-entering LoadingGate.
+ * Non-core (approvals, facilities) start only after that settle; currentUser may
+ * overlap core but never blocks paint. Enrichment does not re-enter LoadingGate.
  * Bell deferral fires on core paint — not after secondary enrichment.
  */
 export function useWorkspace() {

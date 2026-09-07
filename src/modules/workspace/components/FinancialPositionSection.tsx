@@ -12,9 +12,14 @@ export function FinancialPositionSection() {
   const { snapshot, loading, error, reload } = useFinancialPosition();
 
   const isSample = Boolean(snapshot?.isSample);
-  const spent = snapshot?.spentLabel ?? "—";
-  const reimbursement = snapshot?.expectedLabel ?? "—";
-  const outstanding = snapshot?.outstandingLabel ?? "—";
+  const spent = snapshot?.spentLabel ?? null;
+  const reimbursement = snapshot?.expectedLabel ?? null;
+  const outstanding = snapshot?.outstandingLabel ?? null;
+  const allUnavailable =
+    !loading &&
+    !snapshot?.spentAvailable &&
+    !snapshot?.expectedAvailable &&
+    !snapshot?.outstandingAvailable;
 
   return (
     <section
@@ -30,15 +35,19 @@ export function FinancialPositionSection() {
           <p className="sc-fm-panel-lede">
             {loading
               ? "Loading operational spend and reimbursement figures"
-              : error
+              : allUnavailable || error
                 ? "Financial position could not be loaded. Open Finance for the full record, or try again."
-                : isSample
-                  ? "In-view sample from the current Finance pool"
-                  : "Operational costs and open reimbursement claims"}
+                : !snapshot?.spentAvailable ||
+                    !snapshot?.expectedAvailable ||
+                    !snapshot?.outstandingAvailable
+                  ? "Some figures are temporarily unavailable. Open Finance for the full record."
+                  : isSample
+                    ? "In-view sample from the current Finance pool"
+                    : "Operational costs and open reimbursement claims"}
           </p>
         </div>
         <div className="sc-fm-finance-header-actions">
-          {error && !loading ? (
+          {(allUnavailable || error) && !loading ? (
             <button
               type="button"
               className="sc-fm-view-all"
@@ -60,7 +69,11 @@ export function FinancialPositionSection() {
             Spent
             {!loading && isSample && snapshot?.costsTruncated ? " (sample)" : ""}
           </p>
-          <MetricValue loading={loading} error={Boolean(error)} value={spent} />
+          <MetricValue
+            loading={loading}
+            unavailable={!snapshot?.spentAvailable}
+            value={spent}
+          />
         </div>
         <div className="sc-fm-finance-metric" role="listitem">
           <p className="sc-fm-finance-label">
@@ -74,7 +87,7 @@ export function FinancialPositionSection() {
           </p>
           <MetricValue
             loading={loading}
-            error={Boolean(error)}
+            unavailable={!snapshot?.expectedAvailable}
             value={reimbursement}
           />
         </div>
@@ -91,7 +104,7 @@ export function FinancialPositionSection() {
           </p>
           <MetricValue
             loading={loading}
-            error={Boolean(error)}
+            unavailable={!snapshot?.outstandingAvailable}
             value={outstanding}
           />
         </div>
@@ -102,12 +115,12 @@ export function FinancialPositionSection() {
 
 function MetricValue({
   loading,
-  error,
+  unavailable,
   value,
 }: {
   loading: boolean;
-  error: boolean;
-  value: string;
+  unavailable: boolean;
+  value: string | null;
 }) {
   if (loading) {
     return (
@@ -117,7 +130,7 @@ function MetricValue({
       />
     );
   }
-  if (error) {
+  if (unavailable || value == null) {
     return (
       <p className="sc-fm-finance-value sc-fm-finance-value--fallback">
         Unavailable

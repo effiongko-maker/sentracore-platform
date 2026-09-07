@@ -392,8 +392,10 @@ function main() {
   );
   assert(
     bell.includes("HOME_WORKSPACE_SETTLED_EVENT") &&
-      bell.includes("isOperationsHomePath"),
-    "bell defers initial feed on /operations until Home settles"
+      bell.includes("HOME_FINANCE_SETTLED_EVENT") &&
+      bell.includes("isOperationsHomePath") &&
+      bell.includes("resetHomeFinanceSettled"),
+    "bell defers initial feed on /operations until Workspace + Finance settle"
   );
   results.push("PASS global notification bell wiring + Read all + Home deferral");
 
@@ -484,8 +486,10 @@ function main() {
   );
   assert(
     workspace.includes("settleDomain") &&
-      workspace.includes("WORKSPACE_HOME_DOMAIN_TIMEOUT_MS"),
-    "Home domain fetches are timeout-isolated (ok:false on hang)"
+      workspace.includes("WORKSPACE_HOME_DOMAIN_TIMEOUT_MS") &&
+      workspace.includes("AbortController") &&
+      workspace.includes("controller.abort()"),
+    "Home domain fetches are timeout-isolated and abort lingering fetches (ok:false on hang)"
   );
   assert(
     workspace.includes("const domains =") &&
@@ -496,8 +500,11 @@ function main() {
   assert(
     workspace.includes("beginWorkspaceLoad") &&
       workspace.includes("startCoreDomainLists") &&
-      workspace.includes("startNonCoreDomainLists"),
-    "Home progressive load splits core vs non-core domains"
+      workspace.includes("startNonCoreDomainLists") &&
+      workspace.includes(
+        "corePromise.then(() => startNonCoreDomainLists())"
+      ),
+    "Home progressive load: non-core Approvals/Facilities defer until after core"
   );
   assert(
     workspace.includes("Core for first paint") &&
@@ -510,8 +517,10 @@ function main() {
     "src/modules/workspace/utils/homeWorkspaceReady.ts"
   );
   assert(
-    homeReady.includes("signalHomeWorkspaceSettled"),
-    "Home ready signal exists for bell deferral"
+    homeReady.includes("signalHomeWorkspaceSettled") &&
+      homeReady.includes("signalHomeFinanceSettled") &&
+      homeReady.includes("HOME_FINANCE_SETTLED_EVENT"),
+    "Home ready signals exist for Workspace + Finance bell deferral"
   );
   const useWs = readSrc("src/modules/workspace/hooks/useWorkspace.ts");
   assert(

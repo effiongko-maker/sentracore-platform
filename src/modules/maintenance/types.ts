@@ -123,13 +123,18 @@ export interface MaintenanceListParams {
   page?: number;
   pageSize?: number;
   search?: string;
-  priority?: MaintenancePriority | "all";
+  priority?: MaintenancePriority | "all" | "high_or_critical";
   status?: MaintenanceStatus | "all" | "active";
   type?: MaintenanceType | "all";
   facilityId?: string | "all";
   assignedToUserId?: string | "all";
   requiresWorkOrder?: boolean | "all";
   sort?: MaintenanceSort;
+  /**
+   * Home-only: Apps Script returns exact active high|critical total on the
+   * same getAll pass (criticalWorkTotal), counted before pagination.
+   */
+  includeCriticalWorkTotal?: boolean;
 }
 
 /** Lightweight reference row for filter dropdowns — id + title only. */

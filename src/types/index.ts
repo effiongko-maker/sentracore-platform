@@ -159,6 +159,12 @@ export interface PaginatedResult<T> {
   page: number;
   pageSize: number;
   totalPages: number;
+  /**
+   * Optional Home additive from Maintenance getAll when
+   * includeCriticalWorkTotal is set — exact filtered high|critical total
+   * before pagination. Absent on normal list responses.
+   */
+  criticalWorkTotal?: number;
 }
 
 /** @deprecated Prefer module-specific params (e.g. UserListParams). */

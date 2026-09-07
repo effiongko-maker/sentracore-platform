@@ -11,7 +11,6 @@ import {
 } from "@/modules/workspace/constants";
 import {
   buildAttentionModel,
-  countCriticalWork,
   countLegacyCriticalIncidents,
 } from "@/modules/workspace/attention";
 import type {
@@ -203,12 +202,14 @@ function buildPulse(
   incidents: Incident[] | null,
   maintenance: Maintenance[] | null,
   workOrders: WorkOrder[] | null,
-  activity: WorkspaceActivityItem[]
+  activity: WorkspaceActivityItem[],
+  /** Exact register count from filtered getAll total; null when unavailable. */
+  criticalWorkCount: number | null
 ): OrganisationalPulse {
   const openWork = maintenance
     ? maintenance.filter((r) => OPEN_MAINTENANCE.has(r.status)).length
     : null;
-  const criticalWork = maintenance ? countCriticalWork(maintenance) : null;
+  const criticalWork = criticalWorkCount;
   const openWorkOrders = workOrders
     ? workOrders.filter((r) => OPEN_WO.has(r.status)).length
     : null;
@@ -321,11 +322,51 @@ function buildOperationalState(
 
 type DomainResult<T> = { ok: boolean; data: T[] };
 
+/** Exact filtered register total — never treat !ok as total 0 for KPIs. */
+type DomainCountResult = { ok: boolean; total: number };
+
 type CoreDomainLists = {
   workOrders: DomainResult<WorkOrder>;
   incidents: DomainResult<Incident>;
   maintenance: DomainResult<Maintenance>;
+  /** Exact Critical Work register total (status=active, priority high|critical). */
+  criticalWork: DomainCountResult;
 };
+
+/**
+ * Parse Home `criticalWorkTotal` from a Maintenance list page.
+ * Only a finite number counts — missing/non-numeric → null (KPI unavailable).
+ * 0 is a valid exact total.
+ */
+export function parseHomeCriticalWorkTotal(raw: unknown): number | null {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return null;
+  return raw;
+}
+
+/**
+ * Map one Home Maintenance list response into pool + Critical Work domain results.
+ * Pool rows stay usable even when criticalWorkTotal is absent; Critical Work then
+ * ok:false → pulse null (never 0, never sampled from the page rows).
+ *
+ * @internal Exported for Home settle verifies.
+ */
+export function mapHomeMaintenancePageResult(page: {
+  data?: Maintenance[] | null;
+  criticalWorkTotal?: unknown;
+}): {
+  maintenance: DomainResult<Maintenance>;
+  criticalWork: DomainCountResult;
+} {
+  const data = page.data ?? [];
+  const total = parseHomeCriticalWorkTotal(page.criticalWorkTotal);
+  return {
+    maintenance: { ok: true, data },
+    criticalWork:
+      total === null
+        ? { ok: false, total: 0 }
+        : { ok: true, total },
+  };
+}
 
 type NonCoreDomainLists = {
   approvals: DomainResult<Approval>;
@@ -341,36 +382,96 @@ type CurrentUserLite = {
 
 /**
  * Isolate a single domain fetch: reject OR timeout → ok:false + empty data.
+ * On timeout, abort the underlying browser fetch so lingering requests do not
+ * keep holding same-origin HTTP connections (Finance Home starvation).
  * Matches existing catch behaviour so Home can still compose a snapshot
  * (degraded when a core domain is unavailable).
  */
 function settleDomain<T>(
-  promise: Promise<DomainResult<T>>,
+  start: (signal: AbortSignal) => Promise<DomainResult<T>>,
   empty: T[],
   timeoutMs = WORKSPACE_HOME_DOMAIN_TIMEOUT_MS
 ): Promise<DomainResult<T>> {
   return new Promise((resolve) => {
     let settled = false;
+    const controller = new AbortController();
+
+    const finish = (value: DomainResult<T>) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
+      // Cancel the in-flight fetch; late resolve/reject must not overwrite.
+      controller.abort();
       resolve({ ok: false, data: empty });
     }, timeoutMs);
 
-    promise.then(
-      (value) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        resolve(value);
-      },
-      () => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        resolve({ ok: false, data: empty });
-      }
+    start(controller.signal).then(
+      (value) => finish(value),
+      () => finish({ ok: false, data: empty })
     );
+  });
+}
+
+/**
+ * Home Maintenance: one active-pool getAll that also returns exact Critical Work
+ * (criticalWorkTotal counted on the full filtered active set before pagination).
+ *
+ * Critical Work KPI succeeds only when criticalWorkTotal is a finite number
+ * (including 0). Missing/non-numeric → criticalWork ok:false → pulse null, while
+ * pool rows remain available for Open Work / attention when the HTTP call itself
+ * succeeded. Timeout/reject → both ok:false.
+ */
+function settleMaintenanceHome(
+  poolSize: number,
+  timeoutMs = WORKSPACE_HOME_DOMAIN_TIMEOUT_MS
+): Promise<{
+  maintenance: DomainResult<Maintenance>;
+  criticalWork: DomainCountResult;
+}> {
+  const emptyMnt: Maintenance[] = [];
+  const failed = {
+    maintenance: { ok: false as const, data: emptyMnt },
+    criticalWork: { ok: false as const, total: 0 },
+  };
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const controller = new AbortController();
+
+    const finish = (value: {
+      maintenance: DomainResult<Maintenance>;
+      criticalWork: DomainCountResult;
+    }) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      controller.abort();
+      resolve(failed);
+    }, timeoutMs);
+
+    MaintenanceService.listMaintenance(
+      {
+        page: 1,
+        pageSize: poolSize,
+        status: "active",
+        includeCriticalWorkTotal: true,
+      },
+      { signal: controller.signal }
+    )
+      .then((page) => finish(mapHomeMaintenancePageResult(page)))
+      .catch(() => finish(failed));
   });
 }
 
@@ -379,44 +480,37 @@ function settleDomain<T>(
  * Does not walk full operational registers (loadAllPages).
  *
  * Core for first paint: workOrders, incidents, maintenance.
- * Non-core: approvals (attention only), facilities (labels only).
+ * Non-core: approvals (attention only), facilities (labels only) —
+ * started only after core settles (see beginWorkspaceLoad).
  * Each arm already uses ok:false on failure; settleDomain adds the same for hangs.
  */
 function startCoreDomainLists(): Promise<CoreDomainLists> {
   const pool = WORKSPACE_HOME_POOL_SIZE;
   const emptyWo: WorkOrder[] = [];
   const emptyInc: Incident[] = [];
-  const emptyMnt: Maintenance[] = [];
 
   return Promise.all([
     settleDomain(
-      WorkOrderService.listWorkOrders({ page: 1, pageSize: pool })
-        .then((page) => ({ ok: true as const, data: page.data ?? emptyWo }))
-        .catch(() => ({ ok: false as const, data: emptyWo })),
+      (signal) =>
+        WorkOrderService.listWorkOrders({ page: 1, pageSize: pool }, { signal })
+          .then((page) => ({ ok: true as const, data: page.data ?? emptyWo }))
+          .catch(() => ({ ok: false as const, data: emptyWo })),
       emptyWo
     ),
     settleDomain(
-      IncidentService.listIncidents({ page: 1, pageSize: pool })
-        .then((page) => ({ ok: true as const, data: page.data ?? emptyInc }))
-        .catch(() => ({ ok: false as const, data: emptyInc })),
+      (signal) =>
+        IncidentService.listIncidents({ page: 1, pageSize: pool }, { signal })
+          .then((page) => ({ ok: true as const, data: page.data ?? emptyInc }))
+          .catch(() => ({ ok: false as const, data: emptyInc })),
       emptyInc
     ),
-    settleDomain(
-      MaintenanceService.listMaintenance({
-        page: 1,
-        pageSize: pool,
-        status: "active",
-      })
-        .then((page) => ({ ok: true as const, data: page.data ?? emptyMnt }))
-        .catch(() => ({ ok: false as const, data: emptyMnt })),
-      emptyMnt
-    ),
-  ]).then(([workOrders, incidents, maintenance]) => ({
-    // Single WO register page (pageSize covers full current register).
-    // Overdue attention/pulse derives client-side from this set — no second getAll.
+    // One Maintenance getAll: active pool rows + exact Critical Work total.
+    settleMaintenanceHome(pool),
+  ]).then(([workOrders, incidents, maintenanceHome]) => ({
     workOrders,
     incidents,
-    maintenance,
+    maintenance: maintenanceHome.maintenance,
+    criticalWork: maintenanceHome.criticalWork,
   }));
 }
 
@@ -427,18 +521,20 @@ function startNonCoreDomainLists(): Promise<NonCoreDomainLists> {
 
   return Promise.all([
     settleDomain(
-      ApprovalService.listApprovals({ page: 1, pageSize: pool })
-        .then((page) => ({ ok: true as const, data: page.data ?? emptyApr }))
-        .catch(() => ({ ok: false as const, data: emptyApr })),
+      (signal) =>
+        ApprovalService.listApprovals({ page: 1, pageSize: pool }, { signal })
+          .then((page) => ({ ok: true as const, data: page.data ?? emptyApr }))
+          .catch(() => ({ ok: false as const, data: emptyApr })),
       emptyApr
     ),
     settleDomain(
-      FacilityService.listFacilities({ page: 1, pageSize: 200 })
-        .then((page) => ({
-          ok: true as const,
-          data: page.data ?? emptyFac,
-        }))
-        .catch(() => ({ ok: false as const, data: emptyFac })),
+      (signal) =>
+        FacilityService.listFacilities({ page: 1, pageSize: 200 }, { signal })
+          .then((page) => ({
+            ok: true as const,
+            data: page.data ?? emptyFac,
+          }))
+          .catch(() => ({ ok: false as const, data: emptyFac })),
       emptyFac
     ),
   ]).then(([approvals, facilities]) => ({ approvals, facilities }));
@@ -474,11 +570,15 @@ export function composeWorkspaceSnapshot(
     lists.facilities.data.map((facility) => [facility.id, facility.name])
   );
   const activity = buildActivity(workOrders, incidents, maintenance);
+  const criticalWorkCount = lists.criticalWork.ok
+    ? lists.criticalWork.total
+    : null;
   const pulse = buildPulse(
     domains.incidents ? incidents : null,
     domains.maintenance ? maintenance : null,
     domains.workOrders ? workOrders : null,
-    activity
+    activity,
+    criticalWorkCount
   );
   const attentionBase = buildAttentionModel({
     asOf,
@@ -536,8 +636,12 @@ export type WorkspaceProgressiveLoad = {
  */
 export const WorkspaceService = {
   /**
-   * Progressive Home load: start core + non-core in parallel, paint when core
-   * settles, then enrich. currentUser never blocks first paint.
+   * Progressive Home load: start core (WO / INC / MNT) first; paint when core
+   * settles; then load Approvals + Facilities and enrich. currentUser is
+   * enrichment-only and never blocks first paint (may start with core).
+   *
+   * Approvals / Facilities must not share the initial Apps Script contention
+   * window with core domain reads.
    *
    * Users catalog (full getAll walk) stays off the Home critical path.
    */
@@ -545,7 +649,8 @@ export const WorkspaceService = {
     const asOf = new Date().toISOString();
 
     const corePromise = startCoreDomainLists();
-    const nonCorePromise = startNonCoreDomainLists();
+    // Defer register reads until after core settle / Home paint path.
+    const nonCorePromise = corePromise.then(() => startNonCoreDomainLists());
     let latestUser: CurrentUserLite = null;
     const userPromise = UserService.getCurrentUser()
       .then((user) => {

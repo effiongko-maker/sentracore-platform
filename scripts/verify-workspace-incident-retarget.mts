@@ -49,7 +49,10 @@ function main() {
   results.push("PASS canonical workspace context = Issue/Work");
 
   const ws = readSrc("src/services/workspace/WorkspaceService.ts");
-  assert(ws.includes("countCriticalWork"), "critical work pulse");
+  assert(
+    ws.includes("includeCriticalWorkTotal") && ws.includes("criticalWorkTotal"),
+    "critical work exact total from Home Maintenance pass"
+  );
   assert(ws.includes("legacyOpenIncidents"), "legacy incident counts");
   assert(ws.includes("openWork"), "open work pulse");
   assert(!ws.includes("openIncidents:"), "no live openIncidents pulse field");

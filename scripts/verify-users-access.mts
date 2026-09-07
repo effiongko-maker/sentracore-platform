@@ -230,6 +230,11 @@ function main() {
       /search:\s*target/.test(serverSrc),
     "email used as People search term"
   );
+  assert(
+    serverSrc.includes("sharedRequest") &&
+      serverSrc.includes("ACCESS_SHEET_USER_TTL_MS"),
+    "People email lookup coalesced/TTL-cached (no per-request fresh users/getAll storm)"
+  );
 
   const legacyRole = resolveOperatingAccessFromSheetUser(
     "tech@example.com",

@@ -109,7 +109,8 @@ function toPaginatedAuthorizations(
 
 async function postAuthorizations<T>(
   action: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  options?: { signal?: AbortSignal }
 ): Promise<T> {
   if (typeof window === "undefined") {
     return postToAppsScriptData(
@@ -123,29 +124,38 @@ async function postAuthorizations<T>(
     ) as Promise<T>;
   }
 
-  const response = await apiClient.post<T>("/reimbursement-authorizations", {
-    resource: "reimbursement-authorizations",
-    action,
-    payload,
-  });
+  const response = await apiClient.post<T>(
+    "/reimbursement-authorizations",
+    {
+      resource: "reimbursement-authorizations",
+      action,
+      payload,
+    },
+    { signal: options?.signal }
+  );
   return response.data as T;
 }
 
 export const ReimbursementAuthorizationService = {
   async listAuthorizations(
-    params: ReimbursementAuthorizationListParams = {}
+    params: ReimbursementAuthorizationListParams = {},
+    options?: { signal?: AbortSignal }
   ): Promise<PaginatedResult<ReimbursementAuthorization>> {
     const key = stableRequestKey(
       CacheNamespaces.reimbursementAuthorizationsList,
       params
     );
     return sharedRequest(key, async () => {
-      const data = await postAuthorizations<unknown>("getAll", {
-        page: params.page ?? 1,
-        pageSize: params.pageSize ?? 8,
-        search: params.search,
-        submissionId: params.submissionId,
-      });
+      const data = await postAuthorizations<unknown>(
+        "getAll",
+        {
+          page: params.page ?? 1,
+          pageSize: params.pageSize ?? 8,
+          search: params.search,
+          submissionId: params.submissionId,
+        },
+        { signal: options?.signal }
+      );
       return toPaginatedAuthorizations(data, params);
     });
   },

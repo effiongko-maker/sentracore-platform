@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { ShieldOff } from "lucide-react";
+import { ShieldAlert, ShieldOff } from "lucide-react";
 import type { ReactNode } from "react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useOperatingAccess } from "@/hooks/useOperatingAccess";
@@ -19,7 +19,7 @@ import {
 export function AccessSurfaceGate({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { access, loading } = useOperatingAccess();
+  const { access, loading, error, reload } = useOperatingAccess();
   const surface = surfaceForHref(pathname);
 
   // Paths with no surface mapping (platform home, workspace previews, …) stay open.
@@ -27,10 +27,38 @@ export function AccessSurfaceGate({ children }: { children: ReactNode }) {
     return <>{children}</>;
   }
 
-  if (loading || !access) {
+  if (loading) {
     return (
       <div className="px-6 py-10 text-sm text-[var(--os-ink-faint)]">
         Checking access…
+      </div>
+    );
+  }
+
+  // Settled failure: request finished (or timed out) without access context.
+  // Must not look like an infinite “Checking access…” state.
+  if (!access) {
+    return (
+      <div className="px-6 py-10">
+        <EmptyState
+          icon={ShieldAlert}
+          title="Unable to verify access"
+          description={
+            error ??
+            "Your access context could not be loaded. Retry, or return to Platform Home."
+          }
+          actionLabel="Retry"
+          onAction={() => reload()}
+        />
+        <div className="mt-4">
+          <button
+            type="button"
+            className="text-sm text-[var(--os-ink-faint)] underline-offset-2 hover:underline"
+            onClick={() => router.push("/")}
+          >
+            Go to Platform Home
+          </button>
+        </div>
       </div>
     );
   }

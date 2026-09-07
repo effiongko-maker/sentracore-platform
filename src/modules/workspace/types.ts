@@ -114,8 +114,8 @@ export interface OrganisationalPulse {
    */
   openWork: number | null;
   /**
-   * Live — high/critical priority open Work.
-   * null when Maintenance domain is unavailable.
+   * Live — exact count of high/critical priority open Work (register total).
+   * null when the Critical Work count request is unavailable.
    */
   criticalWork: number | null;
   /** null when Work Orders domain is unavailable. */

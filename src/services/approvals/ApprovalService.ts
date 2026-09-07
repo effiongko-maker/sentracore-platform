@@ -289,7 +289,8 @@ function toPaginated(
 
 export const ApprovalService = {
   async listApprovals(
-    params: ApprovalListParams = {}
+    params: ApprovalListParams = {},
+    options?: { signal?: AbortSignal }
   ): Promise<PaginatedResult<Approval>> {
     const key = stableRequestKey(CacheNamespaces.approvalsList, {
       page: params.page ?? 1,
@@ -315,11 +316,15 @@ export const ApprovalService = {
         return toPaginated(row, params);
       }
 
-      const response = await apiClient.post<unknown>("/approvals", {
-        resource: "approvals",
-        action: "getAll",
-        payload: params,
-      });
+      const response = await apiClient.post<unknown>(
+        "/approvals",
+        {
+          resource: "approvals",
+          action: "getAll",
+          payload: params,
+        },
+        { signal: options?.signal }
+      );
       return toPaginated(response.data, params);
     });
   },

@@ -4,6 +4,12 @@ import {
 } from "@/lib/auth/session";
 import type { PlatformSession } from "@/lib/auth/types";
 import { postToAppsScriptData } from "@/services/api/appsScriptProxy";
+import { CacheNamespaces } from "@/services/cache/domainCache";
+import {
+  ACCESS_SHEET_USER_TTL_MS,
+  sharedRequest,
+  stableRequestKey,
+} from "@/services/cache/sharedRequest";
 import type { User, UserStatus } from "@/modules/users/types";
 import {
   findSheetUserByEmail,
@@ -69,6 +75,12 @@ function extractUserRows(payload: unknown): RemoteUser[] {
  * Load the People-register row for access resolution by email.
  * Uses Apps Script search so pagination cannot silently miss the actor
  * and elevate them to legacy unassigned powers.
+ *
+ * Concurrent gates (Home WO/INC/MNT/…) coalesce on one in-flight lookup;
+ * successful rows are TTL-cached briefly so each operational API request does
+ * not pay a fresh users/getAll. Capability decisions still run through
+ * requireCapability → resolveOperatingAccess → accessCan on every request.
+ * Lookup transport failures are not cached (fail-closed on retry).
  */
 export async function loadSheetUserForAccessByEmail(
   email: string
@@ -79,24 +91,34 @@ export async function loadSheetUserForAccessByEmail(
   const target = email.trim();
   if (!target) return null;
 
-  const payload = await postToAppsScriptData(
-    {
-      resource: "users",
-      action: "getAll",
-      payload: {
-        page: 1,
-        pageSize: 50,
-        search: target,
-        status: "all",
-      },
-    },
-    { resource: "users", action: "getAll" },
-    "access/sheet-user-by-email"
-  );
+  const key = stableRequestKey(CacheNamespaces.accessSheetUserByEmail, {
+    email: target.toLowerCase(),
+  });
 
-  return findSheetUserByEmail(
-    extractUserRows(payload).map(mapSheetUserLite),
-    target
+  return sharedRequest(
+    key,
+    async () => {
+      const payload = await postToAppsScriptData(
+        {
+          resource: "users",
+          action: "getAll",
+          payload: {
+            page: 1,
+            pageSize: 50,
+            search: target,
+            status: "all",
+          },
+        },
+        { resource: "users", action: "getAll" },
+        "access/sheet-user-by-email"
+      );
+
+      return findSheetUserByEmail(
+        extractUserRows(payload).map(mapSheetUserLite),
+        target
+      );
+    },
+    { ttlMs: ACCESS_SHEET_USER_TTL_MS }
   );
 }
 

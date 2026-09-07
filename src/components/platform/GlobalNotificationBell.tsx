@@ -7,8 +7,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { formatRelativeTime } from "@/lib/utils";
 import type { OperationalNotificationFeed } from "@/modules/workspace/utils/deriveOperationalNotifications";
 import {
+  HOME_FINANCE_SETTLED_EVENT,
   HOME_WORKSPACE_SETTLED_EVENT,
+  isHomeFinanceSettled,
   isOperationsHomePath,
+  resetHomeFinanceSettled,
 } from "@/modules/workspace/utils/homeWorkspaceReady";
 import {
   countUnreadNotifications,
@@ -33,8 +36,9 @@ const OPERATIONS_BELL_FALLBACK_MS = 35_000;
  * Uses derived operational signals — not a notification database.
  * Distinct from Facility Management Home “Requires attention”.
  *
- * On /operations, the initial feed fetch waits until Home has settled so
- * notification source calls do not contend with WorkspaceService.
+ * On /operations, the initial feed fetch waits until Workspace core settles
+ * and Home Finance Position has settled (or been skipped), so notification
+ * list fan-out does not contend with Workspace or Finance Home requests.
  */
 export function GlobalNotificationBell() {
   const pathname = usePathname();
@@ -73,7 +77,25 @@ export function GlobalNotificationBell() {
       return;
     }
 
-    const onHomeSettled = () => startInitialLoad();
+    resetHomeFinanceSettled();
+
+    const startAfterFinance = () => {
+      if (isHomeFinanceSettled()) {
+        startInitialLoad();
+        return;
+      }
+      const onFinanceSettled = () => startInitialLoad();
+      window.addEventListener(HOME_FINANCE_SETTLED_EVENT, onFinanceSettled);
+      return () =>
+        window.removeEventListener(HOME_FINANCE_SETTLED_EVENT, onFinanceSettled);
+    };
+
+    let removeFinanceListener: (() => void) | undefined;
+    const onHomeSettled = () => {
+      removeFinanceListener?.();
+      removeFinanceListener = startAfterFinance();
+    };
+
     window.addEventListener(HOME_WORKSPACE_SETTLED_EVENT, onHomeSettled);
     const fallback = window.setTimeout(
       () => startInitialLoad(),
@@ -82,6 +104,7 @@ export function GlobalNotificationBell() {
 
     return () => {
       window.removeEventListener(HOME_WORKSPACE_SETTLED_EVENT, onHomeSettled);
+      removeFinanceListener?.();
       window.clearTimeout(fallback);
     };
   }, [pathname, startInitialLoad]);

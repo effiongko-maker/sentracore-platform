@@ -1,12 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import {
   AlertTriangle,
   ArrowRight,
+  Banknote,
   Building2,
   ChevronRight,
+  ClipboardCheck,
   ClipboardList,
+  MessageSquare,
   Plus,
   Wrench,
   type LucideIcon,
@@ -14,6 +18,7 @@ import {
 import { ModeFrame } from "@/components/platform";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import type {
+  AttentionMatter,
   AttentionModel,
   OrganisationalPulse,
   WorkspaceQuickAction,
@@ -23,8 +28,11 @@ import { FinancialPositionSection } from "./FinancialPositionSection";
 import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import {
   accessCan,
+  canSeeHref,
   resolveAccessVisibility,
+  type AccessVisibility,
 } from "@/lib/access";
+import { signalHomeFinanceSettled } from "../utils/homeWorkspaceReady";
 
 const PRIMARY_ACTION_IDS = [
   "log-issue",
@@ -40,6 +48,44 @@ const ACTION_VISUAL: Record<
   "create-work-order": { icon: ClipboardList, tone: "amber" },
   "manage-facilities": { icon: Building2, tone: "violet" },
 };
+
+/** View-only oversight destinations for Executive Home (no Users). */
+const EXECUTIVE_OVERSIGHT_LINKS: Array<{
+  href: string;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  tone: "blue" | "amber" | "violet" | "green";
+}> = [
+  {
+    href: "/approvals",
+    title: "Approvals",
+    description: "Decisions and packages awaiting review",
+    icon: ClipboardCheck,
+    tone: "amber",
+  },
+  {
+    href: "/requests",
+    title: "Requests",
+    description: "Intake and facility requests across the organisation",
+    icon: MessageSquare,
+    tone: "blue",
+  },
+  {
+    href: "/finance",
+    title: "Finance",
+    description: "Costs, claims, and reimbursement position",
+    icon: Banknote,
+    tone: "green",
+  },
+  {
+    href: "/work",
+    title: "Work",
+    description: "Open and critical operational work",
+    icon: Wrench,
+    tone: "violet",
+  },
+];
 
 function greetingForHour(hour: number): string {
   if (hour < 12) return "Good morning";
@@ -86,7 +132,10 @@ function heroCriticalWorkMeta(
   return "None requiring intervention";
 }
 
-function buildHeroCopy(snapshot: WorkspaceSnapshot): {
+function buildHeroCopy(
+  snapshot: WorkspaceSnapshot,
+  oversight: boolean
+): {
   heading: string;
   line1: string;
   line2: string;
@@ -96,7 +145,9 @@ function buildHeroCopy(snapshot: WorkspaceSnapshot): {
 
   if (operationalState.tone === "degraded") {
     return {
-      heading: "Operational overview is limited",
+      heading: oversight
+        ? "Organisation overview is limited"
+        : "Operational overview is limited",
       line1: operationalState.statement,
       line2:
         operationalState.subtext ??
@@ -105,6 +156,16 @@ function buildHeroCopy(snapshot: WorkspaceSnapshot): {
   }
 
   if (attentionTotal > 0) {
+    if (oversight) {
+      return {
+        heading: "Organisation status needs attention",
+        line1:
+          attentionTotal === 1
+            ? "1 matter requires attention across the organisation."
+            : `${attentionTotal} matters require attention across the organisation.`,
+        line2: `${formatMetric(pulse.criticalWork)} critical work · ${formatMetric(pulse.openWork)} open work · ${formatMetric(pulse.openWorkOrders)} work orders.`,
+      };
+    }
     return {
       heading: "Your operations need attention",
       line1:
@@ -117,11 +178,26 @@ function buildHeroCopy(snapshot: WorkspaceSnapshot): {
 
   if (operationalState.tone === "attention") {
     return {
-      heading: "Your operations need attention",
+      heading: oversight
+        ? "Organisation status needs attention"
+        : "Your operations need attention",
       line1: operationalState.statement,
       line2:
         operationalState.subtext ??
         `${formatMetric(pulse.openWork)} open work · ${formatMetric(pulse.openWorkOrders)} work orders.`,
+    };
+  }
+
+  if (oversight) {
+    return {
+      heading: "Organisation status is stable",
+      line1: "No matters require escalation across the organisation.",
+      line2:
+        (pulse.openWork ?? 0) > 0
+          ? `${pulse.openWork} open work item${
+              pulse.openWork === 1 ? "" : "s"
+            } ${pulse.openWork === 1 ? "is" : "are"} in flow with no urgent escalation.`
+          : "Operations appear calm. Drill into Work or Finance for detail.",
     };
   }
 
@@ -135,6 +211,48 @@ function buildHeroCopy(snapshot: WorkspaceSnapshot): {
           } ${pulse.openWork === 1 ? "is" : "are"} in flow with no urgent escalation.`
         : "Facility Management is calm. Continue with scheduled work.",
   };
+}
+
+/**
+ * Executive-only: reframe mutate-oriented attention CTAs as review/open language.
+ * Hrefs stay unchanged.
+ */
+function oversightAttentionLabel(label: string): string {
+  let next = label.replace(/\s*→\s*$/, "").trim();
+  const replacements: Array<[RegExp, string]> = [
+    [/^Create work order$/i, "Review work"],
+    [/^Open work order$/i, "Open work order"],
+    [/^Assign work$/i, "Open work"],
+    [/^Submit approval$/i, "Review approval"],
+    [/^Create approval$/i, "Review approval"],
+    [/^Record follow-up$/i, "Review approval"],
+    [/^Resolve rejection$/i, "Review approval"],
+    [/^Clarify approval$/i, "Review approval"],
+    [/^Track approval$/i, "Review approval"],
+    [/^Open approval$/i, "Review approval"],
+    [/^Review people$/i, "Review organisation"],
+    [/^Review incident$/i, "Review incident"],
+    [/^View legacy incident$/i, "View legacy incident"],
+    [/^Review work$/i, "Review work"],
+  ];
+  for (const [pattern, replacement] of replacements) {
+    if (pattern.test(next)) return replacement;
+  }
+  if (/^create\b/i.test(next)) {
+    return next.replace(/^create\b/i, "Review");
+  }
+  if (/^submit\b/i.test(next)) {
+    return next.replace(/^submit\b/i, "Review");
+  }
+  if (/^assign\b/i.test(next)) {
+    return next.replace(/^assign\b/i, "Open");
+  }
+  return next;
+}
+
+function isUsersHref(href: string): boolean {
+  const path = href.split("?")[0] ?? href;
+  return path === "/users" || path.startsWith("/users/");
 }
 
 function FacilityBlueprint() {
@@ -194,12 +312,18 @@ function FacilityBlueprint() {
   );
 }
 
-function CommandHero({ snapshot }: { snapshot: WorkspaceSnapshot }) {
+function CommandHero({
+  snapshot,
+  oversight,
+}: {
+  snapshot: WorkspaceSnapshot;
+  oversight: boolean;
+}) {
   const { pulse, attention, currentUser, asOf } = snapshot;
   const attentionTotal = attention.total;
   const attentionIncomplete = Boolean(attention.incomplete);
   const criticalWork = pulse.criticalWork;
-  const copy = buildHeroCopy(snapshot);
+  const copy = buildHeroCopy(snapshot, oversight);
   const hour = new Date(asOf).getHours();
   const greeting = `${greetingForHour(hour)}, ${firstName(currentUser.name)}`;
   const live = snapshot.operationalState.tone !== "degraded";
@@ -220,7 +344,9 @@ function CommandHero({ snapshot }: { snapshot: WorkspaceSnapshot }) {
 
       <div className="sc-fm-hero-body">
         <div className="sc-fm-hero-copy">
-          <p className="sc-fm-hero-eyebrow">Facility Management</p>
+          <p className="sc-fm-hero-eyebrow">
+            {oversight ? "Organisation oversight" : "Facility Management"}
+          </p>
           <p className="sc-fm-hero-greeting">{greeting}</p>
           <h1 id="sc-fm-hero-heading" className="sc-fm-hero-title">
             {copy.heading}
@@ -275,7 +401,13 @@ function CommandHero({ snapshot }: { snapshot: WorkspaceSnapshot }) {
   );
 }
 
-function RequiresAttention({ attention }: { attention: AttentionModel }) {
+function RequiresAttention({
+  attention,
+  oversight,
+}: {
+  attention: AttentionModel;
+  oversight: boolean;
+}) {
   const incomplete = Boolean(attention.incomplete);
   const lede = incomplete
     ? attention.total === 0
@@ -289,6 +421,15 @@ function RequiresAttention({ attention }: { attention: AttentionModel }) {
         ? "1 matter requires intervention now"
         : `${attention.total} matters require intervention now`;
 
+  const visibleMatters: AttentionMatter[] = oversight
+    ? attention.visible.filter((matter) => !isUsersHref(matter.href))
+    : attention.visible;
+
+  const visibleTotal = oversight
+    ? // Keep headline total from model; only filter rendered /users rows.
+      attention.total
+    : attention.total;
+
   return (
     <section
       className="sc-fm-attention"
@@ -301,52 +442,59 @@ function RequiresAttention({ attention }: { attention: AttentionModel }) {
           </h2>
           <p className="sc-fm-panel-lede">{lede}</p>
         </div>
-        {attention.viewAllHref ? (
+        {attention.viewAllHref && !isUsersHref(attention.viewAllHref) ? (
           <Link href={attention.viewAllHref} className="sc-fm-view-all">
-            View all ({attention.total})
+            View all ({visibleTotal})
             <ArrowRight className="h-3.5 w-3.5" aria-hidden />
           </Link>
         ) : null}
       </div>
 
-      {attention.total === 0 ? (
+      {attention.total === 0 || visibleMatters.length === 0 ? (
         <div className="sc-fm-attention-empty">
           <p>
             {incomplete
               ? "Some operational sources could not be loaded. Retry Home or open Work directly."
-              : "The operational queue is clear."}
+              : oversight
+                ? "No organisational matters require attention now."
+                : "The operational queue is clear."}
           </p>
         </div>
       ) : (
         <div className="sc-fm-queue">
-          {attention.visible.map((matter) => (
-            <Link
-              key={matter.id}
-              href={matter.href}
-              className={cn(
-                "sc-fm-queue-item",
-                matter.severity === "critical"
-                  ? "sc-fm-queue-critical"
-                  : "sc-fm-queue-high"
-              )}
-            >
-              <div className="sc-fm-queue-main">
-                <p className="sc-fm-queue-severity">
-                  <span className="sc-fm-queue-dot" aria-hidden />
-                  {matter.severity === "critical" ? "Critical" : "High"}
-                </p>
-                <p className="sc-fm-queue-title">{matter.title}</p>
-                <p className="sc-fm-queue-context">
-                  {matter.location} · {matter.entityLabel}
-                </p>
-                <p className="sc-fm-queue-reason">{matter.reason}</p>
-              </div>
-              <span className="sc-fm-queue-action">
-                {matter.actionLabel.replace(/\s*→\s*$/, "")}
-                <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-              </span>
-            </Link>
-          ))}
+          {visibleMatters.map((matter) => {
+            const actionLabel = oversight
+              ? oversightAttentionLabel(matter.actionLabel)
+              : matter.actionLabel.replace(/\s*→\s*$/, "");
+            return (
+              <Link
+                key={matter.id}
+                href={matter.href}
+                className={cn(
+                  "sc-fm-queue-item",
+                  matter.severity === "critical"
+                    ? "sc-fm-queue-critical"
+                    : "sc-fm-queue-high"
+                )}
+              >
+                <div className="sc-fm-queue-main">
+                  <p className="sc-fm-queue-severity">
+                    <span className="sc-fm-queue-dot" aria-hidden />
+                    {matter.severity === "critical" ? "Critical" : "High"}
+                  </p>
+                  <p className="sc-fm-queue-title">{matter.title}</p>
+                  <p className="sc-fm-queue-context">
+                    {matter.location} · {matter.entityLabel}
+                  </p>
+                  <p className="sc-fm-queue-reason">{matter.reason}</p>
+                </div>
+                <span className="sc-fm-queue-action">
+                  {actionLabel}
+                  <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                </span>
+              </Link>
+            );
+          })}
         </div>
       )}
     </section>
@@ -494,24 +642,94 @@ function NextActions({ actions }: { actions: WorkspaceQuickAction[] }) {
   );
 }
 
+function OversightLinks({ visibility }: { visibility: AccessVisibility }) {
+  const links = EXECUTIVE_OVERSIGHT_LINKS.filter(
+    (link) => canSeeHref(visibility, link.href) && !isUsersHref(link.href)
+  );
+
+  if (links.length === 0) return null;
+
+  return (
+    <section className="sc-fm-actions" aria-labelledby="sc-fm-oversight-heading">
+      <h2 id="sc-fm-oversight-heading" className="sc-fm-panel-title">
+        Oversight
+      </h2>
+      <p className="sc-fm-panel-lede">
+        Drill into organisation surfaces — view only
+      </p>
+
+      <div className="sc-fm-actions-grid">
+        {links.map((link) => {
+          const Icon = link.icon;
+          return (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={cn("sc-fm-action", `sc-fm-action-${link.tone}`)}
+            >
+              <span className="sc-fm-action-icon" aria-hidden>
+                <Icon className="h-5 w-5" />
+              </span>
+              <span className="sc-fm-action-copy">
+                <span className="sc-fm-action-title">{link.title}</span>
+                <span className="sc-fm-action-desc">{link.description}</span>
+              </span>
+              <ChevronRight className="sc-fm-action-arrow h-4 w-4" aria-hidden />
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export function CommandSurface({ snapshot }: { snapshot: WorkspaceSnapshot }) {
   const { access, loading } = useOperatingAccess();
   const visibility =
     !loading && access ? resolveAccessVisibility(access) : null;
+  const oversight = Boolean(visibility?.isExecutiveOversight);
   const showFinance =
     Boolean(visibility?.surfaces.has("finance")) ||
     (access ? accessCan(access, "finance.view") : false);
 
+  // When Finance is not shown, release the notification bell gate immediately
+  // so Home without finance.view does not block notifications.
+  useEffect(() => {
+    if (loading) return;
+    if (!showFinance) {
+      signalHomeFinanceSettled();
+    }
+  }, [loading, showFinance]);
+
   return (
     <ModeFrame mode="command">
       <div className="sc-fm-home">
-        <CommandHero snapshot={snapshot} />
-        {showFinance ? <FinancialPositionSection /> : null}
-        <div className="sc-fm-main">
-          <RequiresAttention attention={snapshot.attention} />
-          <OperationalPicture pulse={snapshot.pulse} />
-        </div>
-        <NextActions actions={snapshot.quickActions} />
+        <CommandHero snapshot={snapshot} oversight={oversight} />
+        {oversight ? (
+          <>
+            <RequiresAttention
+              attention={snapshot.attention}
+              oversight
+            />
+            {showFinance ? <FinancialPositionSection /> : null}
+            <div className="sc-fm-main">
+              <OperationalPicture pulse={snapshot.pulse} />
+            </div>
+            {visibility ? <OversightLinks visibility={visibility} /> : null}
+          </>
+        ) : (
+          <>
+            {showFinance ? <FinancialPositionSection /> : null}
+            <div className="sc-fm-main">
+              <RequiresAttention
+                attention={snapshot.attention}
+                oversight={false}
+              />
+              <OperationalPicture pulse={snapshot.pulse} />
+            </div>
+            <NextActions actions={snapshot.quickActions} />
+          </>
+        )}
       </div>
     </ModeFrame>
   );

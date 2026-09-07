@@ -193,6 +193,24 @@ function main() {
   );
   assert(command.includes("resolveAccessVisibility"), "home visibility");
   assert(command.includes('can("ops.create")'), "home log-issue gate");
+  assert(command.includes("isExecutiveOversight"), "executive oversight branch");
+  assert(command.includes("OversightLinks"), "executive oversight links");
+  assert(command.includes("oversightAttentionLabel"), "executive attention labels");
+  assert(
+    command.includes("Organisation oversight") ||
+      command.includes("Organisation status"),
+    "executive hero oversight copy"
+  );
+  assert(
+    !command.includes('href: "/users"') ||
+      command.includes("isUsersHref"),
+    "executive must filter /users attention links"
+  );
+  assert(
+    command.includes('can("ops.create")'),
+    "FM next-actions create gate preserved"
+  );
+  assert(command.includes("NextActions"), "FM NextActions preserved");
 
   const finHeader = readSrc(
     "src/modules/finance/components/FinanceHeader.tsx"

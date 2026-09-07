@@ -291,7 +291,8 @@ function toPaginatedWorkOrders(
  */
 export const WorkOrderService = {
   async listWorkOrders(
-    params: WorkOrderListParams = {}
+    params: WorkOrderListParams = {},
+    options?: { signal?: AbortSignal }
   ): Promise<PaginatedResult<WorkOrder>> {
     const key = stableRequestKey(CacheNamespaces.workOrdersList, {
       page: params.page ?? 1,
@@ -307,11 +308,15 @@ export const WorkOrderService = {
       dueDate: params.dueDate ?? "",
     });
     return sharedRequest(key, async () => {
-      const response = await apiClient.post<unknown>("/work-orders", {
-        resource: "work-orders",
-        action: "getAll",
-        payload: params,
-      });
+      const response = await apiClient.post<unknown>(
+        "/work-orders",
+        {
+          resource: "work-orders",
+          action: "getAll",
+          payload: params,
+        },
+        { signal: options?.signal }
+      );
       return toPaginatedWorkOrders(response.data, params);
     });
   },

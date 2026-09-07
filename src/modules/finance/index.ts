@@ -32,6 +32,7 @@ export {
   deriveFinancialPositionSnapshot,
   type FinancialPositionSnapshot,
   type FinancialPositionSnapshotInput,
+  type FinancialPositionSourcePool,
 } from "./utils/deriveFinancialPositionSnapshot";
 export {
   formatFinancialAmount,

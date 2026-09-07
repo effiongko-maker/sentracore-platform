@@ -272,12 +272,19 @@ function toPaginatedMaintenance(
   if (payload && typeof payload === "object") {
     const page = payload as Record<string, unknown>;
     const rows = Array.isArray(page.data) ? page.data : [];
+    // Only forward a finite number — strings/objects must not become Critical Work.
+    const criticalRaw = page.criticalWorkTotal;
+    const criticalWorkTotal =
+      typeof criticalRaw === "number" && Number.isFinite(criticalRaw)
+        ? criticalRaw
+        : undefined;
     return {
       data: rows.map((row) => mapRemoteMaintenance(row as RemoteMaintenance)),
       page: Number(page.page ?? params.page ?? 1),
       pageSize: Number(page.pageSize ?? params.pageSize ?? rows.length),
       total: Number(page.total ?? rows.length),
       totalPages: Number(page.totalPages ?? 1),
+      ...(criticalWorkTotal !== undefined ? { criticalWorkTotal } : {}),
     };
   }
 
@@ -384,7 +391,8 @@ export const MaintenanceService = {
   },
 
   async listMaintenance(
-    params: MaintenanceListParams = {}
+    params: MaintenanceListParams = {},
+    options?: { signal?: AbortSignal }
   ): Promise<PaginatedResult<Maintenance>> {
     const key = stableRequestKey(CacheNamespaces.maintenanceList, {
       page: params.page ?? 1,
@@ -397,6 +405,7 @@ export const MaintenanceService = {
       assignedToUserId: params.assignedToUserId ?? "all",
       requiresWorkOrder: params.requiresWorkOrder ?? "all",
       sort: params.sort ?? "",
+      includeCriticalWorkTotal: !!params.includeCriticalWorkTotal,
     });
     return sharedRequest(key, async () => {
       if (typeof window === "undefined") {
@@ -411,11 +420,15 @@ export const MaintenanceService = {
         );
         return toPaginatedMaintenance(data, params);
       }
-      const response = await apiClient.post<unknown>("/maintenance", {
-        resource: "maintenance",
-        action: "getAll",
-        payload: params,
-      });
+      const response = await apiClient.post<unknown>(
+        "/maintenance",
+        {
+          resource: "maintenance",
+          action: "getAll",
+          payload: params,
+        },
+        { signal: options?.signal }
+      );
       return toPaginatedMaintenance(response.data, params);
     });
   },

@@ -65,10 +65,17 @@ var MaintenanceService = (function () {
           .indexOf(search) !== -1 ||
         matchesWorkOrderSearch_(row, search);
 
-      var matchesPriority =
-        !priority ||
-        priority === "all" ||
-        String(row.priority).toLowerCase() === String(priority).toLowerCase();
+      var matchesPriority;
+      if (priority === "high_or_critical") {
+        var priorityToken = String(row.priority || "").toLowerCase();
+        matchesPriority =
+          priorityToken === "high" || priorityToken === "critical";
+      } else {
+        matchesPriority =
+          !priority ||
+          priority === "all" ||
+          String(row.priority).toLowerCase() === String(priority).toLowerCase();
+      }
 
       var matchesStatus;
       if (status === "active") {
@@ -149,6 +156,20 @@ var MaintenanceService = (function () {
     };
   }
 
+  /**
+   * Exact Critical Work count for Home — high OR critical among already-filtered
+   * rows (typically status=active). Must run before pagination so totals are not
+   * limited to the newest pageSize slice.
+   */
+  function countCriticalWorkTotal_(rows) {
+    var n = 0;
+    for (var i = 0; i < (rows || []).length; i++) {
+      var token = String((rows[i] && rows[i].priority) || "").toLowerCase();
+      if (token === "high" || token === "critical") n++;
+    }
+    return n;
+  }
+
   function sortNewestFirst_(rows) {
     return rows.slice().sort(function (a, b) {
       var aAt = String(a.updatedAt || a.createdAt || a.reportedAt || "");
@@ -187,7 +208,15 @@ var MaintenanceService = (function () {
 
   function getAll(payload) {
     payload = payload || {};
-    if (payload._auditTiming && typeof OperationalListAudit !== "undefined") {
+    var includeCriticalWorkTotal = !!payload.includeCriticalWorkTotal;
+
+    // Home flag needs criticalWorkTotal from the full filtered set before
+    // pagination — use the explicit pipeline (audit path paginates inside).
+    if (
+      payload._auditTiming &&
+      typeof OperationalListAudit !== "undefined" &&
+      !includeCriticalWorkTotal
+    ) {
       return OperationalListAudit.instrumentGetAll_(
         payload,
         function (auditCollector) {
@@ -200,8 +229,15 @@ var MaintenanceService = (function () {
     }
     var rows = loadCanonicalRows_(payload, null);
     var filtered = applyFilters_(rows, payload);
+    var criticalWorkTotal = includeCriticalWorkTotal
+      ? countCriticalWorkTotal_(filtered)
+      : null;
     var sorted = sortNewestFirst_(filtered);
-    return paginate_(sorted, payload);
+    var page = paginate_(sorted, payload);
+    if (includeCriticalWorkTotal) {
+      page.criticalWorkTotal = criticalWorkTotal;
+    }
+    return page;
   }
 
   function listCatalog(payload) {

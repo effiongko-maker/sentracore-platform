@@ -107,7 +107,8 @@ function toPaginatedPayments(
 
 async function postPayments<T>(
   action: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  options?: { signal?: AbortSignal }
 ): Promise<T> {
   if (typeof window === "undefined") {
     return postToAppsScriptData(
@@ -121,29 +122,38 @@ async function postPayments<T>(
     ) as Promise<T>;
   }
 
-  const response = await apiClient.post<T>("/reimbursement-payments", {
-    resource: "reimbursement-payments",
-    action,
-    payload,
-  });
+  const response = await apiClient.post<T>(
+    "/reimbursement-payments",
+    {
+      resource: "reimbursement-payments",
+      action,
+      payload,
+    },
+    { signal: options?.signal }
+  );
   return response.data as T;
 }
 
 export const ReimbursementPaymentService = {
   async listPayments(
-    params: ReimbursementPaymentListParams = {}
+    params: ReimbursementPaymentListParams = {},
+    options?: { signal?: AbortSignal }
   ): Promise<PaginatedResult<ReimbursementPayment>> {
     const key = stableRequestKey(
       CacheNamespaces.reimbursementPaymentsList,
       params
     );
     return sharedRequest(key, async () => {
-      const data = await postPayments<unknown>("getAll", {
-        page: params.page ?? 1,
-        pageSize: params.pageSize ?? 8,
-        search: params.search,
-        submissionId: params.submissionId,
-      });
+      const data = await postPayments<unknown>(
+        "getAll",
+        {
+          page: params.page ?? 1,
+          pageSize: params.pageSize ?? 8,
+          search: params.search,
+          submissionId: params.submissionId,
+        },
+        { signal: options?.signal }
+      );
       return toPaginatedPayments(data, params);
     });
   },

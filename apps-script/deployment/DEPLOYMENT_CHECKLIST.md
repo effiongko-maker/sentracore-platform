@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Release: **v0.8.6.5** — Protected cost unlock for FM authorization / Super Admin override
+Release: **v0.8.6.7** — Home single-pass Maintenance criticalWorkTotal (eliminate second getAll)
 
 Use this checklist with `DEPLOYMENT_PACK.md` open. Someone unfamiliar
 with the project should be able to deploy from these steps alone.
@@ -213,16 +213,16 @@ A **new Web App version** is REQUIRED.
 
 With `npm run dev` running:
 
-### Protected actions
+### Home Critical Work single-pass total
 
 ```bash
-npx tsx --tsconfig tsconfig.json scripts/verify-protected-actions.mts
+npx tsx --tsconfig tsconfig.json scripts/verify-home-critical-work-count.mts
 ```
 
-### Finance cost workflow lock
+### Command Surface Critical Work
 
 ```bash
-npx tsx --tsconfig tsconfig.json scripts/verify-finance-cost-workflow.mts
+npx tsx --tsconfig tsconfig.json scripts/verify-command-surface-critical-work.mts
 ```
 
 Expected checks:

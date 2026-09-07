@@ -15,6 +15,9 @@ import {
   type OperatingAccess,
 } from "@/lib/access";
 
+/** Client ceiling so a hung /api/access/me cannot leave the gate on “Checking access…” forever. */
+export const OPERATING_ACCESS_FETCH_TIMEOUT_MS = 20_000;
+
 type OperatingAccessState = {
   access: OperatingAccess | null;
   loading: boolean;
@@ -31,11 +34,14 @@ const OperatingAccessContext = createContext<OperatingAccessState>({
   can: () => false,
 });
 
-async function fetchOperatingAccess(): Promise<OperatingAccess> {
+async function fetchOperatingAccess(
+  signal: AbortSignal
+): Promise<OperatingAccess> {
   const response = await fetch("/api/access/me", {
     method: "GET",
     headers: { Accept: "application/json" },
     credentials: "same-origin",
+    signal,
   });
   const json = (await response.json()) as {
     success?: boolean;
@@ -48,6 +54,16 @@ async function fetchOperatingAccess(): Promise<OperatingAccess> {
   return json.data;
 }
 
+function accessFetchErrorMessage(err: unknown, timedOut: boolean): string {
+  if (timedOut) {
+    return "Access check timed out. Please try again.";
+  }
+  if (err instanceof Error && err.name === "AbortError") {
+    return "Access check was cancelled. Please try again.";
+  }
+  return err instanceof Error ? err.message : "Access load failed";
+}
+
 export function OperatingAccessProvider({ children }: { children: ReactNode }) {
   const [access, setAccess] = useState<OperatingAccess | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,8 +72,17 @@ export function OperatingAccessProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    let timedOut = false;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, OPERATING_ACCESS_FETCH_TIMEOUT_MS);
+
     setLoading(true);
-    fetchOperatingAccess()
+    setError(null);
+
+    fetchOperatingAccess(controller.signal)
       .then((next) => {
         if (!cancelled) {
           setAccess(next);
@@ -68,12 +93,18 @@ export function OperatingAccessProvider({ children }: { children: ReactNode }) {
       .catch((err) => {
         if (!cancelled) {
           setAccess(null);
-          setError(err instanceof Error ? err.message : "Access load failed");
+          setError(accessFetchErrorMessage(err, timedOut));
           setLoading(false);
         }
+      })
+      .finally(() => {
+        window.clearTimeout(timer);
       });
+
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
+      controller.abort();
     };
   }, [tick]);
 

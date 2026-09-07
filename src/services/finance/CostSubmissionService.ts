@@ -127,7 +127,8 @@ function toPaginatedCostSubmissions(
 
 async function postCostSubmissions<T>(
   action: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  options?: { signal?: AbortSignal }
 ): Promise<T> {
   if (typeof window === "undefined") {
     return postToAppsScriptData(
@@ -141,28 +142,37 @@ async function postCostSubmissions<T>(
     ) as Promise<T>;
   }
 
-  const response = await apiClient.post<T>("/cost-submissions", {
-    resource: "cost-submissions",
-    action,
-    payload,
-  });
+  const response = await apiClient.post<T>(
+    "/cost-submissions",
+    {
+      resource: "cost-submissions",
+      action,
+      payload,
+    },
+    { signal: options?.signal }
+  );
   return response.data as T;
 }
 
 export const CostSubmissionService = {
   async listCostSubmissions(
-    params: CostSubmissionListParams = {}
+    params: CostSubmissionListParams = {},
+    options?: { signal?: AbortSignal }
   ): Promise<PaginatedResult<CostSubmission>> {
     const key = stableRequestKey(CacheNamespaces.costSubmissionsList, params);
     return sharedRequest(key, async () => {
-      const data = await postCostSubmissions<unknown>("getAll", {
-        page: params.page ?? 1,
-        pageSize: params.pageSize ?? 8,
-        search: params.search,
-        facilityId: params.facilityId,
-        status: params.status,
-        approvalId: params.approvalId,
-      });
+      const data = await postCostSubmissions<unknown>(
+        "getAll",
+        {
+          page: params.page ?? 1,
+          pageSize: params.pageSize ?? 8,
+          search: params.search,
+          facilityId: params.facilityId,
+          status: params.status,
+          approvalId: params.approvalId,
+        },
+        { signal: options?.signal }
+      );
       return toPaginatedCostSubmissions(data, params);
     });
   },

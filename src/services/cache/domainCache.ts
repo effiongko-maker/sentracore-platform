@@ -28,6 +28,8 @@ export const CacheNamespaces = {
   costSubmissionsList: "list:cost-submissions",
   reimbursementPaymentsList: "list:reimbursement-payments",
   reimbursementAuthorizationsList: "list:reimbursement-authorizations",
+  /** Server-only People row used by operating access resolution. */
+  accessSheetUserByEmail: "access:sheet-user-by-email",
 } as const;
 
 export function invalidateUsersCatalog(): void {
@@ -168,6 +170,7 @@ export function onReimbursementAuthorizationMutation(): void {
 export function onUserMutation(): void {
   invalidateUsersCatalog();
   invalidateSharedRequests(CacheNamespaces.usersList);
+  invalidateSharedRequests(CacheNamespaces.accessSheetUserByEmail);
   SnapshotService.invalidate();
 }
 

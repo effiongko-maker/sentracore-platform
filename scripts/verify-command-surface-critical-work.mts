@@ -86,7 +86,23 @@ function main() {
   results.push("PASS CommandSurface hero aligned to pulse.criticalWork");
 
   const ws = readSrc("src/services/workspace/WorkspaceService.ts");
-  assert(ws.includes("countCriticalWork"), "pulse criticalWork source");
+  assert(
+    ws.includes("mapHomeMaintenancePageResult") &&
+      ws.includes("parseHomeCriticalWorkTotal"),
+    "Critical Work settle uses explicit finite-number mapper"
+  );
+  assert(
+    ws.includes("...coreLists") && ws.includes("...nonCoreLists"),
+    "complete enrichment reuses coreLists (no WO overwrite)"
+  );
+  assert(
+    !ws.includes('priority: "high_or_critical"') && !ws.includes("settleCount"),
+    "no separate high_or_critical count request"
+  );
+  assert(
+    !/countCriticalWork\(maintenance\)/.test(ws),
+    "pulse must not sample-count the newest-100 Maintenance pool"
+  );
   assert(!ws.includes("Math.max(pulse.criticalWork"), "no max critical blend");
   assert(ws.includes("critical work item"), "operational state critical work copy");
   assert(ws.includes("critical attention matter"), "operational state attention copy");
@@ -185,6 +201,7 @@ function main() {
     },
     incidents: { ok: true, data: [] },
     maintenance: { ok: false, data: [] },
+    criticalWork: { ok: false, total: 0 },
     approvals: { ok: true, data: [] },
     facilities: { ok: true, data: [] },
   });

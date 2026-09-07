@@ -72,6 +72,24 @@ function main() {
   assert(gate.includes("canSeeHref"), "surface gate uses canSeeHref");
   assert(gate.includes("resolveAccessVisibility"), "surface gate uses visibility");
   assert(!gate.includes("facility_manager"), "no role allowlist in gate");
+  assert(
+    gate.includes("if (loading)") &&
+      gate.includes("Unable to verify access") &&
+      gate.includes("reload()"),
+    "gate distinguishes loading from settled access failure with Retry"
+  );
+  assert(
+    !/loading \|\| !access/.test(gate),
+    "gate must not treat settled !access as Checking access"
+  );
+
+  const accessHook = readSrc("src/hooks/useOperatingAccess.tsx");
+  assert(
+    accessHook.includes("OPERATING_ACCESS_FETCH_TIMEOUT_MS") &&
+      accessHook.includes("AbortController") &&
+      accessHook.includes("signal"),
+    "access fetch uses client timeout + AbortController"
+  );
 
   const shell = readSrc("src/components/platform/ProductShell.tsx");
   assert(shell.includes("AccessSurfaceGate"), "ProductShell mounts gate");
