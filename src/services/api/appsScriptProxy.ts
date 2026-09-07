@@ -98,7 +98,7 @@ export async function postToAppsScript(
       Accept: "application/json",
     },
     body: payload,
-    redirect: "follow",
+    redirect: "manual",
   });
 
   const text = await response.text();
