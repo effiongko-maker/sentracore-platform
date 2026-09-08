@@ -111,12 +111,10 @@ export async function postToAppsScript(
     }
   
     response = await fetch(location, {
-      method: "POST",
+      method: "GET",
       headers: {
-        "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: payload,
     });
   }
 
