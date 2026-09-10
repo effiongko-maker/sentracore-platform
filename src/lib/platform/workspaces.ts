@@ -184,6 +184,14 @@ export function isOperationsPath(pathname: string): boolean {
     pathname.startsWith("/reports") ||
     pathname.startsWith("/facilities") ||
     pathname.startsWith("/assets") ||
+    pathname.startsWith("/operational-registers") ||
+    pathname.startsWith("/generator-log") ||
+    pathname.startsWith("/energy-reading") ||
+    pathname.startsWith("/diesel-usage") ||
+    pathname.startsWith("/consumables-update") ||
+    pathname.startsWith("/waste-log") ||
+    pathname.startsWith("/fumigation-log") ||
+    pathname.startsWith("/deep-cleaning-log") ||
     pathname.startsWith("/users") ||
     pathname.startsWith("/master-data") ||
     pathname.startsWith("/occupant-requests") ||

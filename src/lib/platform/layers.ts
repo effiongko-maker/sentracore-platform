@@ -13,6 +13,7 @@ import {
   Users,
   Wrench,
   Banknote,
+  BookMarked,
   type LucideIcon,
 } from "lucide-react";
 import type { AuthEnabledModule } from "@/lib/auth/types";
@@ -39,6 +40,23 @@ export interface LayerModule {
   description: string;
   moduleSlug?: PlatformModuleSlug;
   comingSoon?: boolean;
+  /**
+   * Additional path prefixes that belong to this module
+   * (e.g. Operational Registers → /generator-log).
+   */
+  matchHrefs?: string[];
+}
+
+/** True when pathname is this module's primary href or a declared match prefix. */
+export function moduleMatchesPath(
+  mod: Pick<LayerModule, "href" | "matchHrefs" | "comingSoon">,
+  pathname: string
+): boolean {
+  if (mod.comingSoon) return false;
+  if (mod.href !== "/" && pathname.startsWith(mod.href)) return true;
+  return (mod.matchHrefs ?? []).some(
+    (href) => href !== "/" && pathname.startsWith(href)
+  );
 }
 
 export interface OperatingLayer {
@@ -100,6 +118,22 @@ export const OPERATING_LAYERS: OperatingLayer[] = [
         icon: Package,
         title: "Assets",
         description: "Equipment and infrastructure",
+      }),
+      fm({
+        label: "Operational Registers",
+        href: "/operational-registers",
+        icon: BookMarked,
+        title: "Operational Registers",
+        description: "Generator, meters, diesel, and consumables",
+        matchHrefs: [
+          "/generator-log",
+          "/energy-reading",
+          "/diesel-usage",
+          "/consumables-update",
+          "/waste-log",
+          "/fumigation-log",
+          "/deep-cleaning-log",
+        ],
       }),
       fm({
         label: "People",
@@ -231,15 +265,14 @@ export function resolveLayerByPath(
 
   for (const layer of OPERATING_LAYERS) {
     for (const mod of layer.modules) {
-      if (mod.comingSoon) continue;
-      if (mod.href !== "/" && pathname.startsWith(mod.href)) {
+      if (moduleMatchesPath(mod, pathname)) {
         return layer.id;
       }
     }
   }
 
   for (const mod of LEGACY_LAYER_MODULES) {
-    if (mod.href !== "/" && pathname.startsWith(mod.href)) {
+    if (moduleMatchesPath(mod, pathname)) {
       return "act";
     }
   }
@@ -258,15 +291,14 @@ export function resolveModuleByPath(pathname: string): LayerModule | null {
 
   for (const layer of OPERATING_LAYERS) {
     for (const mod of layer.modules) {
-      if (mod.comingSoon) continue;
-      if (mod.href !== "/" && pathname.startsWith(mod.href)) {
+      if (moduleMatchesPath(mod, pathname)) {
         return mod;
       }
     }
   }
 
   for (const mod of LEGACY_LAYER_MODULES) {
-    if (mod.href !== "/" && pathname.startsWith(mod.href)) {
+    if (moduleMatchesPath(mod, pathname)) {
       return mod;
     }
   }

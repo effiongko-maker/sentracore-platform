@@ -13,6 +13,13 @@ export const OPERATIONAL_PROXY_RESOURCES = [
   "assets",
   "facilities",
   "master-data",
+  "generator-log",
+  "energy-reading",
+  "diesel-usage",
+  "consumables-update",
+  "waste-log",
+  "fumigation-log",
+  "deep-cleaning-log",
 ] as const;
 
 export type OperationalProxyResource =

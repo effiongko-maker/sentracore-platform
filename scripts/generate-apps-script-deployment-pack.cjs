@@ -191,19 +191,76 @@ function buildChecklist(meta, files) {
     );
     lines.push("");
   }
+  const generatorLogTriad = [
+    "GeneratorLogRepository.gs",
+    "GeneratorLogService.gs",
+    "GeneratorLogController.gs",
+  ].filter((n) => labels.includes(n));
+  if (generatorLogTriad.length) {
+    lines.push(
+      "CRITICAL — generator-log requires **all three** files (ROUTER alone is not enough):"
+    );
+    lines.push("");
+    for (const label of generatorLogTriad) {
+      lines.push(`- [ ] \`${label}\``);
+    }
+    lines.push("");
+    lines.push(
+      "> Live symptom if Controller is missing: `GeneratorLogController is not defined`."
+    );
+    lines.push(
+      "> If the file does not exist in the Apps Script project, **create** it (File → New), then paste from `DEPLOYMENT_PACK.md`. Replacing is only possible after the file exists."
+    );
+    lines.push(
+      "> Confirm `var GeneratorLogController`, `var GeneratorLogService`, and `var GeneratorLogRepository` are defined."
+    );
+    lines.push("");
+  }
+  const dieselUsageTriad = [
+    "DieselUsageRepository.gs",
+    "DieselUsageService.gs",
+    "DieselUsageController.gs",
+  ].filter((n) => labels.includes(n));
+  if (dieselUsageTriad.length) {
+    lines.push(
+      "CRITICAL — diesel-usage requires **all three** files (Controller alone is not enough):"
+    );
+    lines.push("");
+    for (const label of dieselUsageTriad) {
+      lines.push(`- [ ] \`${label}\``);
+    }
+    lines.push("");
+    lines.push(
+      "> Live symptom if Service is missing: `DieselUsageService is not defined`."
+    );
+    lines.push(
+      "> Confirm `DieselUsageService.gs` and `DieselUsageRepository.gs` exist even when the Controller already routes."
+    );
+    lines.push("");
+  }
+  lines.push(
+    "CRITICAL — Operational Registers write path: after pasting any OR triad, cut a **new Web App version**. Unpublished editor saves do not fix live create."
+  );
+  lines.push("");
+  lines.push(
+    "> Verify with: `npm run verify-operational-registers-write`"
+  );
+  lines.push("");
   lines.push("> Note: `UserRepository.gs` may already exist only in the deployed Apps Script");
   lines.push("> project. Do **not** delete it. Replace `UsersController.gs` and `UserService.gs`");
   lines.push("> from this pack when present.");
   lines.push("");
   lines.push("---");
   lines.push("");
-  lines.push("## 2. Existing files that must be replaced");
+  lines.push("## 2. Create missing files, then replace contents");
   lines.push("");
-  lines.push("For each file that already exists in Apps Script, **replace the entire contents**");
-  lines.push("(do not merge by hand):");
+  lines.push("For each file below: **create** it in Apps Script if it does not exist, then");
+  lines.push("**replace the entire contents** from `DEPLOYMENT_PACK.md` (do not merge by hand).");
+  lines.push("Router updates without creating new Controller/Service/Repository files cause");
+  lines.push("live errors such as `GeneratorLogController is not defined`.");
   lines.push("");
   for (const label of replaceExisting) {
-    lines.push(`- [ ] Replace \`${label}\``);
+    lines.push(`- [ ] Create or replace \`${label}\``);
   }
   lines.push("- [ ] Replace `ROUTER.gs` (or the project file that currently holds `doPost` / `jsonResponse_`)");
   lines.push("");

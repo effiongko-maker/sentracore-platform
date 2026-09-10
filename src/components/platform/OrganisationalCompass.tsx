@@ -7,6 +7,7 @@ import {
   COMMAND_HOME,
   filterOperatingLayers,
   OPERATING_LAYERS,
+  moduleMatchesPath,
   resolveLayerByPath,
 } from "@/lib/platform/layers";
 import {
@@ -139,10 +140,7 @@ export function OrganisationalCompass() {
                   <div className="os-compass-modules">
                     {layer.modules.map((mod) => {
                       const Icon = mod.icon;
-                      const active =
-                        !mod.comingSoon &&
-                        mod.href !== "/" &&
-                        pathname.startsWith(mod.href);
+                      const active = moduleMatchesPath(mod, pathname);
 
                       if (mod.comingSoon) {
                         return (

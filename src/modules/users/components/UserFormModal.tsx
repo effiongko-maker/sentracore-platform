@@ -140,6 +140,31 @@ export function UserFormModal({
         });
       } else {
         await UserService.createUser(payload);
+
+
+const inviteResponse = await fetch("/api/admin/invite-user", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    email: payload.email,
+    fullName: payload.name,
+    firstName: payload.name.split(/\s+/)[0] || undefined,
+    lastName: payload.name.split(/\s+/).slice(1).join(" ") || undefined,
+  }),
+});
+
+const inviteResult = (await inviteResponse.json()) as {
+  success?: boolean;
+  message?: string;
+};
+
+if (!inviteResponse.ok || !inviteResult.success) {
+  throw new Error(
+    inviteResult.message || "User was created, but the invitation could not be sent."
+  );
+}
         await onSaved?.();
         toast({
           type: "success",
@@ -152,7 +177,10 @@ export function UserFormModal({
     } catch (err) {
       toast({
         type: "error",
-        title: mode === "edit" ? "Unable to update user" : "Unable to create user",
+        title:
+  mode === "edit"
+    ? "Unable to update user"
+    : "Unable to create user",
         description:
           err instanceof Error ? err.message : "Please try again in a moment.",
       });

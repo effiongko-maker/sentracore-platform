@@ -137,7 +137,43 @@ export class ApiClient {
                                         "/api/reimbursement-authorizations",
                                       resource: "reimbursement-authorizations",
                                     }
-                          : null;
+                                  : path === "/generator-log"
+                                    ? {
+                                        endpoint: "/api/generator-log",
+                                        resource: "generator-log",
+                                      }
+                                    : path === "/energy-reading"
+                                      ? {
+                                          endpoint: "/api/energy-reading",
+                                          resource: "energy-reading",
+                                        }
+                                      : path === "/diesel-usage"
+                                        ? {
+                                            endpoint: "/api/diesel-usage",
+                                            resource: "diesel-usage",
+                                          }
+                                        : path === "/consumables-update"
+                                          ? {
+                                              endpoint: "/api/consumables-update",
+                                              resource: "consumables-update",
+                                            }
+                                          : path === "/waste-log"
+                                            ? {
+                                                endpoint: "/api/waste-log",
+                                                resource: "waste-log",
+                                              }
+                                            : path === "/fumigation-log"
+                                              ? {
+                                                  endpoint: "/api/fumigation-log",
+                                                  resource: "fumigation-log",
+                                                }
+                                              : path === "/deep-cleaning-log"
+                                                ? {
+                                                    endpoint:
+                                                      "/api/deep-cleaning-log",
+                                                    resource: "deep-cleaning-log",
+                                                  }
+                                                : null;
 
     if (liveProxy) {
       const requestBody =

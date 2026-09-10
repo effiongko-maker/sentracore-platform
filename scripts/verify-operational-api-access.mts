@@ -67,6 +67,13 @@ function main() {
     "assets",
     "facilities",
     "master-data",
+    "generator-log",
+    "energy-reading",
+    "diesel-usage",
+    "consumables-update",
+    "waste-log",
+    "fumigation-log",
+    "deep-cleaning-log",
   ];
 
   // --- Action → capability mapping ---
@@ -77,6 +84,13 @@ function main() {
     "assets",
     "facilities",
     "master-data",
+    "generator-log",
+    "energy-reading",
+    "diesel-usage",
+    "consumables-update",
+    "waste-log",
+    "fumigation-log",
+    "deep-cleaning-log",
   ] as const) {
     assert(
       capabilityForOperationalProxyAction(resource, "getAll") === "ops.view",

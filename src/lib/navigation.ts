@@ -17,6 +17,7 @@ import {
   FileCheck2,
   Banknote,
   Bell,
+  BookMarked,
   type LucideIcon,
 } from "lucide-react";
 import type { AuthEnabledModule } from "@/lib/auth/types";
@@ -44,6 +45,11 @@ export interface NavItem {
   description: string;
   /** When set, item is hidden unless this module is enabled. */
   moduleSlug?: PlatformModuleSlug;
+  /**
+   * Additional path prefixes that belong to this nav item
+   * (e.g. Operational Registers → /generator-log).
+   */
+  matchHrefs?: string[];
 }
 
 export interface NavGroup {
@@ -93,6 +99,22 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Package,
         title: "Assets",
         description: "Track and manage operational assets",
+      }),
+      item({
+        label: "Operational Registers",
+        href: "/operational-registers",
+        icon: BookMarked,
+        title: "Operational Registers",
+        description: "Generator, meters, diesel, and consumables",
+        matchHrefs: [
+          "/generator-log",
+          "/energy-reading",
+          "/diesel-usage",
+          "/consumables-update",
+          "/waste-log",
+          "/fumigation-log",
+          "/deep-cleaning-log",
+        ],
       }),
       item({
         label: "Users",
@@ -267,11 +289,26 @@ const ARCHETYPE_BY_HREF: Record<string, PageArchetypeHint> = {
   "/notifications": "operational-list",
   "/facilities": "reference-admin",
   "/assets": "reference-admin",
+  "/operational-registers": "reference-admin",
+  "/generator-log": "operational-list",
+  "/energy-reading": "operational-list",
+  "/diesel-usage": "operational-list",
+  "/consumables-update": "operational-list",
+  "/waste-log": "operational-list",
+  "/fumigation-log": "operational-list",
+  "/deep-cleaning-log": "operational-list",
   "/users": "reference-admin",
   "/master-data": "reference-admin",
   "/reports": "guided-flow",
   "/occupant-requests": "guided-flow",
 };
+
+function navItemMatchesPath(entry: NavItem, pathname: string): boolean {
+  if (entry.href !== "/" && pathname.startsWith(entry.href)) return true;
+  return (entry.matchHrefs ?? []).some(
+    (href) => href !== "/" && pathname.startsWith(href)
+  );
+}
 
 export interface NavContext {
   group: NavGroup | null;
@@ -288,10 +325,10 @@ function resolveNavItem(pathname: string): NavItem {
       (entry) =>
         entry.href !== "/" &&
         entry.href !== "/operations" &&
-        pathname.startsWith(entry.href)
+        navItemMatchesPath(entry, pathname)
     ) ??
     SECONDARY_NAV_ITEMS.find(
-      (entry) => entry.href !== "/" && pathname.startsWith(entry.href)
+      (entry) => entry.href !== "/" && navItemMatchesPath(entry, pathname)
     ) ??
     NAV_ITEMS[0]
   );

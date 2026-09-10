@@ -1,0 +1,102 @@
+<div class="card">
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;">
+
+<div>
+
+<h1>Users</h1>
+
+<p>Manage technicians, supervisors and administrators.</p>
+
+</div>
+
+<button onclick="newUser()"
+style="
+background:#13293D;
+color:white;
+border:none;
+padding:12px 20px;
+border-radius:8px;
+cursor:pointer;
+font-weight:600;
+">
+
++ New User
+
+</button>
+
+</div>
+
+<div id="usersTable">
+
+Loading users...
+
+</div>
+
+</div>
+
+<script>
+
+google.script.run
+.withSuccessHandler(renderUsers)
+.getUsers();
+
+function renderUsers(users){
+
+let html = `
+<table style="width:100%;border-collapse:collapse;">
+
+<tr style="background:#f4f6fa;">
+
+<th align="left">Name</th>
+
+<th align="left">Role</th>
+
+<th align="left">Specialization</th>
+
+<th align="left">Facility</th>
+
+<th align="left">Workload</th>
+
+<th align="left">Status</th>
+
+</tr>
+`;
+
+users.forEach(user=>{
+
+html+=`
+
+<tr>
+
+<td>${user.name}</td>
+
+<td>${user.role}</td>
+
+<td>${user.specialization}</td>
+
+<td>${user.facility}</td>
+
+<td>${user.workload}</td>
+
+<td>${user.status}</td>
+
+</tr>
+
+`;
+
+});
+
+html+="</table>";
+
+document.getElementById("usersTable").innerHTML=html;
+
+}
+
+function newUser(){
+
+alert("Coming next 😎");
+
+}
+
+</script>

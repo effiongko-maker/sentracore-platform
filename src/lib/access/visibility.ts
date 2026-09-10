@@ -61,6 +61,14 @@ const HREF_SURFACE_RULES: Array<{ prefix: string; surface: VisibilitySurface }> 
     { prefix: "/notifications", surface: "home" },
     { prefix: "/facilities", surface: "organise" },
     { prefix: "/assets", surface: "organise" },
+    { prefix: "/operational-registers", surface: "organise" },
+    { prefix: "/generator-log", surface: "organise" },
+    { prefix: "/energy-reading", surface: "organise" },
+    { prefix: "/diesel-usage", surface: "organise" },
+    { prefix: "/consumables-update", surface: "organise" },
+    { prefix: "/waste-log", surface: "organise" },
+    { prefix: "/fumigation-log", surface: "organise" },
+    { prefix: "/deep-cleaning-log", surface: "organise" },
     { prefix: "/master-data", surface: "organise" },
   ];
 

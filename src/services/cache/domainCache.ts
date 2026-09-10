@@ -28,6 +28,13 @@ export const CacheNamespaces = {
   costSubmissionsList: "list:cost-submissions",
   reimbursementPaymentsList: "list:reimbursement-payments",
   reimbursementAuthorizationsList: "list:reimbursement-authorizations",
+  generatorLogsList: "list:generator-logs",
+  energyReadingsList: "list:energy-readings",
+  dieselUsageList: "list:diesel-usage",
+  consumablesUpdatesList: "list:consumables-updates",
+  wasteLogsList: "list:waste-logs",
+  fumigationLogsList: "list:fumigation-logs",
+  deepCleaningLogsList: "list:deep-cleaning-logs",
   /** Server-only People row used by operating access resolution. */
   accessSheetUserByEmail: "access:sheet-user-by-email",
 } as const;
@@ -182,6 +189,41 @@ export function onAssetMutation(): void {
 
 export function onFacilityMutation(): void {
   invalidateFacilitiesCatalog();
+  SnapshotService.invalidate();
+}
+
+export function onGeneratorLogMutation(): void {
+  invalidateSharedRequests(CacheNamespaces.generatorLogsList);
+  SnapshotService.invalidate();
+}
+
+export function onEnergyReadingMutation(): void {
+  invalidateSharedRequests(CacheNamespaces.energyReadingsList);
+  SnapshotService.invalidate();
+}
+
+export function onDieselUsageMutation(): void {
+  invalidateSharedRequests(CacheNamespaces.dieselUsageList);
+  SnapshotService.invalidate();
+}
+
+export function onConsumablesUpdateMutation(): void {
+  invalidateSharedRequests(CacheNamespaces.consumablesUpdatesList);
+  SnapshotService.invalidate();
+}
+
+export function onWasteLogMutation(): void {
+  invalidateSharedRequests(CacheNamespaces.wasteLogsList);
+  SnapshotService.invalidate();
+}
+
+export function onFumigationLogMutation(): void {
+  invalidateSharedRequests(CacheNamespaces.fumigationLogsList);
+  SnapshotService.invalidate();
+}
+
+export function onDeepCleaningLogMutation(): void {
+  invalidateSharedRequests(CacheNamespaces.deepCleaningLogsList);
   SnapshotService.invalidate();
 }
 

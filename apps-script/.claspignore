@@ -1,0 +1,10 @@
+.clasp.json
+.DS_Store
+
+*.sheet.seed.md
+
+deployment/DEPLOYMENT_CHECKLIST.md
+deployment/DEPLOYMENT_PACK.md
+deployment/VERSION.md
+deployment/release-meta.json
+deployment/REPORTING_SNAPSHOT_COPY_PACK.md
