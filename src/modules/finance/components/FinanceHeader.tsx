@@ -1,6 +1,9 @@
+import Image from "next/image";
 import Link from "next/link";
-import { Plus, RefreshCw } from "lucide-react";
+import { FileText, Plus, RefreshCw, Send, Users } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+
+const SPEND_VISUAL_SRC = "/finance/finance-hero.jpg";
 
 export function FinanceHeader({
   derivedAt,
@@ -33,7 +36,7 @@ export function FinanceHeader({
             client payments.
           </p>
           {asOf ? (
-            <p className="fin-v13-asof">In view as of {asOf}</p>
+            <p className="fin-v13-asof">Last updated {asOf}</p>
           ) : null}
         </div>
         <div className="fin-v13-actions">
@@ -42,6 +45,7 @@ export function FinanceHeader({
               <Button
                 type="button"
                 size="sm"
+                className="fin-v13-btn-primary"
                 onClick={onRecordCost}
                 disabled={loading}
               >
@@ -89,40 +93,79 @@ export function FinanceSummaryRow({
   clientAuthorisationsTotal: number;
   loading: boolean;
 }) {
+  const supportCopy = spendIsSample
+    ? "Sample of recorded operational costs currently in view."
+    : "Recorded operational costs currently in view.";
+
   return (
-    <section
-      className="fin-v13-glance"
-      aria-label="Finance at a glance"
-    >
-      <div className="fin-v13-section-head fin-v13-section-head--tight">
-        <h2 className="fin-v13-section-title">Finance at a glance</h2>
-      </div>
-      <div className="fin-v13-summary fin-v13-summary--cards">
-        <div className="fin-v13-summary-item">
-          <p className="fin-v13-metric-label">
-            Operational spend{spendIsSample ? " (sample)" : ""}
-          </p>
-          <p className="fin-v13-metric-value">{operationalSpendLabel}</p>
+    <div className="fin-v13-overview">
+      <section className="fin-v13-hero" aria-label="Operational spend">
+        <div className="fin-v13-hero-body">
+          <div className="fin-v13-hero-metric">
+            <p className="fin-v13-metric-label">
+              Operational spend{spendIsSample ? " (sample)" : ""}
+            </p>
+            <p className="fin-v13-hero-value">
+              {loading ? "—" : operationalSpendLabel}
+            </p>
+          </div>
+          <div className="fin-v13-hero-support">
+            <p className="fin-v13-hero-copy">{supportCopy}</p>
+            <Link href="/finance/costs" className="fin-v13-text-action">
+              View details →
+            </Link>
+          </div>
         </div>
-        <div className="fin-v13-summary-item">
-          <p className="fin-v13-metric-label">Costs recorded</p>
-          <p className="fin-v13-metric-value">
-            {loading ? "—" : costRecordsTotal}
-          </p>
+        <div className="fin-v13-hero-visual" aria-hidden>
+          <Image
+            src={SPEND_VISUAL_SRC}
+            alt=""
+            fill
+            sizes="(min-width: 1024px) 28vw, 100vw"
+            className="fin-v13-hero-image"
+            priority
+          />
         </div>
-        <div className="fin-v13-summary-item">
-          <p className="fin-v13-metric-label">Reimbursement</p>
-          <p className="fin-v13-metric-value">
-            {loading ? "—" : reimbursementsInPreparation}
-          </p>
+      </section>
+
+      <section
+        className="fin-v13-support-metrics"
+        aria-label="Supporting finance metrics"
+      >
+        <div className="fin-v13-support-card">
+          <span className="fin-v13-support-icon" aria-hidden>
+            <FileText className="h-4 w-4" strokeWidth={1.75} />
+          </span>
+          <div className="min-w-0">
+            <p className="fin-v13-metric-label">Costs recorded</p>
+            <p className="fin-v13-support-value">
+              {loading ? "—" : costRecordsTotal}
+            </p>
+          </div>
         </div>
-        <div className="fin-v13-summary-item">
-          <p className="fin-v13-metric-label">Client authorisations</p>
-          <p className="fin-v13-metric-value">
-            {loading ? "—" : clientAuthorisationsTotal}
-          </p>
+        <div className="fin-v13-support-card">
+          <span className="fin-v13-support-icon" aria-hidden>
+            <Send className="h-4 w-4" strokeWidth={1.75} />
+          </span>
+          <div className="min-w-0">
+            <p className="fin-v13-metric-label">Reimbursement claims</p>
+            <p className="fin-v13-support-value">
+              {loading ? "—" : reimbursementsInPreparation}
+            </p>
+          </div>
         </div>
-      </div>
-    </section>
+        <div className="fin-v13-support-card">
+          <span className="fin-v13-support-icon" aria-hidden>
+            <Users className="h-4 w-4" strokeWidth={1.75} />
+          </span>
+          <div className="min-w-0">
+            <p className="fin-v13-metric-label">Client authorisations</p>
+            <p className="fin-v13-support-value">
+              {loading ? "—" : clientAuthorisationsTotal}
+            </p>
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }

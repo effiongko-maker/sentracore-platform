@@ -69,7 +69,11 @@ export function FinanceOperationalCostSection({
                     <span className="fin-v13-item-title">{row.description}</span>
                   </td>
                   <td className="fin-v13-num">{row.amountLabel}</td>
-                  <td className="fin-v13-muted">{row.reimbursabilityLabel}</td>
+                  <td>
+                    <span className="fin-v13-pill fin-v13-pill--neutral">
+                      {row.reimbursabilityLabel}
+                    </span>
+                  </td>
                   <td className="fin-v13-action-col">
                     <Link
                       href={`/finance/costs/${encodeURIComponent(row.costId)}`}

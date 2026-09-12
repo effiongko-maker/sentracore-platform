@@ -74,18 +74,33 @@ export function FinancePage() {
           loading={loading}
         />
 
-        <div className="fin-v13-main">
-          <FinanceOperationalCostSection
-            lenses={overview?.operationalCostLenses ?? []}
-            summary={overview?.operationalCostSummary ?? null}
-            recentCosts={overview?.recentCosts ?? []}
-            loading={loading}
-          />
-          <FinanceSubmissionsSection
-            snapshot={overview?.submissions ?? null}
-            loading={loading}
-          />
-        </div>
+        <section
+          className="fin-v13-activity"
+          aria-labelledby="fin-activity-heading"
+        >
+          <div className="fin-v13-section-head">
+            <div>
+              <h2 id="fin-activity-heading" className="fin-v13-section-title">
+                Financial activity
+              </h2>
+              <p className="fin-v13-section-lede">
+                Recent operational costs and reimbursement claims.
+              </p>
+            </div>
+          </div>
+          <div className="fin-v13-main">
+            <FinanceOperationalCostSection
+              lenses={overview?.operationalCostLenses ?? []}
+              summary={overview?.operationalCostSummary ?? null}
+              recentCosts={overview?.recentCosts ?? []}
+              loading={loading}
+            />
+            <FinanceSubmissionsSection
+              snapshot={overview?.submissions ?? null}
+              loading={loading}
+            />
+          </div>
+        </section>
 
         <FinancePositionSection
           approvals={overview?.sourceApprovals ?? []}
