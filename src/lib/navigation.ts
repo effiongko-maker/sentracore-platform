@@ -285,6 +285,7 @@ const ARCHETYPE_BY_HREF: Record<string, PageArchetypeHint> = {
   "/master-data": "reference-admin",
   "/reports": "guided-flow",
   "/occupant-requests": "guided-flow",
+  "/ecc-operations": "workspace",
 };
 
 function navItemMatchesPath(entry: NavItem, pathname: string): boolean {

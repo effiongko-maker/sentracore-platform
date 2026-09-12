@@ -1598,18 +1598,18 @@
 }
 
 .sc-ws-switcher-label {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 650;
   line-height: 1.3;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--os-ink-on-dark);
 }
 
 .sc-ws-switcher-meta {
-  font-size: 0.625rem;
-  font-weight: 550;
-  letter-spacing: 0.1em;
+  font-size: 0.5625rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--os-ink-on-dark-faint);
 }

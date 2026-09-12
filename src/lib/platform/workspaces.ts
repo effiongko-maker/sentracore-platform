@@ -58,12 +58,11 @@ export const PLATFORM_WORKSPACES: PlatformWorkspace[] = [
     id: "ecc-operations",
     label: "ECC Operations",
     title: "ECC Operations",
-    status: "in_development",
-    statusLabel: "In development",
-    statusDetail: "Being built for your organisation",
+    status: "active",
+    statusLabel: "Active",
     description:
       "Support the reporting, monitoring and operational activity of Emergency Communication Centres.",
-    previewHref: "/workspaces/ecc-operations",
+    href: "/ecc-operations",
     capabilities: ["Reporting", "Monitoring", "Centre Operations"],
   },
   {
@@ -134,6 +133,10 @@ export function resolveCurrentWorkspaceId(
   pathname: string
 ): WorkspaceId | null {
   if (isPlatformHomePath(pathname)) return null;
+
+  if (isEccOperationsPath(pathname)) {
+    return "ecc-operations";
+  }
 
   // Platform Finance workspace entry (never /finance — that is FM Finance).
   if (pathname.startsWith("/workspaces/")) {
@@ -212,4 +215,19 @@ export function isOperationsPath(pathname: string): boolean {
 
 export function isWorkspacePreviewPath(pathname: string): boolean {
   return pathname.startsWith("/workspaces/");
+}
+
+/** ECC Operations workspace routes (not Facility Management). */
+export function isEccOperationsPath(pathname: string): boolean {
+  return (
+    pathname === "/ecc-operations" || pathname.startsWith("/ecc-operations/")
+  );
+}
+
+/**
+ * Platform chrome without FM operating layers
+ * (workspace previews + ECC foundation shell).
+ */
+export function isPlatformWorkspaceSurfacePath(pathname: string): boolean {
+  return isWorkspacePreviewPath(pathname) || isEccOperationsPath(pathname);
 }

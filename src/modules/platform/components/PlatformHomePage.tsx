@@ -24,11 +24,11 @@ import {
 } from "@/lib/platform/workspaces";
 import { cn } from "@/lib/utils";
 
-/** Platform Home display order — FM first, then remaining catalog environments. */
+/** Platform Home display order — live environments first (FM, then ECC). */
 const ENVIRONMENT_DISPLAY_ORDER: WorkspaceId[] = [
   "operations",
-  "finance",
   "ecc-operations",
+  "finance",
   "construction",
   "projects-events",
 ];

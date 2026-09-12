@@ -8,7 +8,7 @@ import {
 } from "@/lib/platform/layers";
 import {
   isPlatformHomePath,
-  isWorkspacePreviewPath,
+  isPlatformWorkspaceSurfacePath,
 } from "@/lib/platform/workspaces";
 import { UserService } from "@/services/users/UserService";
 import type { CurrentUser } from "@/types";
@@ -24,7 +24,7 @@ export function GlobalCommandBar() {
 
   const breadcrumb = resolveBreadcrumbSegments(pathname);
   const isPlatformSurface =
-    isPlatformHomePath(pathname) || isWorkspacePreviewPath(pathname);
+    isPlatformHomePath(pathname) || isPlatformWorkspaceSurfacePath(pathname);
 
   useEffect(() => {
     let cancelled = false;

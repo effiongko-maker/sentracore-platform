@@ -104,8 +104,23 @@ function main() {
   );
 
   const live = PLATFORM_WORKSPACES.filter((w) => w.status === "active");
-  assert(live.length === 1, "exactly one live environment");
-  assert(live[0]?.id === "operations", "only FM is live");
+  assert(live.length === 2, "two live environments");
+  assert(
+    live.some((w) => w.id === "operations"),
+    "FM is live"
+  );
+  assert(
+    live.some((w) => w.id === "ecc-operations"),
+    "ECC Operations is live"
+  );
+  const ecc = getWorkspace("ecc-operations");
+  assert(ecc?.href === "/ecc-operations", "ECC live entry href");
+  assert(
+    /ENVIRONMENT_DISPLAY_ORDER[\s\S]*?"operations",\s*"ecc-operations",\s*"finance"/.test(
+      home
+    ),
+    "ECC positioned next to Facility Management"
+  );
   assert(
     !home.includes('href="/finance"') || home.includes("FM_FINANCE"),
     "platform home must not hard-link platform Finance to /finance"
