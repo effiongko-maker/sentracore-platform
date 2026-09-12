@@ -1,6 +1,5 @@
 import {
   Home,
-  Building2,
   Package,
   Users,
   Wrench,
@@ -85,13 +84,6 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "organise",
     label: "Organise",
     items: [
-      item({
-        label: "Facilities",
-        href: "/facilities",
-        icon: Building2,
-        title: "Facilities",
-        description: "Sites, buildings, and locations",
-      }),
       item({
         label: "Assets",
         href: "/assets",
