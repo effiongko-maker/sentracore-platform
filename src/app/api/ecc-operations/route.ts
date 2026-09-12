@@ -33,6 +33,7 @@ type EccAction =
   | "getPeopleSnapshot"
   | "createPerson"
   | "ensureCurrentShift"
+  | "setCurrentShiftAssignments"
   | "signInPerson"
   | "signOutPerson";
 
@@ -251,6 +252,11 @@ export async function POST(request: Request) {
         return NextResponse.json({
           success: true,
           data: await service.ensureCurrentShift(body.input as never),
+        });
+      case "setCurrentShiftAssignments":
+        return NextResponse.json({
+          success: true,
+          data: await service.setCurrentShiftAssignments(body.input as never),
         });
       case "signInPerson":
         return NextResponse.json({

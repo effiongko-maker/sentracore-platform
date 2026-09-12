@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   Clock3,
@@ -48,13 +48,10 @@ function defaultShiftWindow(): { startsAt: string; endsAt: string } {
   };
 }
 
-function openAddPersonForRole(
-  role: EccPersonRole,
-  setRole: (role: EccPersonRole) => void,
-  setShow: (value: boolean) => void
-) {
-  setRole(role);
-  setShow(true);
+function parseLocalDateTime(value: string): Date | null {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
 }
 
 export function EccPeoplePage() {
@@ -84,6 +81,9 @@ export function EccPeoplePage() {
     };
   });
 
+  const addPersonFormRef = useRef<HTMLFormElement | null>(null);
+  const shiftFormRef = useRef<HTMLFormElement | null>(null);
+
   async function reload() {
     const data = await EccOperationsService.getPeopleSnapshot();
     setSnapshot(data);
@@ -99,8 +99,31 @@ export function EccPeoplePage() {
     });
   }, []);
 
+  useEffect(() => {
+    if (showAddPerson) {
+      addPersonFormRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    }
+  }, [showAddPerson]);
+
+  useEffect(() => {
+    if (showShiftForm) {
+      shiftFormRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    }
+  }, [showShiftForm]);
+
   const agentOptions = useMemo(
     () => snapshot?.agents.map((row) => row.person) ?? [],
+    [snapshot]
+  );
+
+  const assignedSet = useMemo(
+    () => new Set(snapshot?.currentShift.shift?.assignedPersonIds ?? []),
     [snapshot]
   );
 
@@ -141,16 +164,64 @@ export function EccPeoplePage() {
     ).length;
   }, [snapshot]);
 
+  function startAddPerson(role: EccPersonRole = "agent") {
+    setPersonForm({
+      name: "",
+      role,
+      contactEmail: "",
+      contactPhone: "",
+    });
+    setShowAddPerson(true);
+    setShowShiftForm(false);
+  }
+
+  function openShiftForm(preselectAgentIds?: string[]) {
+    const current = snapshot?.currentShift.shift;
+    if (current) {
+      setShiftForm({
+        label: current.label,
+        startsAt: toDatetimeLocalValue(new Date(current.startsAt)),
+        endsAt: toDatetimeLocalValue(new Date(current.endsAt)),
+        assignedPersonIds:
+          preselectAgentIds ?? [...current.assignedPersonIds],
+      });
+    } else {
+      const window = defaultShiftWindow();
+      setShiftForm({
+        label: "Current shift",
+        startsAt: window.startsAt,
+        endsAt: window.endsAt,
+        assignedPersonIds: preselectAgentIds ?? [],
+      });
+    }
+    setShowShiftForm(true);
+    setShowAddPerson(false);
+  }
+
+  function toggleAssignedAgent(personId: string) {
+    setShiftForm((prev) => {
+      const exists = prev.assignedPersonIds.includes(personId);
+      return {
+        ...prev,
+        assignedPersonIds: exists
+          ? prev.assignedPersonIds.filter((id) => id !== personId)
+          : [...prev.assignedPersonIds, personId],
+      };
+    });
+  }
+
   async function onCreatePerson(event: React.FormEvent) {
     event.preventDefault();
     setSaving(true);
     setError(null);
     try {
+      const name = personForm.name.trim();
+      if (!name) throw new Error("Name is required.");
       await EccOperationsService.createPerson({
-        name: personForm.name,
+        name,
         role: personForm.role,
-        contactEmail: personForm.contactEmail || undefined,
-        contactPhone: personForm.contactPhone || undefined,
+        contactEmail: personForm.contactEmail.trim() || undefined,
+        contactPhone: personForm.contactPhone.trim() || undefined,
       });
       setPersonForm({
         name: "",
@@ -172,16 +243,65 @@ export function EccPeoplePage() {
     setSaving(true);
     setError(null);
     try {
+      const startsAt = parseLocalDateTime(shiftForm.startsAt);
+      const endsAt = parseLocalDateTime(shiftForm.endsAt);
+      if (!startsAt || !endsAt) {
+        throw new Error("Shift start and end times are required.");
+      }
+      if (endsAt.getTime() <= startsAt.getTime()) {
+        throw new Error("Shift end must be after shift start.");
+      }
       await EccOperationsService.ensureCurrentShift({
-        label: shiftForm.label,
-        startsAt: new Date(shiftForm.startsAt).toISOString(),
-        endsAt: new Date(shiftForm.endsAt).toISOString(),
+        label: shiftForm.label.trim() || "Current shift",
+        startsAt: startsAt.toISOString(),
+        endsAt: endsAt.toISOString(),
         assignedPersonIds: shiftForm.assignedPersonIds,
       });
       setShowShiftForm(false);
       await reload();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Unable to set shift.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onSaveAssignments() {
+    setSaving(true);
+    setError(null);
+    try {
+      await EccOperationsService.setCurrentShiftAssignments({
+        assignedPersonIds: shiftForm.assignedPersonIds,
+      });
+      setShowShiftForm(false);
+      await reload();
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error ? err.message : "Unable to update assignments."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onAssignAgentToCurrentShift(personId: string) {
+    const current = snapshot?.currentShift.shift;
+    if (!current) {
+      openShiftForm([personId]);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const next = [...new Set([...current.assignedPersonIds, personId])];
+      await EccOperationsService.setCurrentShiftAssignments({
+        assignedPersonIds: next,
+      });
+      await reload();
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error ? err.message : "Unable to assign agent to shift."
+      );
     } finally {
       setSaving(false);
     }
@@ -213,15 +333,6 @@ export function EccPeoplePage() {
     }
   }
 
-  function startAddPerson(role: EccPersonRole = "agent") {
-    openAddPersonForRole(
-      role,
-      (next) => setPersonForm((prev) => ({ ...prev, role: next })),
-      setShowAddPerson
-    );
-    setShowShiftForm(false);
-  }
-
   if (!snapshot && !error) {
     return <p className="ecc-empty">Loading people…</p>;
   }
@@ -246,8 +357,11 @@ export function EccPeoplePage() {
             type="button"
             className="ecc-btn ecc-btn-secondary"
             onClick={() => {
-              setShowShiftForm((value) => !value);
-              setShowAddPerson(false);
+              if (showShiftForm) {
+                setShowShiftForm(false);
+              } else {
+                openShiftForm();
+              }
             }}
           >
             {showShiftForm ? "Close shift" : "Set current shift"}
@@ -272,6 +386,7 @@ export function EccPeoplePage() {
 
       {showAddPerson ? (
         <form
+          ref={addPersonFormRef}
           className="ecc-submit-form ecc-form"
           id="ecc-people-add-form"
           onSubmit={onCreatePerson}
@@ -350,14 +465,16 @@ export function EccPeoplePage() {
 
       {showShiftForm ? (
         <form
+          ref={shiftFormRef}
           className="ecc-submit-form ecc-form"
           id="ecc-people-shift-form"
           onSubmit={onEnsureShift}
         >
           <h3 className="ecc-form-block-title">Current shift</h3>
           <p className="ecc-form-hint">
-            Sets the active shift for attendance and coverage. Existing current
-            shift is replaced.
+            Sets the active shift for attendance and coverage. Activating a new
+            shift replaces the previous current shift. Use Save assignments to
+            update agents on the existing current shift.
           </p>
           <div className="ecc-form-grid ecc-form-grid-3">
             <div className="ecc-field">
@@ -400,39 +517,55 @@ export function EccPeoplePage() {
             </div>
           </div>
           <div className="ecc-field">
-            <label htmlFor="ecc-shf-agents">Agents assigned</label>
-            <select
-              id="ecc-shf-agents"
-              multiple
-              value={shiftForm.assignedPersonIds}
-              onChange={(e) => {
-                const values = Array.from(e.target.selectedOptions).map(
-                  (option) => option.value
-                );
-                setShiftForm((prev) => ({
-                  ...prev,
-                  assignedPersonIds: values,
-                }));
-              }}
-            >
-              {agentOptions.map((agent) => (
-                <option key={agent.id} value={agent.id}>
-                  {agent.name}
-                </option>
-              ))}
-            </select>
-            <p className="ecc-form-hint">
-              Hold Ctrl/Cmd to select multiple agents. Add agents first if the
-              list is empty.
-            </p>
+            <label id="ecc-shf-agents-label">Agents assigned</label>
+            {agentOptions.length === 0 ? (
+              <p className="ecc-form-hint">
+                No agents recorded yet. Add an Agent first, then assign them
+                here.
+              </p>
+            ) : (
+              <div
+                className="ecc-ppl-assign-list"
+                role="group"
+                aria-labelledby="ecc-shf-agents-label"
+              >
+                {agentOptions.map((agent) => {
+                  const checked = shiftForm.assignedPersonIds.includes(
+                    agent.id
+                  );
+                  return (
+                    <label key={agent.id} className="ecc-ppl-assign-option">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleAssignedAgent(agent.id)}
+                      />
+                      <span>{agent.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
           </div>
-          <button
-            type="submit"
-            className="ecc-btn ecc-btn-primary"
-            disabled={saving}
-          >
-            {saving ? "Saving…" : "Activate shift"}
-          </button>
+          <div className="ecc-actions ecc-actions--compact">
+            <button
+              type="submit"
+              className="ecc-btn ecc-btn-primary"
+              disabled={saving}
+            >
+              {saving ? "Saving…" : hasShift ? "Replace current shift" : "Activate shift"}
+            </button>
+            {hasShift ? (
+              <button
+                type="button"
+                className="ecc-btn ecc-btn-secondary"
+                disabled={saving}
+                onClick={() => void onSaveAssignments()}
+              >
+                Save assignments
+              </button>
+            ) : null}
+          </div>
         </form>
       ) : null}
 
@@ -511,10 +644,7 @@ export function EccPeoplePage() {
               <button
                 type="button"
                 className="ecc-btn ecc-btn-secondary"
-                onClick={() => {
-                  setShowShiftForm(true);
-                  setShowAddPerson(false);
-                }}
+                onClick={() => openShiftForm()}
               >
                 Set current shift
               </button>
@@ -551,6 +681,15 @@ export function EccPeoplePage() {
                     })
                   )}
                 </ul>
+                <button
+                  type="button"
+                  className="ecc-btn ecc-btn-secondary ecc-btn-sm ecc-ppl-assign-cta"
+                  onClick={() => openShiftForm()}
+                >
+                  {current!.shift!.assignedPersonIds.length === 0
+                    ? "Assign agents"
+                    : "Update assignments"}
+                </button>
               </div>
             </div>
           )}
@@ -713,6 +852,7 @@ export function EccPeoplePage() {
                     (row.dutyStatus === "signed_out"
                       ? recent?.signedInAt
                       : undefined);
+                  const isAssigned = assignedSet.has(row.person.id);
                   return (
                     <tr key={row.person.id}>
                       <td>
@@ -741,33 +881,47 @@ export function EccPeoplePage() {
                         {signedOutAt ? formatEccWhen(signedOutAt) : "—"}
                       </td>
                       <td className="ecc-reg-actions">
-                        {row.openAttendanceId ? (
-                          <div className="ecc-people-signin">
-                            <span className="ecc-people-signin-copy">
-                              Signed in
-                              {row.signedInAt
-                                ? ` · ${formatEccWhen(row.signedInAt)}`
-                                : ""}
-                            </span>
+                        <div className="ecc-people-signin">
+                          {!isAssigned ? (
                             <button
                               type="button"
                               className="ecc-btn ecc-btn-secondary ecc-btn-sm"
                               disabled={saving}
-                              onClick={() => void onSignOut(row.person.id)}
+                              onClick={() =>
+                                void onAssignAgentToCurrentShift(row.person.id)
+                              }
                             >
-                              Sign out
+                              {hasShift ? "Assign to shift" : "Set shift"}
                             </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            className="ecc-btn ecc-btn-primary ecc-btn-sm"
-                            disabled={saving || row.person.status !== "active"}
-                            onClick={() => void onSignIn(row.person.id)}
-                          >
-                            Sign in
-                          </button>
-                        )}
+                          ) : null}
+                          {row.openAttendanceId ? (
+                            <>
+                              <span className="ecc-people-signin-copy">
+                                Signed in
+                                {row.signedInAt
+                                  ? ` · ${formatEccWhen(row.signedInAt)}`
+                                  : ""}
+                              </span>
+                              <button
+                                type="button"
+                                className="ecc-btn ecc-btn-secondary ecc-btn-sm"
+                                disabled={saving}
+                                onClick={() => void onSignOut(row.person.id)}
+                              >
+                                Sign out
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              className="ecc-btn ecc-btn-primary ecc-btn-sm"
+                              disabled={saving || row.person.status !== "active"}
+                              onClick={() => void onSignIn(row.person.id)}
+                            >
+                              Sign in
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -817,7 +971,7 @@ export function EccPeoplePage() {
               </tr>
             </thead>
             <tbody>
-              {(snapshot?.recentAttendance.length ?? 0) === 0 ? (
+              {attendanceRows.length === 0 ? (
                 <tr>
                   <td colSpan={6}>
                     <div className="ecc-ppl-empty ecc-ppl-empty--table">

@@ -33,6 +33,7 @@ import type {
   EccReportingSnapshot,
   EccRequest,
   EccRequestHistoryEntry,
+  EccSetCurrentShiftAssignmentsInput,
   EccSignInInput,
   EccSignOutInput,
   EccTransitionIssueInput,
@@ -98,6 +99,11 @@ export class EccOperationsServerService {
   async ensureCurrentShift(input: EccEnsureCurrentShiftInput) {
     await this.repo.ensureDefaultCentre();
     return this.peopleRepo.ensureCurrentShift(input);
+  }
+
+  async setCurrentShiftAssignments(input: EccSetCurrentShiftAssignmentsInput) {
+    await this.repo.ensureDefaultCentre();
+    return this.peopleRepo.setCurrentShiftAssignments(input);
   }
 
   async signInPerson(input: EccSignInInput) {

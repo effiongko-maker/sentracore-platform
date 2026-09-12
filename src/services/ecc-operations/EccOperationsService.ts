@@ -28,6 +28,7 @@ import type {
   EccShift,
   EccSignInInput,
   EccSignOutInput,
+  EccSetCurrentShiftAssignmentsInput,
   EccTransitionIssueInput,
   EccTransitionRequestInput,
 } from "@/modules/ecc-operations/types";
@@ -146,6 +147,9 @@ export type IEccOperationsService = {
   getPeopleSnapshot(centreId?: string): Promise<EccPeopleSnapshot>;
   createPerson(input: EccCreatePersonInput): Promise<EccPerson>;
   ensureCurrentShift(input: EccEnsureCurrentShiftInput): Promise<EccShift>;
+  setCurrentShiftAssignments(
+    input: EccSetCurrentShiftAssignmentsInput
+  ): Promise<EccShift>;
   signInPerson(input: EccSignInInput): Promise<EccAttendanceRecord>;
   signOutPerson(input: EccSignOutInput): Promise<EccAttendanceRecord>;
 };
@@ -245,6 +249,10 @@ export const EccOperationsService: IEccOperationsService = {
 
   async ensureCurrentShift(input) {
     return callEccApi({ action: "ensureCurrentShift", input });
+  },
+
+  async setCurrentShiftAssignments(input) {
+    return callEccApi({ action: "setCurrentShiftAssignments", input });
   },
 
   async signInPerson(input) {

@@ -3140,6 +3140,39 @@ button.ecc-filter-clear {
   color: var(--os-ink);
 }
 
+.ecc-ppl-assign-cta {
+  margin-top: 0.65rem;
+}
+
+.ecc-ppl-assign-list {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--os-border) 70%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--os-canvas) 40%, #fff);
+  max-height: 11rem;
+  overflow: auto;
+}
+
+.ecc-ppl-assign-option {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--os-ink);
+  cursor: pointer;
+}
+
+.ecc-ppl-assign-option input {
+  width: 0.95rem;
+  height: 0.95rem;
+  min-height: 0;
+  margin: 0;
+  accent-color: color-mix(in srgb, var(--os-accent, #2563eb) 88%, var(--os-ink));
+}
+
 .ecc-ppl-coverage-grid {
   display: grid;
   gap: 0.85rem;

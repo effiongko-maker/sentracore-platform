@@ -695,3 +695,8 @@ export type EccEnsureCurrentShiftInput = {
   assignedPersonIds?: string[];
   centreId?: string;
 };
+
+export type EccSetCurrentShiftAssignmentsInput = {
+  assignedPersonIds: string[];
+  centreId?: string;
+};

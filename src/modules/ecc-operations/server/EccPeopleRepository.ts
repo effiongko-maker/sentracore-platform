@@ -11,12 +11,19 @@ import type {
   EccPeopleSnapshot,
   EccPerson,
   EccPersonRole,
+  EccSetCurrentShiftAssignmentsInput,
   EccShift,
   EccShiftCoverageStatus,
   EccSignInInput,
   EccSignOutInput,
 } from "@/modules/ecc-operations/types";
 import { DEFAULT_ECC_CENTRE } from "@/modules/ecc-operations/types";
+
+const PERSON_ROLES: ReadonlySet<EccPersonRole> = new Set([
+  "ecc_manager",
+  "relationship_officer",
+  "agent",
+]);
 
 type PersonRow = {
   organisation_id: string;
@@ -133,6 +140,11 @@ export class EccPeopleRepository {
   async createPerson(input: EccCreatePersonInput): Promise<EccPerson> {
     const stamp = nowIso();
     const centreId = input.centreId ?? DEFAULT_ECC_CENTRE.id;
+    if (!PERSON_ROLES.has(input.role)) {
+      throw new Error(
+        "Role must be ECC Manager, Relationship Officer, or Agent."
+      );
+    }
     const person: EccPerson = {
       id: newEccId("ECC-PPL"),
       centreId,
@@ -202,14 +214,26 @@ export class EccPeopleRepository {
       .eq("is_current", true);
     if (clearError) throwDb(clearError, "Failed to clear current shift.");
 
-    const assignedPersonIds = [...new Set(input.assignedPersonIds ?? [])];
+    const startsAt = new Date(input.startsAt);
+    const endsAt = new Date(input.endsAt);
+    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
+      throw new Error("Shift start and end times are required.");
+    }
+    if (endsAt.getTime() <= startsAt.getTime()) {
+      throw new Error("Shift end must be after shift start.");
+    }
+
+    const assignedPersonIds = await this.resolveAgentAssignmentIds(
+      centreId,
+      input.assignedPersonIds ?? []
+    );
     const coverage = computeCoverage(assignedPersonIds.length, 0);
     const shift: EccShift = {
       id: newEccId("ECC-SHF"),
       centreId,
       label: input.label.trim() || "Current shift",
-      startsAt: input.startsAt,
-      endsAt: input.endsAt,
+      startsAt: startsAt.toISOString(),
+      endsAt: endsAt.toISOString(),
       isCurrent: true,
       coverageStatus: coverage,
       assignedPersonIds,
@@ -231,20 +255,90 @@ export class EccPeopleRepository {
     });
     if (error) throwDb(error, "Failed to create shift.");
 
-    if (assignedPersonIds.length > 0) {
-      const { error: assignError } = await db()
-        .from("ecc_shift_assignments")
-        .insert(
-          assignedPersonIds.map((personId) => ({
-            organisation_id: this.organisationId,
-            shift_id: shift.id,
-            person_id: personId,
-          }))
-        );
-      if (assignError) throwDb(assignError, "Failed to assign agents to shift.");
-    }
+    await this.replaceShiftAssignments(shift.id, assignedPersonIds);
 
     return shift;
+  }
+
+  /**
+   * Replace agent assignments on the centre's current shift without recreating it.
+   */
+  async setCurrentShiftAssignments(
+    input: EccSetCurrentShiftAssignmentsInput
+  ): Promise<EccShift> {
+    const centreId = input.centreId ?? DEFAULT_ECC_CENTRE.id;
+    const current = await this.getCurrentShift(centreId);
+    if (!current) {
+      throw new Error("No current shift is set. Set a current shift first.");
+    }
+
+    const assignedPersonIds = await this.resolveAgentAssignmentIds(
+      centreId,
+      input.assignedPersonIds ?? []
+    );
+    await this.replaceShiftAssignments(current.id, assignedPersonIds);
+
+    const open = await this.listOpenAttendance();
+    const signedIn = open.filter((row) =>
+      assignedPersonIds.includes(row.person_id)
+    ).length;
+    const coverageStatus = computeCoverage(assignedPersonIds.length, signedIn);
+    await this.updateShiftCoverage(current.id, coverageStatus);
+
+    return {
+      ...current,
+      assignedPersonIds,
+      coverageStatus,
+      updatedAt: nowIso(),
+    };
+  }
+
+  private async resolveAgentAssignmentIds(
+    centreId: string,
+    personIds: string[]
+  ): Promise<string[]> {
+    const uniqueIds = [...new Set(personIds.map((id) => id.trim()).filter(Boolean))];
+    if (uniqueIds.length === 0) return [];
+
+    const people = await this.listPeople(centreId);
+    const agentsById = new Map(
+      people
+        .filter((person) => person.role === "agent" && person.status === "active")
+        .map((person) => [person.id, person])
+    );
+
+    const invalid = uniqueIds.filter((id) => !agentsById.has(id));
+    if (invalid.length > 0) {
+      throw new Error(
+        "Only active agents can be assigned to a shift. Add agents first, then assign them."
+      );
+    }
+    return uniqueIds;
+  }
+
+  private async replaceShiftAssignments(
+    shiftId: string,
+    assignedPersonIds: string[]
+  ): Promise<void> {
+    const { error: clearError } = await db()
+      .from("ecc_shift_assignments")
+      .delete()
+      .eq("organisation_id", this.organisationId)
+      .eq("shift_id", shiftId);
+    if (clearError) throwDb(clearError, "Failed to clear shift assignments.");
+
+    if (assignedPersonIds.length === 0) return;
+
+    const { error: assignError } = await db()
+      .from("ecc_shift_assignments")
+      .insert(
+        assignedPersonIds.map((personId) => ({
+          organisation_id: this.organisationId,
+          shift_id: shiftId,
+          person_id: personId,
+        }))
+      );
+    if (assignError) throwDb(assignError, "Failed to assign agents to shift.");
   }
 
   async updateShiftCoverage(
