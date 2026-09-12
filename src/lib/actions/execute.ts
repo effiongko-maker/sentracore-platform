@@ -1,4 +1,7 @@
-import { resolveActionContext } from "./context";
+import {
+  createAnonymousActionContext,
+  resolveActionContext,
+} from "./context";
 import { ActionError } from "./errors";
 import {
   actionFailureFromError,
@@ -10,6 +13,7 @@ import { authorizeProtectedAction } from "@/lib/access/authorizeProtectedAction"
 import { ProtectedActionError } from "@/lib/access/authorizeProtectedAction";
 import { accessCan } from "@/lib/access";
 import { isProtectedActionId } from "@/lib/access/protectedActions";
+import { getPlatformSession } from "@/lib/auth/session";
 
 /**
  * Execute a platform action through the controlled boundary:
@@ -30,14 +34,40 @@ export async function executeAction<TInput, TData>(
       throw new ActionError("VALIDATION_ERROR", "Action module is required.");
     }
 
-    const context = await resolveActionContext({
-      module: definition.module,
-      departmentId: definition.departmentId,
-    });
+    if (
+      definition.allowAnonymous &&
+      (definition.protected || definition.protectedActionId)
+    ) {
+      throw new ActionError(
+        "VALIDATION_ERROR",
+        "Anonymous actions cannot be protected."
+      );
+    }
 
     const input = (definition.input ?? undefined) as TInput;
 
-    if (definition.requiredCapability) {
+    let context = null as Awaited<ReturnType<typeof resolveActionContext>> | null;
+
+    if (definition.allowAnonymous) {
+      const session = await getPlatformSession();
+      if (session) {
+        context = await resolveActionContext({
+          module: definition.module,
+          departmentId: definition.departmentId,
+        });
+      } else {
+        context = createAnonymousActionContext(definition.module);
+      }
+    } else {
+      context = await resolveActionContext({
+        module: definition.module,
+        departmentId: definition.departmentId,
+      });
+    }
+
+    const isAnonymous = !context.userId;
+
+    if (definition.requiredCapability && !isAnonymous) {
       if (
         !context.operatingAccess ||
         !accessCan(context.operatingAccess, definition.requiredCapability)

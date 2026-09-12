@@ -9,6 +9,7 @@ import type {
 } from "@/modules/facilities/types";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
+import { postToAppsScriptData } from "@/services/api/appsScriptProxy";
 import {
   CacheNamespaces,
   onFacilityMutation,
@@ -118,6 +119,18 @@ export const FacilityService = {
     return sharedRequest(
       key,
       async () => {
+        if (typeof window === "undefined") {
+          const data = await postToAppsScriptData(
+            {
+              resource: "facilities",
+              action: "getAll",
+              payload: params,
+            },
+            { resource: "facilities", action: "getAll" },
+            "FacilityService.listFacilities"
+          );
+          return toPaginatedFacilities(data, params);
+        }
         const response = await apiClient.post<unknown>(
           "/facilities",
           {

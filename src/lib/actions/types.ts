@@ -109,6 +109,12 @@ export type ActionDefinition<TInput, TData> = {
   /** Base capability required in addition to module access. */
   requiredCapability?: AccessCapability;
   /**
+   * When true, unauthenticated callers may run this action (occupant portal).
+   * Authenticated callers still resolve full session + capability checks.
+   * Must not be combined with protected / step-up actions.
+   */
+  allowAnonymous?: boolean;
+  /**
    * For protected actions: read step-up password from input.
    * Password is never logged or emitted.
    */

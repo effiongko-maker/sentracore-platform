@@ -11,6 +11,8 @@ function isPublicPath(pathname: string): boolean {
   if (pathname === "/reset-password") return true;
   if (pathname === "/auth/callback") return true;
   if (pathname === "/api/admin/bootstrap-first-user") return true;
+  if (pathname === "/occupant-requests") return true;
+  if (pathname === "/occupant-requests/track") return true;
   return false;
 }
 

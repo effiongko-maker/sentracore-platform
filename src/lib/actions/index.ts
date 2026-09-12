@@ -21,7 +21,7 @@ export {
   assertActionSuccess,
 } from "./result";
 
-export { resolveActionContext } from "./context";
+export { resolveActionContext, createAnonymousActionContext } from "./context";
 export { createActionAuthz } from "./authz";
 export { hasModule, requireModule } from "./moduleAccess";
 export { executeAction } from "./execute";

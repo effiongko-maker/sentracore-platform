@@ -6,6 +6,7 @@ import { createActionAuthz } from "./authz";
 import type { ActionContext, ActionDepartment, PlatformModuleSlug } from "./types";
 import { requireModule } from "./moduleAccess";
 import { resolveOperatingAccess } from "@/lib/access/server";
+import type { AuthEnabledModule, AuthProfile } from "@/lib/auth/types";
 
 /**
  * Resolve authenticated ActionContext from the current session.
@@ -64,6 +65,53 @@ export async function resolveActionContext(options: {
     module,
     authz,
     operatingAccess,
+    protectedAuthority: null,
+    now: new Date().toISOString(),
+  };
+}
+
+/**
+ * Minimal context for public occupant-portal actions (no staff session).
+ * Handlers must not rely on profile/org/capability fields.
+ */
+export function createAnonymousActionContext(
+  moduleSlug: PlatformModuleSlug
+): ActionContext {
+  const module: AuthEnabledModule = {
+    id: "anonymous",
+    moduleId: "anonymous",
+    slug: moduleSlug,
+    name: String(moduleSlug),
+    status: "enabled",
+  };
+  const profile: AuthProfile = {
+    id: "",
+    firstName: null,
+    lastName: null,
+    fullName: null,
+    avatarUrl: null,
+    jobTitle: null,
+    organisationId: null,
+    status: "active",
+  };
+
+  return {
+    userId: "",
+    email: "",
+    profile,
+    organisation: {
+      id: "",
+      name: "",
+      slug: "",
+      status: "active",
+    },
+    roleAssignments: [],
+    roleSlugs: [],
+    enabledModules: [module],
+    department: null,
+    module,
+    authz: createActionAuthz([], ""),
+    operatingAccess: undefined,
     protectedAuthority: null,
     now: new Date().toISOString(),
   };

@@ -1,45 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { FacilityService } from "@/services/facilities/FacilityService";
 import type { Facility } from "@/modules/facilities/types";
-import { getOccupantActor } from "../context/OccupantSession";
 
+/** Known V1 portal facility — no live catalogue fetch on guest load. */
+const PORTAL_DEFAULT_FACILITY: Facility = {
+  id: "FAC-0001",
+  name: "NCC Annex",
+  code: "FAC-0001",
+  location: "",
+  type: "office",
+  manager: "",
+  status: "active",
+  createdAt: "",
+  updatedAt: "",
+};
+
+/**
+ * Anonymous request portal facilities.
+ * Synchronous default only — does not call Apps Script or /api/facilities.
+ */
 export function useOccupantFacilities() {
-  const [facilities, setFacilities] = useState<Facility[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const actor = getOccupantActor();
-
-    FacilityService.listFacilities({ page: 1, pageSize: 200, status: "all" })
-      .then((page) => {
-        if (cancelled) return;
-        const allowed = actor.facilityIds?.length
-          ? page.data.filter((f) => actor.facilityIds!.includes(f.id))
-          : page.data;
-        setFacilities(allowed.filter((f) => f.id && f.name));
-        setError(null);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setFacilities([]);
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Unable to load facilities right now."
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return { facilities, loading, error };
+  return {
+    facilities: [PORTAL_DEFAULT_FACILITY],
+    loading: false,
+    error: null as string | null,
+  };
 }

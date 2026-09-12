@@ -21,6 +21,7 @@ export async function submitOccupantMaintenanceRequest(
     name: "occupant.maintenance.request",
     module: "facility_management",
     requiredCapability: "requests.view",
+    allowAnonymous: true,
     input: form,
     handler: async (context, rawInput) => {
       const actor = getOccupantActor();
@@ -54,6 +55,7 @@ export async function submitOccupantIncidentReport(
     name: "occupant.incident.report",
     module: "facility_management",
     requiredCapability: "requests.view",
+    allowAnonymous: true,
     input: form,
     handler: async (context, rawInput) => {
       const actor = getOccupantActor();
