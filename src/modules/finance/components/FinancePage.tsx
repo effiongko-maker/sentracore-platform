@@ -63,11 +63,6 @@ export function FinancePage() {
           canMutateFinance={canMutateFinance}
         />
 
-        <FinancePendingActionSection
-          items={overview?.pendingActions ?? []}
-          loading={loading}
-        />
-
         <FinanceSummaryRow
           operationalSpendLabel={loading ? "—" : spendLabel}
           spendIsSample={Boolean(summary?.truncated)}
@@ -96,6 +91,11 @@ export function FinancePage() {
           approvals={overview?.sourceApprovals ?? []}
           loading={loading}
           totalAuthorisations={overview?.meta.totalApprovals ?? 0}
+        />
+
+        <FinancePendingActionSection
+          items={overview?.pendingActions ?? []}
+          loading={loading}
         />
 
         <div className="fin-v13-footer">
