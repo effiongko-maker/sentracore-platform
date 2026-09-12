@@ -10,7 +10,6 @@ import {
   Zap,
   FileBarChart2,
   Settings2,
-  MessageSquarePlus,
   CircleDot,
   Database,
   ScanSearch,
@@ -136,13 +135,6 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "operate",
     label: "Operate",
     items: [
-      item({
-        label: "Submit request",
-        href: "/occupant-requests",
-        icon: MessageSquarePlus,
-        title: "Submit request",
-        description: "Report a facility need",
-      }),
       item({
         label: "Issues",
         href: "/issues",

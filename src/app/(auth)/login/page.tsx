@@ -1,7 +1,8 @@
 import { LoginForm } from "@/components/auth/LoginForm";
-import { AuthPageShell } from "@/components/auth/AuthPageShell";
+import { LoginPageShell } from "@/components/auth/LoginPageShell";
 import { RecoveryRedirectCatcher } from "@/components/auth/RecoveryRedirectCatcher";
 import { safeInternalPath } from "@/lib/auth/urls";
+import "@/styles/login.css";
 
 export default async function LoginPage({
   searchParams,
@@ -22,14 +23,9 @@ export default async function LoginPage({
   const resetSuccess = params.reset === "success";
 
   return (
-    <AuthPageShell
-      title="Sign in to SentraCore"
-      footer={
-        <p>Access is by invitation. Public registration is not available.</p>
-      }
-    >
+    <LoginPageShell>
       <RecoveryRedirectCatcher />
       <LoginForm nextPath={nextPath} resetSuccess={resetSuccess} />
-    </AuthPageShell>
+    </LoginPageShell>
   );
 }

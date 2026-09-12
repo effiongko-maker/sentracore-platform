@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { Eye, EyeOff } from "lucide-react";
+import { useActionState, useState } from "react";
 import { signIn, type SignInState } from "@/lib/auth/actions";
 
 const initialState: SignInState = {};
@@ -14,26 +15,21 @@ export function LoginForm({
   resetSuccess?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(signIn, initialState);
+  const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form action={formAction} className="login-form">
       <input type="hidden" name="next" value={nextPath} />
 
       {resetSuccess ? (
-        <p
-          role="status"
-          className="rounded-xl border border-border bg-background/60 px-3 py-2 text-sm text-foreground"
-        >
+        <p role="status" className="login-status">
           Your password was updated. Sign in with your new password.
         </p>
       ) : null}
 
-      <div className="space-y-1.5">
-        <label
-          htmlFor="email"
-          className="block text-xs font-medium text-foreground"
-        >
-          Email
+      <div className="login-field">
+        <label htmlFor="email" className="login-label">
+          Work email
         </label>
         <input
           id="email"
@@ -41,51 +37,53 @@ export function LoginForm({
           type="email"
           autoComplete="username"
           required
-          className="h-11 w-full rounded-xl border border-border bg-card px-3 text-sm text-foreground outline-none transition-shadow focus:ring-2 focus:ring-accent/30"
-          placeholder="you@organisation.com"
+          className="login-input"
+          placeholder="name@organisation.com"
         />
       </div>
 
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between gap-3">
-          <label
-            htmlFor="password"
-            className="block text-xs font-medium text-foreground"
+      <div className="login-field">
+        <label htmlFor="password" className="login-label">
+          Password
+        </label>
+        <div className="login-input-wrap">
+          <input
+            id="password"
+            name="password"
+            type={showPassword ? "text" : "password"}
+            autoComplete="current-password"
+            required
+            className="login-input login-input--password"
+            placeholder="Enter your password"
+          />
+          <button
+            type="button"
+            className="login-password-toggle"
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            onClick={() => setShowPassword((value) => !value)}
           >
-            Password
-          </label>
-          <Link
-            href="/forgot-password"
-            className="text-xs font-medium text-muted underline-offset-2 hover:text-primary hover:underline"
-          >
-            Forgot password?
-          </Link>
+            {showPassword ? (
+              <EyeOff className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+            ) : (
+              <Eye className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+            )}
+          </button>
         </div>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          className="h-11 w-full rounded-xl border border-border bg-card px-3 text-sm text-foreground outline-none transition-shadow focus:ring-2 focus:ring-accent/30"
-          placeholder="••••••••"
-        />
+      </div>
+
+      <div className="login-form-row">
+        <Link href="/forgot-password" className="login-forgot">
+          Forgot password?
+        </Link>
       </div>
 
       {state.error ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-danger/20 bg-danger/5 px-3 py-2 text-sm text-danger"
-        >
+        <p role="alert" className="login-alert">
           {state.error}
         </p>
       ) : null}
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-primary text-sm font-semibold text-white transition-opacity hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
-      >
+      <button type="submit" disabled={pending} className="login-submit">
         {pending ? "Signing in…" : "Sign in"}
       </button>
     </form>
