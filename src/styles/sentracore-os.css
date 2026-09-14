@@ -380,6 +380,44 @@
   padding: var(--os-space-3) var(--os-space-2) var(--os-space-4);
 }
 
+.os-compass-nav-status {
+  margin: 0.35rem 0.65rem 0.75rem;
+  font-size: 0.6875rem;
+  line-height: 1.45;
+  color: var(--os-ink-on-dark-faint);
+}
+
+.os-compass-nav-retry {
+  margin-top: 0.4rem;
+  border: 0;
+  background: transparent;
+  color: var(--os-ink-on-dark);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.os-compass-nav-status {
+  margin: 0.35rem 0.65rem 0.75rem;
+  font-size: 0.6875rem;
+  line-height: 1.45;
+  color: var(--os-ink-on-dark-faint);
+}
+
+.os-compass-nav-retry {
+  margin-top: 0.4rem;
+  border: 0;
+  background: transparent;
+  color: var(--os-ink-on-dark);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
 /* OEM attribution — pinned to the visual bottom of the left nav */
 .os-compass-attribution {
   flex-shrink: 0;
@@ -1671,6 +1709,28 @@
 
 .sc-ws-switcher-option:hover {
   background: rgba(255, 255, 255, 0.05);
+}
+
+.sc-ws-switcher-option-disabled,
+.sc-ws-switcher-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.sc-ws-switcher-option-disabled:hover,
+.sc-ws-switcher-option:disabled:hover {
+  background: transparent;
+}
+
+.sc-ws-switcher-option-disabled,
+.sc-ws-switcher-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.sc-ws-switcher-option-disabled:hover,
+.sc-ws-switcher-option:disabled:hover {
+  background: transparent;
 }
 
 .sc-ws-switcher-option-current {

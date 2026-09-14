@@ -1,5 +1,6 @@
 /**
- * Energy Reading — AEDC meter-reading register (not Work / Maintenance / Incident / Issue).
+ * Energy Reading — AEDC meter-reading register retained for compatibility.
+ * Facility Management does not own AEDC meter-reading capture.
  */
 
 /** Canonical Energy Reading domain model. */
@@ -9,7 +10,7 @@ export interface EnergyReading {
   date: string;
   /** Meter No. — free-text label; optional (no asset link). */
   meter: string;
-  /** Observed meter value entered by Facility Management. */
+  /** Observed meter value (historical/compatibility records). */
   reading: number;
   remarks?: string;
   createdAt: string;

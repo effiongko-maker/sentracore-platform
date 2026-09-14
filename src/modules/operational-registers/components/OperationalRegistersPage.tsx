@@ -7,7 +7,6 @@ import {
   Clock,
   FileText,
   Fuel,
-  Gauge,
   Layers,
   Package,
   Recycle,
@@ -42,13 +41,6 @@ const REGISTERS: ReadonlyArray<{
     href: "/generator-log",
     icon: Zap,
     accent: "slate",
-  },
-  {
-    label: "Energy Reading",
-    description: "Record AEDC electricity meter readings.",
-    href: "/energy-reading",
-    icon: Gauge,
-    accent: "emerald",
   },
   {
     label: "Diesel Usage",

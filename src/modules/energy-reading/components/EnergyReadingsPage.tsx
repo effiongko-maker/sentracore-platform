@@ -1,6 +1,5 @@
 "use client";
 
-import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { ArrowLeft, Gauge } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -20,9 +19,6 @@ import { EnergyReadingsToolbar } from "./EnergyReadingsToolbar";
 import { ViewEnergyReadingModal } from "./ViewEnergyReadingModal";
 
 export function EnergyReadingsPage() {
-  const { can } = useOperatingAccess();
-  const canCreateOps = can("ops.create");
-  const canMutateOps = can("ops.edit");
   const openId = useQueryRecordId();
   const {
     entries,
@@ -77,7 +73,7 @@ export function EnergyReadingsPage() {
       </div>
       <ExploreHeader
         title="Energy Reading"
-        description="AEDC meter readings recorded by Facility Management."
+        description="AEDC meter readings are not a Facility Management operational responsibility. This register is retained for historical/compatibility access only and is not an FM capture workflow."
         territoryNote={`${loading ? "—" : total} readings in view`}
       />
 
@@ -96,7 +92,7 @@ export function EnergyReadingsPage() {
         loading={loading}
         onClearAll={clearAll}
         onCreate={() => setModal({ type: "create" })}
-        canCreate={canCreateOps}
+        canCreate={false}
       />
 
       {error ? (
@@ -110,7 +106,7 @@ export function EnergyReadingsPage() {
       ) : (
         <StreamSurface>
           <EnergyReadingsTable
-            canMutate={canMutateOps}
+            canMutate={false}
             entries={entries}
             loading={loading}
             page={page}
@@ -137,11 +133,7 @@ export function EnergyReadingsPage() {
         open={modal.type === "view"}
         entry={modal.type === "view" ? modal.entry : null}
         onClose={() => setModal({ type: "closed" })}
-        onEdit={
-          canMutateOps
-            ? (entry) => setModal({ type: "edit", entry })
-            : undefined
-        }
+        onEdit={undefined}
       />
     </ModeFrame>
   );

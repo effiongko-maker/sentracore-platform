@@ -18,11 +18,14 @@ import {
 } from "lucide-react";
 import {
   PLATFORM_WORKSPACES,
+  resolveWorkspaceDirectoryState,
   type PlatformWorkspace,
   type WorkspaceId,
   type WorkspaceStatus,
 } from "@/lib/platform/workspaces";
 import { cn } from "@/lib/utils";
+import { usePlatformSession } from "@/hooks/usePlatformSession";
+import type { ReactNode } from "react";
 
 /** Platform Home display order — live environments first (FM, then ECC). */
 const ENVIRONMENT_DISPLAY_ORDER: WorkspaceId[] = [
@@ -91,11 +94,60 @@ function statusBadgeLabel(workspace: PlatformWorkspace): string {
   return workspace.statusLabel;
 }
 
-function EnvironmentCard({ workspace }: { workspace: PlatformWorkspace }) {
+function EnvironmentCard({
+  workspace,
+  sessionLoading,
+  enabledModules,
+  isSuperAdmin,
+}: {
+  workspace: PlatformWorkspace;
+  sessionLoading: boolean;
+  enabledModules: Array<{ slug: string; status: string }> | null;
+  isSuperAdmin: boolean;
+}) {
   const Icon = ENV_ICON[workspace.id] ?? Database;
   const tone = statusTone(workspace.status);
   const isLive = workspace.status === "active";
-  const enterHref = workspace.href;
+  const state = resolveWorkspaceDirectoryState(workspace, {
+    enabledModules,
+    sessionLoading,
+    isSuperAdmin,
+  });
+
+  let action: ReactNode;
+  if (state.kind === "enter") {
+    action = (
+      <Link href={state.href} className="sc-ph-env-cta">
+        Enter {workspace.title}
+        <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+      </Link>
+    );
+  } else if (state.kind === "no_access") {
+    action = (
+      <span className="sc-ph-env-soon" aria-disabled="true">
+        No access
+      </span>
+    );
+  } else if (state.kind === "loading") {
+    action = (
+      <span className="sc-ph-env-soon" aria-disabled="true">
+        Checking access…
+      </span>
+    );
+  } else if (workspace.status === "in_development") {
+    // Preserve familiar non-live copy for Finance / in-development cards.
+    action = (
+      <span className="sc-ph-env-soon" aria-disabled="true">
+        Coming soon
+      </span>
+    );
+  } else {
+    action = (
+      <span className="sc-ph-env-soon" aria-disabled="true">
+        {state.label || "Coming soon"}
+      </span>
+    );
+  }
 
   return (
     <article
@@ -115,16 +167,7 @@ function EnvironmentCard({ workspace }: { workspace: PlatformWorkspace }) {
         <h3 className="sc-ph-env-title">{workspace.title}</h3>
       </div>
       <p className="sc-ph-env-desc">{workspace.description}</p>
-      {isLive && enterHref ? (
-        <Link href={enterHref} className="sc-ph-env-cta">
-          Enter {workspace.title}
-          <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-        </Link>
-      ) : (
-        <span className="sc-ph-env-soon" aria-disabled="true">
-          Coming soon
-        </span>
-      )}
+      {action}
     </article>
   );
 }
@@ -145,6 +188,8 @@ function PlatformHeroVisual() {
 }
 
 export function PlatformHomePage() {
+  const { enabledModules, isSuperAdmin, loading: sessionLoading } =
+    usePlatformSession();
   const environments = orderedEnvironments();
 
   return (
@@ -197,7 +242,13 @@ export function PlatformHomePage() {
 
         <div className="sc-ph-env-grid">
           {environments.map((workspace) => (
-            <EnvironmentCard key={workspace.id} workspace={workspace} />
+            <EnvironmentCard
+              key={workspace.id}
+              workspace={workspace}
+              sessionLoading={sessionLoading}
+              enabledModules={enabledModules}
+              isSuperAdmin={isSuperAdmin}
+            />
           ))}
         </div>
       </section>

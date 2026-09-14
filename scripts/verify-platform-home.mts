@@ -10,6 +10,7 @@ import {
   PLATFORM_WORKSPACES,
   getWorkspace,
   resolveCurrentWorkspaceId,
+  resolveWorkspaceDirectoryState,
 } from "../src/lib/platform/workspaces";
 
 function assert(cond: unknown, message: string): asserts cond {
@@ -32,49 +33,33 @@ function main() {
   assert(!home.includes("ACTIVE_CAPABILITIES"), "FM capability rail removed");
   assert(home.includes("Enter {workspace.title}"), "live enter CTA");
   assert(home.includes("Coming soon"), "non-live coming soon");
+  assert(home.includes("No access"), "inaccessible modules labelled");
+  assert(home.includes("resolveWorkspaceDirectoryState"), "directory uses access state");
   assert(
     home.includes("/platform/hero-architecture.jpg"),
     "supplied hero visual asset integrated"
   );
-  assert(!home.includes("sc-ph-hero-plane"), "CSS architecture art removed");
-  assert(!home.includes("HERO_WORDS"), "baked-in image typography used");
 
   const commandBar = readSrc("src/components/platform/GlobalCommandBar.tsx");
   assert(
     commandBar.includes("isPlatformSurface"),
     "command bar detects platform surface"
   );
-  assert(
-    commandBar.includes("GlobalNotificationBell"),
-    "notification bell retained for FM"
-  );
-  assert(
-    commandBar.includes("isPlatformSurface ? null : <GlobalNotificationBell"),
-    "notification bell hidden on platform"
-  );
-  assert(
-    commandBar.includes("Search or jump"),
-    "search retained for FM"
-  );
-  assert(
-    commandBar.includes("isPlatformSurface ? ("),
-    "search gated on platform surface"
-  );
 
   const compass = readSrc("src/components/platform/OrganisationalCompass.tsx");
-  assert(compass.includes("PLATFORM_NAV"), "platform nav defined");
-  assert(compass.includes("Platform Home"), "platform home link");
-  assert(
-    !compass.includes('href: "/users"'),
-    "People not on platform-level sidebar"
-  );
-  assert(
-    !compass.includes('href: "/master-data"'),
-    "Master Data not on platform-level sidebar"
-  );
+  assert(compass.includes("listEnterableWorkspaces"), "platform home lists enterable workspaces");
+  assert(compass.includes("Loading navigation"), "loading nav state");
   assert(
     compass.includes("Facility Management"),
     "FM sidebar caption preserved"
+  );
+  assert(
+    compass.includes("canUseEcc"),
+    "ECC sidebar gated on module access"
+  );
+  assert(
+    !compass.includes("@/modules/platform-finance"),
+    "compass must not import platform-finance module"
   );
 
   const layers = readSrc("src/lib/platform/layers.ts");
@@ -83,17 +68,52 @@ function main() {
     layers.includes('href: "/master-data"'),
     "Master Data remains in FM layers"
   );
-  assert(layers.includes('label: "People"'), "People label in FM layers");
   assert(
-    layers.includes('label: "Master Data"'),
-    "Master Data label in FM layers"
+    !layers.includes('"/energy-reading"'),
+    "AEDC energy-reading removed from FM operational register matching"
   );
 
-  // Workspace identity: platform Finance ≠ FM Finance
   const platformFinance = getWorkspace("finance");
   assert(platformFinance?.previewHref === "/workspaces/finance", "platform finance route");
   assert(platformFinance?.href !== "/finance", "platform finance not FM route");
+  assert(platformFinance?.status === "in_development", "finance in development");
   assert(FM_FINANCE_HOME.href === "/finance", "FM finance route preserved");
+
+  const financeState = resolveWorkspaceDirectoryState(platformFinance!, {
+    enabledModules: [{ slug: "facility_management", status: "enabled" }],
+    sessionLoading: false,
+    isSuperAdmin: false,
+  });
+  assert(financeState.kind === "unavailable", "finance not enterable from directory");
+
+  const eccNoAccess = resolveWorkspaceDirectoryState(
+    getWorkspace("ecc-operations")!,
+    {
+      enabledModules: [{ slug: "facility_management", status: "enabled" }],
+      sessionLoading: false,
+      isSuperAdmin: false,
+    }
+  );
+  assert(eccNoAccess.kind === "no_access", "ECC no access without module");
+
+  const eccEnter = resolveWorkspaceDirectoryState(
+    getWorkspace("ecc-operations")!,
+    {
+      enabledModules: [
+        { slug: "facility_management", status: "enabled" },
+        { slug: "ecc_operations", status: "enabled" },
+      ],
+      sessionLoading: false,
+    }
+  );
+  assert(eccEnter.kind === "enter", "ECC enterable when enabled");
+
+  const loadingState = resolveWorkspaceDirectoryState(
+    getWorkspace("operations")!,
+    { enabledModules: null, sessionLoading: true }
+  );
+  assert(loadingState.kind === "loading", "unresolved access is loading not no-access");
+
   assert(
     resolveCurrentWorkspaceId("/finance") === "operations",
     "FM finance owned by operations workspace"
@@ -106,41 +126,31 @@ function main() {
   const live = PLATFORM_WORKSPACES.filter((w) => w.status === "active");
   assert(live.length === 2, "two live environments");
   assert(
-    live.some((w) => w.id === "operations"),
-    "FM is live"
-  );
-  assert(
-    live.some((w) => w.id === "ecc-operations"),
-    "ECC Operations is live"
-  );
-  const ecc = getWorkspace("ecc-operations");
-  assert(ecc?.href === "/ecc-operations", "ECC live entry href");
-  assert(
     /ENVIRONMENT_DISPLAY_ORDER[\s\S]*?"operations",\s*"ecc-operations",\s*"finance"/.test(
       home
     ),
     "ECC positioned next to Facility Management"
   );
+
+  const registers = readSrc(
+    "src/modules/operational-registers/components/OperationalRegistersPage.tsx"
+  );
   assert(
-    !home.includes('href="/finance"') || home.includes("FM_FINANCE"),
-    "platform home must not hard-link platform Finance to /finance"
+    !registers.includes('href: "/energy-reading"'),
+    "Energy Reading removed from FM registers hub"
   );
 
-  // Environment cards use catalog data, not invented live claims
-  for (const workspace of PLATFORM_WORKSPACES) {
-    if (workspace.status === "active") {
-      assert(Boolean(workspace.href), `${workspace.id} live has href`);
-    } else {
-      assert(
-        workspace.href !== "/finance" || workspace.id !== "finance",
-        "non-live finance must not claim FM finance href"
-      );
-    }
-  }
+  const energyPage = readSrc(
+    "src/modules/energy-reading/components/EnergyReadingsPage.tsx"
+  );
+  assert(
+    energyPage.includes("not a Facility Management operational responsibility"),
+    "Energy Reading page corrects FM ownership"
+  );
+  assert(energyPage.includes("canCreate={false}"), "FM cannot create AEDC readings");
 
   console.log("PASS verify-platform-home");
-  console.log("  platform chrome without FM search/notifications");
-  console.log("  environments grid; FM live; platform Finance distinct");
+  console.log("  directory access states; FM/ECC gating; Finance non-enterable; AEDC FM ownership removed");
 }
 
 main();

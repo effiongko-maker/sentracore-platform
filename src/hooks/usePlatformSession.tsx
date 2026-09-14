@@ -9,14 +9,19 @@ import {
   type ReactNode,
 } from "react";
 import type { AuthEnabledModule } from "@/lib/auth/types";
+import { isPlatformSuperAdminFromSlugs } from "@/lib/access/platformRoles";
 
 type PlatformSessionState = {
   enabledModules: AuthEnabledModule[] | null;
+  roleSlugs: string[];
+  isSuperAdmin: boolean;
   loading: boolean;
 };
 
 const PlatformSessionContext = createContext<PlatformSessionState>({
   enabledModules: null,
+  roleSlugs: [],
+  isSuperAdmin: false,
   loading: true,
 });
 
@@ -24,6 +29,7 @@ export function PlatformSessionProvider({ children }: { children: ReactNode }) {
   const [enabledModules, setEnabledModules] = useState<
     AuthEnabledModule[] | null
   >(null);
+  const [roleSlugs, setRoleSlugs] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,19 +43,31 @@ export function PlatformSessionProvider({ children }: { children: ReactNode }) {
       .then(async (response) => {
         if (!response.ok) return null;
         const json = (await response.json()) as {
-          data?: { enabledModules?: AuthEnabledModule[] };
+          data?: {
+            enabledModules?: AuthEnabledModule[];
+            roleSlugs?: string[];
+          };
         };
-        return json.data?.enabledModules ?? null;
+        return {
+          enabledModules: json.data?.enabledModules ?? null,
+          roleSlugs: Array.isArray(json.data?.roleSlugs)
+            ? json.data.roleSlugs.map(String)
+            : [],
+        };
       })
-      .then((modules) => {
+      .then((payload) => {
         if (!cancelled) {
-          setEnabledModules(modules);
+          setEnabledModules(payload?.enabledModules ?? null);
+          setRoleSlugs(payload?.roleSlugs ?? []);
           setLoading(false);
         }
       })
       .catch(() => {
         if (!cancelled) {
+          // Keep null (unresolved) rather than [] so nav does not collapse to
+          // "no modules" on a transient session fetch failure.
           setEnabledModules(null);
+          setRoleSlugs([]);
           setLoading(false);
         }
       });
@@ -59,9 +77,14 @@ export function PlatformSessionProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const isSuperAdmin = useMemo(
+    () => isPlatformSuperAdminFromSlugs(roleSlugs),
+    [roleSlugs]
+  );
+
   const value = useMemo(
-    () => ({ enabledModules, loading }),
-    [enabledModules, loading]
+    () => ({ enabledModules, roleSlugs, isSuperAdmin, loading }),
+    [enabledModules, roleSlugs, isSuperAdmin, loading]
   );
 
   return (

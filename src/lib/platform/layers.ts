@@ -115,10 +115,10 @@ export const OPERATING_LAYERS: OperatingLayer[] = [
         href: "/operational-registers",
         icon: BookMarked,
         title: "Operational Registers",
-        description: "Generator, meters, diesel, and consumables",
+        description:
+          "Generator, diesel, consumables, and facility service logs",
         matchHrefs: [
           "/generator-log",
-          "/energy-reading",
           "/diesel-usage",
           "/consumables-update",
           "/waste-log",

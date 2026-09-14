@@ -9,6 +9,7 @@ import {
   FM_FINANCE_HOME,
   getWorkspace,
   isOperationsPath,
+  isPlatformFinancePath,
   isWorkspacePreviewPath,
   resolveCurrentWorkspaceId,
   type WorkspaceId,
@@ -45,6 +46,14 @@ function main() {
     "if platform Finance is active, entry must still be workspace-scoped"
   );
 
+  assert(
+    platformFinance.status === "in_development",
+    "platform Finance catalogue remains in_development"
+  );
+  assert(
+    platformFinance.href === undefined,
+    "platform Finance catalogue must not expose href yet"
+  );
   assert(FM_FINANCE_HOME.href === "/finance", "FM Finance home preserved");
   assert(FM_FINANCE_HOME.label === "Finance", "FM Finance label");
 
@@ -66,6 +75,14 @@ function main() {
     "b) /workspaces/finance is Platform Finance workspace"
   );
   assert(
+    resolveCurrentWorkspaceId("/platform-finance") === "finance",
+    "b2) /platform-finance maps to Platform Finance workspace"
+  );
+  assert(
+    resolveCurrentWorkspaceId("/platform-finance/setup") === "finance",
+    "b3) /platform-finance/* maps to Platform Finance workspace"
+  );
+  assert(
     resolveCurrentWorkspaceId("/operations") === "operations",
     "FM home remains operations"
   );
@@ -80,6 +97,18 @@ function main() {
     "platform Finance is not an FM operations path"
   );
   assert(
+    !isOperationsPath("/platform-finance"),
+    "platform-finance module path is not FM operations"
+  );
+  assert(
+    isPlatformFinancePath("/platform-finance"),
+    "isPlatformFinancePath recognizes /platform-finance"
+  );
+  assert(
+    !isPlatformFinancePath("/finance"),
+    "FM /finance is not platform-finance path"
+  );
+  assert(
     isWorkspacePreviewPath("/workspaces/finance"),
     "platform Finance is workspace preview path"
   );
@@ -87,12 +116,20 @@ function main() {
   // Switcher resolution source
   const switcher = readSrc("src/components/platform/WorkspaceSwitcher.tsx");
   assert(
-    switcher.includes("workspaceHref"),
-    "switcher uses workspaceHref helper"
+    switcher.includes("resolveWorkspaceDirectoryState"),
+    "switcher uses directory enterability helper"
   );
   assert(
     switcher.includes("PLATFORM_WORKSPACES"),
     "switcher lists platform workspaces"
+  );
+  assert(
+    switcher.includes("disabled={disabled}"),
+    "non-enterable workspaces are disabled in switcher"
+  );
+  assert(
+    !switcher.includes("previewHref"),
+    "switcher must not navigate via previewHref for Finance"
   );
 
   const workspacesSrc = readSrc("src/lib/platform/workspaces.ts");

@@ -125,6 +125,104 @@ export function getWorkspace(id: WorkspaceId): PlatformWorkspace | undefined {
   return PLATFORM_WORKSPACES.find((workspace) => workspace.id === id);
 }
 
+/** Org module slug that gates enterability for a live workspace (if any). */
+export const WORKSPACE_MODULE_SLUG: Partial<
+  Record<WorkspaceId, "facility_management" | "ecc_operations">
+> = {
+  operations: "facility_management",
+  "ecc-operations": "ecc_operations",
+};
+
+export type WorkspaceDirectoryState =
+  | { kind: "enter"; href: string }
+  | { kind: "no_access"; label: "No access" }
+  | { kind: "unavailable"; label: string }
+  | { kind: "loading" };
+
+type WorkspaceAccessOptions = {
+  /**
+   * Org-enabled modules. `null` means not yet resolved (or session fetch failed).
+   * Callers must pass `sessionLoading` so null is not mistaken for "no access".
+   */
+  enabledModules: Array<{ slug: string; status: string }> | null;
+  sessionLoading?: boolean;
+  isSuperAdmin?: boolean;
+};
+
+function hasEnabledModule(
+  enabledModules: Array<{ slug: string; status: string }>,
+  slug: string
+): boolean {
+  return enabledModules.some(
+    (module) => module.slug === slug && module.status === "enabled"
+  );
+}
+
+/**
+ * Module directory / switcher enterability.
+ * Visibility ≠ authorization — server gates remain authoritative.
+ */
+export function resolveWorkspaceDirectoryState(
+  workspace: PlatformWorkspace,
+  options: WorkspaceAccessOptions
+): WorkspaceDirectoryState {
+  if (workspace.status === "in_development") {
+    return {
+      kind: "unavailable",
+      label: workspace.statusLabel || "In development",
+    };
+  }
+  if (workspace.status === "planned") {
+    return {
+      kind: "unavailable",
+      label: workspace.statusLabel || "Coming soon",
+    };
+  }
+  if (workspace.status !== "active" || !workspace.href) {
+    return { kind: "unavailable", label: "Coming soon" };
+  }
+
+  const moduleSlug = WORKSPACE_MODULE_SLUG[workspace.id];
+  if (!moduleSlug) {
+    return { kind: "enter", href: workspace.href };
+  }
+
+  if (options.sessionLoading || options.enabledModules === null) {
+    // Unresolved enablement must not be treated as "no access".
+    return { kind: "loading" };
+  }
+
+  if (
+    options.isSuperAdmin ||
+    hasEnabledModule(options.enabledModules, moduleSlug)
+  ) {
+    return { kind: "enter", href: workspace.href };
+  }
+
+  return { kind: "no_access", label: "No access" };
+}
+
+/** Enter href for sidebar / switcher, or null when non-enterable. */
+export function workspaceHref(
+  workspace: PlatformWorkspace,
+  options: WorkspaceAccessOptions
+): string | null {
+  const state = resolveWorkspaceDirectoryState(workspace, options);
+  return state.kind === "enter" ? state.href : null;
+}
+
+/** Workspaces the current user may enter (sidebar + switcher). */
+export function listEnterableWorkspaces(
+  options: WorkspaceAccessOptions
+): Array<PlatformWorkspace & { href: string }> {
+  const result: Array<PlatformWorkspace & { href: string }> = [];
+  for (const workspace of PLATFORM_WORKSPACES) {
+    const href = workspaceHref(workspace, options);
+    if (href) result.push({ ...workspace, href });
+  }
+  return result;
+}
+
 /**
  * Workspace currently entered for this route.
  * Distinct from catalog `status: "active"` (product is live/available).
@@ -138,7 +236,12 @@ export function resolveCurrentWorkspaceId(
     return "ecc-operations";
   }
 
-  // Platform Finance workspace entry (never /finance — that is FM Finance).
+  // Platform Finance module route (catalogue stays in_development / no href).
+  if (isPlatformFinancePath(pathname)) {
+    return "finance";
+  }
+
+  // Platform Finance workspace preview (never /finance — that is FM Finance).
   if (pathname.startsWith("/workspaces/")) {
     const slug = pathname.slice("/workspaces/".length).split("/")[0] ?? "";
     if (slug && getWorkspace(slug as WorkspaceId)) {
@@ -181,6 +284,9 @@ export function isOperationsPath(pathname: string): boolean {
   if (pathname === OPERATIONS_HOME.href) return true;
   if (pathname.startsWith("/workspaces")) return false;
   if (isPlatformHomePath(pathname)) return false;
+  // Platform Finance must not be treated as FM (/platform prefix alone is insufficient).
+  if (isPlatformFinancePath(pathname)) return false;
+  if (isEccOperationsPath(pathname)) return false;
   return (
     pathname.startsWith("/intelligence") ||
     pathname.startsWith("/dashboards") ||
@@ -209,7 +315,8 @@ export function isOperationsPath(pathname: string): boolean {
     pathname.startsWith("/incidents") ||
     pathname.startsWith("/inventory") ||
     pathname.startsWith("/utilities") ||
-    pathname.startsWith("/platform")
+    pathname === "/platform" ||
+    pathname.startsWith("/platform/")
   );
 }
 
@@ -225,9 +332,24 @@ export function isEccOperationsPath(pathname: string): boolean {
 }
 
 /**
+ * Platform Finance module routes (not FM `/finance`, not catalogue href).
+ * Catalogue Finance remains `in_development` without an `href`.
+ */
+export function isPlatformFinancePath(pathname: string): boolean {
+  return (
+    pathname === "/platform-finance" ||
+    pathname.startsWith("/platform-finance/")
+  );
+}
+
+/**
  * Platform chrome without FM operating layers
- * (workspace previews + ECC foundation shell).
+ * (workspace previews + ECC / Platform Finance foundation shells).
  */
 export function isPlatformWorkspaceSurfacePath(pathname: string): boolean {
-  return isWorkspacePreviewPath(pathname) || isEccOperationsPath(pathname);
+  return (
+    isWorkspacePreviewPath(pathname) ||
+    isEccOperationsPath(pathname) ||
+    isPlatformFinancePath(pathname)
+  );
 }

@@ -16,6 +16,7 @@ import type { ProtectedActionAuthority } from "@/lib/access/resolveAccess";
 export type PlatformModuleSlug =
   | "facility_management"
   | "ecc_operations"
+  | "platform_finance"
   | "construction"
   | "projects_events"
   | (string & {});

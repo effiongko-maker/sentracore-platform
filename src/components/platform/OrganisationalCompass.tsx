@@ -14,8 +14,11 @@ import {
   isEccOperationsPath,
   isOperationsPath,
   isPlatformHomePath,
+  listEnterableWorkspaces,
   PLATFORM_HOME,
 } from "@/lib/platform/workspaces";
+import { hasModule } from "@/lib/actions/moduleAccess";
+import { ECC_MODULE_SLUG } from "@/modules/ecc-operations/types";
 import { cn } from "@/lib/utils";
 import { usePlatformSession } from "@/hooks/usePlatformSession";
 import { useOperatingAccess } from "@/hooks/useOperatingAccess";
@@ -33,14 +36,32 @@ import {
 } from "@/modules/ecc-operations/nav";
 
 /**
- * Sidebar = actions within the current workspace.
+ * Sidebar = actions within the current workspace (accessible modules only).
  * Workspace switching lives only in WorkspaceSwitcher (not duplicated here).
+ * On Platform Home, lists enterable workspaces so auth never leaves a blank nav.
  */
 export function OrganisationalCompass() {
   const pathname = usePathname();
-  const { enabledModules } = usePlatformSession();
-  const { access, loading: accessLoading } = useOperatingAccess();
+  const {
+    enabledModules,
+    isSuperAdmin,
+    loading: sessionLoading,
+  } = usePlatformSession();
+  const {
+    access,
+    loading: accessLoading,
+    error: accessError,
+    reload: reloadAccess,
+  } = useOperatingAccess();
   const { mobileNavOpen, closeMobileNav } = usePlatformShell();
+
+  const accessOptions = {
+    enabledModules,
+    sessionLoading,
+    isSuperAdmin,
+  };
+
+  // While access is resolving, do not treat visibility as "no surfaces".
   const visibility =
     !accessLoading && access ? resolveAccessVisibility(access) : null;
   const layers = filterOperatingLayers(
@@ -49,16 +70,23 @@ export function OrganisationalCompass() {
     visibility
   );
   const showCommandHome =
+    accessLoading ||
     !visibility ||
     canSeeSurface(visibility, "home") ||
     canSeeSurface(visibility, "operations");
   const activeLayer = resolveLayerByPath(pathname);
   const inOperations = isOperationsPath(pathname);
   const inEccOperations = isEccOperationsPath(pathname);
+  const canUseEcc =
+    isSuperAdmin ||
+    (enabledModules !== null &&
+      hasModule(enabledModules, ECC_MODULE_SLUG));
   const isOpsHome =
     pathname === COMMAND_HOME.href ||
     pathname.startsWith(`${COMMAND_HOME.href}/`);
   const isPlatformHome = isPlatformHomePath(pathname);
+  const navLoading = sessionLoading || (inOperations && accessLoading);
+  const enterableWorkspaces = listEnterableWorkspaces(accessOptions);
 
   return (
     <>
@@ -101,7 +129,24 @@ export function OrganisationalCompass() {
         {inOperations ? (
           <div className="os-compass-scroll">
             <p className="os-compass-workspace-caption">Facility Management</p>
-            {showCommandHome ? (
+            {navLoading ? (
+              <p className="os-compass-nav-status" role="status">
+                Loading navigation…
+              </p>
+            ) : null}
+            {!navLoading && accessError && !access ? (
+              <div className="os-compass-nav-status">
+                <p>Unable to verify access.</p>
+                <button
+                  type="button"
+                  className="os-compass-nav-retry"
+                  onClick={() => reloadAccess()}
+                >
+                  Retry
+                </button>
+              </div>
+            ) : null}
+            {!navLoading && showCommandHome ? (
               <Link
                 href={COMMAND_HOME.href}
                 onClick={closeMobileNav}
@@ -116,101 +161,156 @@ export function OrganisationalCompass() {
               </Link>
             ) : null}
 
-            {layers.map((layer) => {
-              const isGroupActive = activeLayer === layer.id;
+            {!navLoading
+              ? layers.map((layer) => {
+                  const isGroupActive = activeLayer === layer.id;
 
-              return (
-                <div
-                  key={layer.id}
-                  className={cn(
-                    "os-compass-group",
-                    isGroupActive && "os-compass-group-active"
-                  )}
-                >
-                  {layer.id !== "understand" ? (
-                    <p className="os-compass-group-label">{layer.label}</p>
-                  ) : null}
-                  <div className="os-compass-modules">
-                    {layer.modules.map((mod) => {
-                      const Icon = mod.icon;
-                      const active = moduleMatchesPath(mod, pathname);
+                  return (
+                    <div
+                      key={layer.id}
+                      className={cn(
+                        "os-compass-group",
+                        isGroupActive && "os-compass-group-active"
+                      )}
+                    >
+                      {layer.id !== "understand" ? (
+                        <p className="os-compass-group-label">{layer.label}</p>
+                      ) : null}
+                      <div className="os-compass-modules">
+                        {layer.modules.map((mod) => {
+                          const Icon = mod.icon;
+                          const active = moduleMatchesPath(mod, pathname);
 
-                      if (mod.comingSoon) {
-                        return (
-                          <span
-                            key={mod.label}
-                            className="os-compass-module os-compass-module-soon"
-                          >
-                            <Icon className="h-4 w-4 shrink-0 opacity-50" />
-                            <span>{mod.label}</span>
-                          </span>
-                        );
-                      }
+                          if (mod.comingSoon) {
+                            return (
+                              <span
+                                key={mod.label}
+                                className="os-compass-module os-compass-module-soon"
+                              >
+                                <Icon className="h-4 w-4 shrink-0 opacity-50" />
+                                <span>{mod.label}</span>
+                              </span>
+                            );
+                          }
 
-                      return (
-                        <Link
-                          key={mod.href}
-                          href={mod.href}
-                          onClick={closeMobileNav}
-                          aria-current={active ? "page" : undefined}
-                          className={cn(
-                            "os-compass-module",
-                            active && "os-compass-module-active"
-                          )}
-                        >
-                          <Icon className="h-4 w-4 shrink-0" aria-hidden />
-                          <span>{mod.label}</span>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
+                          return (
+                            <Link
+                              key={mod.href}
+                              href={mod.href}
+                              onClick={closeMobileNav}
+                              aria-current={active ? "page" : undefined}
+                              className={cn(
+                                "os-compass-module",
+                                active && "os-compass-module-active"
+                              )}
+                            >
+                              <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                              <span>{mod.label}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })
+              : null}
           </div>
-        ) : inEccOperations ? (
+        ) : inEccOperations && canUseEcc ? (
           <div className="os-compass-scroll">
             <p className="os-compass-workspace-caption">ECC Operations</p>
-            {ECC_NAV_GROUPS.map((group) => {
-              const isGroupActive = group.items.some((item) =>
-                isEccNavItemActive(item, pathname)
-              );
-              return (
-                <div
-                  key={group.id}
-                  className={cn(
-                    "os-compass-group",
-                    isGroupActive && "os-compass-group-active"
-                  )}
-                >
-                  <p className="os-compass-group-label">{group.label}</p>
-                  <div className="os-compass-modules">
-                    {group.items.map((item) => {
-                      const Icon = item.icon;
-                      const active = isEccNavItemActive(item, pathname);
-                      return (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          onClick={closeMobileNav}
-                          aria-current={active ? "page" : undefined}
-                          className={cn(
-                            "os-compass-module",
-                            active && "os-compass-module-active"
-                          )}
-                        >
-                          <Icon className="h-4 w-4 shrink-0" aria-hidden />
-                          <span>{item.label}</span>
-                        </Link>
-                      );
-                    })}
+            {sessionLoading ? (
+              <p className="os-compass-nav-status" role="status">
+                Loading navigation…
+              </p>
+            ) : (
+              ECC_NAV_GROUPS.map((group) => {
+                const isGroupActive = group.items.some((item) =>
+                  isEccNavItemActive(item, pathname)
+                );
+                return (
+                  <div
+                    key={group.id}
+                    className={cn(
+                      "os-compass-group",
+                      isGroupActive && "os-compass-group-active"
+                    )}
+                  >
+                    <p className="os-compass-group-label">{group.label}</p>
+                    <div className="os-compass-modules">
+                      {group.items.map((item) => {
+                        const Icon = item.icon;
+                        const active = isEccNavItemActive(item, pathname);
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            onClick={closeMobileNav}
+                            aria-current={active ? "page" : undefined}
+                            className={cn(
+                              "os-compass-module",
+                              active && "os-compass-module-active"
+                            )}
+                          >
+                            <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                            <span>{item.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
+          </div>
+        ) : inEccOperations && !sessionLoading && !canUseEcc ? (
+          <div className="os-compass-scroll">
+            <p className="os-compass-workspace-caption">ECC Operations</p>
+            <p className="os-compass-nav-status">No access to this workspace.</p>
+            <Link
+              href={PLATFORM_HOME.href}
+              onClick={closeMobileNav}
+              className="os-compass-module"
+            >
+              <Home className="h-4 w-4 shrink-0" aria-hidden />
+              <span>Platform Home</span>
+            </Link>
           </div>
         ) : (
-          <div className="os-compass-scroll" aria-hidden={!isPlatformHome} />
+          <div className="os-compass-scroll">
+            <p className="os-compass-workspace-caption">Workspaces</p>
+            {sessionLoading ? (
+              <p className="os-compass-nav-status" role="status">
+                Loading navigation…
+              </p>
+            ) : (
+              <>
+                {enterableWorkspaces.map((workspace) => {
+                  const active =
+                    pathname === workspace.href ||
+                    pathname.startsWith(`${workspace.href}/`);
+                  return (
+                    <Link
+                      key={workspace.id}
+                      href={workspace.href}
+                      onClick={closeMobileNav}
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        "os-compass-module",
+                        active && "os-compass-module-active"
+                      )}
+                    >
+                      <span>{workspace.label}</span>
+                    </Link>
+                  );
+                })}
+                {enterableWorkspaces.length === 0 ? (
+                  <p className="os-compass-nav-status">
+                    No workspaces available for your account yet.
+                  </p>
+                ) : null}
+              </>
+            )}
+          </div>
         )}
 
         <AppFooter />

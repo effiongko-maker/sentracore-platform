@@ -85,6 +85,13 @@ values
     'active'
   ),
   (
+    'Platform Finance',
+    'platform_finance',
+    'Organisation-wide multi-company financial operations and accounting.',
+    'wallet',
+    'active'
+  ),
+  (
     'Construction',
     'construction',
     'Construction programme and site delivery operations.',
@@ -191,4 +198,58 @@ on conflict (organisation_id, module_id) do update
 set
   status = excluded.status,
   enabled_at = coalesce(public.organisation_modules.enabled_at, excluded.enabled_at),
+  updated_at = timezone('utc', now());
+
+-- Platform Finance module gate for PayChex (workspace catalogue stays in_development).
+insert into public.organisation_modules (
+  organisation_id,
+  module_id,
+  status,
+  enabled_at,
+  configuration
+)
+select
+  o.id,
+  m.id,
+  'enabled'::public.organisation_module_status,
+  timezone('utc', now()),
+  jsonb_build_object('phase', 'foundation')
+from public.organisations o
+join public.modules m on m.slug = 'platform_finance'
+where o.slug = 'paychex'
+on conflict (organisation_id, module_id) do update
+set
+  status = excluded.status,
+  enabled_at = coalesce(public.organisation_modules.enabled_at, excluded.enabled_at),
+  configuration = excluded.configuration,
+  updated_at = timezone('utc', now());
+
+-- Finance companies under PayChex Group (idempotent; mirrors foundation migration)
+insert into public.finance_companies (organisation_id, code, name, status)
+select
+  o.id,
+  v.code,
+  v.name,
+  'active'::public.entity_status
+from public.organisations o
+cross join (
+  values
+    ('PAYCHEX', 'PayChex'),
+    ('FORNIDO', 'Fornido'),
+    ('TRIVNET', 'Trivnet'),
+    ('DIAMOND_HEIRS', 'Diamond Heirs'),
+    ('INOVATIVA', 'Inovativa'),
+    ('ICEPYRAMID', 'IcePyramid'),
+    ('FAMILY_DEPOT', 'Family Depot'),
+    ('KAFAKUWO', 'Kafakuwo'),
+    ('LECOLLECTIF', 'LeCollectIF'),
+    ('NOUVELTECH', 'NouvelTech'),
+    ('REIDACCESS', 'Reidaccess'),
+    ('TELEMIX', 'Telemix')
+) as v(code, name)
+where o.slug = 'paychex'
+on conflict (organisation_id, code) do update
+set
+  name = excluded.name,
+  status = excluded.status,
   updated_at = timezone('utc', now());

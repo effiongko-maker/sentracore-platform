@@ -8,22 +8,22 @@ import {
   PLATFORM_WORKSPACES,
   getActiveWorkspace,
   isPlatformHomePath,
+  listEnterableWorkspaces,
   resolveCurrentWorkspace,
+  resolveWorkspaceDirectoryState,
   type PlatformWorkspace,
 } from "@/lib/platform/workspaces";
 import { cn } from "@/lib/utils";
-
-function workspaceHref(workspace: PlatformWorkspace): string {
-  if (workspace.status === "active" && workspace.href) return workspace.href;
-  return workspace.previewHref ?? "/";
-}
+import { usePlatformSession } from "@/hooks/usePlatformSession";
 
 /** Option status: only the route-current workspace is labelled Active. */
 function optionStatusLabel(
   workspace: PlatformWorkspace,
-  isCurrent: boolean
+  isCurrent: boolean,
+  directoryLabel?: string
 ): string {
   if (isCurrent) return "Active";
+  if (directoryLabel) return directoryLabel;
   if (workspace.status === "active") return "";
   return workspace.statusLabel;
 }
@@ -35,15 +35,25 @@ export function WorkspaceSwitcher({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { enabledModules, isSuperAdmin, loading: sessionLoading } =
+    usePlatformSession();
+  const accessOptions = {
+    enabledModules,
+    sessionLoading,
+    isSuperAdmin,
+  };
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const listId = useId();
   const currentWorkspace = resolveCurrentWorkspace(pathname);
-  const fallbackActive = getActiveWorkspace();
+  const enterable = listEnterableWorkspaces(accessOptions);
+  const fallbackActive =
+    enterable[0] ??
+    (getActiveWorkspace().href ? getActiveWorkspace() : null);
   const onHome = isPlatformHomePath(pathname);
   const triggerLabel = onHome
     ? "Home"
-    : (currentWorkspace ?? fallbackActive).label;
+    : (currentWorkspace ?? fallbackActive)?.label ?? "Home";
 
   useEffect(() => {
     if (!open) return;
@@ -122,9 +132,22 @@ export function WorkspaceSwitcher({
             </li>
 
             {PLATFORM_WORKSPACES.map((workspace) => {
-              const href = workspaceHref(workspace);
+              const state = resolveWorkspaceDirectoryState(
+                workspace,
+                accessOptions
+              );
+              const href = state.kind === "enter" ? state.href : null;
               const isCurrent = currentWorkspace?.id === workspace.id;
-              const statusLabel = optionStatusLabel(workspace, isCurrent);
+              const statusLabel = optionStatusLabel(
+                workspace,
+                isCurrent,
+                state.kind === "enter"
+                  ? undefined
+                  : state.kind === "loading"
+                    ? "Checking access…"
+                    : state.label
+              );
+              const disabled = !href;
 
               return (
                 <li key={workspace.id}>
@@ -132,11 +155,15 @@ export function WorkspaceSwitcher({
                     type="button"
                     role="option"
                     aria-selected={isCurrent}
+                    aria-disabled={disabled}
+                    disabled={disabled}
                     className={cn(
                       "sc-ws-switcher-option",
-                      isCurrent && "sc-ws-switcher-option-current"
+                      isCurrent && "sc-ws-switcher-option-current",
+                      disabled && "sc-ws-switcher-option-disabled"
                     )}
                     onClick={() => {
+                      if (!href) return;
                       setOpen(false);
                       router.push(href);
                     }}
