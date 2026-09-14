@@ -97,22 +97,31 @@ function main() {
   const operate = NAV_GROUPS.find((g) => g.id === "operate");
   assert(operate, "operate group");
   const labels = operate!.items.map((i) => i.label);
-  assert(labels.includes("Work"), "Work nav");
+  assert(labels.includes("Work In Progress"), "Work In Progress nav");
   assert(labels.includes("Issues"), "Issues nav");
   assert(labels.includes("Work Orders"), "WO nav");
   assert(!labels.includes("Request Queue"), "no Request Queue");
   const workItem = operate!.items.find((i) => i.href === "/work");
   assert(workItem, "/work nav href");
-  results.push("PASS navigation: Work/WIP; Request Queue absent");
+  assert(workItem!.label === "Work In Progress", "WIP label");
+  results.push("PASS navigation: Work In Progress; Request Queue absent");
 
   // Incident boundary
   assert(INCIDENT_DOMAIN_LEGACY.newFmLogIssueCreatesIncident === false, "no INC");
   assert(INCIDENT_POLICY.ordinaryDefault === "work", "treat → work");
   assert(WORK_ORDER_BOUNDARY.implemented === true, "WO");
-  assert(JOB_ORDER_BOUNDARY.implemented === false, "JO");
+  assert(JOB_ORDER_BOUNDARY.implemented === false, "JO no separate register");
+  assert(
+    JOB_ORDER_BOUNDARY.classifiedOnWorkOrderRegister === true,
+    "JO classified on WO register"
+  );
+  assert(
+    !("valueThresholdNgn" in JOB_ORDER_BOUNDARY),
+    "JO has no value threshold — Order Type is explicit"
+  );
   assert(FM_LOG_ISSUE_SIDE_EFFECT_MODE === "after", "phase 9");
   results.push(
-    "PASS Incident not created from Work path; WO ok; JO unimplemented; Phase 9 intact"
+    "PASS Incident not created from Work path; WO/JO distinction; Phase 9 intact"
   );
 
   // Maintenance compat route still present

@@ -163,6 +163,7 @@ var WorkOrderMaintenanceMutationService = (function () {
       reportedByUserId: maintenance.reportedByUserId || "",
       assignedToUserId: maintenance.assignedToUserId || "",
       priority: maintenance.priority || "medium",
+      orderType: "work_order",
       status: "open",
       requestedAt: cell_(payload.requestedAt) || nowIso_(),
       createdByUserId: actor,

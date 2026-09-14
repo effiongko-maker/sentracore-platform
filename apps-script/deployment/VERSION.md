@@ -1,19 +1,21 @@
 Release:
-v0.8.6.17
+v0.8.6.19
 
 Title:
-Operational Registers write-path deploy + live verify
+Work Orders explicit persisted Order Type
 
 Generated:
-2026-09-10T17:35:28.724Z
+2026-09-14T08:40:38.658Z
 
 Features
-- Live write verification for all 7 Operational Registers (npm run verify-operational-registers-write)
-- Deployment checklist CRITICAL notes for generator-log and diesel-usage triads
+- Persist Order Type (work_order | job_order) on Work Orders sheet
+- Order Type is user-selected; estimated cost is financial only
+- Legacy missing Order Type resolves to work_order
 
 Performance
 
 Files Changed
+- ROUTER.gs
 - ROUTER.gs
 - ApprovalRepository.gs
 - AssetRepository.gs
@@ -107,32 +109,29 @@ Typecheck:
 npm run typecheck
 ```
 
-Operational API access:
+Work instruction kind:
 
 ```bash
-npm run verify-operational-api-access
+node scripts/verify-work-instruction-kind.cjs
 ```
 
-Operational Registers write path:
+Work orders WIP register:
 
 ```bash
-npm run verify-operational-registers-write
+node scripts/verify-work-orders-wip-register.cjs
 ```
 
 Notes
-- Repo write wiring for all 7 registers is correct. Remaining live failure is incomplete Apps Script file deployment for GeneratorLogRepository.gs only.
+- Order Type is explicit and persisted. Estimated Cost must not classify Work Order vs Job Order.
 
 Deployment semantics
 - `deploymentRequired`: Pack intent: a new Web App deploy is required to apply this source release when cutting from the repo. Not a live deployment status flag.
-- `appsScriptRedeploy`: Required — create/paste GeneratorLogRepository.gs (Controller/Service already present live). Cut a new Web App version.
+- `appsScriptRedeploy`: Required — update WorkOrderRepository for Order Type read/write. Client already classifies via persisted orderType.
 
 Live verification (read-only audit)
-- Verified: 2026-09-10T17:35:00Z
-- Method: npm run verify-operational-registers-write against live /exec
 - resourceLive: no
 - Notes:
-  - PASS live create+list: energy-reading, diesel-usage, consumables-update, waste-log, fumigation-log, deep-cleaning-log
-  - FAIL live create: generator-log → GeneratorLogRepository is not defined (only remaining missing file)
-  - Frontend does not reference Apps Script controller/repository names — those strings are Apps Script runtime errors returned via the API.
+  - Redeploy Apps Script before validating Order Type tabs against live sheet.
+  - Legacy rows without Order Type resolve to Work Order after client update; sheet column is added on write.
 
 <!-- GENERATED FILE — do not edit by hand. npm run apps-script:pack -->

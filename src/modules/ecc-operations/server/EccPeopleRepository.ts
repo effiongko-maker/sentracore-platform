@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/utils/supabase/admin";
 import { newEccId } from "@/modules/ecc-operations/ids";
 import { nowIso } from "@/modules/ecc-operations/domain/rules";
+import { mapUniqueViolation } from "@/modules/ecc-operations/server/validation";
 import type {
   EccAgentDutyStatus,
   EccAgentRow,
@@ -69,8 +70,8 @@ function db() {
   return createAdminClient();
 }
 
-function throwDb(error: { message?: string } | null, fallback: string): never {
-  throw new Error(error?.message?.trim() || fallback);
+function throwDb(error: { code?: string; message?: string } | null, fallback: string): never {
+  throw mapUniqueViolation(error, fallback);
 }
 
 function personToDto(row: PersonRow): EccPerson {

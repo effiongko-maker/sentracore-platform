@@ -65,7 +65,10 @@ function main() {
   assert(command.includes("pulse.criticalWork"), "hero critical work from pulse");
   assert(!command.includes("attention.criticalCount"), "hero not attention criticalCount");
   assert(command.includes('href: "/work"'), "work links");
-  assert(command.includes("Legacy incidents"), "legacy incidents row conditional");
+  assert(
+    !command.includes("Legacy incidents"),
+    "legacy incidents must not appear in operational picture"
+  );
   results.push("PASS CommandSurface retargeted to Work/Issues");
 
   const constants = readSrc("src/modules/workspace/constants.ts");

@@ -52,6 +52,8 @@ export function mapWorkOrderToIssueRef(
     id: string;
     title: string;
     status: string;
+    orderType?: "work_order" | "job_order";
+    estimatedCost?: number;
     maintenanceId?: string;
     incidentId?: string;
   },
@@ -74,6 +76,8 @@ export function mapWorkOrderToIssueRef(
     id: row.id,
     status: row.status,
     title: row.title,
+    orderType: row.orderType,
+    estimatedCost: row.estimatedCost,
     viaTreatmentId,
     viaTreatmentKind,
   };

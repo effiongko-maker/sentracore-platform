@@ -129,9 +129,20 @@ function main() {
 
   const operationalPicture =
     command.match(/function OperationalPicture[\s\S]*?^}/m)?.[0] ?? "";
-  assert(operationalPicture.includes("pulse.criticalWork"), "operational picture criticalWork");
-  assert(operationalPicture.includes("Critical work"), "operational picture label");
-  results.push("PASS Operational Picture uses pulse.criticalWork");
+  assert(
+    operationalPicture.includes("picture.critical"),
+    "operational picture critical"
+  );
+  assert(operationalPicture.includes('"Critical"'), "operational picture Critical label");
+  assert(operationalPicture.includes('"In Progress"'), "In Progress label");
+  assert(operationalPicture.includes('"Awaiting Action"'), "Awaiting Action label");
+  assert(operationalPicture.includes('"Overdue"'), "Overdue label");
+  assert(!operationalPicture.includes("Open work"), "no Open work metric");
+  assert(
+    !/"Work orders"/.test(operationalPicture),
+    "no Work orders headline metric"
+  );
+  results.push("PASS Operational Picture uses state metrics (Critical/In Progress/Awaiting/Overdue)");
 
   const kpis = readSrc("src/services/reporting/kpis.ts");
   const dashboard = readSrc("src/services/dashboard/widgets/kpiWidgets.ts");

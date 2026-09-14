@@ -192,7 +192,7 @@ export function WorkPage() {
   return (
     <ModeFrame mode="execute">
       <OperateHeader
-        title="Work"
+        title="Work In Progress"
         description="Work currently being handled across the facility."
       />
 

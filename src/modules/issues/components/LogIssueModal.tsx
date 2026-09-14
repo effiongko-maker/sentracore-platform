@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal } from "@/components/modals/Modal";
 import { Button } from "@/components/ui/Button";
 import {
@@ -10,6 +10,10 @@ import {
 } from "@/components/forms/FormField";
 import { useToast } from "@/components/ui/Toast";
 import { useFacilities } from "@/modules/facilities/hooks/useFacilities";
+import {
+  facilityDisplayName,
+  resolveScopedFacilityId,
+} from "@/lib/platform/scopedFacility";
 import { labelize } from "@/modules/incidents/utils";
 import { logIssue, type LogIssueResult } from "../actions/logIssue";
 
@@ -42,18 +46,10 @@ export function LogIssueModal({ open, onClose, onCreated }: Props) {
     setDescription("");
     setLocationDetail("");
     setUrgency("medium");
-    setFacilityId((prev) => prev || facilities[0]?.id || "");
+    setFacilityId(resolveScopedFacilityId(facilities));
   }, [open, facilities]);
 
-  const facilityOptions = useMemo(
-    () =>
-      facilities.map((f) => (
-        <option key={f.id} value={f.id}>
-          {f.name || f.id}
-        </option>
-      )),
-    [facilities]
-  );
+  const facilityName = facilityDisplayName(facilities, facilityId);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -131,17 +127,14 @@ export function LogIssueModal({ open, onClose, onCreated }: Props) {
           />
         </FormField>
 
-        <FormField label="Facility" htmlFor="log-issue-facility" required>
-          <select
+        <FormField label="Facility" htmlFor="log-issue-facility">
+          <input
             id="log-issue-facility"
-            className={selectClassName}
-            value={facilityId}
-            onChange={(e) => setFacilityId(e.target.value)}
-            required
-          >
-            <option value="">Select facility</option>
-            {facilityOptions}
-          </select>
+            className={inputClassName}
+            value={facilityName}
+            readOnly
+            aria-readonly="true"
+          />
         </FormField>
 
         <FormField label="Location detail" htmlFor="log-issue-location">

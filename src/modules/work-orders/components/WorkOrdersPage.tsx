@@ -12,7 +12,12 @@ import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
 import { useQueryRecordId } from "@/hooks/useQueryRecordId";
 import { useOperatingAccess } from "@/hooks/useOperatingAccess";
+import { cn } from "@/lib/utils";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
+import {
+  WORK_ORDER_ORDER_TYPE_SCOPE_OPTIONS,
+  type WorkOrderOrderTypeScope,
+} from "../constants";
 import { useWorkOrders } from "../hooks/useWorkOrders";
 import type { WorkOrderModalState } from "../types";
 import { WorkOrderFormModal } from "./WorkOrderFormModal";
@@ -32,6 +37,8 @@ export function WorkOrdersPage() {
     error,
     search,
     setSearch,
+    orderTypeScope,
+    setOrderTypeScope,
     status,
     setStatus,
     priority,
@@ -60,6 +67,19 @@ export function WorkOrdersPage() {
 
   const [modal, setModal] = useState<WorkOrderModalState>({ type: "closed" });
   const [deactivating, setDeactivating] = useState(false);
+
+  const createAction =
+    orderTypeScope === "work_order"
+      ? {
+          label: "New Work Order",
+          initialOrderType: "work_order" as const,
+        }
+      : orderTypeScope === "job_order"
+        ? {
+            label: "New Job Order",
+            initialOrderType: "job_order" as const,
+          }
+        : null;
 
   useEffect(() => {
     if (!openId) return;
@@ -105,14 +125,44 @@ export function WorkOrdersPage() {
     <ModeFrame mode="execute">
       <OperateHeader
         title="Work Orders"
-        description="Plan, assign, and track work moving through the organisation."
+        description="Plan, assign, and track Work Orders and Job Orders."
         signalValue={loading ? "—" : total}
         signalLabel="In view"
       />
 
+      <div
+        className="mb-3 flex gap-1 border-b border-border/70"
+        role="tablist"
+        aria-label="Order Type"
+      >
+        {WORK_ORDER_ORDER_TYPE_SCOPE_OPTIONS.map((option) => {
+          const selected = orderTypeScope === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              className={cn(
+                "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+                selected
+                  ? "border-accent text-accent"
+                  : "border-transparent text-muted hover:text-foreground"
+              )}
+              onClick={() =>
+                setOrderTypeScope(option.value as WorkOrderOrderTypeScope)
+              }
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+
       <WorkOrdersToolbar
         search={search}
         onSearchChange={setSearch}
+        orderTypeScope={orderTypeScope}
         status={status}
         onStatusChange={setStatus}
         priority={priority}
@@ -132,8 +182,17 @@ export function WorkOrdersPage() {
         total={total}
         loading={loading}
         onClearAll={clearAll}
-        onCreate={() => setModal({ type: "create" })}
-        canCreate={canCreateOps}
+        onCreate={
+          createAction
+            ? () =>
+                setModal({
+                  type: "create",
+                  initialOrderType: createAction.initialOrderType,
+                })
+            : undefined
+        }
+        createLabel={createAction?.label}
+        canCreate={Boolean(canCreateOps && createAction)}
       />
 
       {error ? (
@@ -149,6 +208,7 @@ export function WorkOrdersPage() {
           <WorkOrdersTable
             workOrders={workOrders}
             loading={loading}
+            orderTypeScope={orderTypeScope}
             page={page}
             totalPages={totalPages}
             total={total}
@@ -167,6 +227,9 @@ export function WorkOrdersPage() {
         open={modal.type === "create" || modal.type === "edit"}
         mode={modal.type === "edit" ? "edit" : "create"}
         workOrder={modal.type === "edit" ? modal.workOrder : null}
+        initialOrderType={
+          modal.type === "create" ? modal.initialOrderType : null
+        }
         onClose={() => setModal({ type: "closed" })}
         onSaved={async () => {
           await reloadFirstPage();

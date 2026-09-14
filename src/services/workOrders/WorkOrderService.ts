@@ -212,6 +212,15 @@ function mapRemoteWorkOrder(raw: RemoteWorkOrder): WorkOrder {
     completedAt: optionalMappedString(raw, "completedAt", "Completed At"),
     estimatedHours: optionalNumber(raw, "estimatedHours", "Estimated Hours"),
     actualHours: optionalNumber(raw, "actualHours", "Actual Hours"),
+    orderType: (() => {
+      const value = optionalMappedString(raw, "orderType", "Order Type");
+      if (!value) return undefined;
+      const normalized = value.toLowerCase().replace(/\s+/g, "_");
+      if (normalized === "work_order" || normalized === "job_order") {
+        return normalized as WorkOrder["orderType"];
+      }
+      return undefined;
+    })(),
     estimatedCost: optionalNumber(raw, "estimatedCost", "Estimated Cost"),
     actualCost: optionalNumber(raw, "actualCost", "Actual Cost"),
     completionNotes: optionalMappedString(

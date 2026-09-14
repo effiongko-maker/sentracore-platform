@@ -1,24 +1,24 @@
 {
-  "release": "v0.8.6.17",
-  "title": "Operational Registers write-path deploy + live verify",
+  "release": "v0.8.6.19",
+  "title": "Work Orders explicit persisted Order Type",
   "features": [
-    "Live write verification for all 7 Operational Registers (npm run verify-operational-registers-write)",
-    "Deployment checklist CRITICAL notes for generator-log and diesel-usage triads"
+    "Persist Order Type (work_order | job_order) on Work Orders sheet",
+    "Order Type is user-selected; estimated cost is financial only",
+    "Legacy missing Order Type resolves to work_order"
   ],
   "performance": [],
   "deploymentRequired": true,
   "deploymentSemantics": {
     "deploymentRequired": "Pack intent: a new Web App deploy is required to apply this source release when cutting from the repo. Not a live deployment status flag.",
-    "appsScriptRedeploy": "Required — create/paste GeneratorLogRepository.gs (Controller/Service already present live). Cut a new Web App version."
+    "appsScriptRedeploy": "Required — update WorkOrderRepository for Order Type read/write. Client already classifies via persisted orderType."
   },
   "liveVerification": {
-    "verifiedAt": "2026-09-10T17:35:00Z",
-    "method": "npm run verify-operational-registers-write against live /exec",
+    "verifiedAt": null,
+    "method": null,
     "resourceLive": false,
     "notes": [
-      "PASS live create+list: energy-reading, diesel-usage, consumables-update, waste-log, fumigation-log, deep-cleaning-log",
-      "FAIL live create: generator-log → GeneratorLogRepository is not defined (only remaining missing file)",
-      "Frontend does not reference Apps Script controller/repository names — those strings are Apps Script runtime errors returned via the API."
+      "Redeploy Apps Script before validating Order Type tabs against live sheet.",
+      "Legacy rows without Order Type resolve to Work Order after client update; sheet column is added on write."
     ]
   },
   "triggerRequired": false,
@@ -29,15 +29,15 @@
       "command": "npm run typecheck"
     },
     {
-      "name": "Operational API access",
-      "command": "npm run verify-operational-api-access"
+      "name": "Work instruction kind",
+      "command": "node scripts/verify-work-instruction-kind.cjs"
     },
     {
-      "name": "Operational Registers write path",
-      "command": "npm run verify-operational-registers-write"
+      "name": "Work orders WIP register",
+      "command": "node scripts/verify-work-orders-wip-register.cjs"
     }
   ],
   "notes": [
-    "Repo write wiring for all 7 registers is correct. Remaining live failure is incomplete Apps Script file deployment for GeneratorLogRepository.gs only."
+    "Order Type is explicit and persisted. Estimated Cost must not classify Work Order vs Job Order."
   ]
 }

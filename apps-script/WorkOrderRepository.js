@@ -23,6 +23,8 @@ var WorkOrderRepository = (function () {
     "Source",
     "Title",
     "Approval ID",
+    "Estimated Cost",
+    "Order Type",
   ];
 
   function getSheet_() {
@@ -119,6 +121,39 @@ var WorkOrderRepository = (function () {
     return raw;
   }
 
+  /**
+   * Estimated Cost is a financial field only — never used to classify Order Type.
+   */
+  function readEstimatedCost_(sheetRow, headerMap) {
+    if (!SheetFieldUtils.hasHeader(headerMap, "Estimated Cost")) {
+      return undefined;
+    }
+    var raw = sheetRow["Estimated Cost"];
+    if (raw == null || raw === "") return undefined;
+    var num =
+      typeof raw === "number"
+        ? raw
+        : Number(String(raw).replace(/,/g, "").trim());
+    return isFinite(num) ? num : undefined;
+  }
+
+  /**
+   * Persisted Order Type. Returns work_order | job_order | undefined.
+   * Invalid / blank values are left undefined so the client legacy default applies.
+   */
+  function readOrderType_(sheetRow, headerMap) {
+    if (!SheetFieldUtils.hasHeader(headerMap, "Order Type")) {
+      return undefined;
+    }
+    var raw = SheetFieldUtils.cellText(sheetRow["Order Type"]);
+    if (!raw) return undefined;
+    var normalized = String(raw).toLowerCase().replace(/\s+/g, "_");
+    if (normalized === "work_order" || normalized === "job_order") {
+      return normalized;
+    }
+    return undefined;
+  }
+
   function toCanonical_(sheetRow, headerMap) {
     var description = SheetFieldUtils.cellText(sheetRow["Description"]);
     var explicitTitle = SheetFieldUtils.cellText(sheetRow["Title"]);
@@ -183,7 +218,8 @@ var WorkOrderRepository = (function () {
       completedAt: completedAt || undefined,
       estimatedHours: undefined,
       actualHours: undefined,
-      estimatedCost: undefined,
+      orderType: readOrderType_(sheetRow, headerMap),
+      estimatedCost: readEstimatedCost_(sheetRow, headerMap),
       actualCost: undefined,
       completionNotes: undefined,
       workPerformed: undefined,
@@ -223,6 +259,15 @@ var WorkOrderRepository = (function () {
       "Parent Work Order ID": canonical.parentWorkOrderId || "",
       Source: canonical.source || "manual",
       "Approval ID": canonical.approvalId || "",
+      "Estimated Cost":
+        canonical.estimatedCost != null && canonical.estimatedCost !== ""
+          ? canonical.estimatedCost
+          : "",
+      "Order Type":
+        canonical.orderType === "job_order" ||
+        canonical.orderType === "work_order"
+          ? canonical.orderType
+          : "",
     };
   }
 
@@ -413,6 +458,14 @@ var WorkOrderRepository = (function () {
           : current.requiresApproval,
       approvalId:
         payload.approvalId != null ? payload.approvalId : current.approvalId,
+      estimatedCost:
+        payload.estimatedCost != null
+          ? payload.estimatedCost
+          : current.estimatedCost,
+      orderType:
+        payload.orderType === "job_order" || payload.orderType === "work_order"
+          ? payload.orderType
+          : current.orderType,
       createdAt: current.createdAt,
       updatedAt: new Date().toISOString(),
       _completedBy: current._completedBy || "",
@@ -448,6 +501,14 @@ var WorkOrderRepository = (function () {
       priority: payload.priority || "medium",
       requiresApproval: payload.requiresApproval || false,
       approvalId: payload.approvalId || "",
+      estimatedCost:
+        payload.estimatedCost != null && payload.estimatedCost !== ""
+          ? payload.estimatedCost
+          : undefined,
+      orderType:
+        payload.orderType === "job_order" || payload.orderType === "work_order"
+          ? payload.orderType
+          : undefined,
       createdAt: requestedAt,
       updatedAt: payload.updatedAt || requestedAt,
       _completedBy: "",

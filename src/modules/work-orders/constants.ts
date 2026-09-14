@@ -75,6 +75,24 @@ export const WORK_ORDER_PRIORITY_VARIANT: Record<
 
 export const WORK_ORDERS_PAGE_SIZE = 8;
 
+/** Client-side Order Type scope on the WIP register (not a persisted field). */
+export type WorkOrderOrderTypeScope = "all" | "work_order" | "job_order";
+
+export const WORK_ORDER_ORDER_TYPE_SCOPE_OPTIONS: Array<{
+  value: WorkOrderOrderTypeScope;
+  label: string;
+}> = [
+  { value: "all", label: "All" },
+  { value: "work_order", label: "Work Orders" },
+  { value: "job_order", label: "Job Orders" },
+];
+
+/**
+ * When scoping by derived Order Type, load a bounded window then paginate
+ * client-side. Classification remains resolveWorkInstructionKind(orderType).
+ */
+export const WORK_ORDER_ORDER_TYPE_SCOPE_FETCH_SIZE = 500;
+
 export const WORK_ORDER_SORT_OPTIONS: Array<{
   value: WorkOrderSort;
   label: string;

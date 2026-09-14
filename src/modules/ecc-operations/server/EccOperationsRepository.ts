@@ -8,6 +8,7 @@ import type {
   EccRequestHistoryEntry,
 } from "@/modules/ecc-operations/types";
 import { DEFAULT_ECC_CENTRE } from "@/modules/ecc-operations/types";
+import { mapUniqueViolation } from "@/modules/ecc-operations/server/validation";
 import {
   centreToDto,
   centreToRow,
@@ -41,8 +42,8 @@ function db() {
   return createAdminClient();
 }
 
-function throwDb(error: { message?: string } | null, fallback: string): never {
-  throw new Error(error?.message?.trim() || fallback);
+function throwDb(error: { code?: string; message?: string } | null, fallback: string): never {
+  throw mapUniqueViolation(error, fallback);
 }
 
 export class EccOperationsRepository {
@@ -161,6 +162,34 @@ export class EccOperationsRepository {
       data as EccDailyOpsRow,
       issuesByDaily.get(id) ?? [],
       requestsByDaily.get(id) ?? []
+    );
+  }
+
+  /**
+   * Lookup used for morning/evening uniqueness (org + centre + period + date).
+   * Ad hoc is unconstrained and should not call this for conflict decisions.
+   */
+  async findDailyOpsByPeriodDate(
+    centreId: string,
+    period: "morning" | "evening",
+    reportingDate: string
+  ): Promise<EccDailyOpsRecord | null> {
+    const { data, error } = await db()
+      .from("ecc_daily_ops")
+      .select("*")
+      .eq("organisation_id", this.organisationId)
+      .eq("centre_id", centreId)
+      .eq("period", period)
+      .eq("reporting_date", reportingDate)
+      .maybeSingle();
+    if (error) throwDb(error, "Failed to look up daily ops by period and date.");
+    if (!data) return null;
+    const row = data as EccDailyOpsRow;
+    const { issuesByDaily, requestsByDaily } = await this.loadLinkMaps();
+    return dailyOpsToDto(
+      row,
+      issuesByDaily.get(row.id) ?? [],
+      requestsByDaily.get(row.id) ?? []
     );
   }
 

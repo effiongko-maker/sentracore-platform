@@ -33,6 +33,7 @@ import {
   EccStatusPill,
   formatEccWhen,
 } from "./eccUi";
+import { EccEntityAuditTrail } from "./EccAuditTrail";
 
 type IssuePanel = "register" | "detail" | "treat" | "delete";
 
@@ -62,6 +63,7 @@ export function EccIssuesPage() {
   const [actingAs, setActingAs] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panel, setPanel] = useState<IssuePanel>("register");
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [linkRequestId, setLinkRequestId] = useState("");
@@ -93,9 +95,11 @@ export function EccIssuesPage() {
 
   useEffect(() => {
     setActingAs(readEccActingAs());
-    void reload().catch((err: unknown) => {
-      setError(err instanceof Error ? err.message : "Unable to load issues.");
-    });
+    void reload()
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : "Unable to load issues.");
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -192,6 +196,14 @@ export function EccIssuesPage() {
     if (!selected || !treat.byName.trim()) return;
     if (!treat.toStatus && !treat.actionNote.trim()) {
       setError("Choose a next step or record an action note.");
+      return;
+    }
+    if (
+      (treat.toStatus === "resolved" || treat.toStatus === "closed") &&
+      !treat.resolutionNotes.trim() &&
+      !selected.resolutionNotes?.trim()
+    ) {
+      setError("Resolution notes are required to resolve or close an issue.");
       return;
     }
     setSaving(true);
@@ -441,6 +453,8 @@ export function EccIssuesPage() {
 
       {error ? <p className="ecc-empty">{error}</p> : null}
 
+      {loading ? <p className="ecc-empty">Loading issues…</p> : null}
+
       {panel === "register" ? (
         <>
           {filterBar}
@@ -553,7 +567,7 @@ export function EccIssuesPage() {
             </form>
           ) : null}
 
-          {visible.length === 0 ? (
+          {loading ? null : visible.length === 0 ? (
             <div className="ecc-reg-empty">
               <p className="ecc-reg-empty-title">No issues in this view</p>
               <p className="ecc-reg-empty-copy">
@@ -808,6 +822,11 @@ export function EccIssuesPage() {
                 </li>
               ))}
             </ol>
+            <EccEntityAuditTrail
+              entityType="issue"
+              entityId={selected.id}
+              title="Accountability"
+            />
           </div>
         </section>
       ) : null}
@@ -862,32 +881,36 @@ export function EccIssuesPage() {
           </div>
 
           <form className="ecc-submit-form ecc-form" onSubmit={onTreat}>
-            <div className="ecc-form-block">
+            <div className="ecc-form-block ecc-iss-next-step">
               <h3 className="ecc-form-block-title">Next step</h3>
               <p className="ecc-form-hint">
                 Choose an allowed lifecycle transition, or leave blank to log an
                 action without changing status.
               </p>
-              <div className="ecc-field">
+              <div className="ecc-field ecc-iss-advance-field">
                 <label htmlFor="ecc-iss-next">Advance to</label>
-                <select
-                  id="ecc-iss-next"
-                  value={treat.toStatus}
-                  onChange={(e) =>
-                    setTreat((prev) => ({
-                      ...prev,
-                      toStatus: e.target.value as EccIssueStatus | "",
-                    }))
-                  }
-                  disabled={nextStatuses.length === 0}
-                >
-                  <option value="">Stay in current state</option>
-                  {nextStatuses.map((status) => (
-                    <option key={status} value={status}>
-                      {ECC_ISSUE_STATUS_LABELS[status]}
-                    </option>
-                  ))}
-                </select>
+                <div className="ecc-iss-advance-control">
+                  <select
+                    id="ecc-iss-next"
+                    className="ecc-iss-advance-select"
+                    value={treat.toStatus}
+                    onChange={(e) =>
+                      setTreat((prev) => ({
+                        ...prev,
+                        toStatus: e.target.value as EccIssueStatus | "",
+                      }))
+                    }
+                    disabled={nextStatuses.length === 0}
+                  >
+                    <option value="">Stay in current state</option>
+                    {nextStatuses.map((status) => (
+                      <option key={status} value={status}>
+                        {ECC_ISSUE_STATUS_LABELS[status]}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="ecc-iss-advance-chevron" aria-hidden />
+                </div>
               </div>
             </div>
 
@@ -954,6 +977,7 @@ export function EccIssuesPage() {
                   <label htmlFor="ecc-iss-treat-res">Resolution notes</label>
                   <textarea
                     id="ecc-iss-treat-res"
+                    required
                     value={treat.resolutionNotes}
                     onChange={(e) =>
                       setTreat((prev) => ({

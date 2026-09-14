@@ -40,7 +40,7 @@
 
 .login-brand-image {
   object-fit: cover;
-  object-position: 55% center;
+  object-position: center center;
 }
 
 .login-brand-scrim {
@@ -67,7 +67,6 @@
   justify-content: space-between;
   width: 100%;
   padding: clamp(1.75rem, 4vw, 2.75rem);
-  padding-right: clamp(2.5rem, 6vw, 4.5rem);
 }
 
 .login-brand-top {
@@ -121,9 +120,9 @@
 
 .login-brand-pillars {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem 1rem;
-  max-width: 26rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem 0.85rem;
+  max-width: 32rem;
   padding-top: 1.25rem;
   border-top: 1px solid rgb(255 255 255 / 0.18);
   animation: login-fade-up 0.8s ease 0.14s both;
@@ -154,7 +153,16 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
   line-height: 1.35;
-  color: rgb(255 255 255 / 0.78);
+  color: rgb(255 255 255 / 0.88);
+}
+
+.login-brand-pillar-sublabel {
+  margin: 0.1rem 0 0;
+  font-size: 0.5625rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+  color: rgb(255 255 255 / 0.62);
 }
 
 .login-brand-foot {
@@ -171,23 +179,6 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: rgb(255 255 255 / 0.7);
-}
-
-.login-brand-spine {
-  position: absolute;
-  top: 50%;
-  right: 1.1rem;
-  z-index: 2;
-  margin: 0;
-  transform: translateY(-50%) rotate(180deg);
-  writing-mode: vertical-rl;
-  font-size: 0.5625rem;
-  font-weight: 600;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: rgb(255 255 255 / 0.42);
-  pointer-events: none;
-  animation: login-fade 1s ease 0.25s both;
 }
 
 /* —— Right panel —— */
@@ -558,21 +549,11 @@
   }
 }
 
-@keyframes login-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .login-brand-top,
   .login-brand-mid,
   .login-brand-pillars,
   .login-brand-foot,
-  .login-brand-spine,
   .login-panel-inner {
     animation: none;
   }

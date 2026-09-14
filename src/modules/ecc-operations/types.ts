@@ -700,3 +700,170 @@ export type EccSetCurrentShiftAssignmentsInput = {
   assignedPersonIds: string[];
   centreId?: string;
 };
+
+/** ECC operational finance (centre-scoped — not organisation Finance). */
+export type EccFinanceCategory =
+  | "facilities"
+  | "utilities"
+  | "connectivity_technical"
+  | "staffing_operations"
+  | "maintenance"
+  | "other";
+
+export type EccFinanceTransactionStatus =
+  | "recorded"
+  | "pending"
+  | "settled"
+  | "cancelled";
+
+export type EccFinanceCommitmentStatus =
+  | "pending"
+  | "approved"
+  | "due"
+  | "settled"
+  | "cancelled";
+
+export type EccFinanceBudgetStatus = "active" | "superseded" | "closed";
+
+export type EccFinanceBudget = {
+  id: string;
+  centreId: string;
+  periodLabel: string;
+  amount: number;
+  currency: string;
+  status: EccFinanceBudgetStatus;
+  createdBy: string;
+  createdAt: string;
+};
+
+export type EccFinanceTransaction = {
+  id: string;
+  centreId: string;
+  date: string;
+  reference: string;
+  description: string;
+  category: EccFinanceCategory;
+  amount: number;
+  currency: string;
+  status: EccFinanceTransactionStatus;
+  recordedBy: string;
+  createdAt: string;
+};
+
+export type EccFinanceCommitment = {
+  id: string;
+  centreId: string;
+  description: string;
+  category: EccFinanceCategory;
+  expectedAmount: number;
+  currency: string;
+  dueDate?: string;
+  status: EccFinanceCommitmentStatus;
+  recordedBy: string;
+  createdAt: string;
+};
+
+export type EccFinanceBudgetPosition = {
+  budget: number | null;
+  committed: number | null;
+  spent: number | null;
+  remaining: number | null;
+};
+
+export type EccFinanceSnapshot = {
+  centreId: string;
+  asOf: string;
+  periodLabel: string;
+  currency: string;
+  budget: EccFinanceBudget | null;
+  totalExpenditure: number | null;
+  pendingCommitmentsTotal: number | null;
+  availableBudget: number | null;
+  budgetPosition: EccFinanceBudgetPosition;
+  transactions: EccFinanceTransaction[];
+  commitments: EccFinanceCommitment[];
+  categories: EccFinanceCategory[];
+};
+
+export type EccCreateFinanceBudgetInput = {
+  periodLabel: string;
+  amount: number;
+  currency?: string;
+  createdBy: string;
+  centreId?: string;
+};
+
+export type EccCreateFinanceTransactionInput = {
+  date: string;
+  reference?: string;
+  description: string;
+  category: EccFinanceCategory;
+  amount: number;
+  currency?: string;
+  status: EccFinanceTransactionStatus;
+  recordedBy: string;
+  centreId?: string;
+};
+
+export type EccCreateFinanceCommitmentInput = {
+  description: string;
+  category: EccFinanceCategory;
+  expectedAmount: number;
+  currency?: string;
+  dueDate?: string;
+  status?: EccFinanceCommitmentStatus;
+  recordedBy: string;
+  centreId?: string;
+};
+
+/** ECC accountability / audit trail */
+export type EccAuditEntityType =
+  | "issue"
+  | "request"
+  | "person"
+  | "shift"
+  | "attendance"
+  | "finance_budget"
+  | "finance_transaction"
+  | "finance_commitment"
+  | "daily_ops";
+
+export type EccAuditEvent = {
+  id: string;
+  centreId?: string;
+  actorUserId?: string;
+  actorName: string;
+  actorEmail?: string;
+  action: string;
+  entityType: EccAuditEntityType;
+  entityId: string;
+  description: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type EccRecordAuditEventInput = {
+  centreId?: string;
+  actorUserId?: string;
+  actorName: string;
+  actorEmail?: string;
+  action: string;
+  entityType: EccAuditEntityType;
+  entityId: string;
+  description: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type EccAuditListFilter = {
+  centreId?: string;
+  entityType?: EccAuditEntityType;
+  entityId?: string;
+  action?: string;
+  limit?: number;
+};
+
+export type EccActorContext = {
+  userId: string;
+  email: string;
+  name: string;
+};

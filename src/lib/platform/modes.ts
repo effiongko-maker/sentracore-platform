@@ -52,7 +52,10 @@ export function productModeFromPath(pathname: string): ProductMode {
   if (
     pathname.startsWith("/intelligence") ||
     pathname.startsWith("/reports") ||
-    pathname.startsWith("/dashboards")
+    pathname.startsWith("/dashboards") ||
+    pathname === "/ecc-operations" ||
+    pathname.startsWith("/ecc-operations/reporting") ||
+    pathname.startsWith("/ecc-operations/intelligence")
   ) {
     return "cognitive";
   }

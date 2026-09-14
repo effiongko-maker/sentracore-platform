@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Generated: 2026-09-10T17:35:28.707Z
+Generated: 2026-09-14T08:40:38.643Z
 
 This document is the **single source of truth** for copying Apps Script
 source into the Google Apps Script project.
@@ -17,6 +17,7 @@ Then follow `DEPLOYMENT_CHECKLIST.md`.
 
 ## File index
 
+- ROUTER.gs
 - ROUTER.gs
 - ApprovalRepository.gs
 - AssetRepository.gs
@@ -92,6 +93,220 @@ Then follow `DEPLOYMENT_CHECKLIST.md`.
 - RequestTreatmentLinkSpike.gs
 - RequestTreatmentMutationSpike.gs
 - SheetFieldUtils.gs
+
+======================================
+FILE:
+ROUTER.gs
+======================================
+
+```javascript
+/**
+ * ROUTER.gs
+ *
+ * Production Apps Script entrypoint for SentraCore.
+ * Copy this file into the Apps Script project as ROUTER.gs (or replace the
+ * existing doPost / jsonResponse_ helpers with this complete file).
+ *
+ * Request envelope:
+ * {
+ *   resource: "users" | "facilities" | "assets" | "work-orders" |
+ *             "incidents" | "maintenance" | "approvals" | "requests" |
+ *             "master-data" | "reporting-snapshot" | "operational-workload" |
+ *             "cost-records" | "cost-submissions" | "reimbursement-payments" |
+ *             "diesel-usage" | "consumables-update" | "waste-log" | "fumigation-log" | "deep-cleaning-log",
+ *   action: string,
+ *   payload: object
+ * }
+ *
+ * `module` is accepted as an alias for `resource` for backwards compatibility.
+ */
+
+function jsonResponse_(success, message, data, meta) {
+  var payload = {
+    success: !!success,
+    message: message == null ? "" : String(message),
+    data: data === undefined ? null : data,
+  };
+  if (meta && typeof meta === "object") {
+    payload.meta = meta;
+  }
+  var text;
+  try {
+    text = JSON.stringify(payload);
+  } catch (err) {
+    text = JSON.stringify({
+      success: false,
+      message: "Failed to serialise Apps Script response.",
+      data: null,
+      meta: { errorClass: "serialization" },
+    });
+  }
+  // ContentService accepts Unicode strings; do not pass through ByteString APIs.
+  return ContentService.createTextOutput(text).setMimeType(
+    ContentService.MimeType.JSON
+  );
+}
+
+/** Classify Apps Script failures for client diagnostics (not end-user copy). */
+function classifyAppsScriptError_(error) {
+  var message = (error && error.message) || String(error || "");
+  var lower = message.toLowerCase();
+  if (
+    /missing headers|missing required|is required|validation|invalid|cannot write sheet fields/.test(
+      lower
+    )
+  ) {
+    return { errorClass: "validation", retryable: false };
+  }
+  if (/timed out|timeout|exceeded maximum execution|service invoked too many/.test(lower)) {
+    return { errorClass: "timeout", retryable: true };
+  }
+  if (/temporarily unavailable|rate limit|quota|backend error|internal error/.test(lower)) {
+    return { errorClass: "transient", retryable: true };
+  }
+  return { errorClass: "exception", retryable: false };
+}
+
+function doPost(e) {
+  var body = {};
+
+  try {
+    var raw =
+      e && e.postData && e.postData.contents ? e.postData.contents : "{}";
+    body = JSON.parse(raw || "{}");
+  } catch (err) {
+    body = {};
+  }
+
+  var resource = String(body.resource || body.module || "").trim();
+  var action = body.action || "getAll";
+  var payload = body.payload || {};
+
+  var result;
+
+  try {
+    if (resource === "users") {
+      result = UsersController.handle(action, payload);
+    } else if (resource === "facilities") {
+      result = FacilitiesController.handle(action, payload);
+    } else if (resource === "assets") {
+      result = AssetsController.handle(action, payload);
+    } else if (resource === "work-orders") {
+      result = WorkOrdersController.handle(action, payload);
+    } else if (resource === "incidents") {
+      result = IncidentsController.handle(action, payload);
+    } else if (resource === "maintenance") {
+      result = MaintenanceController.handle(action, payload);
+    } else if (resource === "approvals") {
+      result = ApprovalsController.handle(action, payload);
+    } else if (resource === "requests") {
+      result = RequestsController.handle(action, payload);
+    } else if (resource === "master-data") {
+      result = MasterDataController.handle(action, payload);
+    } else if (resource === "reporting-snapshot") {
+      result = ReportingSnapshotController.handle(action, payload);
+    } else if (resource === "operational-workload") {
+      result = OperationalWorkloadController.handle(action, payload);
+    } else if (resource === "cost-records") {
+      result = CostRecordsController.handle(action, payload);
+    } else if (resource === "cost-submissions") {
+      result = CostSubmissionsController.handle(action, payload);
+    } else if (resource === "reimbursement-payments") {
+      result = ReimbursementPaymentsController.handle(action, payload);
+    } else if (resource === "reimbursement-authorizations") {
+      result = ReimbursementAuthorizationsController.handle(action, payload);
+    } else if (resource === "generator-log") {
+      result = GeneratorLogController.handle(action, payload);
+    } else if (resource === "energy-reading") {
+      result = EnergyReadingController.handle(action, payload);
+    } else if (resource === "diesel-usage") {
+      result = DieselUsageController.handle(action, payload);
+    } else if (resource === "consumables-update") {
+      result = ConsumablesUpdateController.handle(action, payload);
+    } else if (resource === "waste-log") {
+      result = WasteLogController.handle(action, payload);
+    } else if (resource === "fumigation-log") {
+      result = FumigationLogController.handle(action, payload);
+    } else if (resource === "deep-cleaning-log") {
+      result = DeepCleaningLogController.handle(action, payload);
+    } else {
+      result = jsonResponse_(
+        false,
+        resource
+          ? "Unknown module: " + resource
+          : "Missing resource. Expected users|facilities|assets|work-orders|incidents|maintenance|approvals|requests|master-data|reporting-snapshot|operational-workload|cost-records|cost-submissions|reimbursement-payments|reimbursement-authorizations|generator-log|energy-reading|diesel-usage|consumables-update|waste-log|fumigation-log|deep-cleaning-log.",
+        null,
+        { errorClass: "validation", retryable: false }
+      );
+    }
+  } catch (error) {
+    var classified = classifyAppsScriptError_(error);
+    result = jsonResponse_(
+      false,
+      (error && error.message) || "Unhandled Apps Script error.",
+      null,
+      classified
+    );
+  }
+
+  return result;
+}
+
+/**
+ * Optional health check for the Web App deployment URL.
+ * GET returns a small JSON payload confirming the script is reachable.
+ */
+function doGet() {
+  var builds = {};
+  if (typeof UserRepository !== "undefined" && UserRepository.BUILD_MARKER) {
+    builds.users = UserRepository.BUILD_MARKER;
+  }
+  if (typeof AssetRepository !== "undefined" && AssetRepository.BUILD_MARKER) {
+    builds.assets = AssetRepository.BUILD_MARKER;
+  }
+  if (
+    typeof GeneratorLogRepository !== "undefined" &&
+    GeneratorLogRepository.BUILD_MARKER
+  ) {
+    builds.generatorLog = GeneratorLogRepository.BUILD_MARKER;
+  }
+  if (
+    typeof DieselUsageRepository !== "undefined" &&
+    DieselUsageRepository.BUILD_MARKER
+  ) {
+    builds.dieselUsage = DieselUsageRepository.BUILD_MARKER;
+  }
+
+  return jsonResponse_(true, "SentraCore Apps Script is online.", {
+    service: "sentracore",
+    resources: [
+      "users",
+      "facilities",
+      "assets",
+      "work-orders",
+      "incidents",
+      "maintenance",
+      "approvals",
+      "requests",
+      "master-data",
+      "reporting-snapshot",
+      "operational-workload",
+      "cost-records",
+      "cost-submissions",
+      "reimbursement-payments",
+      "reimbursement-authorizations",
+      "generator-log",
+      "energy-reading",
+      "diesel-usage",
+      "consumables-update",
+      "waste-log",
+      "fumigation-log",
+      "deep-cleaning-log",
+    ],
+    builds: builds,
+  });
+}
+```
 
 ======================================
 FILE:
@@ -7562,6 +7777,8 @@ var WorkOrderRepository = (function () {
     "Source",
     "Title",
     "Approval ID",
+    "Estimated Cost",
+    "Order Type",
   ];
 
   function getSheet_() {
@@ -7658,6 +7875,39 @@ var WorkOrderRepository = (function () {
     return raw;
   }
 
+  /**
+   * Estimated Cost is a financial field only — never used to classify Order Type.
+   */
+  function readEstimatedCost_(sheetRow, headerMap) {
+    if (!SheetFieldUtils.hasHeader(headerMap, "Estimated Cost")) {
+      return undefined;
+    }
+    var raw = sheetRow["Estimated Cost"];
+    if (raw == null || raw === "") return undefined;
+    var num =
+      typeof raw === "number"
+        ? raw
+        : Number(String(raw).replace(/,/g, "").trim());
+    return isFinite(num) ? num : undefined;
+  }
+
+  /**
+   * Persisted Order Type. Returns work_order | job_order | undefined.
+   * Invalid / blank values are left undefined so the client legacy default applies.
+   */
+  function readOrderType_(sheetRow, headerMap) {
+    if (!SheetFieldUtils.hasHeader(headerMap, "Order Type")) {
+      return undefined;
+    }
+    var raw = SheetFieldUtils.cellText(sheetRow["Order Type"]);
+    if (!raw) return undefined;
+    var normalized = String(raw).toLowerCase().replace(/\s+/g, "_");
+    if (normalized === "work_order" || normalized === "job_order") {
+      return normalized;
+    }
+    return undefined;
+  }
+
   function toCanonical_(sheetRow, headerMap) {
     var description = SheetFieldUtils.cellText(sheetRow["Description"]);
     var explicitTitle = SheetFieldUtils.cellText(sheetRow["Title"]);
@@ -7722,7 +7972,8 @@ var WorkOrderRepository = (function () {
       completedAt: completedAt || undefined,
       estimatedHours: undefined,
       actualHours: undefined,
-      estimatedCost: undefined,
+      orderType: readOrderType_(sheetRow, headerMap),
+      estimatedCost: readEstimatedCost_(sheetRow, headerMap),
       actualCost: undefined,
       completionNotes: undefined,
       workPerformed: undefined,
@@ -7762,6 +8013,15 @@ var WorkOrderRepository = (function () {
       "Parent Work Order ID": canonical.parentWorkOrderId || "",
       Source: canonical.source || "manual",
       "Approval ID": canonical.approvalId || "",
+      "Estimated Cost":
+        canonical.estimatedCost != null && canonical.estimatedCost !== ""
+          ? canonical.estimatedCost
+          : "",
+      "Order Type":
+        canonical.orderType === "job_order" ||
+        canonical.orderType === "work_order"
+          ? canonical.orderType
+          : "",
     };
   }
 
@@ -7952,6 +8212,14 @@ var WorkOrderRepository = (function () {
           : current.requiresApproval,
       approvalId:
         payload.approvalId != null ? payload.approvalId : current.approvalId,
+      estimatedCost:
+        payload.estimatedCost != null
+          ? payload.estimatedCost
+          : current.estimatedCost,
+      orderType:
+        payload.orderType === "job_order" || payload.orderType === "work_order"
+          ? payload.orderType
+          : current.orderType,
       createdAt: current.createdAt,
       updatedAt: new Date().toISOString(),
       _completedBy: current._completedBy || "",
@@ -7987,6 +8255,14 @@ var WorkOrderRepository = (function () {
       priority: payload.priority || "medium",
       requiresApproval: payload.requiresApproval || false,
       approvalId: payload.approvalId || "",
+      estimatedCost:
+        payload.estimatedCost != null && payload.estimatedCost !== ""
+          ? payload.estimatedCost
+          : undefined,
+      orderType:
+        payload.orderType === "job_order" || payload.orderType === "work_order"
+          ? payload.orderType
+          : undefined,
       createdAt: requestedAt,
       updatedAt: payload.updatedAt || requestedAt,
       _completedBy: "",
@@ -15683,6 +15959,7 @@ var WorkOrderMaintenanceMutationService = (function () {
       reportedByUserId: maintenance.reportedByUserId || "",
       assignedToUserId: maintenance.assignedToUserId || "",
       priority: maintenance.priority || "medium",
+      orderType: "work_order",
       status: "open",
       requestedAt: cell_(payload.requestedAt) || nowIso_(),
       createdByUserId: actor,

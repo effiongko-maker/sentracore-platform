@@ -11,6 +11,7 @@ import {
   Clock3,
   Headphones,
   Monitor,
+  PenLine,
   Users,
   Zap,
 } from "lucide-react";
@@ -82,12 +83,25 @@ export function EccOverviewPage() {
   }, []);
 
   if (error) {
-    return <p className="ecc-empty">{error}</p>;
+    return (
+      <div className="ecc-overview">
+        <p className="ecc-empty">{error}</p>
+      </div>
+    );
   }
 
   if (!snapshot) {
-    return <p className="ecc-empty">Loading centre overview…</p>;
+    return (
+      <div className="ecc-overview">
+        <p className="ecc-empty">Loading centre overview…</p>
+      </div>
+    );
   }
+
+  // Dashboard card: always the 5 most recent activities only.
+  const recentActivityPreview = [...snapshot.recentActivity]
+    .sort((a, b) => b.at.localeCompare(a.at))
+    .slice(0, 5);
 
   const latest = snapshot.latestDailyOps;
   const call = latest?.callOperations;
@@ -135,10 +149,7 @@ export function EccOverviewPage() {
         </div>
 
         {latest ? (
-          <Link
-            href="/ecc-operations/daily-ops"
-            className="ecc-ov-latest"
-          >
+          <Link href="/ecc-operations/daily-ops" className="ecc-ov-latest">
             <div className="ecc-ov-latest-top">
               <span className="ecc-ov-latest-dot" aria-hidden />
               <span className="ecc-ov-latest-label">Latest update</span>
@@ -159,7 +170,7 @@ export function EccOverviewPage() {
           <div className="ecc-ov-latest ecc-ov-latest--empty">
             <p className="ecc-ov-latest-label">Latest update</p>
             <p className="ecc-ov-latest-line">No daily operations record yet.</p>
-            <Link href="/ecc-operations/daily-ops" className="ecc-link">
+            <Link href="/ecc-operations/daily-ops" className="ecc-ov-link">
               Submit an update
             </Link>
           </div>
@@ -169,7 +180,7 @@ export function EccOverviewPage() {
       <section className="ecc-ov-state-grid" aria-label="Current state">
         <article className={`ecc-ov-state-card is-${centreTone}`}>
           <div className="ecc-ov-state-icon" aria-hidden>
-            <Building2 className="h-4 w-4" />
+            <Building2 className="h-3.5 w-3.5" strokeWidth={1.75} />
           </div>
           <p className="ecc-ov-state-label">Centre</p>
           <p className="ecc-ov-state-value">
@@ -187,7 +198,7 @@ export function EccOverviewPage() {
 
         <article className={`ecc-ov-state-card is-${facilityTone}`}>
           <div className="ecc-ov-state-icon" aria-hidden>
-            <Building2 className="h-4 w-4" />
+            <Building2 className="h-3.5 w-3.5" strokeWidth={1.75} />
           </div>
           <p className="ecc-ov-state-label">Facility</p>
           <p className="ecc-ov-state-value">
@@ -206,7 +217,7 @@ export function EccOverviewPage() {
 
         <article className={`ecc-ov-state-card is-${technicalTone}`}>
           <div className="ecc-ov-state-icon" aria-hidden>
-            <Monitor className="h-4 w-4" />
+            <Monitor className="h-3.5 w-3.5" strokeWidth={1.75} />
           </div>
           <p className="ecc-ov-state-label">Technical</p>
           <p className="ecc-ov-state-value">
@@ -225,7 +236,7 @@ export function EccOverviewPage() {
 
         <article className={`ecc-ov-state-card is-${staffingTone}`}>
           <div className="ecc-ov-state-icon" aria-hidden>
-            <Users className="h-4 w-4" />
+            <Users className="h-3.5 w-3.5" strokeWidth={1.75} />
           </div>
           <p className="ecc-ov-state-label">Staffing</p>
           <p className="ecc-ov-state-value">
@@ -237,15 +248,15 @@ export function EccOverviewPage() {
             <p className="ecc-ov-state-meta">—</p>
           )}
           <p className="ecc-ov-state-foot">
-            <Link href="/ecc-operations/people" className="ecc-link">
-              People
+            <Link href="/ecc-operations/people" className="ecc-ov-link">
+              People →
             </Link>
           </p>
         </article>
 
         <article className="ecc-ov-state-card is-call">
           <div className="ecc-ov-state-icon" aria-hidden>
-            <Headphones className="h-4 w-4" />
+            <Headphones className="h-3.5 w-3.5" strokeWidth={1.75} />
           </div>
           <p className="ecc-ov-state-label">Call activity</p>
           <p className="ecc-ov-state-value">
@@ -254,16 +265,23 @@ export function EccOverviewPage() {
           {callSecondary ? (
             <p className="ecc-ov-state-meta">{callSecondary}</p>
           ) : null}
-          <p className="ecc-ov-state-foot">Extensible metrics</p>
+          <p className="ecc-ov-state-foot">
+            <span className="ecc-ov-link ecc-ov-link--static">
+              Extensible metrics →
+            </span>
+          </p>
         </article>
       </section>
 
       <div className="ecc-ov-mid-grid">
         <section className="ecc-ov-card">
-          <header className="ecc-ov-card-head">
+          <header className="ecc-ov-card-head ecc-ov-card-head--split">
             <div className="ecc-ov-card-title-row">
-              <span className="ecc-ov-card-icon ecc-ov-card-icon--alert" aria-hidden>
-                <AlertTriangle className="h-4 w-4" />
+              <span
+                className="ecc-ov-card-icon ecc-ov-card-icon--alert"
+                aria-hidden
+              >
+                <AlertTriangle className="h-3.5 w-3.5" strokeWidth={1.75} />
               </span>
               <div>
                 <h2 className="ecc-ov-card-title">Needs attention</h2>
@@ -273,6 +291,9 @@ export function EccOverviewPage() {
                 </p>
               </div>
             </div>
+            <Link href="/ecc-operations/issues" className="ecc-ov-link">
+              View all
+            </Link>
           </header>
 
           {snapshot.attentionItems.length === 0 ? (
@@ -301,47 +322,66 @@ export function EccOverviewPage() {
           )}
         </section>
 
-        <section className="ecc-ov-card">
+        <section className="ecc-ov-card ecc-ov-card--registers">
           <header className="ecc-ov-card-head">
             <div className="ecc-ov-card-title-row">
               <span className="ecc-ov-card-icon" aria-hidden>
-                <ClipboardList className="h-4 w-4" />
+                <ClipboardList className="h-3.5 w-3.5" strokeWidth={1.75} />
               </span>
-              <h2 className="ecc-ov-card-title">Open registers</h2>
+              <div>
+                <h2 className="ecc-ov-card-title">Open registers</h2>
+                <p className="ecc-ov-card-desc">
+                  Live counts from ECC operational registers.
+                </p>
+              </div>
             </div>
           </header>
-          <div className="ecc-ov-registers">
-            <div className="ecc-ov-register">
-              <p className="ecc-ov-register-value">{snapshot.openIssueCount}</p>
-              <p className="ecc-ov-register-label">Open issues</p>
-              <Link href="/ecc-operations/issues" className="ecc-link">
-                Issues
-              </Link>
+          <div className="ecc-ov-registers-body">
+            <div
+              className="ecc-ov-registers-primary"
+              aria-label="Primary registers"
+            >
+              <div className="ecc-ov-register ecc-ov-register--primary">
+                <p className="ecc-ov-register-value">
+                  {snapshot.openIssueCount}
+                </p>
+                <p className="ecc-ov-register-label">Open issues</p>
+                <Link href="/ecc-operations/issues" className="ecc-ov-link">
+                  Issues →
+                </Link>
+              </div>
+              <div className="ecc-ov-register ecc-ov-register--primary">
+                <p className="ecc-ov-register-value">
+                  {snapshot.openRequestCount}
+                </p>
+                <p className="ecc-ov-register-label">Open requests</p>
+                <Link href="/ecc-operations/requests" className="ecc-ov-link">
+                  Requests →
+                </Link>
+              </div>
             </div>
-            <div className="ecc-ov-register">
-              <p className="ecc-ov-register-value">{snapshot.openRequestCount}</p>
-              <p className="ecc-ov-register-label">Open requests</p>
-              <Link href="/ecc-operations/requests" className="ecc-link">
-                Requests
-              </Link>
-            </div>
-            <div className="ecc-ov-register">
-              <p className="ecc-ov-register-value">
-                {snapshot.escalatedIssueCount}
-              </p>
-              <p className="ecc-ov-register-label">Escalations</p>
-            </div>
-            <div className="ecc-ov-register">
-              <p className="ecc-ov-register-value">
-                {snapshot.highUrgentOpenCount}
-              </p>
-              <p className="ecc-ov-register-label">High / urgent</p>
-            </div>
-            <div className="ecc-ov-register">
-              <p className="ecc-ov-register-value">
-                {snapshot.waitingOnOthersCount}
-              </p>
-              <p className="ecc-ov-register-label">Waiting on others</p>
+            <div
+              className="ecc-ov-registers-secondary"
+              aria-label="Secondary register status"
+            >
+              <div className="ecc-ov-register ecc-ov-register--secondary">
+                <p className="ecc-ov-register-value">
+                  {snapshot.escalatedIssueCount}
+                </p>
+                <p className="ecc-ov-register-label">Escalations</p>
+              </div>
+              <div className="ecc-ov-register ecc-ov-register--secondary">
+                <p className="ecc-ov-register-value">
+                  {snapshot.highUrgentOpenCount}
+                </p>
+                <p className="ecc-ov-register-label">High / urgent</p>
+              </div>
+              <div className="ecc-ov-register ecc-ov-register--secondary">
+                <p className="ecc-ov-register-value">
+                  {snapshot.waitingOnOthersCount}
+                </p>
+                <p className="ecc-ov-register-label">Waiting on others</p>
+              </div>
             </div>
           </div>
         </section>
@@ -352,7 +392,7 @@ export function EccOverviewPage() {
           <header className="ecc-ov-card-head ecc-ov-card-head--split">
             <div className="ecc-ov-card-title-row">
               <span className="ecc-ov-card-icon" aria-hidden>
-                <Clock3 className="h-4 w-4" />
+                <Clock3 className="h-3.5 w-3.5" strokeWidth={1.75} />
               </span>
               <div>
                 <h2 className="ecc-ov-card-title">Recent activity</h2>
@@ -361,12 +401,12 @@ export function EccOverviewPage() {
                 </p>
               </div>
             </div>
-            <Link href="/ecc-operations/daily-ops" className="ecc-link">
+            <Link href="/ecc-operations/daily-ops" className="ecc-ov-link">
               View all
             </Link>
           </header>
 
-          {snapshot.recentActivity.length === 0 ? (
+          {recentActivityPreview.length === 0 ? (
             <p className="ecc-empty ecc-empty--compact">
               No ECC activity recorded yet.
             </p>
@@ -378,7 +418,7 @@ export function EccOverviewPage() {
                 <span>Type</span>
               </div>
               <ul className="ecc-ov-activity-list">
-                {snapshot.recentActivity.map((item) => (
+                {recentActivityPreview.map((item) => (
                   <li key={`${item.kind}-${item.id}`}>
                     <Link href={item.href} className="ecc-ov-activity-row">
                       <span className="ecc-ov-activity-when">
@@ -394,7 +434,7 @@ export function EccOverviewPage() {
                           </span>
                         ) : null}
                       </span>
-                      <span className="ecc-pill ecc-ov-type-pill">
+                      <span className="ecc-ov-type-pill">
                         {activityKindLabel(item.kind)}
                       </span>
                     </Link>
@@ -405,11 +445,11 @@ export function EccOverviewPage() {
           )}
         </section>
 
-        <section className="ecc-ov-card">
+        <section className="ecc-ov-card ecc-ov-card--actions">
           <header className="ecc-ov-card-head">
             <div className="ecc-ov-card-title-row">
               <span className="ecc-ov-card-icon" aria-hidden>
-                <Zap className="h-4 w-4" />
+                <Zap className="h-3.5 w-3.5" strokeWidth={1.75} />
               </span>
               <div>
                 <h2 className="ecc-ov-card-title">Quick actions</h2>
@@ -422,16 +462,39 @@ export function EccOverviewPage() {
           <div className="ecc-ov-actions">
             <Link
               href="/ecc-operations/daily-ops"
-              className="ecc-btn ecc-btn-primary ecc-ov-action-btn"
+              className="ecc-ov-action-row"
             >
-              + Submit update
+              <span
+                className="ecc-ov-action-icon ecc-ov-action-icon--submit"
+                aria-hidden
+              >
+                <PenLine className="h-3.5 w-3.5" strokeWidth={1.75} />
+              </span>
+              <span className="ecc-ov-action-copy">
+                <span className="ecc-ov-action-title">Submit update</span>
+                <span className="ecc-ov-action-desc">
+                  Record the next morning or evening Daily Ops submission.
+                </span>
+              </span>
+              <ChevronRight className="ecc-ov-action-cue" aria-hidden />
             </Link>
             <Link
               href="/ecc-operations/daily-ops"
-              className="ecc-btn ecc-btn-secondary ecc-ov-action-btn"
+              className="ecc-ov-action-row"
             >
-              <CalendarDays className="h-4 w-4" aria-hidden />
-              View daily operations
+              <span
+                className="ecc-ov-action-icon ecc-ov-action-icon--view"
+                aria-hidden
+              >
+                <CalendarDays className="h-3.5 w-3.5" strokeWidth={1.75} />
+              </span>
+              <span className="ecc-ov-action-copy">
+                <span className="ecc-ov-action-title">View daily operations</span>
+                <span className="ecc-ov-action-desc">
+                  Open the Daily Ops register and recent submissions.
+                </span>
+              </span>
+              <ChevronRight className="ecc-ov-action-cue" aria-hidden />
             </Link>
           </div>
         </section>
@@ -450,10 +513,10 @@ export function EccOverviewPage() {
           <ul className="ecc-ov-link-list">
             {snapshot.issuesFromRecentOps.map((item) => (
               <li key={item.id}>
-                <Link href={item.href} className="ecc-link">
+                <Link href={item.href} className="ecc-ov-link">
                   {item.title}
                 </Link>
-                <span className="ecc-muted"> · {item.id}</span>
+                <span className="ecc-ov-meta"> · {item.id}</span>
               </li>
             ))}
           </ul>
@@ -473,11 +536,13 @@ export function EccOverviewPage() {
           <ul className="ecc-ov-link-list">
             {snapshot.recentResolutions.map((item) => (
               <li key={`${item.kind}-${item.id}`}>
-                <span className="ecc-muted">{formatEccWhen(item.at)} · </span>
-                <Link href={item.href} className="ecc-link">
+                <span className="ecc-ov-meta">
+                  {formatEccWhen(item.at)} ·{" "}
+                </span>
+                <Link href={item.href} className="ecc-ov-link">
                   {item.title}
                 </Link>
-                <span className="ecc-pill" style={{ marginLeft: "0.5rem" }}>
+                <span className="ecc-ov-type-pill" style={{ marginLeft: "0.5rem" }}>
                   {item.kind}
                 </span>
               </li>

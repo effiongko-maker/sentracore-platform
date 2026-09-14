@@ -19,6 +19,9 @@ export type {
   OperationalNotificationKind,
 } from "./utils/deriveOperationalNotifications";
 
+import type { OperationalPictureMetrics } from "./operationalPicture";
+export type { OperationalPictureMetrics } from "./operationalPicture";
+
 export interface WorkspaceQuickAction {
   id: string;
   title: string;
@@ -31,7 +34,8 @@ export interface WorkspaceQuickAction {
     | "workOrder"
     | "asset"
     | "facility"
-    | "dashboard";
+    | "dashboard"
+    | "approval";
 }
 
 export interface WorkspaceWorkSummary {
@@ -127,6 +131,11 @@ export interface OrganisationalPulse {
   /** Historical — critical/high open legacy Incidents (compatibility only). */
   legacyCriticalIncidents: number | null;
   recentActivity: number;
+  /**
+   * Operational Picture state metrics (Home panel).
+   * Distinct from hero open-work / work-order register counts.
+   */
+  picture: OperationalPictureMetrics;
 }
 
 /** Sole contract between WorkspaceService and Workspace UI. */

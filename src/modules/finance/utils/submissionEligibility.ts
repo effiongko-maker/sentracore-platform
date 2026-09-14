@@ -57,9 +57,9 @@ export function filterCostsBySearch(
 export function reimbursabilityLabel(value: CostReimbursability): string {
   switch (value) {
     case "reimbursable":
-      return "Reimbursable";
+      return "NCC Reimbursable";
     case "non_reimbursable":
-      return "Non-reimbursable";
+      return "Non-Reimbursable";
     default:
       return "Unknown — needs classification";
   }

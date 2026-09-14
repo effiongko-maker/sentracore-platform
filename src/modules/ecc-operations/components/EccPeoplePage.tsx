@@ -22,6 +22,7 @@ import {
   ECC_SHIFT_COVERAGE_LABELS,
 } from "../constants";
 import { formatEccWhen } from "./eccUi";
+import { EccRecentAuditFeed } from "./EccAuditTrail";
 
 function dutyTone(
   status: string
@@ -335,6 +336,23 @@ export function EccPeoplePage() {
 
   if (!snapshot && !error) {
     return <p className="ecc-empty">Loading people…</p>;
+  }
+
+  if (error && !snapshot) {
+    return (
+      <div className="ecc-people">
+        <header className="ecc-page-header">
+          <div className="ecc-page-header-copy">
+            <h1 className="ecc-page-title">People</h1>
+            <p className="ecc-page-desc">
+              Who operates this ECC, who is responsible for it, and who is
+              currently on duty.
+            </p>
+          </div>
+        </header>
+        <p className="ecc-empty">{error}</p>
+      </div>
+    );
   }
 
   const managers = snapshot?.managers ?? [];
@@ -1018,6 +1036,11 @@ export function EccPeoplePage() {
           </table>
         </div>
       </section>
+
+      <EccRecentAuditFeed
+        title="People activity"
+        entityTypes={["person", "shift", "attendance"]}
+      />
     </div>
   );
 }

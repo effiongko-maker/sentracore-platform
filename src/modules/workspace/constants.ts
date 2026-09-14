@@ -16,11 +16,11 @@ export const WORKSPACE_QUICK_ACTIONS: WorkspaceQuickAction[] = [
     icon: "workOrder",
   },
   {
-    id: "manage-facilities",
-    title: "Browse facilities",
-    description: "View and manage operational locations",
-    href: "/facilities",
-    icon: "facility",
+    id: "review-approvals",
+    title: "Review approvals",
+    description: "Review items awaiting your action",
+    href: "/approvals",
+    icon: "approval",
   },
   {
     id: "register-asset",

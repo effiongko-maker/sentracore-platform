@@ -135,10 +135,10 @@ export const NAV_GROUPS: NavGroup[] = [
         description: "Manage what needs attention",
       }),
       item({
-        label: "Work",
+        label: "Work In Progress",
         href: "/work",
         icon: Wrench,
-        title: "Work",
+        title: "Work In Progress",
         description: "What we are doing about Issues",
       }),
       item({
@@ -146,7 +146,7 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/work-orders",
         icon: ClipboardList,
         title: "Work Orders",
-        description: "Assignments, progress, and completion",
+        description: "Plan, assign, and track Work Orders and Job Orders",
       }),
       item({
         label: "Approvals",

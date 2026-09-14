@@ -28,7 +28,7 @@ import { AppFooter } from "@/components/layout/AppFooter";
 import { SentraCoreLogo } from "@/components/brand";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import {
-  ECC_NAV_ITEMS,
+  ECC_NAV_GROUPS,
   isEccNavItemActive,
 } from "@/modules/ecc-operations/nav";
 
@@ -171,29 +171,43 @@ export function OrganisationalCompass() {
         ) : inEccOperations ? (
           <div className="os-compass-scroll">
             <p className="os-compass-workspace-caption">ECC Operations</p>
-            <div className="os-compass-group os-compass-group-active">
-              <div className="os-compass-modules">
-                {ECC_NAV_ITEMS.map((item) => {
-                  const Icon = item.icon;
-                  const active = isEccNavItemActive(item, pathname);
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={closeMobileNav}
-                      aria-current={active ? "page" : undefined}
-                      className={cn(
-                        "os-compass-module",
-                        active && "os-compass-module-active"
-                      )}
-                    >
-                      <Icon className="h-4 w-4 shrink-0" aria-hidden />
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
+            {ECC_NAV_GROUPS.map((group) => {
+              const isGroupActive = group.items.some((item) =>
+                isEccNavItemActive(item, pathname)
+              );
+              return (
+                <div
+                  key={group.id}
+                  className={cn(
+                    "os-compass-group",
+                    isGroupActive && "os-compass-group-active"
+                  )}
+                >
+                  <p className="os-compass-group-label">{group.label}</p>
+                  <div className="os-compass-modules">
+                    {group.items.map((item) => {
+                      const Icon = item.icon;
+                      const active = isEccNavItemActive(item, pathname);
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={closeMobileNav}
+                          aria-current={active ? "page" : undefined}
+                          className={cn(
+                            "os-compass-module",
+                            active && "os-compass-module-active"
+                          )}
+                        >
+                          <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                          <span>{item.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div className="os-compass-scroll" aria-hidden={!isPlatformHome} />

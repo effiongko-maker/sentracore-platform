@@ -13,6 +13,7 @@ import {
   buildAttentionModel,
   countLegacyCriticalIncidents,
 } from "@/modules/workspace/attention";
+import { buildOperationalPictureMetrics } from "@/modules/workspace/operationalPicture";
 import type {
   WorkspaceActivityItem,
   WorkspaceScheduleItem,
@@ -202,7 +203,9 @@ function buildPulse(
   incidents: Incident[] | null,
   maintenance: Maintenance[] | null,
   workOrders: WorkOrder[] | null,
+  approvals: Approval[] | null,
   activity: WorkspaceActivityItem[],
+  asOf: string,
   /** Exact register count from filtered getAll total; null when unavailable. */
   criticalWorkCount: number | null
 ): OrganisationalPulse {
@@ -228,6 +231,13 @@ function buildPulse(
     legacyOpenIncidents,
     legacyCriticalIncidents,
     recentActivity: activity.length,
+    picture: buildOperationalPictureMetrics({
+      asOf,
+      criticalWork,
+      maintenance,
+      workOrders,
+      approvals,
+    }),
   };
 }
 
@@ -577,7 +587,9 @@ export function composeWorkspaceSnapshot(
     domains.incidents ? incidents : null,
     domains.maintenance ? maintenance : null,
     domains.workOrders ? workOrders : null,
+    lists.approvals.ok ? approvals : null,
     activity,
+    asOf,
     criticalWorkCount
   );
   const attentionBase = buildAttentionModel({

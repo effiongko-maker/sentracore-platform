@@ -154,10 +154,10 @@ export const OPERATING_LAYERS: OperatingLayer[] = [
         description: "Manage what needs attention",
       }),
       fm({
-        label: "Work",
+        label: "Work In Progress",
         href: "/work",
         icon: Wrench,
-        title: "Work",
+        title: "Work In Progress",
         description: "What we are doing about Issues",
       }),
       fm({
@@ -165,7 +165,7 @@ export const OPERATING_LAYERS: OperatingLayer[] = [
         href: "/work-orders",
         icon: ClipboardList,
         title: "Work Orders",
-        description: "Work moving through the organisation",
+        description: "Plan, assign, and track Work Orders and Job Orders",
       }),
       fm({
         label: "Approvals",

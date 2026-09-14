@@ -1,10 +1,17 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowRight, ClipboardPen, Leaf, Settings2, Users } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart3,
+  ClipboardPen,
+  Settings2,
+  Target,
+  Users,
+} from "lucide-react";
 import { SentraCoreLogo } from "@/components/brand";
 
-const LOGIN_HERO_SRC = "/auth/login-hero.jpg";
+const LOGIN_HERO_SRC = "/auth/sentracore-operations-hero.jpg";
 
 /**
  * Split-screen login composition matching the approved login reference.
@@ -28,16 +35,17 @@ export function LoginPageShell({ children }: { children: ReactNode }) {
             <SentraCoreLogo size={40} priority alt="" />
             <div>
               <p className="login-brand-wordmark">SentraCore</p>
-              <p className="login-brand-tagline">
-                Facility management simplified
-              </p>
+              <p className="login-brand-tagline">Operations, connected.</p>
             </div>
           </div>
 
           <div className="login-brand-mid">
-            <h1 className="login-brand-headline">Spaces that work harder</h1>
+            <h1 className="login-brand-headline">
+              Bring your operations into focus.
+            </h1>
             <p className="login-brand-lede">
-              People. Assets. Services. All in one place.
+              SentraCore connects people, systems and workflows so organisations
+              can operate with greater clarity.
             </p>
           </div>
 
@@ -47,31 +55,39 @@ export function LoginPageShell({ children }: { children: ReactNode }) {
                 <span className="login-brand-pillar-icon">
                   <Users className="h-4 w-4" strokeWidth={1.75} />
                 </span>
-                <p className="login-brand-pillar-label">People support</p>
+                <p className="login-brand-pillar-label">People</p>
+                <p className="login-brand-pillar-sublabel">Coordinate</p>
               </div>
               <div className="login-brand-pillar">
                 <span className="login-brand-pillar-icon">
                   <Settings2 className="h-4 w-4" strokeWidth={1.75} />
                 </span>
-                <p className="login-brand-pillar-label">Assets perform</p>
+                <p className="login-brand-pillar-label">Operations</p>
+                <p className="login-brand-pillar-sublabel">Execute</p>
               </div>
               <div className="login-brand-pillar">
                 <span className="login-brand-pillar-icon">
-                  <Leaf className="h-4 w-4" strokeWidth={1.75} />
+                  <BarChart3 className="h-4 w-4" strokeWidth={1.75} />
                 </span>
-                <p className="login-brand-pillar-label">Spaces thrive</p>
+                <p className="login-brand-pillar-label">Intelligence</p>
+                <p className="login-brand-pillar-sublabel">Understand</p>
+              </div>
+              <div className="login-brand-pillar">
+                <span className="login-brand-pillar-icon">
+                  <Target className="h-4 w-4" strokeWidth={1.75} />
+                </span>
+                <p className="login-brand-pillar-label">Impact</p>
+                <p className="login-brand-pillar-sublabel">Improve</p>
               </div>
             </div>
 
             <div className="login-brand-foot">
-              <p className="login-brand-foot-line">Stronger operations</p>
-              <p className="login-brand-foot-line">Brighter environments</p>
+              <p className="login-brand-foot-line">
+                Clarity for better operations.
+              </p>
             </div>
           </div>
         </div>
-        <p className="login-brand-spine" aria-hidden>
-          People Spaces Operations Impact
-        </p>
       </aside>
 
       <main className="login-panel">
@@ -84,9 +100,7 @@ export function LoginPageShell({ children }: { children: ReactNode }) {
             <SentraCoreLogo size={36} priority alt="" />
             <div>
               <p className="login-mobile-wordmark">SentraCore</p>
-              <p className="login-mobile-tagline">
-                Facility management simplified
-              </p>
+              <p className="login-mobile-tagline">Operations, connected.</p>
             </div>
           </div>
 

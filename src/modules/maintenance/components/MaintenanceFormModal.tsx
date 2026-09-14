@@ -14,6 +14,10 @@ import { FacilityService } from "@/services/facilities/FacilityService";
 import { AssetService } from "@/services/assets/AssetService";
 import { UserService } from "@/services/users/UserService";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
+import {
+  facilityDisplayName,
+  resolveScopedFacilityId,
+} from "@/lib/platform/scopedFacility";
 import type { Facility } from "@/modules/facilities/types";
 import type { Asset } from "@/modules/assets/types";
 import type { User } from "@/modules/users/types";
@@ -121,6 +125,19 @@ export function MaintenanceFormModal({
       cancelled = true;
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!open || facilities.length === 0) return;
+    setForm((current) => {
+      if (current.facilityId.trim()) return current;
+      const nextId = resolveScopedFacilityId(
+        facilities,
+        maintenance?.facilityId
+      );
+      if (!nextId || current.facilityId === nextId) return current;
+      return { ...current, facilityId: nextId };
+    });
+  }, [open, facilities, maintenance?.facilityId]);
 
   const facilityName = facilities.find((f) => f.id === form.facilityId)?.name;
   const filteredAssets = form.facilityId
@@ -631,25 +648,15 @@ export function MaintenanceFormModal({
         <FormField
           label="Facility"
           htmlFor="mnt-facility"
-          required
           error={errors.facilityId}
         >
-          <select
+          <input
             id="mnt-facility"
-            className={selectClassName}
-            value={form.facilityId}
-            onChange={(event) => {
-              updateField("facilityId", event.target.value);
-              updateField("assetId", "");
-            }}
-          >
-            <option value="">Select facility</option>
-            {facilities.map((facility) => (
-              <option key={facility.id} value={facility.id}>
-                {facility.name}
-              </option>
-            ))}
-          </select>
+            className={inputClassName}
+            value={facilityDisplayName(facilities, form.facilityId)}
+            readOnly
+            aria-readonly="true"
+          />
         </FormField>
 
         <FormField label="Asset" htmlFor="mnt-asset">

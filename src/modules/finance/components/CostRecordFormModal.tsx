@@ -12,6 +12,7 @@ import { Modal } from "@/components/modals/Modal";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { useFacilityOptions } from "@/hooks/useFacilityOptions";
+import { resolveScopedFacilityId } from "@/lib/platform/scopedFacility";
 import {
   COST_CATEGORIES,
   COST_CATEGORY_LABELS,
@@ -28,6 +29,10 @@ import {
 import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 import { UserService } from "@/services/users/UserService";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
+import {
+  resolveWorkInstructionKind,
+  WORK_INSTRUCTION_KIND_LABELS,
+} from "@/modules/work-orders/instructionKind";
 import { COST_REIMBURSABILITY_LABELS } from "../constants";
 import { MonetaryInput } from "./MonetaryInput";
 import { formatFinancialAmount } from "../utils/formatFinancialAmount";
@@ -156,18 +161,19 @@ export function CostRecordFormModal({
   >([]);
   const [workLoading, setWorkLoading] = useState(false);
   const [workOrderRows, setWorkOrderRows] = useState<
-    Array<{ id: string; title: string; facilityId: string }>
+    Array<{
+      id: string;
+      title: string;
+      facilityId: string;
+      estimatedCost?: number;
+    }>
   >([]);
   const [workOrderLoading, setWorkOrderLoading] = useState(false);
 
   /** NCC Annex deployment scope — same preferred facility as Submit Request. */
   const scopedFacilityId = useMemo(() => {
     if (initialValues?.facilityId?.trim()) return initialValues.facilityId.trim();
-    return (
-      facilities.find((facility) => facility.id === "FAC-0001")?.id ??
-      facilities[0]?.id ??
-      ""
-    );
+    return resolveScopedFacilityId(facilities);
   }, [facilities, initialValues?.facilityId]);
 
   useEffect(() => {
@@ -261,6 +267,7 @@ export function CostRecordFormModal({
             id: row.id,
             title: row.title,
             facilityId: row.facilityId,
+            estimatedCost: row.estimatedCost,
           }))
         );
       })
@@ -288,11 +295,18 @@ export function CostRecordFormModal({
 
   const workOrderOptions = useMemo(
     () =>
-      workOrderRows.map((row) => ({
-        value: row.id,
-        label: `${row.id} · ${row.title}`,
-        keywords: [row.facilityId],
-      })),
+      workOrderRows.map((row) => {
+        const kind = resolveWorkInstructionKind(row);
+        return {
+          value: row.id,
+          label: `${row.id} · ${WORK_INSTRUCTION_KIND_LABELS[kind]} · ${row.title}`,
+          keywords: [
+            row.facilityId,
+            WORK_INSTRUCTION_KIND_LABELS[kind],
+            kind,
+          ],
+        };
+      }),
     [workOrderRows]
   );
 
@@ -531,9 +545,9 @@ export function CostRecordFormModal({
           </FormField>
 
           <FormField
-            label="Can we claim this back?"
+            label="Cost category (reimbursement)"
             htmlFor="cost-reimbursability"
-            hint="Leave as Unknown if you are not sure yet."
+            hint="Independent of Order Type. A Work Order or Job Order may be NCC Reimbursable or Non-Reimbursable. Leave as Unknown if you are not sure yet."
             className="sm:col-span-2"
           >
             <select
@@ -683,7 +697,7 @@ export function CostRecordFormModal({
                 >
                   <option value="none">None</option>
                   <option value="work">Work</option>
-                  <option value="work_order">Work Order</option>
+                  <option value="work_order">Work / Job Order</option>
                 </select>
               </FormField>
 
@@ -711,19 +725,20 @@ export function CostRecordFormModal({
 
               {form.relatedLink === "work_order" ? (
                 <FormField
-                  label="Work Order"
+                  label="Work / Job Order"
                   htmlFor="cost-work-order-id"
                   error={errors.workOrderId}
+                  hint="Order Type (Work Order vs Job Order) is determined by the linked record’s estimated cost only. Reimbursability above is independent. Actual cost does not change Order Type."
                   className="sm:col-span-2"
                 >
                   <SearchableSelect
                     id="cost-work-order-id"
-                    aria-label="Work Order"
+                    aria-label="Work / Job Order"
                     value={form.workOrderId}
                     onChange={(value) => updateField("workOrderId", value)}
                     options={workOrderOptions}
                     allowEmpty
-                    emptyOptionLabel="Select work order"
+                    emptyOptionLabel="Select work or job order"
                     searchPlaceholder="Search by reference or title…"
                     loading={workOrderLoading}
                     disabled={saving}

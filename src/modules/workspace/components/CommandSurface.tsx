@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   ArrowRight,
   Banknote,
-  Building2,
   ChevronRight,
   ClipboardCheck,
   ClipboardList,
@@ -37,7 +36,7 @@ import { signalHomeFinanceSettled } from "../utils/homeWorkspaceReady";
 const PRIMARY_ACTION_IDS = [
   "log-issue",
   "create-work-order",
-  "manage-facilities",
+  "review-approvals",
 ] as const;
 
 const ACTION_VISUAL: Record<
@@ -46,7 +45,7 @@ const ACTION_VISUAL: Record<
 > = {
   "log-issue": { icon: Plus, tone: "blue" },
   "create-work-order": { icon: ClipboardList, tone: "amber" },
-  "manage-facilities": { icon: Building2, tone: "violet" },
+  "review-approvals": { icon: ClipboardCheck, tone: "violet" },
 };
 
 /** View-only oversight destinations for Executive Home (no Users). */
@@ -502,54 +501,53 @@ function RequiresAttention({
 }
 
 function OperationalPicture({ pulse }: { pulse: OrganisationalPulse }) {
+  const picture = pulse.picture;
   const rows = [
     {
-      value: pulse.criticalWork,
-      label: "Critical work",
+      value: picture.critical,
+      label: "Critical",
       detail:
-        pulse.criticalWork == null
+        picture.critical == null
           ? "Temporarily unavailable"
-          : pulse.criticalWork > 0
-            ? "Require immediate intervention"
-            : "None requiring intervention",
+          : "Requires immediate intervention",
       href: "/work",
       tone: "critical" as const,
       icon: AlertTriangle,
     },
     {
-      value: pulse.openWork,
-      label: "Open work",
+      value: picture.inProgress,
+      label: "In Progress",
       detail:
-        pulse.openWork == null
+        picture.inProgress == null
           ? "Temporarily unavailable"
-          : "Active work in operational flow",
+          : "Currently being executed",
       href: "/work",
       tone: "blue" as const,
       icon: Wrench,
     },
     {
-      value: pulse.openWorkOrders,
-      label: "Work orders",
+      value: picture.awaitingAction,
+      label: "Awaiting Action",
       detail:
-        pulse.openWorkOrders == null
+        picture.awaitingAction == null
           ? "Temporarily unavailable"
-          : "Assigned and in progress",
-      href: "/work-orders",
-      tone: "green" as const,
+          : "Waiting on action or decision",
+      href: "/approvals",
+      tone: "amber" as const,
+      icon: ClipboardCheck,
+    },
+    {
+      value: picture.overdue,
+      label: "Overdue",
+      detail:
+        picture.overdue == null
+          ? "Temporarily unavailable"
+          : "Past expected completion",
+      href: "/work",
+      tone: "amber" as const,
       icon: ClipboardList,
     },
   ];
-
-  if ((pulse.legacyOpenIncidents ?? 0) > 0) {
-    rows.push({
-      value: pulse.legacyOpenIncidents,
-      label: "Legacy incidents",
-      detail: "Historical records — compatibility only",
-      href: "/incidents",
-      tone: "blue" as const,
-      icon: ClipboardList,
-    });
-  }
 
   return (
     <section
@@ -560,7 +558,7 @@ function OperationalPicture({ pulse }: { pulse: OrganisationalPulse }) {
         Operational picture
       </h2>
       <p className="sc-fm-panel-lede">
-        A snapshot of your operational landscape
+        A snapshot of operational state right now
       </p>
 
       <div className="sc-fm-picture-list" role="list">
@@ -603,7 +601,7 @@ function NextActions({ actions }: { actions: WorkspaceQuickAction[] }) {
   const visible = items.filter((action) => {
     if (loading || !access) return false;
     if (action.id === "log-issue") return can("ops.create");
-    // Browse WO / facilities — view only
+    // Browse WO / Approvals — view only
     return can("ops.view");
   });
 

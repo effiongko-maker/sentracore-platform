@@ -17,6 +17,7 @@ import { useToast } from "@/components/ui/Toast";
 import { ProtectedActionDialog } from "@/components/security/ProtectedActionDialog";
 import { useFacilityOptions } from "@/hooks/useFacilityOptions";
 import { useOperatingAccess } from "@/hooks/useOperatingAccess";
+import { facilityDisplayName } from "@/lib/platform/scopedFacility";
 import type { ProtectedMutationProof } from "@/lib/access/protectedMutationProof";
 import {
   COST_CATEGORIES,
@@ -828,29 +829,16 @@ export function CostDetailPage({ costId }: { costId: string }) {
             <FormField
               label="Facility"
               htmlFor="cost-edit-facility"
-              required
               error={errors.facilityId}
             >
-              <select
+              <input
                 id="cost-edit-facility"
-                className={selectClassName}
-                value={form.facilityId}
-                disabled={saving || facilitiesLoading}
-                onChange={(event) =>
-                  updateField("facilityId", event.target.value)
-                }
-              >
-                <option value="">
-                  {facilitiesLoading
-                    ? "Loading facilities…"
-                    : "Select facility"}
-                </option>
-                {facilities.map((facility) => (
-                  <option key={facility.id} value={facility.id}>
-                    {facility.name}
-                  </option>
-                ))}
-              </select>
+                className={inputClassName}
+                value={facilityDisplayName(facilities, form.facilityId)}
+                readOnly
+                aria-readonly="true"
+                disabled={saving}
+              />
             </FormField>
 
             <FormField

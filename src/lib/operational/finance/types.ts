@@ -87,7 +87,7 @@ export type CostRecord = {
   /** Work backing store id (Maintenance / MNT-* in current architecture). */
   workId?: string;
   workOrderId?: string;
-  /** Reserved — Job Order is not yet implemented. */
+  /** Reserved link field — Job Order uses the work-order register (value-classified), not a separate entity id. */
   jobOrderId?: string;
 
   description: string;

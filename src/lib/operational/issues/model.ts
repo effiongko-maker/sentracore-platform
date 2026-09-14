@@ -51,21 +51,23 @@ export const ISSUE_TREATMENT_IMPLEMENTATIONS = {
 
 /**
  * Execution implementations.
- * Work Order = formal scoped/authorised execution (optional).
- * Job Order = future — not implemented.
+ * Work Order / Job Order = operational instructions (Order Type).
+ * Both use the existing work-order register; Job Order is value-classified (≥ ₦1m),
+ * not a separate persistence product.
  */
 export const ISSUE_EXECUTION_IMPLEMENTATIONS = {
   work_order: {
     kind: "work_order" as const,
     implemented: true,
     isTreatment: false,
-    note: "Work Order is EXECUTION, not Work/Treatment.",
+    note: "Work Order is EXECUTION (verbal, below ₦1m), not Work/Treatment.",
   },
   job_order: {
     kind: "job_order" as const,
+    /** No separate JO entity — classified on work-order records by value. */
     implemented: false,
     isTreatment: false,
-    note: "Job Order remains unimplemented.",
+    note: "Job Order is EXECUTION (written/formal, ≥ ₦1m), classified on the work-order register.",
   },
 } as const;
 

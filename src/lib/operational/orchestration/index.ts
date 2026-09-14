@@ -559,6 +559,7 @@ export async function orchestrateTriageIncident(options: {
               `Work order: ${current.title}`.slice(0, 200),
             description: current.description,
             type: "corrective",
+            orderType: "work_order",
             source: "incident",
             facilityId: current.facilityId,
             assetId: current.assetId,

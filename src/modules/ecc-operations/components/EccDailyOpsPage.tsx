@@ -245,6 +245,7 @@ export function EccDailyOpsPage() {
   const [rows, setRows] = useState<EccDailyOpsRecord[]>([]);
   const [issues, setIssues] = useState<EccIssue[]>([]);
   const [requests, setRequests] = useState<EccRequest[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panel, setPanel] = useState<DailyOpsPanel>("register");
   const [form, setForm] = useState(emptyForm);
@@ -307,8 +308,14 @@ export function EccDailyOpsPage() {
   }
 
   useEffect(() => {
-    void reload().catch((err: unknown) => {
-      setError(err instanceof Error ? err.message : "Unable to load records.");
+    queueMicrotask(() => {
+      void reload()
+        .catch((err: unknown) => {
+          setError(
+            err instanceof Error ? err.message : "Unable to load records."
+          );
+        })
+        .finally(() => setLoading(false));
     });
   }, []);
 
@@ -382,8 +389,43 @@ export function EccDailyOpsPage() {
       setError("Submitted by is required.");
       return;
     }
+    if (form.callStatus !== "normal" && !form.callNotes.trim()) {
+      setError("Call notes are required when call status is not normal.");
+      return;
+    }
+    if (
+      form.technicalStatus !== "normal" &&
+      !form.technicalIncidents.trim() &&
+      !form.technicalObservations.trim()
+    ) {
+      setError(
+        "Technical incidents or observations are required when technical status is not normal."
+      );
+      return;
+    }
+
+    // Morning/evening: one report per centre per date. Ad hoc is unconstrained.
+    if (form.period === "morning" || form.period === "evening") {
+      const existingLocal = rows.find(
+        (row) =>
+          row.period === form.period &&
+          row.reportingDate === form.reportingDate
+      );
+      if (existingLocal) {
+        setShowForm(false);
+        openDetail(existingLocal.id);
+        setError(
+          form.period === "morning"
+            ? "The morning report for this centre and date has already been submitted."
+            : "The evening report for this centre and date has already been submitted."
+        );
+        return;
+      }
+    }
+
     setSaving(true);
     setError(null);
+    const priorIds = new Set(rows.map((row) => row.id));
     try {
       const additionalMetrics: Record<string, string> = {};
       if (form.callMetricKey.trim() && form.callMetricValue.trim()) {
@@ -435,8 +477,23 @@ export function EccDailyOpsPage() {
           noIssuesToReport: form.technicalStatus === "normal",
         },
       });
+      const reusedExisting = priorIds.has(created.id);
+      if (reusedExisting) {
+        setShowForm(false);
+        await reload();
+        openDetail(created.id);
+        setError(
+          created.period === "morning"
+            ? "The morning report for this centre and date has already been submitted."
+            : created.period === "evening"
+              ? "The evening report for this centre and date has already been submitted."
+              : "A report for this centre and date has already been submitted."
+        );
+        return;
+      }
       setForm({ ...emptyForm, reportingDate: todayDate() });
       setShowForm(false);
+      setError(null);
       await reload();
       openDetail(created.id);
     } catch (err: unknown) {
@@ -545,6 +602,8 @@ export function EccDailyOpsPage() {
       </header>
 
       {error ? <p className="ecc-empty">{error}</p> : null}
+
+      {loading ? <p className="ecc-empty">Loading daily operations…</p> : null}
 
       {raiseNotice ? (
         <div className="ecc-raise-success" role="status">
@@ -974,7 +1033,7 @@ export function EccDailyOpsPage() {
 
       {panel === "register" ? (
         <>
-          {rows.length === 0 ? (
+          {loading ? null : rows.length === 0 ? (
             showForm ? null : (
             <div className="ecc-reg-empty">
               <p className="ecc-reg-empty-title">No daily operations records yet</p>

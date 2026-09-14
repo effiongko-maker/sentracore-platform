@@ -26,6 +26,7 @@ import {
   WORK_ORDER_PRIORITIES,
   WORK_ORDER_SORT_OPTIONS,
   WORK_ORDER_STATUSES,
+  type WorkOrderOrderTypeScope,
 } from "../constants";
 import { labelize } from "../utils";
 import type {
@@ -38,6 +39,7 @@ import type {
 interface WorkOrdersToolbarProps {
   search: string;
   onSearchChange: (value: string) => void;
+  orderTypeScope: WorkOrderOrderTypeScope;
   status: WorkOrderStatus | "all";
   onStatusChange: (value: WorkOrderStatus | "all") => void;
   priority: WorkOrderPriority | "all";
@@ -57,7 +59,8 @@ interface WorkOrdersToolbarProps {
   total: number;
   loading?: boolean;
   onClearAll: () => void;
-  onCreate: () => void;
+  onCreate?: () => void;
+  createLabel?: string;
   canCreate?: boolean;
 }
 
@@ -84,6 +87,7 @@ function countActiveFilters(filters: {
 export function WorkOrdersToolbar({
   search,
   onSearchChange,
+  orderTypeScope,
   status,
   onStatusChange,
   priority,
@@ -104,6 +108,7 @@ export function WorkOrdersToolbar({
   loading,
   onClearAll,
   onCreate,
+  createLabel = "New work order",
   canCreate = true,
 }: WorkOrdersToolbarProps) {
   const [facilities, setFacilities] = useState<
@@ -234,7 +239,7 @@ export function WorkOrdersToolbar({
     maintenanceId,
   });
   const hasSearch = Boolean(search.trim());
-  const filtered = activeFilterCount > 0 || hasSearch;
+  const filtered = activeFilterCount > 0 || hasSearch || orderTypeScope !== "all";
 
   const chips: ActiveFilterChip[] = useMemo(() => {
     const next: ActiveFilterChip[] = [];
@@ -346,6 +351,16 @@ export function WorkOrdersToolbar({
             (facilityName != null && asset.facility === facilityName)
         );
 
+  const resultNoun =
+    orderTypeScope === "job_order"
+      ? ({ noun: "job order", nounPlural: "job orders" } as const)
+      : orderTypeScope === "work_order"
+        ? ({ noun: "work order", nounPlural: "work orders" } as const)
+        : ({
+            noun: "work instruction",
+            nounPlural: "work instructions",
+          } as const);
+
   return (
     <div className="flex flex-col gap-3">
       <OperationalListToolbar
@@ -362,7 +377,7 @@ export function WorkOrdersToolbar({
         sortOptions={WORK_ORDER_SORT_OPTIONS}
         onSortChange={(value) => onSortChange(value as WorkOrderSort)}
         leadingActions={
-          canCreate ? (
+          canCreate && onCreate ? (
             <Button
               type="button"
               size="sm"
@@ -370,7 +385,7 @@ export function WorkOrdersToolbar({
               onClick={onCreate}
             >
               <Plus className="h-3.5 w-3.5" aria-hidden />
-              New work order
+              {createLabel}
             </Button>
           ) : undefined
         }
@@ -500,8 +515,8 @@ export function WorkOrdersToolbar({
       {!loading && filtered ? (
         <ResultContext
           text={buildResultContext({
-            noun: "work order",
-            nounPlural: "work orders",
+            noun: resultNoun.noun,
+            nounPlural: resultNoun.nounPlural,
             total,
             filtered,
             pageSize: WORK_ORDERS_PAGE_SIZE,

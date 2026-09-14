@@ -14,6 +14,11 @@ import {
   WORK_ORDER_PRIORITY_VARIANT,
   WORK_ORDER_STATUS_VARIANT,
 } from "../constants";
+import {
+  resolveWorkInstructionKind,
+  WORK_INSTRUCTION_KIND_LABELS,
+  WORK_INSTRUCTION_KIND_SUMMARIES,
+} from "../instructionKind";
 import { displayWorkOrderTitle, labelize } from "../utils";
 import type { WorkOrder } from "../types";
 import { WorkOrderClientApprovalSection } from "./WorkOrderClientApprovalSection";
@@ -47,6 +52,9 @@ export function ViewWorkOrderModal({
   const assigneeName = useUserName(workOrder?.assignedToUserId);
   const reportedByName = useUserName(workOrder?.reportedByUserId);
   const maintenanceTitle = useMaintenanceTitle(workOrder?.maintenanceId);
+  const instructionKind = workOrder
+    ? resolveWorkInstructionKind(workOrder)
+    : "work_order";
 
   if (!workOrder) return null;
 
@@ -84,6 +92,11 @@ export function ViewWorkOrderModal({
         <Badge variant={WORK_ORDER_PRIORITY_VARIANT[workOrder.priority]}>
           {labelize(workOrder.priority)}
         </Badge>
+        <Badge
+          variant={instructionKind === "job_order" ? "warning" : "default"}
+        >
+          {WORK_INSTRUCTION_KIND_LABELS[instructionKind]}
+        </Badge>
         <span className="text-sm text-muted">
           {labelize(workOrder.type)}
           {workOrder.maintenanceType
@@ -93,8 +106,20 @@ export function ViewWorkOrderModal({
       </div>
 
       <div className="mt-5 grid gap-5 sm:grid-cols-2">
-        <Detail label="Work Order ID" value={workOrder.id} />
+        <Detail label="Record ID" value={workOrder.id} />
+        <Detail
+          label="Order type"
+          value={
+            <div className="space-y-1">
+              <p>{WORK_INSTRUCTION_KIND_LABELS[instructionKind]}</p>
+              <p className="text-xs text-muted font-normal normal-case tracking-normal">
+                {WORK_INSTRUCTION_KIND_SUMMARIES[instructionKind]}
+              </p>
+            </div>
+          }
+        />
         <Detail label="Source" value={labelize(workOrder.source)} />
+        <Detail label="Work category" value={labelize(workOrder.type)} />
         <Detail label="Facility" value={facilityName || workOrder.facilityId} />
         <Detail
           label="Asset"

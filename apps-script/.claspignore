@@ -1,6 +1,7 @@
 .clasp.json
 .DS_Store
 
+*.js
 *.sheet.seed.md
 
 deployment/DEPLOYMENT_CHECKLIST.md

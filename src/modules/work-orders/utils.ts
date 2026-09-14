@@ -149,6 +149,7 @@ export function toCreateFormValues(
     title: workOrder ? displayWorkOrderTitle(workOrder) : "",
     description: workOrder?.description ?? "",
     type: workOrder?.type ?? "corrective",
+    orderType: workOrder?.orderType ?? "work_order",
     maintenanceType: workOrder?.maintenanceType,
     source: workOrder?.source ?? "manual",
     categoryId: workOrder?.categoryId ?? "",

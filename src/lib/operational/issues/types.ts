@@ -101,12 +101,17 @@ export type IssueTreatmentRef = {
 
 /**
  * Work Order related to an Issue (formal executable work = EXECUTION).
- * Distinct from Treatment: Issue = what needs attention; WO = formal execution instrument.
+ * Distinct from Treatment: Issue = what needs attention; WO register = execution instrument.
+ * Order Type (Work Order vs Job Order) is the persisted WO orderType (legacy missing → work_order).
  */
 export type IssueWorkOrderRef = {
   id: string;
   status: string;
   title?: string;
+  /** Persisted Order Type when known. */
+  orderType?: "work_order" | "job_order";
+  /** Financial attribute only — does not classify Order Type. */
+  estimatedCost?: number;
   /** Parent maintenance/incident that linked this WO, when known. */
   viaTreatmentId?: string;
   viaTreatmentKind?: Extract<
@@ -117,8 +122,7 @@ export type IssueWorkOrderRef = {
 
 /**
  * Formal executable work under an Issue.
- * work_order = implemented today (Annex approval may apply — OPEN gates).
- * job_order = future EVC/HQ + Procurement path — NOT implemented.
+ * work_order / job_order follow the persisted Work Order Order Type.
  */
 export type IssueExecutionKind = "work_order" | "job_order";
 

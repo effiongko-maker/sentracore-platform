@@ -190,7 +190,7 @@ export function mutationCapabilityForQuickAction(
       return "ops.create";
     case "create-work-order":
       return "ops.view"; // browse WO is view; create gated elsewhere
-    case "manage-facilities":
+    case "review-approvals":
       return "ops.view";
     default:
       return null;

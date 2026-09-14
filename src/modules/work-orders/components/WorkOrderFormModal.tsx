@@ -14,6 +14,10 @@ import { FacilityService } from "@/services/facilities/FacilityService";
 import { AssetService } from "@/services/assets/AssetService";
 import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 import { UserService } from "@/services/users/UserService";
+import {
+  facilityDisplayName,
+  resolveScopedFacilityId,
+} from "@/lib/platform/scopedFacility";
 import type { Facility } from "@/modules/facilities/types";
 import type { Asset } from "@/modules/assets/types";
 import type { Maintenance } from "@/modules/maintenance/types";
@@ -26,6 +30,13 @@ import {
   WORK_ORDER_STATUSES,
   WORK_ORDER_TYPES,
 } from "../constants";
+import {
+  validateOrderTypeSelection,
+  WORK_INSTRUCTION_KIND_LABELS,
+  WORK_INSTRUCTION_KIND_OPTIONS,
+  WORK_INSTRUCTION_KIND_SUMMARIES,
+  type WorkInstructionKind,
+} from "../instructionKind";
 import { createWorkOrder } from "../actions/createWorkOrder";
 import { updateWorkOrderOperational } from "@/lib/operational/lifecycle/updateActions";
 import {
@@ -43,12 +54,18 @@ import type {
   CreateWorkOrderInput,
   WorkOrder,
   WorkOrderMaintenanceType,
+  WorkOrderOrderType,
   WorkOrderPriority,
   WorkOrderSource,
   WorkOrderStatus,
   WorkOrderType,
 } from "../types";
 import { WorkOrderClientApprovalSection } from "./WorkOrderClientApprovalSection";
+
+/** Form state allows empty Order Type until the user selects one on create. */
+type WorkOrderFormValues = Omit<CreateWorkOrderInput, "orderType"> & {
+  orderType: WorkOrderOrderType | "";
+};
 
 const TERMINAL_WORK_ORDER_STATUSES: WorkOrderStatus[] = [
   "completed",
@@ -72,6 +89,8 @@ interface WorkOrderFormModalProps {
   open: boolean;
   mode: "create" | "edit";
   workOrder?: WorkOrder | null;
+  /** Create-only: preselect Order Type from register scope tab. */
+  initialOrderType?: WorkInstructionKind | null;
   onClose: () => void;
   onSaved?: () => void;
 }
@@ -80,13 +99,14 @@ export function WorkOrderFormModal({
   open,
   mode,
   workOrder,
+  initialOrderType = null,
   onClose,
   onSaved,
 }: WorkOrderFormModalProps) {
   const { toast } = useToast();
-  const [form, setForm] = useState<CreateWorkOrderInput>(toCreateFormValues());
+  const [form, setForm] = useState<WorkOrderFormValues>(toCreateFormValues());
   const [errors, setErrors] = useState<
-    Partial<Record<keyof CreateWorkOrderInput, string>>
+    Partial<Record<keyof WorkOrderFormValues, string>>
   >({});
   const [linkedApprovalId, setLinkedApprovalId] = useState<string | undefined>(
     workOrder?.approvalId
@@ -100,10 +120,19 @@ export function WorkOrderFormModal({
 
   useEffect(() => {
     if (!open) return;
-    setForm(toCreateFormValues(mode === "edit" ? workOrder : null));
+    const nextForm: WorkOrderFormValues = toCreateFormValues(
+      mode === "edit" ? workOrder : null
+    );
+    if (mode === "create" && initialOrderType) {
+      nextForm.orderType = initialOrderType;
+    } else if (mode === "create") {
+      // Force an explicit pick when create is not opened from a scoped tab.
+      nextForm.orderType = "";
+    }
+    setForm(nextForm);
     setLinkedApprovalId(workOrder?.approvalId);
     setErrors({});
-  }, [open, mode, workOrder]);
+  }, [open, mode, workOrder, initialOrderType]);
 
   useEffect(() => {
     if (!open) return;
@@ -137,6 +166,19 @@ export function WorkOrderFormModal({
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!open || facilities.length === 0) return;
+    setForm((current) => {
+      if (current.facilityId.trim()) return current;
+      const nextId = resolveScopedFacilityId(
+        facilities,
+        workOrder?.facilityId
+      );
+      if (!nextId || current.facilityId === nextId) return current;
+      return { ...current, facilityId: nextId };
+    });
+  }, [open, facilities, workOrder?.facilityId]);
+
   const assetsForFacility = form.facilityId
     ? assets.filter((asset) => asset.facility === form.facilityId || !form.facilityId)
     : assets;
@@ -150,28 +192,6 @@ export function WorkOrderFormModal({
           (facilityName != null && asset.facility === facilityName)
       )
     : assets;
-
-  /** Keep current edit IDs selectable even if truncated catalog pages omit them. */
-  const facilityOptions = useMemo(() => {
-    if (!workOrder?.facilityId) return facilities;
-    if (facilities.some((row) => row.id === workOrder.facilityId)) {
-      return facilities;
-    }
-    return [
-      {
-        id: workOrder.facilityId,
-        name: workOrder.facilityId,
-        code: workOrder.facilityId,
-        location: "",
-        type: "office" as const,
-        manager: "",
-        status: "active" as const,
-        createdAt: "",
-        updatedAt: "",
-      },
-      ...facilities,
-    ];
-  }, [facilities, workOrder?.facilityId]);
 
   const assetOptions = useMemo(() => {
     const base = filteredAssets.length ? filteredAssets : assetsForFacility;
@@ -238,18 +258,32 @@ export function WorkOrderFormModal({
     });
   }, [maintenanceRows, facilities]);
 
-  function updateField<K extends keyof CreateWorkOrderInput>(
+  function updateField<K extends keyof WorkOrderFormValues>(
     key: K,
-    value: CreateWorkOrderInput[K]
+    value: WorkOrderFormValues[K]
   ) {
     setForm((current) => ({ ...current, [key]: value }));
     setErrors((current) => ({ ...current, [key]: undefined }));
   }
 
+  function updateEstimatedCost(value: number | undefined) {
+    updateField("estimatedCost", value);
+  }
+
+  function updateOrderType(value: WorkInstructionKind | "") {
+    updateField("orderType", value);
+  }
+
   function validate() {
-    const next: Partial<Record<keyof CreateWorkOrderInput, string>> = {};
+    const next: Partial<Record<keyof WorkOrderFormValues, string>> = {};
     if (!form.title.trim()) next.title = "Title is required";
     if (!form.facilityId.trim()) next.facilityId = "Facility is required";
+
+    const orderTypeCheck = validateOrderTypeSelection(form.orderType);
+    if (!orderTypeCheck.ok) {
+      next.orderType = orderTypeCheck.message;
+    }
+
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -310,6 +344,9 @@ export function WorkOrderFormModal({
     event.preventDefault();
     if (!validate()) return;
 
+    const orderTypeCheck = validateOrderTypeSelection(form.orderType);
+    if (!orderTypeCheck.ok) return;
+
     setSaving(true);
     const submitStarted = performance.now();
     const mark = (label: string, since = submitStarted) => {
@@ -322,6 +359,7 @@ export function WorkOrderFormModal({
       const payload: CreateWorkOrderInput = {
         ...form,
         title: form.title.trim(),
+        orderType: orderTypeCheck.kind,
         description: optionalString(form.description),
         categoryId: optionalString(form.categoryId),
         workInstructions: optionalString(form.workInstructions),
@@ -411,6 +449,8 @@ export function WorkOrderFormModal({
   }
 
   const isEdit = mode === "edit";
+  const createTitle =
+    initialOrderType === "job_order" ? "New job order" : "New work order";
   const showResolutionDetails =
     isTerminalStatus(form.status) ||
     Boolean(
@@ -426,7 +466,7 @@ export function WorkOrderFormModal({
       onClose={() => {
         if (!saving) onClose();
       }}
-      title={isEdit ? "Treat work order" : "New work order"}
+      title={isEdit ? "Treat work order" : createTitle}
       description={
         isEdit
           ? "Update assignment, schedule, source maintenance, and resolution."
@@ -465,7 +505,12 @@ export function WorkOrderFormModal({
           />
         </FormField>
 
-        <FormField label="Type" htmlFor="wo-type" required>
+        <FormField
+          label="Work category"
+          htmlFor="wo-type"
+          required
+          hint="Nature of the work (corrective, preventive, etc.) — not Order Type."
+        >
           <select
             id="wo-type"
             className={selectClassName}
@@ -525,25 +570,15 @@ export function WorkOrderFormModal({
         <FormField
           label="Facility"
           htmlFor="wo-facility"
-          required
           error={errors.facilityId}
         >
-          <select
+          <input
             id="wo-facility"
-            className={selectClassName}
-            value={form.facilityId}
-            onChange={(event) => {
-              updateField("facilityId", event.target.value);
-              updateField("assetId", "");
-            }}
-          >
-            <option value="">Select facility</option>
-            {facilityOptions.map((facility) => (
-              <option key={facility.id} value={facility.id}>
-                {facility.name}
-              </option>
-            ))}
-          </select>
+            className={inputClassName}
+            value={facilityDisplayName(facilities, form.facilityId)}
+            readOnly
+            aria-readonly="true"
+          />
         </FormField>
 
         <FormField label="Asset" htmlFor="wo-asset">
@@ -664,7 +699,12 @@ export function WorkOrderFormModal({
           />
         </FormField>
 
-        <FormField label="Estimated cost" htmlFor="wo-est-cost">
+        <FormField
+          label="Estimated cost (₦)"
+          htmlFor="wo-est-cost"
+          error={errors.estimatedCost}
+          hint="Financial estimate only. Does not determine Order Type."
+        >
           <input
             id="wo-est-cost"
             type="number"
@@ -673,14 +713,49 @@ export function WorkOrderFormModal({
             className={inputClassName}
             value={form.estimatedCost ?? ""}
             onChange={(event) =>
-              updateField(
-                "estimatedCost",
+              updateEstimatedCost(
                 event.target.value === ""
                   ? undefined
                   : Number(event.target.value)
               )
             }
           />
+        </FormField>
+
+        <FormField
+          label="Order type"
+          htmlFor="wo-order-type"
+          required
+          error={errors.orderType}
+          className="sm:col-span-2"
+          hint={
+            form.orderType === "work_order" || form.orderType === "job_order"
+              ? WORK_INSTRUCTION_KIND_SUMMARIES[form.orderType]
+              : "Select Work Order or Job Order. Independent of estimated cost."
+          }
+        >
+          <select
+            id="wo-order-type"
+            className={selectClassName}
+            value={
+              form.orderType === "work_order" || form.orderType === "job_order"
+                ? form.orderType
+                : ""
+            }
+            onChange={(event) =>
+              updateOrderType(
+                event.target.value as WorkInstructionKind | ""
+              )
+            }
+            aria-invalid={Boolean(errors.orderType)}
+          >
+            <option value="">Select Order Type…</option>
+            {WORK_INSTRUCTION_KIND_OPTIONS.map((value) => (
+              <option key={value} value={value}>
+                {WORK_INSTRUCTION_KIND_LABELS[value]}
+              </option>
+            ))}
+          </select>
         </FormField>
 
         <FormField

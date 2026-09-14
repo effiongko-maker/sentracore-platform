@@ -5,7 +5,10 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   DEFAULT_WORK_ORDER_SORT,
   WORK_ORDERS_PAGE_SIZE,
+  WORK_ORDER_ORDER_TYPE_SCOPE_FETCH_SIZE,
+  type WorkOrderOrderTypeScope,
 } from "../constants";
+import { resolveWorkInstructionKind } from "../instructionKind";
 import { WorkOrderService } from "../services/WorkOrderService";
 import { sortWorkOrders } from "../utils";
 import type {
@@ -21,6 +24,8 @@ export function useWorkOrders() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [orderTypeScope, setOrderTypeScopeState] =
+    useState<WorkOrderOrderTypeScope>("all");
   const [status, setStatusState] = useState<WorkOrderStatus | "all">("all");
   const [priority, setPriorityState] = useState<WorkOrderPriority | "all">(
     "all"
@@ -41,6 +46,11 @@ export function useWorkOrders() {
   const requestId = useRef(0);
   const debouncedSearch = useDebouncedValue(search, 250);
   const previousSearch = useRef(debouncedSearch);
+
+  const setOrderTypeScope = useCallback((value: WorkOrderOrderTypeScope) => {
+    setOrderTypeScopeState(value);
+    setPage(1);
+  }, []);
 
   const setStatus = useCallback((value: WorkOrderStatus | "all") => {
     setStatusState(value);
@@ -84,6 +94,7 @@ export function useWorkOrders() {
 
   const clearAll = useCallback(() => {
     setSearch("");
+    setOrderTypeScopeState("all");
     setStatusState("all");
     setPriorityState("all");
     setFacilityIdState("all");
@@ -110,9 +121,12 @@ export function useWorkOrders() {
       try {
         const t0 =
           typeof performance !== "undefined" ? performance.now() : Date.now();
+        const scoped = orderTypeScope !== "all";
         const result = await WorkOrderService.listWorkOrders({
-          page: nextPage,
-          pageSize: WORK_ORDERS_PAGE_SIZE,
+          page: scoped ? 1 : nextPage,
+          pageSize: scoped
+            ? WORK_ORDER_ORDER_TYPE_SCOPE_FETCH_SIZE
+            : WORK_ORDERS_PAGE_SIZE,
           search: debouncedSearch,
           status,
           priority,
@@ -130,15 +144,37 @@ export function useWorkOrders() {
         console.info("[wo.load.timing] list", {
           elapsedMs,
           page: nextPage,
+          orderTypeScope,
           rows: result.data.length,
           total: result.total,
         });
 
         if (id !== requestId.current) return;
 
-        setWorkOrders(sortWorkOrders(result.data, sort));
-        setTotalPages(result.totalPages);
-        setTotal(result.total);
+        let rows = sortWorkOrders(result.data, sort);
+        if (scoped) {
+          rows = rows.filter(
+            (workOrder) =>
+              resolveWorkInstructionKind(workOrder) === orderTypeScope
+          );
+          const scopedTotal = rows.length;
+          const scopedTotalPages = Math.max(
+            1,
+            Math.ceil(scopedTotal / WORK_ORDERS_PAGE_SIZE)
+          );
+          const safePage = Math.min(nextPage, scopedTotalPages);
+          const start = (safePage - 1) * WORK_ORDERS_PAGE_SIZE;
+          setWorkOrders(rows.slice(start, start + WORK_ORDERS_PAGE_SIZE));
+          setTotal(scopedTotal);
+          setTotalPages(scopedTotalPages);
+          if (safePage !== nextPage) {
+            setPage(safePage);
+          }
+        } else {
+          setWorkOrders(rows);
+          setTotalPages(result.totalPages);
+          setTotal(result.total);
+        }
       } catch (err) {
         if (id !== requestId.current) return;
         setError(
@@ -156,6 +192,7 @@ export function useWorkOrders() {
     [
       page,
       debouncedSearch,
+      orderTypeScope,
       status,
       priority,
       facilityId,
@@ -193,6 +230,8 @@ export function useWorkOrders() {
     error,
     search,
     setSearch,
+    orderTypeScope,
+    setOrderTypeScope,
     status,
     setStatus,
     priority,

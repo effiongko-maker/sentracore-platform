@@ -12,6 +12,10 @@ import { labelizeApprovalStatus } from "@/modules/approvals/utils";
 import type { Approval } from "@/modules/approvals/types";
 import { ApprovalService } from "@/services/approvals/ApprovalService";
 import type { WorkOrder } from "../types";
+import {
+  resolveWorkInstructionKind,
+  WORK_INSTRUCTION_KIND_LABELS,
+} from "../instructionKind";
 
 interface WorkOrderClientApprovalSectionProps {
   workOrder: WorkOrder;
@@ -19,8 +23,8 @@ interface WorkOrderClientApprovalSectionProps {
 }
 
 /**
- * Optional Client Approval on a Work Order.
- * Work Orders may exist with no Approval Request.
+ * Optional Client Approval on a Work Order / Job Order record.
+ * Client APR is independent of Order Type and of reimbursability.
  */
 export function WorkOrderClientApprovalSection({
   workOrder,
@@ -31,6 +35,7 @@ export function WorkOrderClientApprovalSection({
   const [wizardOpen, setWizardOpen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
   const [packageOpen, setPackageOpen] = useState(false);
+  const orderType = resolveWorkInstructionKind(workOrder);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,8 +71,12 @@ export function WorkOrderClientApprovalSection({
             Client Approval
           </h3>
           <p className="mt-1 text-xs text-muted">
-            Optional formal authorisation. This Work Order can proceed without
-            an Approval Request when not required.
+            Optional commercial authorisation (Client/NCC APR). Independent of
+            Order Type ({WORK_INSTRUCTION_KIND_LABELS[orderType]}) and of
+            reimbursability.{" "}
+            {orderType === "job_order"
+              ? "Job Orders also follow the formal written approval / Procurement path after appropriate organisational approval."
+              : "This record can proceed without an Approval Request when not required."}
           </p>
         </div>
         {!approval && !loading ? (

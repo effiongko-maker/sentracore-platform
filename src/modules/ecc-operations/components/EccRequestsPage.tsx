@@ -35,6 +35,7 @@ import {
   EccStatusPill,
   formatEccWhen,
 } from "./eccUi";
+import { EccEntityAuditTrail } from "./EccAuditTrail";
 
 type RequestPanel = "register" | "detail" | "treat";
 
@@ -79,6 +80,7 @@ export function EccRequestsPage() {
   const [actingAs, setActingAs] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panel, setPanel] = useState<RequestPanel>("register");
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -113,9 +115,13 @@ export function EccRequestsPage() {
 
   useEffect(() => {
     setActingAs(readEccActingAs());
-    void reload().catch((err: unknown) => {
-      setError(err instanceof Error ? err.message : "Unable to load requests.");
-    });
+    void reload()
+      .catch((err: unknown) => {
+        setError(
+          err instanceof Error ? err.message : "Unable to load requests."
+        );
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -225,6 +231,14 @@ export function EccRequestsPage() {
     if (!selected || !treat.byName.trim()) return;
     if (!treat.toStatus && !treat.actionNote.trim()) {
       setError("Choose a next step or record an action note.");
+      return;
+    }
+    if (
+      (treat.toStatus === "resolved" || treat.toStatus === "closed") &&
+      !treat.resolutionNotes.trim() &&
+      !selected.resolutionNotes?.trim()
+    ) {
+      setError("Resolution notes are required to resolve or close a request.");
       return;
     }
     setSaving(true);
@@ -459,6 +473,8 @@ export function EccRequestsPage() {
 
       {error ? <p className="ecc-empty">{error}</p> : null}
 
+      {loading ? <p className="ecc-empty">Loading requests…</p> : null}
+
       {panel === "register" ? (
         <>
           {filterBar}
@@ -615,7 +631,7 @@ export function EccRequestsPage() {
             </form>
           ) : null}
 
-          {visible.length === 0 ? (
+          {loading ? null : visible.length === 0 ? (
             <div className="ecc-reg-empty">
               <p className="ecc-reg-empty-title">No requests in this view</p>
               <p className="ecc-reg-empty-copy">
@@ -881,6 +897,11 @@ export function EccRequestsPage() {
                 </li>
               ))}
             </ol>
+            <EccEntityAuditTrail
+              entityType="request"
+              entityId={selected.id}
+              title="Accountability"
+            />
           </div>
         </section>
       ) : null}
@@ -1027,6 +1048,7 @@ export function EccRequestsPage() {
                   <label htmlFor="ecc-req-treat-res">Resolution notes</label>
                   <textarea
                     id="ecc-req-treat-res"
+                    required
                     value={treat.resolutionNotes}
                     onChange={(e) =>
                       setTreat((prev) => ({

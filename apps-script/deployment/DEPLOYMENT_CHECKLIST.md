@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Release: **v0.8.6.17** — Operational Registers write-path deploy + live verify
+Release: **v0.8.6.19** — Work Orders explicit persisted Order Type
 
 Use this checklist with `DEPLOYMENT_PACK.md` open. Someone unfamiliar
 with the project should be able to deploy from these steps alone.
@@ -25,6 +25,7 @@ Copy **every** file listed in `DEPLOYMENT_PACK.md` (full source is embedded ther
 
 Current pack file list:
 
+- [ ] `ROUTER.gs`
 - [ ] `ROUTER.gs`
 - [ ] `ApprovalRepository.gs`
 - [ ] `AssetRepository.gs`
@@ -286,16 +287,16 @@ With `npm run dev` running:
 npm run typecheck
 ```
 
-### Operational API access
+### Work instruction kind
 
 ```bash
-npm run verify-operational-api-access
+node scripts/verify-work-instruction-kind.cjs
 ```
 
-### Operational Registers write path
+### Work orders WIP register
 
 ```bash
-npm run verify-operational-registers-write
+node scripts/verify-work-orders-wip-register.cjs
 ```
 
 Expected checks:

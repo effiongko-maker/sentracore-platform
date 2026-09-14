@@ -3,8 +3,8 @@ import type { CostReimbursability } from "@/lib/operational/finance";
 /** Human labels for reimbursement classification in Finance UI. */
 export const COST_REIMBURSABILITY_LABELS: Record<CostReimbursability, string> = {
   unknown: "Unknown",
-  reimbursable: "Reimbursable",
-  non_reimbursable: "Non-reimbursable",
+  reimbursable: "NCC Reimbursable",
+  non_reimbursable: "Non-Reimbursable",
 };
 
 /**
@@ -36,13 +36,13 @@ export const CLIENT_AUTHORISATION_STAGES = [
   { id: "rejected", label: "Rejected / closed" },
 ] as const;
 
-/** Non-interactive context chips — Job Order is not a product capability. */
+/** Operational cost grouping lenses — independent of Order Type and reimbursability. */
 export const OPERATIONAL_COST_LENSES = [
   { id: "facility", label: "By facility" },
   { id: "department", label: "By department" },
   { id: "category", label: "By cost category" },
   { id: "work", label: "By maintenance / work" },
-  { id: "execution", label: "By work order" },
+  { id: "execution", label: "By work / job order" },
 ] as const;
 
 /** Optional suggestions — not an exhaustive or enforced taxonomy. */

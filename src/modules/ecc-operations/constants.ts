@@ -14,6 +14,9 @@ import type {
   EccSeverity,
   EccShiftCoverageStatus,
   EccStaffingStatus,
+  EccFinanceCategory,
+  EccFinanceTransactionStatus,
+  EccFinanceCommitmentStatus,
 } from "./types";
 
 export const ECC_CENTRE_OVERALL_STATUS_LABELS: Record<
@@ -246,3 +249,43 @@ export const ECC_REPORTING_DIMENSIONS: readonly EccReportingDimension[] = [
     status: "available",
   },
 ];
+
+/** Operational ECC spending categories — extend carefully; not a full CoA. */
+export const ECC_FINANCE_CATEGORIES: readonly EccFinanceCategory[] = [
+  "facilities",
+  "utilities",
+  "connectivity_technical",
+  "staffing_operations",
+  "maintenance",
+  "other",
+] as const;
+
+export const ECC_FINANCE_CATEGORY_LABELS: Record<EccFinanceCategory, string> = {
+  facilities: "Facilities",
+  utilities: "Utilities",
+  connectivity_technical: "Connectivity / Technical",
+  staffing_operations: "Staffing / Operations",
+  maintenance: "Maintenance",
+  other: "Other",
+};
+
+export const ECC_FINANCE_TRANSACTION_STATUS_LABELS: Record<
+  EccFinanceTransactionStatus,
+  string
+> = {
+  recorded: "Recorded",
+  pending: "Pending",
+  settled: "Settled",
+  cancelled: "Cancelled",
+};
+
+export const ECC_FINANCE_COMMITMENT_STATUS_LABELS: Record<
+  EccFinanceCommitmentStatus,
+  string
+> = {
+  pending: "Pending",
+  approved: "Approved",
+  due: "Due",
+  settled: "Settled",
+  cancelled: "Cancelled",
+};

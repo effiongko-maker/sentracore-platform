@@ -28,13 +28,24 @@ export type WorkOrderSource =
 
 export type WorkOrderMaintenanceType = "planned" | "unplanned";
 
-/** Canonical WorkOrder domain model — frozen. Do not modify. */
+/**
+ * Explicit Order Type (Work Order vs Job Order).
+ * Independent of Work Category (`type`) and of estimated/actual cost.
+ */
+export type WorkOrderOrderType = "work_order" | "job_order";
+
+/** Canonical WorkOrder domain model. */
 export interface WorkOrder {
   id: string;
 
   title: string;
   description?: string;
   type: WorkOrderType;
+  /**
+   * Persisted Order Type. Missing on legacy records → resolve as work_order.
+   * Required on new create/update from the client.
+   */
+  orderType?: WorkOrderOrderType;
   maintenanceType?: WorkOrderMaintenanceType;
   source: WorkOrderSource;
   categoryId?: string;
@@ -87,6 +98,8 @@ export interface CreateWorkOrderInput {
   title: string;
   description?: string;
   type: WorkOrderType;
+  /** Required on create/update from the UI. */
+  orderType: WorkOrderOrderType;
   maintenanceType?: WorkOrderMaintenanceType;
   source: WorkOrderSource;
   categoryId?: string;
@@ -190,7 +203,7 @@ export interface WorkOrderFilterCatalog {
 
 export type WorkOrderModalState =
   | { type: "closed" }
-  | { type: "create" }
+  | { type: "create"; initialOrderType: WorkOrderOrderType }
   | { type: "edit"; workOrder: WorkOrder }
   | { type: "view"; workOrder: WorkOrder }
   | { type: "deactivate"; workOrder: WorkOrder };

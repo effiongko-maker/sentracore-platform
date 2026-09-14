@@ -4,6 +4,7 @@ export { EccIssuesPage } from "./components/EccIssuesPage";
 export { EccRequestsPage } from "./components/EccRequestsPage";
 export { EccPeoplePage } from "./components/EccPeoplePage";
 export { EccReportingPage } from "./components/EccReportingPage";
+export { EccIntelligencePage } from "./components/EccIntelligencePage";
 export { EccFinancePage } from "./components/EccFinancePage";
 export { EccWorkspaceShell } from "./components/EccWorkspaceShell";
 export { EccOperationsService } from "./services/EccOperationsService";
@@ -24,7 +25,7 @@ export {
   type EccPeopleSnapshot,
 } from "./types";
 export { ECC_ACCESS, eccModuleContext } from "./access";
-export { ECC_NAV_ITEMS } from "./nav";
+export { ECC_NAV_ITEMS, ECC_NAV_GROUPS } from "./nav";
 export {
   ECC_REPORTING_DIMENSIONS,
   ECC_ISSUE_STATUS_LABELS,

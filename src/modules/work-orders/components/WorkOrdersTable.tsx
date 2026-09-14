@@ -11,7 +11,15 @@ import {
   useFacilityName,
   useUserName,
 } from "@/hooks/useEntityLabel";
-import { WORK_ORDER_STATUS_VARIANT } from "../constants";
+import {
+  WORK_ORDER_STATUS_VARIANT,
+  type WorkOrderOrderTypeScope,
+} from "../constants";
+import {
+  resolveWorkInstructionKind,
+  WORK_INSTRUCTION_KIND_LABELS,
+  type WorkInstructionKind,
+} from "../instructionKind";
 import { displayWorkOrderTitle, labelize } from "../utils";
 import type { WorkOrder } from "../types";
 import { WorkOrderRowActions } from "./WorkOrderRowActions";
@@ -19,6 +27,7 @@ import { WorkOrderRowActions } from "./WorkOrderRowActions";
 interface WorkOrdersTableProps {
   workOrders: WorkOrder[];
   loading: boolean;
+  orderTypeScope?: WorkOrderOrderTypeScope;
   page: number;
   totalPages: number;
   total: number;
@@ -43,9 +52,16 @@ function AssigneeLabel({ id }: { id?: string }) {
   return <>{id ? name || "—" : "—"}</>;
 }
 
+function orderTypeBadgeVariant(
+  kind: WorkInstructionKind
+): "info" | "warning" {
+  return kind === "job_order" ? "warning" : "info";
+}
+
 export function WorkOrdersTable({
   workOrders,
   loading,
+  orderTypeScope = "all",
   page,
   totalPages,
   total,
@@ -59,7 +75,7 @@ export function WorkOrdersTable({
     () => [
       {
         key: "title",
-        header: "Work Order",
+        header: "Title",
         render: (workOrder) => (
           <div>
             <span className="font-medium text-foreground">
@@ -67,6 +83,29 @@ export function WorkOrdersTable({
             </span>
             <p className="text-xs text-muted">{workOrder.id}</p>
           </div>
+        ),
+      },
+      {
+        key: "orderType",
+        header: "Order Type",
+        render: (workOrder) => {
+          const kind = resolveWorkInstructionKind(workOrder);
+          return (
+            <Badge
+              variant={orderTypeBadgeVariant(kind)}
+              withDot
+              className="normal-case"
+            >
+              {WORK_INSTRUCTION_KIND_LABELS[kind]}
+            </Badge>
+          );
+        },
+      },
+      {
+        key: "type",
+        header: "Work Category",
+        render: (workOrder) => (
+          <span className="text-sm text-muted">{labelize(workOrder.type)}</span>
         ),
       },
       {
@@ -142,6 +181,18 @@ export function WorkOrdersTable({
     [onView, onEdit, onDeactivate, canMutate]
   );
 
+  const emptyTitle =
+    orderTypeScope === "job_order"
+      ? "No Job Orders match your filters"
+      : orderTypeScope === "work_order"
+        ? "No Work Orders match your filters"
+        : "No work orders match your filters";
+
+  const emptyDescription =
+    orderTypeScope === "all"
+      ? "Clear search or adjust status, priority, facility, and assignee filters."
+      : "Try All, or clear search and other filters to widen the register.";
+
   return (
     <DataTable
       columns={columns}
@@ -153,8 +204,8 @@ export function WorkOrdersTable({
       total={total}
       onPageChange={onPageChange}
       emptyIcon={ClipboardList}
-      emptyTitle="No work orders match your filters"
-      emptyDescription="Clear search or adjust status, priority, facility, and assignee filters."
+      emptyTitle={emptyTitle}
+      emptyDescription={emptyDescription}
       className="min-w-0"
     />
   );

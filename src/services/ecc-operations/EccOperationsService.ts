@@ -13,6 +13,9 @@ import type {
   EccCreateIssueInput,
   EccCreatePersonInput,
   EccCreateRequestInput,
+  EccCreateFinanceBudgetInput,
+  EccCreateFinanceCommitmentInput,
+  EccCreateFinanceTransactionInput,
   EccDailyOpsRecord,
   EccEnsureCurrentShiftInput,
   EccIssue,
@@ -29,6 +32,14 @@ import type {
   EccSignInInput,
   EccSignOutInput,
   EccSetCurrentShiftAssignmentsInput,
+  EccFinanceBudget,
+  EccFinanceCommitment,
+  EccFinanceCommitmentStatus,
+  EccFinanceSnapshot,
+  EccFinanceTransaction,
+  EccAuditEntityType,
+  EccAuditEvent,
+  EccAuditListFilter,
   EccTransitionIssueInput,
   EccTransitionRequestInput,
 } from "@/modules/ecc-operations/types";
@@ -152,6 +163,23 @@ export type IEccOperationsService = {
   ): Promise<EccShift>;
   signInPerson(input: EccSignInInput): Promise<EccAttendanceRecord>;
   signOutPerson(input: EccSignOutInput): Promise<EccAttendanceRecord>;
+  getFinanceSnapshot(centreId?: string): Promise<EccFinanceSnapshot>;
+  setFinanceBudget(input: EccCreateFinanceBudgetInput): Promise<EccFinanceBudget>;
+  createFinanceTransaction(
+    input: EccCreateFinanceTransactionInput
+  ): Promise<EccFinanceTransaction>;
+  createFinanceCommitment(
+    input: EccCreateFinanceCommitmentInput
+  ): Promise<EccFinanceCommitment>;
+  updateFinanceCommitmentStatus(input: {
+    id: string;
+    status: EccFinanceCommitmentStatus;
+  }): Promise<EccFinanceCommitment>;
+  listAuditEvents(filter?: EccAuditListFilter): Promise<EccAuditEvent[]>;
+  getEntityAuditTrail(
+    entityType: EccAuditEntityType,
+    entityId: string
+  ): Promise<EccAuditEvent[]>;
 };
 
 export const EccOperationsService: IEccOperationsService = {
@@ -261,5 +289,37 @@ export const EccOperationsService: IEccOperationsService = {
 
   async signOutPerson(input) {
     return callEccApi({ action: "signOutPerson", input });
+  },
+
+  async getFinanceSnapshot(centreId = DEFAULT_ECC_CENTRE.id) {
+    return callEccApi({ action: "getFinanceSnapshot", centreId });
+  },
+
+  async setFinanceBudget(input) {
+    return callEccApi({ action: "setFinanceBudget", input });
+  },
+
+  async createFinanceTransaction(input) {
+    return callEccApi({ action: "createFinanceTransaction", input });
+  },
+
+  async createFinanceCommitment(input) {
+    return callEccApi({ action: "createFinanceCommitment", input });
+  },
+
+  async updateFinanceCommitmentStatus(input) {
+    return callEccApi({ action: "updateFinanceCommitmentStatus", input });
+  },
+
+  async listAuditEvents(filter = {}) {
+    return callEccApi({ action: "listAuditEvents", filter });
+  },
+
+  async getEntityAuditTrail(entityType, entityId) {
+    return callEccApi({
+      action: "getEntityAuditTrail",
+      entityType,
+      id: entityId,
+    });
   },
 };

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isActionError } from "@/lib/actions/errors";
+import { toSessionIdentity } from "@/lib/auth/session";
 import { requireEccAccess } from "@/modules/ecc-operations/server/requireEccAccess";
 import { EccOperationsServerService } from "@/modules/ecc-operations/server/EccOperationsServerService";
 import {
@@ -35,14 +36,23 @@ type EccAction =
   | "ensureCurrentShift"
   | "setCurrentShiftAssignments"
   | "signInPerson"
-  | "signOutPerson";
+  | "signOutPerson"
+  | "getFinanceSnapshot"
+  | "setFinanceBudget"
+  | "createFinanceTransaction"
+  | "createFinanceCommitment"
+  | "updateFinanceCommitmentStatus"
+  | "listAuditEvents"
+  | "getEntityAuditTrail";
 
 type EccRequestBody = {
   action?: EccAction;
   centreId?: string;
   id?: string;
+  entityType?: string;
   input?: unknown;
   state?: unknown;
+  filter?: unknown;
 };
 
 function actionErrorStatus(code: string): number {
@@ -103,7 +113,9 @@ function errorResponse(error: unknown) {
   const status =
     /not found/i.test(message)
       ? 404
-      : /already been raised|Cannot move/i.test(message)
+      : /already been raised|already exists|already signed|already been submitted|Cannot move|is required|Resolution notes/i.test(
+            message
+          )
         ? 400
         : 500;
   return NextResponse.json({ success: false, message }, { status });
@@ -111,8 +123,13 @@ function errorResponse(error: unknown) {
 
 export async function GET() {
   try {
-    const { organisationId } = await requireEccAccess();
-    const service = new EccOperationsServerService(organisationId);
+    const { session, organisationId } = await requireEccAccess();
+    const identity = toSessionIdentity(session);
+    const service = new EccOperationsServerService(organisationId, {
+      userId: session.userId,
+      email: session.email,
+      name: identity.name,
+    });
     const data = await service.getFoundationStatus();
     return NextResponse.json({ success: true, data });
   } catch (error) {
@@ -122,8 +139,13 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { organisationId } = await requireEccAccess();
-    const service = new EccOperationsServerService(organisationId);
+    const { session, organisationId } = await requireEccAccess();
+    const identity = toSessionIdentity(session);
+    const service = new EccOperationsServerService(organisationId, {
+      userId: session.userId,
+      email: session.email,
+      name: identity.name,
+    });
     const body = (await request.json()) as EccRequestBody;
     const action = body.action;
 
@@ -267,6 +289,46 @@ export async function POST(request: Request) {
         return NextResponse.json({
           success: true,
           data: await service.signOutPerson(body.input as never),
+        });
+      case "getFinanceSnapshot":
+        return NextResponse.json({
+          success: true,
+          data: await service.getFinanceSnapshot(body.centreId),
+        });
+      case "setFinanceBudget":
+        return NextResponse.json({
+          success: true,
+          data: await service.setFinanceBudget(body.input as never),
+        });
+      case "createFinanceTransaction":
+        return NextResponse.json({
+          success: true,
+          data: await service.createFinanceTransaction(body.input as never),
+        });
+      case "createFinanceCommitment":
+        return NextResponse.json({
+          success: true,
+          data: await service.createFinanceCommitment(body.input as never),
+        });
+      case "updateFinanceCommitmentStatus":
+        return NextResponse.json({
+          success: true,
+          data: await service.updateFinanceCommitmentStatus(body.input as never),
+        });
+      case "listAuditEvents":
+        return NextResponse.json({
+          success: true,
+          data: await service.listAuditEvents(
+            (body.filter as never) ?? (body.input as never) ?? {}
+          ),
+        });
+      case "getEntityAuditTrail":
+        return NextResponse.json({
+          success: true,
+          data: await service.getEntityAuditTrail(
+            String(body.entityType ?? "") as never,
+            String(body.id ?? "")
+          ),
         });
       case "importLocalState": {
         const state: EccLocalState = hydrateEccLocalStateFromUnknown(body.state);
