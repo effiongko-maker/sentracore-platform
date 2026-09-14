@@ -2,8 +2,12 @@
 
 import { usePathname } from "next/navigation";
 import { PlatformShellProvider } from "@/hooks/usePlatformShell";
-import { PlatformSessionProvider } from "@/hooks/usePlatformSession";
+import {
+  PlatformSessionProvider,
+  type PlatformSessionChrome,
+} from "@/hooks/usePlatformSession";
 import { OperatingAccessProvider } from "@/hooks/useOperatingAccess";
+import type { OperatingAccess } from "@/lib/access";
 import { ToastProvider } from "@/components/ui/Toast";
 import { OrganisationalCompass } from "./OrganisationalCompass";
 import { GlobalCommandBar } from "./GlobalCommandBar";
@@ -38,10 +42,18 @@ function ProductShellBody({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function ProductShell({ children }: { children: React.ReactNode }) {
+export function ProductShell({
+  children,
+  initialSessionChrome,
+  initialOperatingAccess,
+}: {
+  children: React.ReactNode;
+  initialSessionChrome?: PlatformSessionChrome | null;
+  initialOperatingAccess?: OperatingAccess | null;
+}) {
   return (
-    <PlatformSessionProvider>
-      <OperatingAccessProvider>
+    <PlatformSessionProvider initialSessionChrome={initialSessionChrome}>
+      <OperatingAccessProvider initialAccess={initialOperatingAccess}>
         <PlatformShellProvider>
           <ToastProvider>
             <ProductShellBody>{children}</ProductShellBody>

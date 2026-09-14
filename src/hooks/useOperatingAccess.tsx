@@ -64,13 +64,35 @@ function accessFetchErrorMessage(err: unknown, timedOut: boolean): string {
   return err instanceof Error ? err.message : "Access load failed";
 }
 
-export function OperatingAccessProvider({ children }: { children: ReactNode }) {
-  const [access, setAccess] = useState<OperatingAccess | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function OperatingAccessProvider({
+  children,
+  initialAccess,
+}: {
+  children: ReactNode;
+  /**
+   * When provided (including null), skip the initial /api/access/me fetch.
+   * `null` means bootstrap settled without access (fail closed — not loading).
+   */
+  initialAccess?: OperatingAccess | null;
+}) {
+  const hydrated = initialAccess !== undefined;
+  const [access, setAccess] = useState<OperatingAccess | null>(
+    hydrated ? initialAccess : null
+  );
+  const [loading, setLoading] = useState(!hydrated);
+  const [error, setError] = useState<string | null>(
+    hydrated && initialAccess === null
+      ? "Unable to verify access. Retry, or return to Platform Home."
+      : null
+  );
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
+    // Hydrated first paint: do not duplicate /api/access/me until reload().
+    if (hydrated && tick === 0) {
+      return;
+    }
+
     let cancelled = false;
     let timedOut = false;
     const controller = new AbortController();
@@ -106,7 +128,7 @@ export function OperatingAccessProvider({ children }: { children: ReactNode }) {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [tick]);
+  }, [tick, hydrated]);
 
   const reload = useCallback(() => setTick((n) => n + 1), []);
 

@@ -11,6 +11,11 @@ import {
 import type { AuthEnabledModule } from "@/lib/auth/types";
 import { isPlatformSuperAdminFromSlugs } from "@/lib/access/platformRoles";
 
+export type PlatformSessionChrome = {
+  enabledModules: AuthEnabledModule[] | null;
+  roleSlugs: string[];
+};
+
 type PlatformSessionState = {
   enabledModules: AuthEnabledModule[] | null;
   roleSlugs: string[];
@@ -25,14 +30,43 @@ const PlatformSessionContext = createContext<PlatformSessionState>({
   loading: true,
 });
 
-export function PlatformSessionProvider({ children }: { children: ReactNode }) {
+function chromeFromInitial(
+  initial: PlatformSessionChrome | null | undefined
+): Pick<PlatformSessionState, "enabledModules" | "roleSlugs" | "loading"> {
+  // undefined → not hydrated (legacy mount); fetch on client.
+  if (initial === undefined) {
+    return { enabledModules: null, roleSlugs: [], loading: true };
+  }
+  // null → bootstrap ran, no session (fail closed, not loading).
+  if (initial === null) {
+    return { enabledModules: null, roleSlugs: [], loading: false };
+  }
+  return {
+    enabledModules: initial.enabledModules,
+    roleSlugs: initial.roleSlugs,
+    loading: false,
+  };
+}
+
+export function PlatformSessionProvider({
+  children,
+  initialSessionChrome,
+}: {
+  children: ReactNode;
+  /** When provided (including null), skip the initial /api/auth/me fetch. */
+  initialSessionChrome?: PlatformSessionChrome | null;
+}) {
+  const hydrated = initialSessionChrome !== undefined;
+  const seeded = chromeFromInitial(initialSessionChrome);
   const [enabledModules, setEnabledModules] = useState<
     AuthEnabledModule[] | null
-  >(null);
-  const [roleSlugs, setRoleSlugs] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  >(seeded.enabledModules);
+  const [roleSlugs, setRoleSlugs] = useState<string[]>(seeded.roleSlugs);
+  const [loading, setLoading] = useState(seeded.loading);
 
   useEffect(() => {
+    if (hydrated) return;
+
     let cancelled = false;
 
     fetch("/api/auth/me", {
@@ -75,7 +109,7 @@ export function PlatformSessionProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hydrated]);
 
   const isSuperAdmin = useMemo(
     () => isPlatformSuperAdminFromSlugs(roleSlugs),
