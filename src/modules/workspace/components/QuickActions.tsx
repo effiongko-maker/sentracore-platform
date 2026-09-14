@@ -6,6 +6,7 @@ import {
   BarChart3,
   Building2,
   ClipboardList,
+  FileCheck2,
   Package,
   Wrench,
   type LucideIcon,
@@ -21,6 +22,7 @@ const icons: Record<WorkspaceQuickAction["icon"], LucideIcon> = {
   asset: Package,
   facility: Building2,
   dashboard: BarChart3,
+  approval: FileCheck2,
 };
 
 const accent: Record<WorkspaceQuickAction["icon"], string> = {
@@ -31,6 +33,7 @@ const accent: Record<WorkspaceQuickAction["icon"], string> = {
   asset: "bg-emerald-50 text-emerald-700",
   facility: "bg-violet-50 text-violet-700",
   dashboard: "bg-accent-soft text-accent",
+  approval: "bg-indigo-50 text-indigo-700",
 };
 
 export function QuickActions({ actions }: { actions: WorkspaceQuickAction[] }) {
