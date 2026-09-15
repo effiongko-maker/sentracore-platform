@@ -13,12 +13,14 @@ import {
 import {
   isEccOperationsPath,
   isOperationsPath,
+  isPlatformFinancePath,
   isPlatformHomePath,
   listEnterableWorkspaces,
   PLATFORM_HOME,
 } from "@/lib/platform/workspaces";
 import { hasModule } from "@/lib/actions/moduleAccess";
 import { ECC_MODULE_SLUG } from "@/modules/ecc-operations/types";
+import { PLATFORM_FINANCE_MODULE_SLUG } from "@/modules/platform-finance/types";
 import { cn } from "@/lib/utils";
 import { usePlatformSession } from "@/hooks/usePlatformSession";
 import { useOperatingAccess } from "@/hooks/useOperatingAccess";
@@ -34,6 +36,10 @@ import {
   ECC_NAV_GROUPS,
   isEccNavItemActive,
 } from "@/modules/ecc-operations/nav";
+import {
+  PLATFORM_FINANCE_NAV_ITEMS,
+  isPlatformFinanceNavItemActive,
+} from "@/modules/platform-finance/nav";
 
 /**
  * Sidebar = actions within the current workspace (accessible modules only).
@@ -77,10 +83,15 @@ export function OrganisationalCompass() {
   const activeLayer = resolveLayerByPath(pathname);
   const inOperations = isOperationsPath(pathname);
   const inEccOperations = isEccOperationsPath(pathname);
+  const inPlatformFinance = isPlatformFinancePath(pathname);
   const canUseEcc =
     isSuperAdmin ||
     (enabledModules !== null &&
       hasModule(enabledModules, ECC_MODULE_SLUG));
+  const canUsePlatformFinance =
+    isSuperAdmin ||
+    (enabledModules !== null &&
+      hasModule(enabledModules, PLATFORM_FINANCE_MODULE_SLUG));
   const isOpsHome =
     pathname === COMMAND_HOME.href ||
     pathname.startsWith(`${COMMAND_HOME.href}/`);
@@ -265,6 +276,67 @@ export function OrganisationalCompass() {
         ) : inEccOperations && !sessionLoading && !canUseEcc ? (
           <div className="os-compass-scroll">
             <p className="os-compass-workspace-caption">ECC Operations</p>
+            <p className="os-compass-nav-status">No access to this workspace.</p>
+            <Link
+              href={PLATFORM_HOME.href}
+              onClick={closeMobileNav}
+              className="os-compass-module"
+            >
+              <Home className="h-4 w-4 shrink-0" aria-hidden />
+              <span>Platform Home</span>
+            </Link>
+          </div>
+        ) : inPlatformFinance && canUsePlatformFinance ? (
+          <div className="os-compass-scroll">
+            <p className="os-compass-workspace-caption">Finance</p>
+            {sessionLoading ? (
+              <p className="os-compass-nav-status" role="status">
+                Loading navigation…
+              </p>
+            ) : (
+              <div className="os-compass-group os-compass-group-active">
+                <div className="os-compass-modules">
+                  {PLATFORM_FINANCE_NAV_ITEMS.map((item) => {
+                    const Icon = item.icon;
+                    const active = isPlatformFinanceNavItemActive(
+                      item,
+                      pathname
+                    );
+                    if (item.comingSoon || !item.href) {
+                      return (
+                        <span
+                          key={item.label}
+                          className="os-compass-module os-compass-module-soon"
+                          title="Not available yet"
+                        >
+                          <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                          <span>{item.label}</span>
+                        </span>
+                      );
+                    }
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={closeMobileNav}
+                        aria-current={active ? "page" : undefined}
+                        className={cn(
+                          "os-compass-module",
+                          active && "os-compass-module-active"
+                        )}
+                      >
+                        <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                        <span>{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : inPlatformFinance && !sessionLoading && !canUsePlatformFinance ? (
+          <div className="os-compass-scroll">
+            <p className="os-compass-workspace-caption">Finance</p>
             <p className="os-compass-nav-status">No access to this workspace.</p>
             <Link
               href={PLATFORM_HOME.href}

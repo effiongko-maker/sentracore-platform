@@ -253,3 +253,49 @@ set
   name = excluded.name,
   status = excluded.status,
   updated_at = timezone('utc', now());
+
+-- Platform Finance access for PayChex organisation owners / platform super admins.
+-- Capabilities and company access are explicit (not derived from Super Admin).
+-- Role-based; does not hard-code profile UUIDs.
+-- Note: platform_super_admin assignments are platform-scoped (organisation_id null).
+insert into public.finance_capability_grants (
+  organisation_id,
+  profile_id,
+  capability
+)
+select distinct
+  o.id,
+  p.id,
+  'platform_finance.view'
+from public.organisations o
+join public.profiles p on p.organisation_id = o.id
+join public.user_role_assignments ura on ura.profile_id = p.id
+join public.roles r on r.id = ura.role_id
+where o.slug = 'paychex'
+  and (
+    (r.slug = 'organisation_owner' and ura.organisation_id = o.id)
+    or (r.slug = 'platform_super_admin' and ura.organisation_id is null)
+  )
+on conflict (profile_id, organisation_id, capability) do nothing;
+
+insert into public.finance_company_access (
+  organisation_id,
+  profile_id,
+  company_id
+)
+select distinct
+  o.id,
+  p.id,
+  fc.id
+from public.organisations o
+join public.profiles p on p.organisation_id = o.id
+join public.user_role_assignments ura on ura.profile_id = p.id
+join public.roles r on r.id = ura.role_id
+join public.finance_companies fc on fc.organisation_id = o.id
+where o.slug = 'paychex'
+  and (
+    (r.slug = 'organisation_owner' and ura.organisation_id = o.id)
+    or (r.slug = 'platform_super_admin' and ura.organisation_id is null)
+  )
+  and fc.status = 'active'
+on conflict (profile_id, company_id) do nothing;

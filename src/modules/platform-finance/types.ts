@@ -21,7 +21,38 @@ export const PLATFORM_FINANCE_CAPABILITIES = {
   manage_coa: "platform_finance.manage_coa",
   create_transaction: "platform_finance.create_transaction",
   post: "platform_finance.post",
+  request_create: "platform_finance.request.create",
+  request_view_own: "platform_finance.request.view_own",
+  request_review: "platform_finance.request.review",
+  request_approve: "platform_finance.request.approve",
 } as const;
+
+export {
+  FINANCIAL_REQUEST_STATUSES,
+  FINANCIAL_REQUEST_TRANSITIONS,
+  FINANCIAL_REQUEST_TERMINAL_STATUSES,
+  FINANCIAL_REQUEST_PAYEE_TYPES,
+  FINANCIAL_REQUEST_DOCUMENT_ROLES,
+  FINANCIAL_REQUEST_EVENT_TYPES,
+  FINANCIAL_REQUEST_CAPABILITIES,
+  FINANCIAL_REQUEST_SEPARATION_OF_DUTIES,
+  FINANCIAL_REQUEST_CATEGORY_SEEDS,
+  financialRequestOutstandingAmount,
+  isAllowedFinancialRequestTransition,
+  isFinancialRequestStatus,
+  assertFinancialRequestTransition,
+  isFinancialRequestTerminalStatus,
+  type FinancialRequest,
+  type FinancialRequestStatus,
+  type FinancialRequestTerminalStatus,
+  type FinancialRequestCategory,
+  type FinancialRequestDocument,
+  type FinancialRequestDocumentRole,
+  type FinancialRequestEvent,
+  type FinancialRequestEventType,
+  type FinancialRequestPayeeType,
+  type FinancialRequestCapability,
+} from "./domain/requests";
 
 export type PlatformFinanceCapability =
   (typeof PLATFORM_FINANCE_CAPABILITIES)[keyof typeof PLATFORM_FINANCE_CAPABILITIES];

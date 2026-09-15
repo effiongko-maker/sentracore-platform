@@ -224,8 +224,103 @@ function main() {
   assert(seed.includes("'platform_finance'"), "seed registers platform_finance");
   assert(seed.includes("finance_companies"), "seed mirrors company seed");
 
+  // --- Verification lifecycle hardening (static) ---
+  const txHelperPath = "scripts/lib/platform-finance-verify-transaction.ts";
+  const foundationDbPath = "scripts/verify-platform-finance-foundation-db.mts";
+  const slice2Path = "scripts/verify-platform-finance-requests-slice2.mts";
+  assert(existsSync(resolve(txHelperPath)), "transaction helper exists");
+  assert(
+    !existsSync(resolve("scripts/lib/platform-finance-smoke-cleanup.mts")),
+    "unsafe smoke-cleanup helper must be removed"
+  );
+  assert(
+    !existsSync(resolve("scripts/cleanup-platform-finance-smoke-artifacts.mts")),
+    "unsafe one-shot smoke cleanup script must be removed"
+  );
+
+  const txHelper = readSrc(txHelperPath);
+  const foundationDb = readSrc(foundationDbPath);
+  const slice2 = readSrc(slice2Path);
+  const scriptsBundle = [txHelper, foundationDb, slice2].join("\n");
+
+  assert(
+    txHelper.includes("BEGIN") && txHelper.includes("ROLLBACK"),
+    "transaction helper BEGIN/ROLLBACK"
+  );
+  assert(
+    /finally[\s\S]*ROLLBACK/.test(txHelper),
+    "ROLLBACK guaranteed in finally"
+  );
+  assert(
+    !/session_replication_role\s*=\s*replica/.test(scriptsBundle),
+    "session_replication_role = replica must be absent"
+  );
+  assert(
+    !scriptsBundle.includes("hardDeleteFinanceSmokeArtifacts"),
+    "hardDeleteFinanceSmokeArtifacts must not be referenced"
+  );
+  assert(
+    foundationDb.includes("withFinanceVerifyTransaction") &&
+      slice2.includes("withFinanceVerifyTransaction"),
+    "DB verifies use withFinanceVerifyTransaction"
+  );
+  assert(
+    !/from\(["']finance_capability_grants["']\)\s*\.delete\(/.test(foundationDb) &&
+      !/from\(["']finance_capability_grants["']\)\s*\.delete\(/.test(slice2) &&
+      !/\.query\(\s*`delete from public\.finance_capability_grants/i.test(
+        scriptsBundle
+      ),
+    "verify scripts must not delete finance_capability_grants"
+  );
+  assert(
+    !/\.query\(\s*`delete from public\.finance_company_access/i.test(
+      scriptsBundle
+    ),
+    "verify scripts must not delete finance_company_access"
+  );
+  assert(
+    !/delete from public\.finance_periods[\s\S]*year = any/i.test(scriptsBundle) &&
+      !/year IN \(2098,\s*2099\)/i.test(scriptsBundle),
+    "no broad 2098/2099 period deletion"
+  );
+  assert(
+    !/reason = any\(\[[\s\S]*race A/i.test(scriptsBundle) &&
+      !/FINANCE_SMOKE_AUDIT_REASONS/.test(scriptsBundle),
+    "no generic audit-reason deletion cleanup"
+  );
+  assert(
+    !/ee7eb825-090d-4db9-a852-feb278a69763/.test(foundationDb) &&
+      !/ee7eb825-090d-4db9-a852-feb278a69763/.test(slice2),
+    "verify scripts must not hard-code development profile UUID"
+  );
+  assert(
+    foundationDb.includes("PLATFORM_FINANCE_VERIFY_DATABASE_URL") &&
+      slice2.includes("PLATFORM_FINANCE_VERIFY_DATABASE_URL"),
+    "DB suite gated on explicit PLATFORM_FINANCE_VERIFY_DATABASE_URL"
+  );
+
+  // Default period selection remains non-hard-coded
+  const overviewSvc = readSrc(
+    "src/modules/platform-finance/server/PlatformFinanceServerService.ts"
+  );
+  assert(
+    overviewSvc.includes("selectDefaultFinancePeriod"),
+    "selectDefaultFinancePeriod present"
+  );
+  assert(
+    !/September 2026|2099-01|hard-?coded.*period/i.test(
+      overviewSvc.slice(
+        overviewSvc.indexOf("selectDefaultFinancePeriod"),
+        overviewSvc.indexOf("selectDefaultFinancePeriod") + 1200
+      )
+    ),
+    "default period helper must not hard-code a product month"
+  );
+
   console.log("PASS verify-platform-finance-foundation");
-  console.log("  domain invariants + static isolation + migrations + workspace freeze");
+  console.log(
+    "  domain invariants + static isolation + migrations + workspace freeze + verify lifecycle"
+  );
 }
 
 main();

@@ -20,6 +20,10 @@ export const PLATFORM_FINANCE_CAPABILITY_LABELS: Record<
   [PLATFORM_FINANCE_CAPABILITIES.manage_coa]: "Manage chart of accounts",
   [PLATFORM_FINANCE_CAPABILITIES.create_transaction]: "Create transactions",
   [PLATFORM_FINANCE_CAPABILITIES.post]: "Post to journal",
+  [PLATFORM_FINANCE_CAPABILITIES.request_create]: "Create financial requests",
+  [PLATFORM_FINANCE_CAPABILITIES.request_view_own]: "View own financial requests",
+  [PLATFORM_FINANCE_CAPABILITIES.request_review]: "Review financial requests",
+  [PLATFORM_FINANCE_CAPABILITIES.request_approve]: "Approve financial requests",
 };
 
 export const PLATFORM_FINANCE_ENTITY_STATUS_LABELS: Record<

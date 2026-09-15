@@ -22,14 +22,16 @@ export type RequirePlatformFinanceAccessOptions = {
   companyId?: string;
 };
 
-/**
- * Session + active org + module enabled (SA may bypass module enablement only).
- * Capability must exist in finance_capability_grants — SA does not auto-receive capabilities.
- * When companyId is provided, finance_company_access is required — SA does not bypass.
- */
-export async function requirePlatformFinanceAccess(
-  options: RequirePlatformFinanceAccessOptions
-): Promise<PlatformFinanceAccessContext> {
+export type RequirePlatformFinanceAccessAnyOptions = {
+  capabilities: readonly PlatformFinanceCapability[];
+  companyId?: string;
+};
+
+async function resolvePlatformFinanceSessionContext(): Promise<{
+  session: PlatformSession;
+  organisationId: string;
+  profileId: string;
+}> {
   const session = await getPlatformSession();
   if (!session) {
     throw new ActionError("UNAUTHENTICATED");
@@ -58,6 +60,60 @@ export async function requirePlatformFinanceAccess(
     throw new ActionError("MODULE_NOT_ENABLED");
   }
 
+  return { session, organisationId, profileId };
+}
+
+async function assertFinanceCompanyAccess(
+  organisationId: string,
+  profileId: string,
+  companyId: string
+): Promise<void> {
+  const admin = createAdminClient();
+  const { data: accessRow, error: accessError } = await admin
+    .from("finance_company_access")
+    .select("id")
+    .eq("company_id", companyId)
+    .eq("profile_id", profileId)
+    .maybeSingle();
+
+  if (accessError) {
+    throw new ActionError(
+      "INTERNAL_ERROR",
+      "Unable to verify finance company access."
+    );
+  }
+  if (!accessRow) {
+    throw new ActionError(
+      "FORBIDDEN",
+      "You do not have access to this finance company."
+    );
+  }
+
+  const { data: company, error: companyError } = await admin
+    .from("finance_companies")
+    .select("id, organisation_id")
+    .eq("id", companyId)
+    .maybeSingle();
+
+  if (companyError) {
+    throw new ActionError("INTERNAL_ERROR", "Unable to load finance company.");
+  }
+  if (!company || company.organisation_id !== organisationId) {
+    throw new ActionError("FORBIDDEN", "Finance company not in your organisation.");
+  }
+}
+
+/**
+ * Session + active org + module enabled (SA may bypass module enablement only).
+ * Capability must exist in finance_capability_grants — SA does not auto-receive capabilities.
+ * When companyId is provided, finance_company_access is required — SA does not bypass.
+ */
+export async function requirePlatformFinanceAccess(
+  options: RequirePlatformFinanceAccessOptions
+): Promise<PlatformFinanceAccessContext> {
+  const { session, organisationId, profileId } =
+    await resolvePlatformFinanceSessionContext();
+
   const admin = createAdminClient();
 
   const { data: capRow, error: capError } = await admin
@@ -79,38 +135,11 @@ export async function requirePlatformFinanceAccess(
   }
 
   if (options.companyId) {
-    const { data: accessRow, error: accessError } = await admin
-      .from("finance_company_access")
-      .select("id")
-      .eq("company_id", options.companyId)
-      .eq("profile_id", profileId)
-      .maybeSingle();
-
-    if (accessError) {
-      throw new ActionError(
-        "INTERNAL_ERROR",
-        "Unable to verify finance company access."
-      );
-    }
-    if (!accessRow) {
-      throw new ActionError(
-        "FORBIDDEN",
-        "You do not have access to this finance company."
-      );
-    }
-
-    const { data: company, error: companyError } = await admin
-      .from("finance_companies")
-      .select("id, organisation_id")
-      .eq("id", options.companyId)
-      .maybeSingle();
-
-    if (companyError) {
-      throw new ActionError("INTERNAL_ERROR", "Unable to load finance company.");
-    }
-    if (!company || company.organisation_id !== organisationId) {
-      throw new ActionError("FORBIDDEN", "Finance company not in your organisation.");
-    }
+    await assertFinanceCompanyAccess(
+      organisationId,
+      profileId,
+      options.companyId
+    );
   }
 
   return {
@@ -118,6 +147,58 @@ export async function requirePlatformFinanceAccess(
     organisationId,
     profileId,
     capability: options.capability,
+    companyId: options.companyId,
+  };
+}
+
+/**
+ * Same session/org/company rules as requirePlatformFinanceAccess, but accepts
+ * any one of the listed capabilities (first matching grant wins).
+ */
+export async function requirePlatformFinanceAccessAny(
+  options: RequirePlatformFinanceAccessAnyOptions
+): Promise<PlatformFinanceAccessContext> {
+  if (!options.capabilities.length) {
+    throw new ActionError("INTERNAL_ERROR", "No capabilities specified.");
+  }
+
+  const { session, organisationId, profileId } =
+    await resolvePlatformFinanceSessionContext();
+
+  const admin = createAdminClient();
+  const { data: capRows, error: capError } = await admin
+    .from("finance_capability_grants")
+    .select("capability")
+    .eq("organisation_id", organisationId)
+    .eq("profile_id", profileId)
+    .in("capability", [...options.capabilities]);
+
+  if (capError) {
+    throw new ActionError("INTERNAL_ERROR", "Unable to verify finance capability.");
+  }
+
+  const granted = new Set((capRows ?? []).map((row) => row.capability));
+  const matched = options.capabilities.find((cap) => granted.has(cap));
+  if (!matched) {
+    throw new ActionError(
+      "FORBIDDEN",
+      `Missing capability ${options.capabilities.join(" | ")}.`
+    );
+  }
+
+  if (options.companyId) {
+    await assertFinanceCompanyAccess(
+      organisationId,
+      profileId,
+      options.companyId
+    );
+  }
+
+  return {
+    session,
+    organisationId,
+    profileId,
+    capability: matched,
     companyId: options.companyId,
   };
 }

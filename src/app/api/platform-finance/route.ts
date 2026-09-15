@@ -9,6 +9,7 @@ import { PlatformFinanceServerService } from "@/modules/platform-finance/server/
 
 type PlatformFinanceAction =
   | "getFoundationStatus"
+  | "getOverview"
   | "listCompanies"
   | "listAccounts"
   | "listPeriods"
@@ -72,6 +73,7 @@ function capabilityForAction(
       return PLATFORM_FINANCE_CAPABILITIES.create_transaction;
     case "postTransaction":
       return PLATFORM_FINANCE_CAPABILITIES.post;
+    case "getOverview":
     default:
       return PLATFORM_FINANCE_CAPABILITIES.view;
   }
@@ -81,10 +83,12 @@ function companyIdForAction(
   action: PlatformFinanceAction,
   body: RequestBody
 ): string | undefined {
-  if (action === "listCompanies" || action === "listAccounts") {
-    return undefined;
-  }
-  if (action === "getFoundationStatus") {
+  if (
+    action === "listCompanies" ||
+    action === "listAccounts" ||
+    action === "getFoundationStatus" ||
+    action === "getOverview"
+  ) {
     return undefined;
   }
   if (typeof body.companyId === "string" && body.companyId) {
@@ -135,6 +139,23 @@ export async function POST(request: Request) {
           success: true,
           data: await service.getFoundationStatus(),
         });
+      case "getOverview": {
+        const input = body.input ?? {};
+        return NextResponse.json({
+          success: true,
+          data: await service.getOverview({
+            profileId: access.profileId,
+            companyId:
+              typeof input.companyId === "string"
+                ? input.companyId
+                : typeof body.companyId === "string"
+                  ? body.companyId
+                  : null,
+            periodId:
+              typeof input.periodId === "string" ? input.periodId : null,
+          }),
+        });
+      }
       case "listCompanies":
         return NextResponse.json({
           success: true,

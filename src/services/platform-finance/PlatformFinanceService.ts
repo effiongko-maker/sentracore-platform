@@ -8,6 +8,7 @@ import type {
   FinancePostingLineInput,
   FinanceTransaction,
 } from "@/modules/platform-finance/types";
+import type { FinanceOverviewSnapshot } from "@/modules/platform-finance/overviewTypes";
 
 const API_PATH = "/api/platform-finance";
 
@@ -47,6 +48,19 @@ export const PlatformFinanceService = {
       );
     }
     return json.data;
+  },
+
+  getOverview(input?: {
+    companyId?: string | null;
+    periodId?: string | null;
+  }): Promise<FinanceOverviewSnapshot> {
+    return postAction("getOverview", {
+      companyId: input?.companyId ?? undefined,
+      input: {
+        companyId: input?.companyId ?? null,
+        periodId: input?.periodId ?? null,
+      },
+    });
   },
 
   listCompanies(): Promise<FinanceCompany[]> {

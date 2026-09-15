@@ -406,4 +406,94 @@ export class PlatformFinanceRepository {
         .length,
     };
   }
+
+  async listAccessibleCompanyIds(profileId: string): Promise<string[]> {
+    const { data, error } = await db()
+      .from("finance_company_access")
+      .select("company_id")
+      .eq("organisation_id", this.organisationId)
+      .eq("profile_id", profileId);
+    if (error) throwDb(error, "Failed to list company access.");
+    return (data ?? []).map((row) => row.company_id as string);
+  }
+
+  async listJournalEntries(filters: {
+    companyId?: string | null;
+    periodId?: string | null;
+  }): Promise<FinanceJournalEntry[]> {
+    let query = db()
+      .from("finance_journal_entries")
+      .select("*")
+      .eq("organisation_id", this.organisationId)
+      .order("posted_at", { ascending: false });
+    if (filters.companyId) {
+      query = query.eq("company_id", filters.companyId);
+    }
+    if (filters.periodId) {
+      query = query.eq("period_id", filters.periodId);
+    }
+    const { data, error } = await query.limit(500);
+    if (error) throwDb(error, "Failed to list journal entries.");
+    return (data as JournalEntryRow[] | null)?.map(mapJournalEntry) ?? [];
+  }
+
+  async getTrialBalanceRows(filters: {
+    companyId?: string | null;
+    periodId?: string | null;
+  }): Promise<
+    Array<{
+      accountType: string;
+      totalDebit: number;
+      totalCredit: number;
+    }>
+  > {
+    let query = db()
+      .from("finance_trial_balance_v")
+      .select("account_type, total_debit, total_credit")
+      .eq("organisation_id", this.organisationId);
+    if (filters.companyId) {
+      query = query.eq("company_id", filters.companyId);
+    }
+    if (filters.periodId) {
+      query = query.eq("period_id", filters.periodId);
+    }
+    const { data, error } = await query;
+    if (error) throwDb(error, "Failed to load trial balance.");
+    return (data ?? []).map((row) => ({
+      accountType: String(row.account_type),
+      totalDebit: Number(row.total_debit ?? 0),
+      totalCredit: Number(row.total_credit ?? 0),
+    }));
+  }
+
+  async listRecentAuditEvents(limit = 12): Promise<
+    Array<{
+      id: string;
+      action: string;
+      objectType: string;
+      objectId: string;
+      reason: string | null;
+      createdAt: string;
+      companyId: string | null;
+    }>
+  > {
+    const { data, error } = await db()
+      .from("finance_audit_events")
+      .select(
+        "id, action, object_type, object_id, reason, created_at, company_id"
+      )
+      .eq("organisation_id", this.organisationId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) throwDb(error, "Failed to list finance audit events.");
+    return (data ?? []).map((row) => ({
+      id: row.id as string,
+      action: row.action as string,
+      objectType: row.object_type as string,
+      objectId: row.object_id as string,
+      reason: (row.reason as string | null) ?? null,
+      createdAt: row.created_at as string,
+      companyId: (row.company_id as string | null) ?? null,
+    }));
+  }
 }
