@@ -289,9 +289,9 @@ export function PlatformFinanceOverviewPage() {
         <article className="pf-panel">
           <div className="pf-panel-head">
             <h2 className="pf-panel-title">Financial requests</h2>
-            <span className="pf-link is-disabled" title="Requests UI not live yet">
+            <a className="pf-link" href="/platform-finance/requests">
               View all
-            </span>
+            </a>
           </div>
           <div className="pf-request-rows">
             <div className="pf-request-row">

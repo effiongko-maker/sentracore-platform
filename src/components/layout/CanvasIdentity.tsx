@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import {
+  isCommandCentrePath,
   isOperationsPath,
   isPlatformHomePath,
   isWorkspacePreviewPath,
@@ -15,12 +16,15 @@ export function CanvasIdentity() {
   const onPlatform =
     isPlatformHomePath(pathname) || isWorkspacePreviewPath(pathname);
   const inFacilityManagement = isOperationsPath(pathname);
+  const inCommandCentre = isCommandCentrePath(pathname);
 
-  const line = onPlatform
-    ? "SentraCore · Enterprise Operating Platform"
-    : inFacilityManagement
-      ? "SentraCore · Facility Management Platform"
-      : "SentraCore · Enterprise Operating Platform";
+  const line = inCommandCentre
+    ? "SentraCore · Command Centre"
+    : onPlatform
+      ? "SentraCore · Enterprise Operating Platform"
+      : inFacilityManagement
+        ? "SentraCore · Facility Management Platform"
+        : "SentraCore · Enterprise Operating Platform";
 
   return (
     <footer className="os-canvas-identity print:hidden">

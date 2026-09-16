@@ -240,7 +240,12 @@ export function filterOperatingLayers(
 export function resolveLayerByPath(
   pathname: string
 ): OperatingLayerId | "command" | "platform" {
-  if (pathname === "/" || pathname.startsWith("/workspaces")) {
+  if (
+    pathname === "/" ||
+    pathname.startsWith("/workspaces") ||
+    pathname === "/command-centre" ||
+    pathname.startsWith("/command-centre/")
+  ) {
     return "platform";
   }
   if (pathname === "/operations" || pathname.startsWith("/operations/")) {
@@ -268,7 +273,9 @@ export function resolveModuleByPath(pathname: string): LayerModule | null {
   if (
     pathname === "/" ||
     pathname === "/operations" ||
-    pathname.startsWith("/workspaces")
+    pathname.startsWith("/workspaces") ||
+    pathname === "/command-centre" ||
+    pathname.startsWith("/command-centre/")
   ) {
     return null;
   }
@@ -321,6 +328,12 @@ export function resolveBreadcrumbSegments(pathname: string): string[] {
   }
 
   if (layer === "platform") {
+    if (
+      pathname === "/command-centre" ||
+      pathname.startsWith("/command-centre/")
+    ) {
+      return ["Command Centre"];
+    }
     return ["Platform Home"];
   }
 

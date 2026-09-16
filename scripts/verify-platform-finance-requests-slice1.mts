@@ -107,7 +107,14 @@ async function runStatic(results: CheckResult[]) {
     return;
   }
 
+  const MIGRATION_SLICE4 =
+    "supabase/migrations/20260915200000_finance_request_documents_storage.sql";
   const sql = readSrc(MIGRATION);
+  const sqlWithSlice4 =
+    sql +
+    (existsSync(resolve(MIGRATION_SLICE4))
+      ? `\n${readSrc(MIGRATION_SLICE4)}`
+      : "");
 
   for (const table of EXPECTED_TABLES) {
     try {
@@ -302,7 +309,10 @@ async function runStatic(results: CheckResult[]) {
 
   try {
     for (const eventType of FINANCIAL_REQUEST_EVENT_TYPES) {
-      assert(sql.includes(`'${eventType}'`), `event type ${eventType}`);
+      assert(
+        sqlWithSlice4.includes(`'${eventType}'`),
+        `event type ${eventType}`
+      );
     }
     assert(
       sql.includes("finance_request_events is append-only"),

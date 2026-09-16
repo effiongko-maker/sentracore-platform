@@ -12,18 +12,29 @@ export type SearchableSelectOption = {
   searchText?: string;
 };
 
+export type SearchableSelectOptionGroup = {
+  label: string;
+  options: SearchableSelectOption[];
+};
+
 type SearchableSelectProps = {
   id?: string;
   value: string;
   onChange: (value: string) => void;
-  options: SearchableSelectOption[];
+  options?: SearchableSelectOption[];
+  /** When set, options render under subtle section labels. */
+  optionGroups?: SearchableSelectOptionGroup[];
   emptyOptionLabel?: string;
   allowEmpty?: boolean;
   placeholder?: string;
   searchPlaceholder?: string;
+  /** Hide the in-menu search field (useful for short option lists). */
+  hideSearch?: boolean;
   disabled?: boolean;
   loading?: boolean;
   className?: string;
+  /** Optional class on the open menu panel (width/height/spacing overrides). */
+  menuClassName?: string;
   "aria-label"?: string;
 };
 
@@ -45,13 +56,16 @@ export function SearchableSelect({
   value,
   onChange,
   options,
+  optionGroups,
   emptyOptionLabel = "Not selected",
   allowEmpty = true,
   placeholder,
   searchPlaceholder = "Search…",
+  hideSearch = false,
   disabled,
   loading,
   className,
+  menuClassName,
   "aria-label": ariaLabel,
 }: SearchableSelectProps) {
   const listboxId = useId();
@@ -60,16 +74,34 @@ export function SearchableSelect({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
-  const selected = options.find((option) => option.value === value) ?? null;
+  const flatOptions = useMemo(() => {
+    if (optionGroups?.length) {
+      return optionGroups.flatMap((group) => group.options);
+    }
+    return options ?? [];
+  }, [optionGroups, options]);
+
+  const selected = flatOptions.find((option) => option.value === value) ?? null;
   const orphan =
     value && !selected
       ? ({ value, label: value } satisfies SearchableSelectOption)
       : null;
 
-  const filtered = useMemo(() => {
-    const base = orphan ? [orphan, ...options] : options;
+  const filteredFlat = useMemo(() => {
+    const base = orphan ? [orphan, ...flatOptions] : flatOptions;
     return base.filter((option) => optionMatches(option, query));
-  }, [options, orphan, query]);
+  }, [flatOptions, orphan, query]);
+
+  const filteredGroups = useMemo(() => {
+    if (!optionGroups?.length) return null;
+    const q = query.trim();
+    return optionGroups
+      .map((group) => ({
+        label: group.label,
+        options: group.options.filter((option) => optionMatches(option, q)),
+      }))
+      .filter((group) => group.options.length > 0);
+  }, [optionGroups, query]);
 
   useEffect(() => {
     if (!open) return;
@@ -94,12 +126,12 @@ export function SearchableSelect({
   }, [open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || hideSearch) return;
     const frame = window.requestAnimationFrame(() => {
       searchRef.current?.focus();
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [open]);
+  }, [open, hideSearch]);
 
   function selectValue(next: string) {
     onChange(next);
@@ -114,6 +146,30 @@ export function SearchableSelect({
       (value ? value : placeholder ?? emptyOptionLabel);
 
   const isPlaceholder = !value && !loading;
+  const hasMatches = filteredGroups
+    ? filteredGroups.length > 0
+    : filteredFlat.length > 0;
+
+  function renderOption(option: SearchableSelectOption) {
+    const isSelected = option.value === value;
+    return (
+      <li key={option.value} role="option" aria-selected={isSelected}>
+        <button
+          type="button"
+          className={cn(
+            "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/40",
+            isSelected && "bg-muted/30 font-medium text-foreground"
+          )}
+          onClick={() => selectValue(option.value)}
+        >
+          <span className="min-w-0 flex-1 truncate">{option.label}</span>
+          {isSelected ? (
+            <Check className="h-3.5 w-3.5 shrink-0 text-accent" />
+          ) : null}
+        </button>
+      </li>
+    );
+  }
 
   return (
     <div ref={rootRef} className={cn("relative", className)}>
@@ -146,21 +202,28 @@ export function SearchableSelect({
       </button>
 
       {open ? (
-        <div className="absolute left-0 right-0 z-50 mt-1.5 overflow-hidden rounded-[12px] border border-border bg-card shadow-lg">
-          <div className="border-b border-border/70 p-2">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
-              <input
-                ref={searchRef}
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={searchPlaceholder}
-                className="h-9 w-full rounded-md border border-border bg-white pl-8 pr-2.5 text-sm text-foreground outline-none placeholder:text-slate-400 focus:border-accent/40 focus:ring-2 focus:ring-accent/15"
-                aria-label={searchPlaceholder}
-              />
+        <div
+          className={cn(
+            "absolute left-0 right-0 z-50 mt-1.5 overflow-hidden rounded-[12px] border border-border bg-card shadow-lg",
+            menuClassName
+          )}
+        >
+          {hideSearch ? null : (
+            <div className="border-b border-border/70 p-2">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+                <input
+                  ref={searchRef}
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={searchPlaceholder}
+                  className="h-9 w-full rounded-md border border-border bg-white pl-8 pr-2.5 text-sm text-foreground outline-none placeholder:text-slate-400 focus:border-accent/40 focus:ring-2 focus:ring-accent/15"
+                  aria-label={searchPlaceholder}
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           <ul
             id={listboxId}
@@ -187,35 +250,24 @@ export function SearchableSelect({
               </li>
             ) : null}
 
-            {filtered.length === 0 ? (
+            {!hasMatches ? (
               <li className="px-3 py-2 text-sm text-muted">No matches</li>
-            ) : (
-              filtered.map((option) => {
-                const isSelected = option.value === value;
-                return (
-                  <li
-                    key={option.value}
-                    role="option"
-                    aria-selected={isSelected}
+            ) : filteredGroups ? (
+              filteredGroups.map((group) => (
+                <li key={group.label} role="presentation">
+                  <div
+                    className="px-3 pb-1 pt-2 text-[0.65rem] font-semibold uppercase tracking-[0.06em] text-slate-400"
+                    aria-hidden
                   >
-                    <button
-                      type="button"
-                      className={cn(
-                        "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/40",
-                        isSelected && "bg-muted/30 font-medium text-foreground"
-                      )}
-                      onClick={() => selectValue(option.value)}
-                    >
-                      <span className="min-w-0 flex-1 truncate">
-                        {option.label}
-                      </span>
-                      {isSelected ? (
-                        <Check className="h-3.5 w-3.5 shrink-0 text-accent" />
-                      ) : null}
-                    </button>
-                  </li>
-                );
-              })
+                    {group.label}
+                  </div>
+                  <ul role="group" aria-label={group.label}>
+                    {group.options.map(renderOption)}
+                  </ul>
+                </li>
+              ))
+            ) : (
+              filteredFlat.map(renderOption)
             )}
           </ul>
         </div>

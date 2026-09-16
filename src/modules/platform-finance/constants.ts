@@ -24,6 +24,13 @@ export const PLATFORM_FINANCE_CAPABILITY_LABELS: Record<
   [PLATFORM_FINANCE_CAPABILITIES.request_view_own]: "View own financial requests",
   [PLATFORM_FINANCE_CAPABILITIES.request_review]: "Review financial requests",
   [PLATFORM_FINANCE_CAPABILITIES.request_approve]: "Approve financial requests",
+  [PLATFORM_FINANCE_CAPABILITIES.payable_view]: "View payables",
+  [PLATFORM_FINANCE_CAPABILITIES.payable_create]: "Create payables",
+  [PLATFORM_FINANCE_CAPABILITIES.payable_review]: "Review payables",
+  [PLATFORM_FINANCE_CAPABILITIES.payable_approve]: "Approve payables",
+  [PLATFORM_FINANCE_CAPABILITIES.vendor_bill_view]: "View vendor bills",
+  [PLATFORM_FINANCE_CAPABILITIES.vendor_bill_create]: "Input vendor bills",
+  [PLATFORM_FINANCE_CAPABILITIES.vendor_bill_review]: "Review vendor bills",
 };
 
 export const PLATFORM_FINANCE_ENTITY_STATUS_LABELS: Record<

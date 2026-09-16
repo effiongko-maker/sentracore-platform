@@ -254,9 +254,11 @@ set
   status = excluded.status,
   updated_at = timezone('utc', now());
 
--- Platform Finance access for PayChex organisation owners / platform super admins.
--- Capabilities and company access are explicit (not derived from Super Admin).
+-- Platform developer / QA access for PayChex organisation owners / platform
+-- super admins. Explicit grants only (not derived from Super Admin).
 -- Role-based; does not hard-code profile UUIDs.
+-- Source of truth for capability lists:
+--   scripts/lib/platform-developer-access-bundle.ts
 -- Note: platform_super_admin assignments are platform-scoped (organisation_id null).
 insert into public.finance_capability_grants (
   organisation_id,
@@ -266,11 +268,56 @@ insert into public.finance_capability_grants (
 select distinct
   o.id,
   p.id,
-  'platform_finance.view'
+  c.capability
 from public.organisations o
 join public.profiles p on p.organisation_id = o.id
 join public.user_role_assignments ura on ura.profile_id = p.id
 join public.roles r on r.id = ura.role_id
+cross join (
+  values
+    ('platform_finance.view'),
+    ('platform_finance.manage_setup'),
+    ('platform_finance.manage_periods'),
+    ('platform_finance.manage_coa'),
+    ('platform_finance.create_transaction'),
+    ('platform_finance.post'),
+    ('platform_finance.request.create'),
+    ('platform_finance.request.view_own'),
+    ('platform_finance.request.review'),
+    ('platform_finance.request.approve'),
+    ('platform_finance.payable.view'),
+    ('platform_finance.payable.create'),
+    ('platform_finance.payable.review'),
+    ('platform_finance.payable.approve'),
+    ('platform_finance.vendor_bill.view'),
+    ('platform_finance.vendor_bill.create'),
+    ('platform_finance.vendor_bill.review')
+) as c(capability)
+where o.slug = 'paychex'
+  and (
+    (r.slug = 'organisation_owner' and ura.organisation_id = o.id)
+    or (r.slug = 'platform_super_admin' and ura.organisation_id is null)
+  )
+on conflict (profile_id, organisation_id, capability) do nothing;
+
+insert into public.platform_capability_grants (
+  organisation_id,
+  profile_id,
+  capability
+)
+select distinct
+  o.id,
+  p.id,
+  c.capability
+from public.organisations o
+join public.profiles p on p.organisation_id = o.id
+join public.user_role_assignments ura on ura.profile_id = p.id
+join public.roles r on r.id = ura.role_id
+cross join (
+  values
+    ('platform.command_centre.view'),
+    ('platform.command_centre.decide')
+) as c(capability)
 where o.slug = 'paychex'
   and (
     (r.slug = 'organisation_owner' and ura.organisation_id = o.id)

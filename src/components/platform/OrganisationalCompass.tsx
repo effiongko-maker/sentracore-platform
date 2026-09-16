@@ -1,8 +1,9 @@
 "use client";
 
-import { Home } from "lucide-react";
+import { ChevronDown, Hexagon, Home } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   COMMAND_HOME,
   filterOperatingLayers,
@@ -15,8 +16,9 @@ import {
   isOperationsPath,
   isPlatformFinancePath,
   isPlatformHomePath,
-  listEnterableWorkspaces,
+  isCommandCentrePath,
   PLATFORM_HOME,
+  COMMAND_CENTRE_HOME,
 } from "@/lib/platform/workspaces";
 import { hasModule } from "@/lib/actions/moduleAccess";
 import { ECC_MODULE_SLUG } from "@/modules/ecc-operations/types";
@@ -39,12 +41,15 @@ import {
 import {
   PLATFORM_FINANCE_NAV_ITEMS,
   isPlatformFinanceNavItemActive,
+  isPlatformFinanceNavSectionActive,
+  type PlatformFinanceNavItem,
+  type PlatformFinanceNavLeaf,
 } from "@/modules/platform-finance/nav";
 
 /**
- * Sidebar = actions within the current workspace (accessible modules only).
- * Workspace switching lives only in WorkspaceSwitcher (not duplicated here).
- * On Platform Home, lists enterable workspaces so auth never leaves a blank nav.
+ * Sidebar = actions within the current operating environment.
+ * Cross-workspace switching lives only in WorkspaceSwitcher — do not
+ * duplicate workspace directory lists here.
  */
 export function OrganisationalCompass() {
   const pathname = usePathname();
@@ -60,12 +65,6 @@ export function OrganisationalCompass() {
     reload: reloadAccess,
   } = useOperatingAccess();
   const { mobileNavOpen, closeMobileNav } = usePlatformShell();
-
-  const accessOptions = {
-    enabledModules,
-    sessionLoading,
-    isSuperAdmin,
-  };
 
   // While access is resolving, do not treat visibility as "no surfaces".
   const visibility =
@@ -84,6 +83,7 @@ export function OrganisationalCompass() {
   const inOperations = isOperationsPath(pathname);
   const inEccOperations = isEccOperationsPath(pathname);
   const inPlatformFinance = isPlatformFinancePath(pathname);
+  const inCommandCentre = isCommandCentrePath(pathname);
   const canUseEcc =
     isSuperAdmin ||
     (enabledModules !== null &&
@@ -96,8 +96,157 @@ export function OrganisationalCompass() {
     pathname === COMMAND_HOME.href ||
     pathname.startsWith(`${COMMAND_HOME.href}/`);
   const isPlatformHome = isPlatformHomePath(pathname);
+  const showPlatformDirectory = isPlatformHome || inCommandCentre;
   const navLoading = sessionLoading || (inOperations && accessLoading);
-  const enterableWorkspaces = listEnterableWorkspaces(accessOptions);
+
+  /** Finance groups default open; collapse toggles persist until path forces open. */
+  const [financeCollapsed, setFinanceCollapsed] = useState<
+    Record<string, boolean>
+  >({});
+
+  useEffect(() => {
+    if (!inPlatformFinance) return;
+    setFinanceCollapsed((prev) => {
+      let next = prev;
+      for (const item of PLATFORM_FINANCE_NAV_ITEMS) {
+        if (
+          item.children?.length &&
+          isPlatformFinanceNavSectionActive(item, pathname) &&
+          prev[item.label]
+        ) {
+          if (next === prev) next = { ...prev };
+          next[item.label] = false;
+        }
+      }
+      return next;
+    });
+  }, [inPlatformFinance, pathname]);
+
+  function isFinanceGroupOpen(item: PlatformFinanceNavItem): boolean {
+    if (!item.children?.length) return false;
+    return !financeCollapsed[item.label];
+  }
+
+  function toggleFinanceGroup(label: string) {
+    setFinanceCollapsed((prev) => ({
+      ...prev,
+      [label]: !prev[label],
+    }));
+  }
+
+  function renderFinanceLeaf(
+    item: PlatformFinanceNavLeaf,
+    opts?: { nested?: boolean }
+  ) {
+    const Icon = item.icon;
+    const active = isPlatformFinanceNavItemActive(item, pathname);
+    const className = cn(
+      opts?.nested ? "os-compass-intel-link" : "os-compass-module",
+      active &&
+        (opts?.nested
+          ? "os-compass-intel-link-active"
+          : "os-compass-module-active")
+    );
+
+    if (item.comingSoon || !item.href) {
+      return (
+        <span
+          key={item.label}
+          className={cn(
+            className,
+            !opts?.nested && "os-compass-module-soon",
+            opts?.nested && "os-compass-module-soon"
+          )}
+          title="Not available yet"
+        >
+          <Icon className="h-4 w-4 shrink-0" aria-hidden />
+          <span>{item.label}</span>
+        </span>
+      );
+    }
+
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        onClick={closeMobileNav}
+        aria-current={active ? "page" : undefined}
+        className={className}
+      >
+        <Icon className="h-4 w-4 shrink-0" aria-hidden />
+        <span>{item.label}</span>
+      </Link>
+    );
+  }
+
+  function renderFinanceItem(item: PlatformFinanceNavItem) {
+    const children = item.children;
+    if (!children?.length) {
+      return renderFinanceLeaf(item);
+    }
+
+    const Icon = item.icon;
+    const sectionActive = isPlatformFinanceNavSectionActive(item, pathname);
+    const open = isFinanceGroupOpen(item);
+    const childActive = children.some((child) =>
+      isPlatformFinanceNavItemActive(child, pathname)
+    );
+    const parentActive =
+      isPlatformFinanceNavItemActive(item, pathname) && !childActive;
+    const parentSoon = Boolean(item.comingSoon || !item.href);
+
+    return (
+      <div
+        key={item.label}
+        className={cn(
+          "os-compass-finance-section",
+          sectionActive && "os-compass-finance-section-active"
+        )}
+      >
+        <div className="os-compass-finance-parent">
+          {parentSoon ? (
+            <span className="os-compass-module os-compass-finance-parent-label">
+              <Icon className="h-4 w-4 shrink-0" aria-hidden />
+              <span>{item.label}</span>
+            </span>
+          ) : (
+            <Link
+              href={item.href!}
+              onClick={closeMobileNav}
+              aria-current={parentActive ? "page" : undefined}
+              className={cn(
+                "os-compass-module os-compass-finance-parent-label",
+                parentActive && "os-compass-module-active"
+              )}
+            >
+              <Icon className="h-4 w-4 shrink-0" aria-hidden />
+              <span>{item.label}</span>
+            </Link>
+          )}
+          <button
+            type="button"
+            className="os-compass-finance-toggle"
+            aria-expanded={open}
+            aria-label={`${open ? "Collapse" : "Expand"} ${item.label}`}
+            onClick={() => toggleFinanceGroup(item.label)}
+          >
+            <ChevronDown
+              className={cn(
+                "h-3.5 w-3.5 transition-transform",
+                open && "rotate-180"
+              )}
+              aria-hidden
+            />
+          </button>
+        </div>
+        {open ? (
+          <div className="os-compass-intel-subnav" role="group">
+            {children.map((child) => renderFinanceLeaf(child, { nested: true }))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <>
@@ -296,40 +445,9 @@ export function OrganisationalCompass() {
             ) : (
               <div className="os-compass-group os-compass-group-active">
                 <div className="os-compass-modules">
-                  {PLATFORM_FINANCE_NAV_ITEMS.map((item) => {
-                    const Icon = item.icon;
-                    const active = isPlatformFinanceNavItemActive(
-                      item,
-                      pathname
-                    );
-                    if (item.comingSoon || !item.href) {
-                      return (
-                        <span
-                          key={item.label}
-                          className="os-compass-module os-compass-module-soon"
-                          title="Not available yet"
-                        >
-                          <Icon className="h-4 w-4 shrink-0" aria-hidden />
-                          <span>{item.label}</span>
-                        </span>
-                      );
-                    }
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={closeMobileNav}
-                        aria-current={active ? "page" : undefined}
-                        className={cn(
-                          "os-compass-module",
-                          active && "os-compass-module-active"
-                        )}
-                      >
-                        <Icon className="h-4 w-4 shrink-0" aria-hidden />
-                        <span>{item.label}</span>
-                      </Link>
-                    );
-                  })}
+                  {PLATFORM_FINANCE_NAV_ITEMS.map((item) =>
+                    renderFinanceItem(item)
+                  )}
                 </div>
               </div>
             )}
@@ -347,40 +465,79 @@ export function OrganisationalCompass() {
               <span>Platform Home</span>
             </Link>
           </div>
-        ) : (
+        ) : showPlatformDirectory ? (
           <div className="os-compass-scroll">
-            <p className="os-compass-workspace-caption">Workspaces</p>
             {sessionLoading ? (
               <p className="os-compass-nav-status" role="status">
                 Loading navigation…
               </p>
             ) : (
               <>
-                {enterableWorkspaces.map((workspace) => {
-                  const active =
-                    pathname === workspace.href ||
-                    pathname.startsWith(`${workspace.href}/`);
-                  return (
+                <div className="os-compass-command-block">
+                  <p className="os-compass-workspace-caption">Command Centre</p>
+                  <Link
+                    href={COMMAND_CENTRE_HOME.href}
+                    onClick={closeMobileNav}
+                    aria-current={inCommandCentre ? "page" : undefined}
+                    className={cn(
+                      "os-compass-command-centre",
+                      inCommandCentre && "os-compass-command-centre-active"
+                    )}
+                  >
+                    <Hexagon
+                      className="h-4 w-4 shrink-0 opacity-80"
+                      aria-hidden
+                    />
+                    <span className="os-compass-command-centre-label">
+                      {COMMAND_CENTRE_HOME.label}
+                    </span>
+                  </Link>
+                  <p className="os-compass-command-centre-hint">
+                    Your organisation
+                  </p>
+                </div>
+
+                <div className="os-compass-group">
+                  <p className="os-compass-group-label">Platform</p>
+                  <div className="os-compass-modules">
                     <Link
-                      key={workspace.id}
-                      href={workspace.href}
+                      href={PLATFORM_HOME.href}
                       onClick={closeMobileNav}
-                      aria-current={active ? "page" : undefined}
+                      aria-current={isPlatformHome ? "page" : undefined}
                       className={cn(
                         "os-compass-module",
-                        active && "os-compass-module-active"
+                        isPlatformHome && "os-compass-module-active"
                       )}
                     >
-                      <span>{workspace.label}</span>
+                      <Home className="h-4 w-4 shrink-0" aria-hidden />
+                      <span>{PLATFORM_HOME.label}</span>
                     </Link>
-                  );
-                })}
-                {enterableWorkspaces.length === 0 ? (
-                  <p className="os-compass-nav-status">
-                    No workspaces available for your account yet.
-                  </p>
-                ) : null}
+                  </div>
+                </div>
               </>
+            )}
+          </div>
+        ) : (
+          <div className="os-compass-scroll">
+            <p className="os-compass-workspace-caption">Platform</p>
+            {sessionLoading ? (
+              <p className="os-compass-nav-status" role="status">
+                Loading navigation…
+              </p>
+            ) : (
+              <div className="os-compass-modules">
+                <Link
+                  href={PLATFORM_HOME.href}
+                  onClick={closeMobileNav}
+                  className="os-compass-module"
+                >
+                  <Home className="h-4 w-4 shrink-0" aria-hidden />
+                  <span>{PLATFORM_HOME.label}</span>
+                </Link>
+                <p className="os-compass-nav-status">
+                  Use the workspace switcher to change operating environment.
+                </p>
+              </div>
             )}
           </div>
         )}

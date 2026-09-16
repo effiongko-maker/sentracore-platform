@@ -52,9 +52,14 @@ function collectTsFiles(dir: string): string[] {
 
 const EXPECTED_ACTIONS = [
   "getRequest",
+  "getRequestDetail",
   "listMyRequests",
   "listReviewQueue",
   "listApprovalQueue",
+  "listAccessibleRequests",
+  "listAccessibleCompanies",
+  "listCategories",
+  "getMyRequestCapabilities",
   "createRequest",
   "updateDraftRequest",
   "submitRequest",
@@ -65,13 +70,23 @@ const EXPECTED_ACTIONS = [
   "approveRequest",
   "partiallyApproveRequest",
   "rejectRequest",
+  "deleteDraftRequest",
+  "uploadRequestDocument",
+  "removeDraftRequestDocument",
+  "supersedeRequestDocument",
+  "getRequestDocumentSignedUrl",
 ] as const;
 
 const ACTION_TO_SERVICE: Record<(typeof EXPECTED_ACTIONS)[number], string> = {
   getRequest: "getRequest",
+  getRequestDetail: "getRequestDetail",
   listMyRequests: "listMyRequests",
   listReviewQueue: "listReviewQueue",
   listApprovalQueue: "listApprovalQueue",
+  listAccessibleRequests: "listAccessibleRequests",
+  listAccessibleCompanies: "listAccessibleCompanies",
+  listCategories: "listCategories",
+  getMyRequestCapabilities: "getMyRequestCapabilities",
   createRequest: "createRequest",
   updateDraftRequest: "updateDraftRequest",
   submitRequest: "submitRequest",
@@ -82,6 +97,11 @@ const ACTION_TO_SERVICE: Record<(typeof EXPECTED_ACTIONS)[number], string> = {
   approveRequest: "approveRequest",
   partiallyApproveRequest: "partiallyApproveRequest",
   rejectRequest: "rejectRequest",
+  deleteDraftRequest: "deleteDraftRequest",
+  uploadRequestDocument: "uploadRequestDocument",
+  removeDraftRequestDocument: "removeDraftRequestDocument",
+  supersedeRequestDocument: "supersedeRequestDocument",
+  getRequestDocumentSignedUrl: "getRequestDocumentSignedUrl",
 };
 
 function runStatic(results: CheckResult[]) {
@@ -176,13 +196,24 @@ function runStatic(results: CheckResult[]) {
       !existsSync(resolve("src/app/api/financial-requests")),
       "no /api/financial-requests"
     );
-    const uiDirs = [
-      "src/app/(app)/platform-finance/requests",
-      "src/modules/platform-finance/components/FinancialRequest",
-    ];
-    for (const dir of uiDirs) {
-      assert(!existsSync(resolve(dir)), `no UI path ${dir}`);
-    }
+    assert(
+      existsSync(resolve("src/app/(app)/platform-finance/requests/page.tsx")),
+      "Financial Requests register route required"
+    );
+    assert(
+      existsSync(
+        resolve(
+          "src/modules/platform-finance/components/PlatformFinanceRequestsPage.tsx"
+        )
+      ),
+      "PlatformFinanceRequestsPage required"
+    );
+    assert(
+      !existsSync(
+        resolve("src/modules/platform-finance/components/FinancialRequest")
+      ),
+      "no parallel FinancialRequest module path"
+    );
     // Slice 1/2 migrations untouched by this slice (file presence only)
     assert(
       existsSync(
@@ -200,9 +231,14 @@ function runStatic(results: CheckResult[]) {
       ),
       "slice2 transitions migration must remain"
     );
-    push(results, "static.scope_no_ui_no_parallel_api", "PASS");
+    push(results, "static.scope_register_ui_no_parallel_api", "PASS");
   } catch (e) {
-    push(results, "static.scope_no_ui_no_parallel_api", "FAIL", (e as Error).message);
+    push(
+      results,
+      "static.scope_register_ui_no_parallel_api",
+      "FAIL",
+      (e as Error).message
+    );
   }
 
   try {

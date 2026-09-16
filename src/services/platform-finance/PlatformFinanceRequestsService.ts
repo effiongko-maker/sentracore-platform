@@ -1,5 +1,10 @@
-import type { FinancialRequest } from "@/modules/platform-finance/domain/requests";
-import type { FinancialRequestPayeeType } from "@/modules/platform-finance/domain/requests";
+import type {
+  FinancialRequest,
+  FinancialRequestCategory,
+  FinancialRequestDocument,
+  FinancialRequestEvent,
+  FinancialRequestPayeeType,
+} from "@/modules/platform-finance/domain/requests";
 
 const API_PATH = "/api/platform-finance/requests";
 
@@ -21,6 +26,22 @@ async function postAction<T>(
     throw new Error(
       ("message" in json && json.message) ||
         `Financial request failed (${action}).`
+    );
+  }
+  return json.data;
+}
+
+async function postMultipart<T>(form: FormData): Promise<T> {
+  const response = await fetch(API_PATH, {
+    method: "POST",
+    body: form,
+    credentials: "same-origin",
+  });
+  const json = (await response.json()) as ApiSuccess<T> | ApiFailure;
+  if (!response.ok || !json.success) {
+    throw new Error(
+      ("message" in json && json.message) ||
+        "Financial request document upload failed."
     );
   }
   return json.data;
@@ -51,6 +72,28 @@ export type UpdateDraftFinancialRequestClientInput = {
   clearRequiredByDate?: boolean;
   externalReference?: string | null;
   projectContractRef?: string | null;
+};
+
+export type FinancialRequestProfileSummary = {
+  id: string;
+  fullName: string | null;
+  jobTitle: string | null;
+};
+
+export type FinancialRequestCapabilities = {
+  profileId: string;
+  create: boolean;
+  viewOwn: boolean;
+  review: boolean;
+  approve: boolean;
+  view: boolean;
+};
+
+export type FinancialRequestDetail = {
+  request: FinancialRequest;
+  events: FinancialRequestEvent[];
+  documents: FinancialRequestDocument[];
+  requester: FinancialRequestProfileSummary | null;
 };
 
 /**
@@ -84,8 +127,33 @@ export const PlatformFinanceRequestsService = {
     return postAction("listApprovalQueue");
   },
 
+  listAccessibleRequests(): Promise<{
+    requests: FinancialRequest[];
+    requesters: FinancialRequestProfileSummary[];
+  }> {
+    return postAction("listAccessibleRequests");
+  },
+
+  listAccessibleCompanies(): Promise<
+    Array<{ id: string; code: string; name: string; status: string }>
+  > {
+    return postAction("listAccessibleCompanies");
+  },
+
+  listCategories(): Promise<FinancialRequestCategory[]> {
+    return postAction("listCategories");
+  },
+
+  getMyRequestCapabilities(): Promise<FinancialRequestCapabilities> {
+    return postAction("getMyRequestCapabilities");
+  },
+
   getRequest(requestId: string): Promise<FinancialRequest> {
     return postAction("getRequest", { id: requestId });
+  },
+
+  getRequestDetail(requestId: string): Promise<FinancialRequestDetail> {
+    return postAction("getRequestDetail", { id: requestId });
   },
 
   createRequest(
@@ -157,6 +225,63 @@ export const PlatformFinanceRequestsService = {
     return postAction("rejectRequest", {
       id: requestId,
       input: { reason },
+    });
+  },
+
+  deleteDraftRequest(
+    requestId: string
+  ): Promise<{ deletedRequestId: string }> {
+    return postAction("deleteDraftRequest", { id: requestId });
+  },
+
+  uploadRequestDocument(input: {
+    requestId: string;
+    documentRole: FinancialRequestDocument["documentRole"];
+    file: File;
+  }): Promise<FinancialRequestDocument> {
+    const form = new FormData();
+    form.set("action", "uploadRequestDocument");
+    form.set("id", input.requestId);
+    form.set("documentRole", input.documentRole);
+    form.set("file", input.file, input.file.name);
+    return postMultipart(form);
+  },
+
+  removeDraftRequestDocument(
+    requestId: string,
+    documentId: string
+  ): Promise<{ removedDocumentId: string }> {
+    return postAction("removeDraftRequestDocument", {
+      id: requestId,
+      input: { documentId },
+    });
+  },
+
+  supersedeRequestDocument(input: {
+    requestId: string;
+    documentId: string;
+    file: File;
+    documentRole?: FinancialRequestDocument["documentRole"];
+  }): Promise<{
+    previous: FinancialRequestDocument;
+    replacement: FinancialRequestDocument;
+  }> {
+    const form = new FormData();
+    form.set("action", "supersedeRequestDocument");
+    form.set("id", input.requestId);
+    form.set("documentId", input.documentId);
+    if (input.documentRole) form.set("documentRole", input.documentRole);
+    form.set("file", input.file, input.file.name);
+    return postMultipart(form);
+  },
+
+  getRequestDocumentSignedUrl(
+    requestId: string,
+    documentId: string
+  ): Promise<{ signedUrl: string; expiresInSeconds: number }> {
+    return postAction("getRequestDocumentSignedUrl", {
+      id: requestId,
+      input: { documentId },
     });
   },
 };

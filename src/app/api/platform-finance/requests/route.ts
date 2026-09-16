@@ -2,20 +2,29 @@ import { NextResponse } from "next/server";
 import { isActionError } from "@/lib/actions/errors";
 import {
   FINANCIAL_REQUEST_CAPABILITIES,
+  FINANCIAL_REQUEST_DOCUMENT_ROLES,
   FINANCIAL_REQUEST_PAYEE_TYPES,
+  PLATFORM_FINANCE_CAPABILITIES,
+  type FinancialRequestDocumentRole,
   type FinancialRequestPayeeType,
-} from "@/modules/platform-finance/domain/requests";
+} from "@/modules/platform-finance/types";
 import {
   requirePlatformFinanceAccess,
   requirePlatformFinanceAccessAny,
 } from "@/modules/platform-finance/server/requirePlatformFinanceAccess";
 import { PlatformFinanceRequestsServerService } from "@/modules/platform-finance/server/PlatformFinanceRequestsServerService";
+import { isFinanceRequestDocumentRole } from "@/modules/platform-finance/server/requestDocumentStorage";
 
 type FinancialRequestApiAction =
   | "getRequest"
+  | "getRequestDetail"
   | "listMyRequests"
   | "listReviewQueue"
   | "listApprovalQueue"
+  | "listAccessibleRequests"
+  | "listAccessibleCompanies"
+  | "listCategories"
+  | "getMyRequestCapabilities"
   | "createRequest"
   | "updateDraftRequest"
   | "submitRequest"
@@ -25,11 +34,25 @@ type FinancialRequestApiAction =
   | "sendRequestToCeo"
   | "approveRequest"
   | "partiallyApproveRequest"
-  | "rejectRequest";
+  | "rejectRequest"
+  | "deleteDraftRequest"
+  | "uploadRequestDocument"
+  | "removeDraftRequestDocument"
+  | "supersedeRequestDocument"
+  | "getRequestDocumentSignedUrl";
+
+const REGISTER_READ_CAPABILITIES = [
+  PLATFORM_FINANCE_CAPABILITIES.view,
+  FINANCIAL_REQUEST_CAPABILITIES.create,
+  FINANCIAL_REQUEST_CAPABILITIES.view_own,
+  FINANCIAL_REQUEST_CAPABILITIES.review,
+  FINANCIAL_REQUEST_CAPABILITIES.approve,
+] as const;
 
 type RequestBody = {
   action?: FinancialRequestApiAction;
   id?: string;
+  documentId?: string;
   companyId?: string;
   input?: Record<string, unknown>;
 };
@@ -237,8 +260,62 @@ export async function GET() {
   }
 }
 
+function requireDocumentRole(value: unknown): FinancialRequestDocumentRole {
+  if (!isFinanceRequestDocumentRole(value)) {
+    throw Object.assign(
+      new Error(
+        `documentRole must be one of: ${FINANCIAL_REQUEST_DOCUMENT_ROLES.join(", ")}.`
+      ),
+      { statusHint: 400 }
+    );
+  }
+  return value;
+}
+
+function rejectClientStorageAuthority(input: Record<string, unknown>) {
+  if (
+    input.storagePath != null ||
+    input.storage_path != null ||
+    input.storageBucket != null ||
+    input.storage_bucket != null ||
+    input.bucket != null ||
+    input.path != null
+  ) {
+    throw Object.assign(
+      new Error("Client must not supply storage bucket or path."),
+      { statusHint: 400 }
+    );
+  }
+}
+
+function decodeBase64File(contentBase64: unknown, field = "contentBase64"): Buffer {
+  if (typeof contentBase64 !== "string" || !contentBase64.trim()) {
+    throw Object.assign(new Error(`${field} is required.`), { statusHint: 400 });
+  }
+  const trimmed = contentBase64.trim();
+  const raw = trimmed.includes(",")
+    ? trimmed.slice(trimmed.indexOf(",") + 1)
+    : trimmed;
+  try {
+    const buf = Buffer.from(raw, "base64");
+    if (buf.length === 0) {
+      throw new Error("empty");
+    }
+    return buf;
+  } catch {
+    throw Object.assign(new Error(`${field} must be valid base64.`), {
+      statusHint: 400,
+    });
+  }
+}
+
 export async function POST(request: Request) {
   try {
+    const contentType = request.headers.get("content-type") ?? "";
+    if (contentType.includes("multipart/form-data")) {
+      return await handleMultipartDocumentPost(request);
+    }
+
     const body = (await request.json()) as RequestBody;
     const action = body.action;
     if (!action) {
@@ -293,15 +370,86 @@ export async function POST(request: Request) {
         });
       }
 
-      case "getRequest": {
-        const requestId = requireUuid(body.id ?? input.requestId, "id");
+      case "listAccessibleRequests": {
+        const access = await requirePlatformFinanceAccessAny({
+          capabilities: [...REGISTER_READ_CAPABILITIES],
+        });
+        const service = new PlatformFinanceRequestsServerService(
+          access.organisationId
+        );
+        const actor = actorFrom(access);
+        const requests = await service.listAccessibleRequests(actor);
+        const requesters = await service.listRequesterSummaries(
+          actor,
+          requests.map((r) => r.requesterProfileId)
+        );
+        return NextResponse.json({
+          success: true,
+          data: { requests, requesters },
+        });
+      }
+
+      case "listAccessibleCompanies": {
         const access = await requirePlatformFinanceAccessAny({
           capabilities: [
             FINANCIAL_REQUEST_CAPABILITIES.create,
             FINANCIAL_REQUEST_CAPABILITIES.view_own,
-            FINANCIAL_REQUEST_CAPABILITIES.review,
-            FINANCIAL_REQUEST_CAPABILITIES.approve,
+            PLATFORM_FINANCE_CAPABILITIES.view,
           ],
+        });
+        const service = new PlatformFinanceRequestsServerService(
+          access.organisationId
+        );
+        return NextResponse.json({
+          success: true,
+          data: await service.listAccessibleCompanies(actorFrom(access)),
+        });
+      }
+
+      case "listCategories": {
+        const access = await requirePlatformFinanceAccessAny({
+          capabilities: [...REGISTER_READ_CAPABILITIES],
+        });
+        const service = new PlatformFinanceRequestsServerService(
+          access.organisationId
+        );
+        return NextResponse.json({
+          success: true,
+          data: await service.listCategories(actorFrom(access)),
+        });
+      }
+
+      case "getMyRequestCapabilities": {
+        const access = await requirePlatformFinanceAccessAny({
+          capabilities: [...REGISTER_READ_CAPABILITIES],
+        });
+        const service = new PlatformFinanceRequestsServerService(
+          access.organisationId
+        );
+        return NextResponse.json({
+          success: true,
+          data: await service.getMyRequestCapabilities(actorFrom(access)),
+        });
+      }
+
+      case "getRequestDetail": {
+        const requestId = requireUuid(body.id ?? input.requestId, "id");
+        const access = await requirePlatformFinanceAccessAny({
+          capabilities: [...REGISTER_READ_CAPABILITIES],
+        });
+        const service = new PlatformFinanceRequestsServerService(
+          access.organisationId
+        );
+        return NextResponse.json({
+          success: true,
+          data: await service.getRequestDetail(actorFrom(access), requestId),
+        });
+      }
+
+      case "getRequest": {
+        const requestId = requireUuid(body.id ?? input.requestId, "id");
+        const access = await requirePlatformFinanceAccessAny({
+          capabilities: [...REGISTER_READ_CAPABILITIES],
         });
         const service = new PlatformFinanceRequestsServerService(
           access.organisationId
@@ -580,6 +728,107 @@ export async function POST(request: Request) {
         });
       }
 
+      case "deleteDraftRequest": {
+        const requestId = requireUuid(body.id ?? input.requestId, "id");
+        const { access, service } = await gateExistingRequest(
+          FINANCIAL_REQUEST_CAPABILITIES.create,
+          requestId
+        );
+        return NextResponse.json({
+          success: true,
+          data: await service.deleteDraftRequest(
+            actorFrom(access),
+            requestId
+          ),
+        });
+      }
+
+      case "uploadRequestDocument": {
+        rejectClientStorageAuthority(input);
+        const requestId = requireUuid(body.id ?? input.requestId, "id");
+        const documentRole = requireDocumentRole(input.documentRole);
+        const filename = requireNonEmptyString(input.filename, "filename");
+        const bytes = decodeBase64File(input.contentBase64);
+        const { access, service } = await gateExistingRequest(
+          FINANCIAL_REQUEST_CAPABILITIES.create,
+          requestId
+        );
+        return NextResponse.json({
+          success: true,
+          data: await service.uploadRequestDocument(actorFrom(access), {
+            requestId,
+            documentRole,
+            filename,
+            declaredMimeType: asOptionalString(input.mimeType) ?? null,
+            bytes,
+          }),
+        });
+      }
+
+      case "removeDraftRequestDocument": {
+        const requestId = requireUuid(body.id ?? input.requestId, "id");
+        const documentId = requireUuid(
+          input.documentId ?? body.documentId,
+          "documentId"
+        );
+        const { access, service } = await gateExistingRequest(
+          FINANCIAL_REQUEST_CAPABILITIES.create,
+          requestId
+        );
+        return NextResponse.json({
+          success: true,
+          data: await service.removeDraftRequestDocument(actorFrom(access), {
+            requestId,
+            documentId,
+          }),
+        });
+      }
+
+      case "supersedeRequestDocument": {
+        rejectClientStorageAuthority(input);
+        const requestId = requireUuid(body.id ?? input.requestId, "id");
+        const documentId = requireUuid(input.documentId, "documentId");
+        const filename = requireNonEmptyString(input.filename, "filename");
+        const bytes = decodeBase64File(input.contentBase64);
+        const documentRole =
+          input.documentRole === undefined || input.documentRole === null
+            ? undefined
+            : requireDocumentRole(input.documentRole);
+        const { access, service } = await gateExistingRequest(
+          FINANCIAL_REQUEST_CAPABILITIES.create,
+          requestId
+        );
+        return NextResponse.json({
+          success: true,
+          data: await service.supersedeRequestDocument(actorFrom(access), {
+            requestId,
+            documentId,
+            filename,
+            declaredMimeType: asOptionalString(input.mimeType) ?? null,
+            bytes,
+            documentRole,
+          }),
+        });
+      }
+
+      case "getRequestDocumentSignedUrl": {
+        const requestId = requireUuid(body.id ?? input.requestId, "id");
+        const documentId = requireUuid(input.documentId, "documentId");
+        const access = await requirePlatformFinanceAccessAny({
+          capabilities: [...REGISTER_READ_CAPABILITIES],
+        });
+        const service = new PlatformFinanceRequestsServerService(
+          access.organisationId
+        );
+        return NextResponse.json({
+          success: true,
+          data: await service.getRequestDocumentSignedUrl(actorFrom(access), {
+            requestId,
+            documentId,
+          }),
+        });
+      }
+
       default:
         return NextResponse.json(
           { success: false, message: `Unknown action: ${String(action)}` },
@@ -589,4 +838,88 @@ export async function POST(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
+}
+
+async function handleMultipartDocumentPost(request: Request) {
+  const form = await request.formData();
+  const action = String(form.get("action") ?? "");
+  const requestId = requireUuid(form.get("id") ?? form.get("requestId"), "id");
+  const file = form.get("file");
+
+  if (
+    action !== "uploadRequestDocument" &&
+    action !== "supersedeRequestDocument"
+  ) {
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          "multipart/form-data is only supported for uploadRequestDocument and supersedeRequestDocument.",
+      },
+      { status: 400 }
+    );
+  }
+
+  if (!(file instanceof File)) {
+    return NextResponse.json(
+      { success: false, message: "file is required." },
+      { status: 400 }
+    );
+  }
+
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const filename =
+    typeof form.get("filename") === "string" &&
+    String(form.get("filename")).trim()
+      ? String(form.get("filename")).trim()
+      : file.name;
+
+  if (form.get("storagePath") || form.get("storageBucket") || form.get("path")) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Client must not supply storage bucket or path.",
+      },
+      { status: 400 }
+    );
+  }
+
+  const { access, service } = await gateExistingRequest(
+    FINANCIAL_REQUEST_CAPABILITIES.create,
+    requestId
+  );
+  const actor = actorFrom(access);
+
+  if (action === "uploadRequestDocument") {
+    const documentRole = requireDocumentRole(form.get("documentRole"));
+    return NextResponse.json({
+      success: true,
+      data: await service.uploadRequestDocument(actor, {
+        requestId,
+        documentRole,
+        filename,
+        declaredMimeType: file.type || null,
+        bytes,
+      }),
+    });
+  }
+
+  const documentId = requireUuid(form.get("documentId"), "documentId");
+  const roleRaw = form.get("documentRole");
+  const documentRole =
+    roleRaw === null || roleRaw === undefined || String(roleRaw) === ""
+      ? undefined
+      : requireDocumentRole(roleRaw);
+
+  return NextResponse.json({
+    success: true,
+    data: await service.supersedeRequestDocument(actor, {
+      requestId,
+      documentId,
+      filename,
+      declaredMimeType: file.type || null,
+      bytes,
+      documentRole,
+    }),
+  });
 }

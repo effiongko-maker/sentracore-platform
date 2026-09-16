@@ -227,6 +227,22 @@ export type CreateFinancePeriodInput = {
   endDate: string;
 };
 
+export type CreateFinanceAccountInput = {
+  code: string;
+  name: string;
+  accountType: FinanceAccount["accountType"];
+  classification?: string | null;
+  status?: FinanceAccount["status"];
+};
+
+export type UpdateFinanceAccountInput = {
+  name?: string;
+  accountType?: FinanceAccount["accountType"];
+  classification?: string | null;
+  status?: FinanceAccount["status"];
+  code?: string;
+};
+
 export class PlatformFinanceRepository {
   constructor(private readonly organisationId: string) {}
 
@@ -259,6 +275,100 @@ export class PlatformFinanceRepository {
       .order("code", { ascending: true });
     if (error) throwDb(error, "Failed to list finance accounts.");
     return (data as AccountRow[] | null)?.map(mapAccount) ?? [];
+  }
+
+  async getAccount(accountId: string): Promise<FinanceAccount | null> {
+    const { data, error } = await db()
+      .from("finance_accounts")
+      .select("*")
+      .eq("organisation_id", this.organisationId)
+      .eq("id", accountId)
+      .maybeSingle();
+    if (error) throwDb(error, "Failed to load finance account.");
+    return data ? mapAccount(data as AccountRow) : null;
+  }
+
+  async getAccountByCode(code: string): Promise<FinanceAccount | null> {
+    const { data, error } = await db()
+      .from("finance_accounts")
+      .select("*")
+      .eq("organisation_id", this.organisationId)
+      .eq("code", code)
+      .maybeSingle();
+    if (error) throwDb(error, "Failed to load finance account by code.");
+    return data ? mapAccount(data as AccountRow) : null;
+  }
+
+  async createAccount(
+    input: CreateFinanceAccountInput
+  ): Promise<FinanceAccount> {
+    const { data, error } = await db()
+      .from("finance_accounts")
+      .insert({
+        organisation_id: this.organisationId,
+        code: input.code,
+        name: input.name,
+        account_type: input.accountType,
+        classification: input.classification ?? null,
+        status: input.status ?? "active",
+      })
+      .select("*")
+      .single();
+    if (error) throwDb(error, "Failed to create finance account.");
+    return mapAccount(data as AccountRow);
+  }
+
+  async updateAccount(
+    accountId: string,
+    input: UpdateFinanceAccountInput
+  ): Promise<FinanceAccount> {
+    const patch: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (input.name !== undefined) patch.name = input.name;
+    if (input.accountType !== undefined) patch.account_type = input.accountType;
+    if (input.classification !== undefined) {
+      patch.classification = input.classification;
+    }
+    if (input.status !== undefined) patch.status = input.status;
+    if (input.code !== undefined) patch.code = input.code;
+
+    const { data, error } = await db()
+      .from("finance_accounts")
+      .update(patch)
+      .eq("organisation_id", this.organisationId)
+      .eq("id", accountId)
+      .select("*")
+      .single();
+    if (error) throwDb(error, "Failed to update finance account.");
+    return mapAccount(data as AccountRow);
+  }
+
+  /**
+   * True when the account appears on any journal line belonging to a posted
+   * journal entry in this organisation (historical integrity lock).
+   */
+  async accountHasPostedUsage(accountId: string): Promise<boolean> {
+    const { data: lines, error } = await db()
+      .from("finance_journal_lines")
+      .select("id, journal_entry_id")
+      .eq("account_id", accountId)
+      .limit(50);
+    if (error) throwDb(error, "Failed to check account journal usage.");
+    if (!lines?.length) return false;
+
+    const entryIds = [
+      ...new Set(lines.map((row) => row.journal_entry_id as string)),
+    ];
+    const { data: entries, error: entryErr } = await db()
+      .from("finance_journal_entries")
+      .select("id")
+      .eq("organisation_id", this.organisationId)
+      .eq("status", "posted")
+      .in("id", entryIds)
+      .limit(1);
+    if (entryErr) throwDb(entryErr, "Failed to check posted journal usage.");
+    return (entries?.length ?? 0) > 0;
   }
 
   async getPeriod(periodId: string): Promise<FinancePeriod | null> {
@@ -303,6 +413,68 @@ export class PlatformFinanceRepository {
       .single();
     if (error) throwDb(error, "Failed to create finance period.");
     return mapPeriod(data as PeriodRow);
+  }
+
+  /**
+   * Idempotent insert for a company month. Returns existing row if present.
+   * Does not reopen closed periods.
+   */
+  async ensureOpenPeriod(
+    input: CreateFinancePeriodInput
+  ): Promise<{ period: FinancePeriod; created: boolean }> {
+    const existing = await this.findPeriodByCompanyYearMonth(
+      input.companyId,
+      input.year,
+      input.month
+    );
+    if (existing) {
+      return { period: existing, created: false };
+    }
+
+    const { data, error } = await db()
+      .from("finance_periods")
+      .insert({
+        organisation_id: this.organisationId,
+        company_id: input.companyId,
+        year: input.year,
+        month: input.month,
+        start_date: input.startDate,
+        end_date: input.endDate,
+        status: "open",
+      })
+      .select("*")
+      .single();
+
+    if (error) {
+      // Race: unique constraint — reload existing
+      if (error.code === "23505") {
+        const raced = await this.findPeriodByCompanyYearMonth(
+          input.companyId,
+          input.year,
+          input.month
+        );
+        if (raced) return { period: raced, created: false };
+      }
+      throwDb(error, "Failed to ensure finance period.");
+    }
+    return { period: mapPeriod(data as PeriodRow), created: true };
+  }
+
+  async findPeriodByCompanyYearMonth(
+    companyId: string,
+    year: number,
+    month: number
+  ): Promise<FinancePeriod | null> {
+    const { data, error } = await db()
+      .from("finance_periods")
+      .select("*")
+      .eq("organisation_id", this.organisationId)
+      .eq("company_id", companyId)
+      .eq("year", year)
+      .eq("month", month)
+      .maybeSingle();
+    if (error) throwDb(error, "Failed to find finance period.");
+    return data ? mapPeriod(data as PeriodRow) : null;
   }
 
   async listTransactions(companyId?: string): Promise<FinanceTransaction[]> {
@@ -435,6 +607,231 @@ export class PlatformFinanceRepository {
     const { data, error } = await query.limit(500);
     if (error) throwDb(error, "Failed to list journal entries.");
     return (data as JournalEntryRow[] | null)?.map(mapJournalEntry) ?? [];
+  }
+
+  /**
+   * Journal register query — posted journals with FT source metadata + line totals.
+   * Company scope must be pre-filtered to accessible company IDs by the service.
+   */
+  async queryJournalRegister(input: {
+    companyIds: string[];
+    companyId?: string | null;
+    periodId?: string | null;
+    dateFrom?: string | null;
+    dateTo?: string | null;
+    status?: string | null;
+    sourceType?: string | null;
+    search?: string | null;
+    page: number;
+    pageSize: number;
+  }): Promise<{
+    rows: Array<{
+      entry: FinanceJournalEntry;
+      sourceType: string | null;
+      transactionReference: string | null;
+      totalDebit: number;
+      totalCredit: number;
+    }>;
+    total: number;
+  }> {
+    if (input.companyIds.length === 0) {
+      return { rows: [], total: 0 };
+    }
+
+    let query = db()
+      .from("finance_journal_entries")
+      .select("*", { count: "exact" })
+      .eq("organisation_id", this.organisationId)
+      .in("company_id", input.companyIds)
+      .order("entry_date", { ascending: false })
+      .order("posted_at", { ascending: false });
+
+    if (input.companyId) {
+      query = query.eq("company_id", input.companyId);
+    }
+    if (input.periodId) {
+      query = query.eq("period_id", input.periodId);
+    }
+    if (input.dateFrom) {
+      query = query.gte("entry_date", input.dateFrom);
+    }
+    if (input.dateTo) {
+      query = query.lte("entry_date", input.dateTo);
+    }
+    if (input.status && input.status !== "all") {
+      query = query.eq("status", input.status);
+    }
+
+    const search = input.search?.trim();
+    if (search) {
+      const escaped = search.replace(/[%_,]/g, "\\$&");
+      const isUuid =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          search
+        );
+      query = isUuid
+        ? query.or(
+            `reference.ilike.%${escaped}%,description.ilike.%${escaped}%,id.eq.${search}`
+          )
+        : query.or(
+            `reference.ilike.%${escaped}%,description.ilike.%${escaped}%`
+          );
+    }
+
+    // Source-type filter needs FT join — fetch candidates then filter when set.
+    const needsSourceFilter =
+      Boolean(input.sourceType) && input.sourceType !== "all";
+
+    const page = Math.max(1, input.page);
+    const pageSize = Math.min(100, Math.max(1, input.pageSize));
+
+    if (!needsSourceFilter) {
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      const { data, error, count } = await query.range(from, to);
+      if (error) throwDb(error, "Failed to query journals.");
+      const entries = (data as JournalEntryRow[] | null)?.map(mapJournalEntry) ?? [];
+      const enriched = await this.enrichJournalRows(entries);
+      return { rows: enriched, total: count ?? enriched.length };
+    }
+
+    // Source filter: load matching window (capped), filter, then page in memory.
+    const { data, error } = await query.limit(2000);
+    if (error) throwDb(error, "Failed to query journals for source filter.");
+    const entries = (data as JournalEntryRow[] | null)?.map(mapJournalEntry) ?? [];
+    const enriched = await this.enrichJournalRows(entries);
+    const filtered = enriched.filter(
+      (row) => row.sourceType === input.sourceType
+    );
+    const from = (page - 1) * pageSize;
+    return {
+      rows: filtered.slice(from, from + pageSize),
+      total: filtered.length,
+    };
+  }
+
+  private async enrichJournalRows(
+    entries: FinanceJournalEntry[]
+  ): Promise<
+    Array<{
+      entry: FinanceJournalEntry;
+      sourceType: string | null;
+      transactionReference: string | null;
+      totalDebit: number;
+      totalCredit: number;
+    }>
+  > {
+    if (entries.length === 0) return [];
+
+    const entryIds = entries.map((e) => e.id);
+    const txIds = [...new Set(entries.map((e) => e.transactionId))];
+
+    const [{ data: txRows, error: txErr }, { data: lineRows, error: lineErr }] =
+      await Promise.all([
+        db()
+          .from("finance_transactions")
+          .select("id, transaction_type, reference, source_type")
+          .eq("organisation_id", this.organisationId)
+          .in("id", txIds),
+        db()
+          .from("finance_journal_lines")
+          .select("journal_entry_id, debit, credit")
+          .in("journal_entry_id", entryIds),
+      ]);
+    if (txErr) throwDb(txErr, "Failed to load journal transactions.");
+    if (lineErr) throwDb(lineErr, "Failed to load journal line totals.");
+
+    const txById = new Map(
+      (txRows ?? []).map((row) => [
+        row.id as string,
+        {
+          transactionType: String(row.transaction_type),
+          reference: String(row.reference),
+          sourceType: (row.source_type as string | null) ?? null,
+        },
+      ])
+    );
+
+    const totals = new Map<string, { debit: number; credit: number }>();
+    for (const row of lineRows ?? []) {
+      const id = row.journal_entry_id as string;
+      const cur = totals.get(id) ?? { debit: 0, credit: 0 };
+      cur.debit += Number(row.debit ?? 0);
+      cur.credit += Number(row.credit ?? 0);
+      totals.set(id, cur);
+    }
+
+    return entries.map((entry) => {
+      const tx = txById.get(entry.transactionId);
+      const tot = totals.get(entry.id) ?? { debit: 0, credit: 0 };
+      return {
+        entry,
+        // Prefer FT transaction_type for register "Source Type" (payment/expense/…)
+        sourceType: tx?.transactionType ?? null,
+        transactionReference: tx?.reference ?? null,
+        totalDebit: tot.debit,
+        totalCredit: tot.credit,
+      };
+    });
+  }
+
+  async listJournalLinesWithAccounts(journalEntryId: string): Promise<
+    Array<{
+      line: FinanceJournalLine;
+      accountCode: string;
+      accountName: string;
+      accountType: string;
+    }>
+  > {
+    const lines = await this.listJournalLines(journalEntryId);
+    if (lines.length === 0) return [];
+    const accountIds = [...new Set(lines.map((l) => l.accountId))];
+    const { data, error } = await db()
+      .from("finance_accounts")
+      .select("id, code, name, account_type")
+      .eq("organisation_id", this.organisationId)
+      .in("id", accountIds);
+    if (error) throwDb(error, "Failed to load journal line accounts.");
+    const byId = new Map(
+      (data ?? []).map((row) => [
+        row.id as string,
+        {
+          code: String(row.code),
+          name: String(row.name),
+          accountType: String(row.account_type),
+        },
+      ])
+    );
+    return lines.map((line) => {
+      const account = byId.get(line.accountId);
+      return {
+        line,
+        accountCode: account?.code ?? "—",
+        accountName: account?.name ?? "Unknown account",
+        accountType: account?.accountType ?? "expense",
+      };
+    });
+  }
+
+  async getProfilesByIds(
+    profileIds: string[]
+  ): Promise<Map<string, string>> {
+    const unique = [...new Set(profileIds.filter(Boolean))];
+    if (unique.length === 0) return new Map();
+    const { data, error } = await db()
+      .from("profiles")
+      .select("id, full_name, first_name, last_name")
+      .in("id", unique);
+    if (error) throwDb(error, "Failed to load profiles.");
+    const map = new Map<string, string>();
+    for (const row of data ?? []) {
+      const full =
+        (row.full_name && String(row.full_name).trim()) ||
+        [row.first_name, row.last_name].filter(Boolean).join(" ").trim() ||
+        null;
+      if (full) map.set(row.id as string, full);
+    }
+    return map;
   }
 
   async getTrialBalanceRows(filters: {

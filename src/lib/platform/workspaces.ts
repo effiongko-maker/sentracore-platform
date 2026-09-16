@@ -30,6 +30,12 @@ export const PLATFORM_HOME = {
   href: "/",
 } as const;
 
+/** CEO Command Centre — platform-level orchestration surface. */
+export const COMMAND_CENTRE_HOME = {
+  label: "Command Centre",
+  href: "/command-centre",
+} as const;
+
 /** Facility Management workspace home (route unchanged for compatibility). */
 export const OPERATIONS_HOME = {
   label: "Home",
@@ -231,6 +237,7 @@ export function resolveCurrentWorkspaceId(
   pathname: string
 ): WorkspaceId | null {
   if (isPlatformHomePath(pathname)) return null;
+  if (isCommandCentrePath(pathname)) return null;
 
   if (isEccOperationsPath(pathname)) {
     return "ecc-operations";
@@ -278,6 +285,13 @@ export function getActiveWorkspace(): PlatformWorkspace {
 
 export function isPlatformHomePath(pathname: string): boolean {
   return pathname === "/" || pathname === "";
+}
+
+export function isCommandCentrePath(pathname: string): boolean {
+  return (
+    pathname === COMMAND_CENTRE_HOME.href ||
+    pathname.startsWith(`${COMMAND_CENTRE_HOME.href}/`)
+  );
 }
 
 export function isOperationsPath(pathname: string): boolean {

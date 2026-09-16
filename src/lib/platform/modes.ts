@@ -1,5 +1,6 @@
 import { resolveLayerByPath, type OperatingLayerId } from "@/lib/platform/layers";
 import {
+  isCommandCentrePath,
   isPlatformHomePath,
   isWorkspacePreviewPath,
 } from "@/lib/platform/workspaces";
@@ -59,7 +60,11 @@ export function productModeFromPath(pathname: string): ProductMode {
   ) {
     return "cognitive";
   }
-  if (isPlatformHomePath(pathname) || isWorkspacePreviewPath(pathname)) {
+  if (
+    isPlatformHomePath(pathname) ||
+    isWorkspacePreviewPath(pathname) ||
+    isCommandCentrePath(pathname)
+  ) {
     return "platform";
   }
   return layerToMode(resolveLayerByPath(pathname));
@@ -84,5 +89,9 @@ export function isIntelligenceRoute(pathname: string): boolean {
 }
 
 export function isPlatformRoute(pathname: string): boolean {
-  return isPlatformHomePath(pathname) || isWorkspacePreviewPath(pathname);
+  return (
+    isPlatformHomePath(pathname) ||
+    isWorkspacePreviewPath(pathname) ||
+    isCommandCentrePath(pathname)
+  );
 }

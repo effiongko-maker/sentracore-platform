@@ -8,16 +8,36 @@ import {
   closeFinancePeriod,
   postFinanceTransaction,
 } from "@/modules/platform-finance/server/posting";
+import {
+  isFinanceAccountType,
+  normalizeAccountCode,
+  normalizeAccountName,
+} from "@/modules/platform-finance/domain/coa";
+import { yearMonthBounds } from "@/modules/platform-finance/domain/periods";
 import type {
+  FinanceAccount,
+  FinanceAccountStatus,
+  FinanceAccountType,
+  FinanceCompany,
   FinanceFoundationStatus,
   FinanceJournalEntry,
   FinanceJournalLine,
   FinancePeriod,
   FinancePostingLineInput,
   FinanceTransaction,
+  PlatformFinanceCapability,
 } from "@/modules/platform-finance/types";
+import { PLATFORM_FINANCE_CAPABILITIES } from "@/modules/platform-finance/types";
 import type { FinanceOverviewSnapshot } from "@/modules/platform-finance/overviewTypes";
+import type {
+  FinanceJournalDetail,
+  FinanceJournalListFilters,
+  FinanceJournalRegisterResult,
+  FinanceJournalRegisterRow,
+} from "@/modules/platform-finance/journalTypes";
 import { PlatformFinanceRequestsRepository } from "@/modules/platform-finance/server/PlatformFinanceRequestsRepository";
+import { createAdminClient } from "@/utils/supabase/admin";
+import { financePeriodLabel } from "@/modules/platform-finance/domain/periods";
 
 const MONTH_LABELS = [
   "January",
@@ -119,8 +139,189 @@ export class PlatformFinanceServerService {
     return this.repo.listCompanies();
   }
 
+  async listAccessibleCompanies(profileId: string): Promise<FinanceCompany[]> {
+    const [companies, accessibleIds] = await Promise.all([
+      this.repo.listCompanies(),
+      this.repo.listAccessibleCompanyIds(profileId),
+    ]);
+    const allowed = new Set(accessibleIds);
+    return companies.filter(
+      (c) => allowed.has(c.id) && c.status === "active"
+    );
+  }
+
+  async getMyAccountingCapabilities(profileId: string): Promise<{
+    view: boolean;
+    manageCoa: boolean;
+    managePeriods: boolean;
+    manageSetup: boolean;
+  }> {
+    const admin = createAdminClient();
+    const wanted = [
+      PLATFORM_FINANCE_CAPABILITIES.view,
+      PLATFORM_FINANCE_CAPABILITIES.manage_coa,
+      PLATFORM_FINANCE_CAPABILITIES.manage_periods,
+      PLATFORM_FINANCE_CAPABILITIES.manage_setup,
+    ] as const;
+    const { data, error } = await admin
+      .from("finance_capability_grants")
+      .select("capability")
+      .eq("organisation_id", this.organisationId)
+      .eq("profile_id", profileId)
+      .in("capability", [...wanted]);
+    if (error) {
+      throw new ActionError(
+        "INTERNAL_ERROR",
+        "Unable to load accounting capabilities."
+      );
+    }
+    const granted = new Set(
+      (data ?? []).map((row) => row.capability as PlatformFinanceCapability)
+    );
+    return {
+      view: granted.has(PLATFORM_FINANCE_CAPABILITIES.view),
+      manageCoa: granted.has(PLATFORM_FINANCE_CAPABILITIES.manage_coa),
+      managePeriods: granted.has(PLATFORM_FINANCE_CAPABILITIES.manage_periods),
+      manageSetup: granted.has(PLATFORM_FINANCE_CAPABILITIES.manage_setup),
+    };
+  }
+
   async listAccounts() {
     return this.repo.listAccounts();
+  }
+
+  async getAccount(accountId: string): Promise<{
+    account: FinanceAccount;
+    hasPostedUsage: boolean;
+  }> {
+    const account = await this.repo.getAccount(accountId);
+    if (!account) {
+      throw new ActionError("VALIDATION_ERROR", "Account not found.");
+    }
+    const hasPostedUsage = await this.repo.accountHasPostedUsage(accountId);
+    return { account, hasPostedUsage };
+  }
+
+  async createAccount(input: {
+    code: string;
+    name: string;
+    accountType: FinanceAccountType;
+    classification?: string | null;
+    status?: FinanceAccountStatus;
+  }): Promise<FinanceAccount> {
+    const code = normalizeAccountCode(input.code);
+    const name = normalizeAccountName(input.name);
+    if (!code) {
+      throw new ActionError("VALIDATION_ERROR", "Account code is required.");
+    }
+    if (!name) {
+      throw new ActionError("VALIDATION_ERROR", "Account name is required.");
+    }
+    if (!isFinanceAccountType(input.accountType)) {
+      throw new ActionError("VALIDATION_ERROR", "Invalid account type.");
+    }
+    const status = input.status ?? "active";
+    if (status !== "active" && status !== "inactive") {
+      throw new ActionError("VALIDATION_ERROR", "Invalid account status.");
+    }
+    const existing = await this.repo.getAccountByCode(code);
+    if (existing) {
+      throw new ActionError(
+        "VALIDATION_ERROR",
+        `Account code ${code} already exists.`
+      );
+    }
+    return this.repo.createAccount({
+      code,
+      name,
+      accountType: input.accountType,
+      classification: input.classification?.trim() || null,
+      status,
+    });
+  }
+
+  async updateAccount(input: {
+    accountId: string;
+    name?: string;
+    accountType?: FinanceAccountType;
+    classification?: string | null;
+    status?: FinanceAccountStatus;
+    code?: string;
+  }): Promise<FinanceAccount> {
+    const existing = await this.repo.getAccount(input.accountId);
+    if (!existing) {
+      throw new ActionError("VALIDATION_ERROR", "Account not found.");
+    }
+
+    const hasPosted = await this.repo.accountHasPostedUsage(input.accountId);
+    const patch: {
+      name?: string;
+      accountType?: FinanceAccountType;
+      classification?: string | null;
+      status?: FinanceAccountStatus;
+      code?: string;
+    } = {};
+
+    if (input.name !== undefined) {
+      const name = normalizeAccountName(input.name);
+      if (!name) {
+        throw new ActionError("VALIDATION_ERROR", "Account name is required.");
+      }
+      patch.name = name;
+    }
+    if (input.classification !== undefined) {
+      patch.classification = input.classification?.trim() || null;
+    }
+    if (input.status !== undefined) {
+      if (input.status !== "active" && input.status !== "inactive") {
+        throw new ActionError("VALIDATION_ERROR", "Invalid account status.");
+      }
+      patch.status = input.status;
+    }
+    if (input.code !== undefined) {
+      if (hasPosted) {
+        throw new ActionError(
+          "VALIDATION_ERROR",
+          "Cannot change code of an account used in posted journals. Deactivate instead."
+        );
+      }
+      const code = normalizeAccountCode(input.code);
+      if (!code) {
+        throw new ActionError("VALIDATION_ERROR", "Account code is required.");
+      }
+      const clash = await this.repo.getAccountByCode(code);
+      if (clash && clash.id !== existing.id) {
+        throw new ActionError(
+          "VALIDATION_ERROR",
+          `Account code ${code} already exists.`
+        );
+      }
+      patch.code = code;
+    }
+    if (input.accountType !== undefined) {
+      if (hasPosted) {
+        throw new ActionError(
+          "VALIDATION_ERROR",
+          "Cannot change type of an account used in posted journals."
+        );
+      }
+      if (!isFinanceAccountType(input.accountType)) {
+        throw new ActionError("VALIDATION_ERROR", "Invalid account type.");
+      }
+      patch.accountType = input.accountType;
+    }
+
+    return this.repo.updateAccount(input.accountId, patch);
+  }
+
+  async setAccountStatus(input: {
+    accountId: string;
+    status: FinanceAccountStatus;
+  }): Promise<FinanceAccount> {
+    return this.updateAccount({
+      accountId: input.accountId,
+      status: input.status,
+    });
   }
 
   async getTransaction(transactionId: string) {
@@ -151,7 +352,76 @@ export class PlatformFinanceServerService {
         "year, month, startDate, and endDate are required."
       );
     }
+    const company = await this.repo.getCompany(input.companyId);
+    if (!company || company.status !== "active") {
+      throw new ActionError("VALIDATION_ERROR", "Company not found or inactive.");
+    }
+    const existing = await this.repo.findPeriodByCompanyYearMonth(
+      input.companyId,
+      input.year,
+      input.month
+    );
+    if (existing) {
+      throw new ActionError(
+        "VALIDATION_ERROR",
+        `Period ${input.year}-${input.month} already exists for this company.`
+      );
+    }
     return this.repo.createPeriod(input);
+  }
+
+  /**
+   * Idempotent monthly calendar for one company + year.
+   * Creates missing open periods; leaves existing (open or closed) untouched.
+   */
+  async generatePeriodCalendar(input: {
+    companyId: string;
+    year: number;
+  }): Promise<{
+    companyId: string;
+    year: number;
+    createdCount: number;
+    existingCount: number;
+    periods: FinancePeriod[];
+  }> {
+    if (!input.companyId) {
+      throw new ActionError("VALIDATION_ERROR", "companyId is required.");
+    }
+    if (!Number.isInteger(input.year) || input.year < 2000 || input.year > 2100) {
+      throw new ActionError(
+        "VALIDATION_ERROR",
+        "year must be an integer between 2000 and 2100."
+      );
+    }
+    const company = await this.repo.getCompany(input.companyId);
+    if (!company || company.status !== "active") {
+      throw new ActionError("VALIDATION_ERROR", "Company not found or inactive.");
+    }
+
+    let createdCount = 0;
+    let existingCount = 0;
+    const periods: FinancePeriod[] = [];
+    for (const bounds of yearMonthBounds(input.year)) {
+      const result = await this.repo.ensureOpenPeriod({
+        companyId: input.companyId,
+        year: bounds.year,
+        month: bounds.month,
+        startDate: bounds.startDate,
+        endDate: bounds.endDate,
+      });
+      if (result.created) createdCount += 1;
+      else existingCount += 1;
+      periods.push(result.period);
+    }
+
+    periods.sort((a, b) => a.month - b.month);
+    return {
+      companyId: input.companyId,
+      year: input.year,
+      createdCount,
+      existingCount,
+      periods,
+    };
   }
 
   async createTransaction(
@@ -231,6 +501,152 @@ export class PlatformFinanceServerService {
     }
     const lines = await this.repo.listJournalLines(journalEntryId);
     return { entry, lines };
+  }
+
+  async listJournals(
+    profileId: string,
+    filters: FinanceJournalListFilters = {}
+  ): Promise<FinanceJournalRegisterResult> {
+    const accessibleIds = await this.repo.listAccessibleCompanyIds(profileId);
+    if (filters.companyId && !accessibleIds.includes(filters.companyId)) {
+      throw new ActionError(
+        "FORBIDDEN",
+        "You do not have access to this finance company."
+      );
+    }
+
+    const page = Math.max(1, filters.page ?? 1);
+    const pageSize = Math.min(50, Math.max(1, filters.pageSize ?? 25));
+
+    const { rows, total } = await this.repo.queryJournalRegister({
+      companyIds: accessibleIds,
+      companyId: filters.companyId ?? null,
+      periodId: filters.periodId ?? null,
+      dateFrom: filters.dateFrom ?? null,
+      dateTo: filters.dateTo ?? null,
+      status: filters.status ?? "posted",
+      sourceType: filters.sourceType ?? null,
+      search: filters.search ?? null,
+      page,
+      pageSize,
+    });
+
+    const companies = await this.repo.listCompanies();
+    const companyName = new Map(companies.map((c) => [c.id, c.name]));
+    const periods = filters.companyId
+      ? await this.repo.listPeriods(filters.companyId)
+      : (
+          await Promise.all(
+            accessibleIds.map((id) => this.repo.listPeriods(id))
+          )
+        ).flat();
+    const periodLabel = new Map(
+      periods.map((p) => [p.id, financePeriodLabel(p.year, p.month)])
+    );
+
+    const mapped: FinanceJournalRegisterRow[] = rows.map((row) => ({
+      id: row.entry.id,
+      journalNo: row.entry.reference,
+      entryDate: row.entry.entryDate,
+      periodId: row.entry.periodId,
+      periodLabel: periodLabel.get(row.entry.periodId) ?? "—",
+      companyId: row.entry.companyId,
+      companyName: companyName.get(row.entry.companyId) ?? "—",
+      description: row.entry.description,
+      sourceType: (row.sourceType as FinanceJournalRegisterRow["sourceType"]) ?? null,
+      reference: row.entry.reference,
+      totalDebit: row.totalDebit,
+      totalCredit: row.totalCredit,
+      status: row.entry.status,
+      transactionId: row.entry.transactionId,
+      postedAt: row.entry.postedAt,
+    }));
+
+    return { rows: mapped, total, page, pageSize };
+  }
+
+  async getJournalDetail(
+    profileId: string,
+    journalEntryId: string
+  ): Promise<FinanceJournalDetail> {
+    const entry = await this.repo.getJournalEntry(journalEntryId);
+    if (!entry) {
+      throw new ActionError("VALIDATION_ERROR", "Journal entry not found.");
+    }
+
+    const accessibleIds = await this.repo.listAccessibleCompanyIds(profileId);
+    if (!accessibleIds.includes(entry.companyId)) {
+      throw new ActionError(
+        "FORBIDDEN",
+        "You do not have access to this finance company."
+      );
+    }
+
+    const [linesWithAccounts, company, period, transaction] = await Promise.all([
+      this.repo.listJournalLinesWithAccounts(entry.id),
+      this.repo.getCompany(entry.companyId),
+      this.repo.getPeriod(entry.periodId),
+      this.repo.getTransaction(entry.transactionId),
+    ]);
+
+    const profileIds = [
+      entry.postedByProfileId,
+      transaction?.createdByProfileId,
+    ].filter(Boolean) as string[];
+    const names = await this.repo.getProfilesByIds(profileIds);
+
+    const totalDebit = linesWithAccounts.reduce(
+      (s, row) => s + row.line.debit,
+      0
+    );
+    const totalCredit = linesWithAccounts.reduce(
+      (s, row) => s + row.line.credit,
+      0
+    );
+    // Exact equality for foundation decimal amounts (numeric(18,2)).
+    const balanced =
+      linesWithAccounts.length >= 2 &&
+      Math.round(totalDebit * 100) === Math.round(totalCredit * 100);
+
+    return {
+      id: entry.id,
+      journalNo: entry.reference,
+      description: entry.description,
+      status: entry.status,
+      sourceType: (transaction?.transactionType ??
+        null) as FinanceJournalDetail["sourceType"],
+      reference: entry.reference,
+      transactionId: entry.transactionId,
+      transactionReference: transaction?.reference ?? entry.reference,
+      transactionHref: null,
+      companyId: entry.companyId,
+      companyName: company?.name ?? "—",
+      periodId: entry.periodId,
+      periodLabel: period
+        ? financePeriodLabel(period.year, period.month)
+        : "—",
+      entryDate: entry.entryDate,
+      createdByName: transaction?.createdByProfileId
+        ? names.get(transaction.createdByProfileId) ?? null
+        : null,
+      createdAt: transaction?.createdAt ?? entry.createdAt,
+      postedByName: names.get(entry.postedByProfileId) ?? null,
+      postedAt: entry.postedAt,
+      lines: linesWithAccounts.map((row) => ({
+        id: row.line.id,
+        lineNo: row.line.lineNo,
+        accountId: row.line.accountId,
+        accountCode: row.accountCode,
+        accountName: row.accountName,
+        accountType: row.accountType as FinanceJournalDetail["lines"][number]["accountType"],
+        description: row.line.description,
+        debit: row.line.debit,
+        credit: row.line.credit,
+      })),
+      totalDebit,
+      totalCredit,
+      balanced,
+    };
   }
 
   /**

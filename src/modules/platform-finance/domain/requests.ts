@@ -117,6 +117,8 @@ export const FINANCIAL_REQUEST_EVENT_TYPES = [
   "partially_approved",
   "rejected",
   "document_added",
+  "document_removed",
+  "document_superseded",
   "field_changed",
 ] as const;
 

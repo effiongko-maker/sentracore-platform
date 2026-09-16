@@ -4,9 +4,11 @@ import { useEffect, useId, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Check, ChevronDown } from "lucide-react";
 import {
+  COMMAND_CENTRE_HOME,
   PLATFORM_HOME,
   PLATFORM_WORKSPACES,
   getActiveWorkspace,
+  isCommandCentrePath,
   isPlatformHomePath,
   listEnterableWorkspaces,
   resolveCurrentWorkspace,
@@ -28,6 +30,10 @@ function optionStatusLabel(
   return workspace.statusLabel;
 }
 
+/**
+ * Cross-environment switcher — the only place to change operating environment.
+ * Sidebar shows in-environment actions only (never a duplicate workspace list).
+ */
 export function WorkspaceSwitcher({
   compact = false,
 }: {
@@ -51,9 +57,12 @@ export function WorkspaceSwitcher({
     enterable[0] ??
     (getActiveWorkspace().href ? getActiveWorkspace() : null);
   const onHome = isPlatformHomePath(pathname);
-  const triggerLabel = onHome
-    ? "Home"
-    : (currentWorkspace ?? fallbackActive)?.label ?? "Home";
+  const onCommandCentre = isCommandCentrePath(pathname);
+  const triggerLabel = onCommandCentre
+    ? COMMAND_CENTRE_HOME.label
+    : onHome
+      ? "Home"
+      : (currentWorkspace ?? fallbackActive)?.label ?? "Home";
 
   useEffect(() => {
     if (!open) return;
@@ -107,6 +116,34 @@ export function WorkspaceSwitcher({
               <button
                 type="button"
                 role="option"
+                aria-selected={onCommandCentre}
+                className={cn(
+                  "sc-ws-switcher-option",
+                  onCommandCentre && "sc-ws-switcher-option-current"
+                )}
+                onClick={() => {
+                  setOpen(false);
+                  router.push(COMMAND_CENTRE_HOME.href);
+                }}
+              >
+                <span className="sc-ws-switcher-option-main">
+                  <span className="sc-ws-switcher-option-title">
+                    {onCommandCentre ? (
+                      <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    ) : null}
+                    {COMMAND_CENTRE_HOME.label}
+                  </span>
+                  <span className="sc-ws-switcher-option-status">
+                    {onCommandCentre ? "Active" : "Organisation overview"}
+                  </span>
+                </span>
+              </button>
+            </li>
+
+            <li>
+              <button
+                type="button"
+                role="option"
                 aria-selected={onHome}
                 className={cn(
                   "sc-ws-switcher-option",
@@ -137,7 +174,10 @@ export function WorkspaceSwitcher({
                 accessOptions
               );
               const href = state.kind === "enter" ? state.href : null;
-              const isCurrent = currentWorkspace?.id === workspace.id;
+              const isCurrent =
+                !onCommandCentre &&
+                !onHome &&
+                currentWorkspace?.id === workspace.id;
               const statusLabel = optionStatusLabel(
                 workspace,
                 isCurrent,

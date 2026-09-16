@@ -10,15 +10,24 @@ import { PlatformFinanceServerService } from "@/modules/platform-finance/server/
 type PlatformFinanceAction =
   | "getFoundationStatus"
   | "getOverview"
+  | "getMyAccountingCapabilities"
   | "listCompanies"
+  | "listAccessibleCompanies"
   | "listAccounts"
+  | "getAccount"
+  | "createAccount"
+  | "updateAccount"
+  | "setAccountStatus"
   | "listPeriods"
   | "listTransactions"
   | "createPeriod"
+  | "generatePeriodCalendar"
   | "createTransaction"
   | "postTransaction"
   | "closePeriod"
-  | "getJournal";
+  | "getJournal"
+  | "listJournals"
+  | "getJournalDetail";
 
 type RequestBody = {
   action?: PlatformFinanceAction;
@@ -54,7 +63,7 @@ function errorResponse(error: unknown) {
     error instanceof Error && error.message.trim()
       ? error.message
       : "Platform Finance request failed.";
-  const status = /not found|already posted|unbalanced|required|closed/i.test(
+  const status = /not found|already posted|unbalanced|required|closed|already exists/i.test(
     message
   )
     ? 400
@@ -68,12 +77,23 @@ function capabilityForAction(
   switch (action) {
     case "createPeriod":
     case "closePeriod":
+    case "generatePeriodCalendar":
       return PLATFORM_FINANCE_CAPABILITIES.manage_periods;
+    case "createAccount":
+    case "updateAccount":
+    case "setAccountStatus":
+      return PLATFORM_FINANCE_CAPABILITIES.manage_coa;
     case "createTransaction":
       return PLATFORM_FINANCE_CAPABILITIES.create_transaction;
     case "postTransaction":
       return PLATFORM_FINANCE_CAPABILITIES.post;
     case "getOverview":
+    case "getMyAccountingCapabilities":
+    case "listAccessibleCompanies":
+    case "listAccounts":
+    case "getAccount":
+    case "listJournals":
+    case "getJournalDetail":
     default:
       return PLATFORM_FINANCE_CAPABILITIES.view;
   }
@@ -85,9 +105,17 @@ function companyIdForAction(
 ): string | undefined {
   if (
     action === "listCompanies" ||
+    action === "listAccessibleCompanies" ||
     action === "listAccounts" ||
+    action === "getAccount" ||
+    action === "createAccount" ||
+    action === "updateAccount" ||
+    action === "setAccountStatus" ||
     action === "getFoundationStatus" ||
-    action === "getOverview"
+    action === "getOverview" ||
+    action === "getMyAccountingCapabilities" ||
+    action === "listJournals" ||
+    action === "getJournalDetail"
   ) {
     return undefined;
   }
@@ -156,16 +184,95 @@ export async function POST(request: Request) {
           }),
         });
       }
+      case "getMyAccountingCapabilities":
+        return NextResponse.json({
+          success: true,
+          data: await service.getMyAccountingCapabilities(access.profileId),
+        });
       case "listCompanies":
         return NextResponse.json({
           success: true,
           data: await service.listCompanies(),
+        });
+      case "listAccessibleCompanies":
+        return NextResponse.json({
+          success: true,
+          data: await service.listAccessibleCompanies(access.profileId),
         });
       case "listAccounts":
         return NextResponse.json({
           success: true,
           data: await service.listAccounts(),
         });
+      case "getAccount": {
+        const accountId = String(body.id ?? body.input?.accountId ?? "");
+        return NextResponse.json({
+          success: true,
+          data: await service.getAccount(accountId),
+        });
+      }
+      case "createAccount": {
+        const input = body.input ?? {};
+        return NextResponse.json({
+          success: true,
+          data: await service.createAccount({
+            code: String(input.code ?? ""),
+            name: String(input.name ?? ""),
+            accountType: input.accountType as never,
+            classification:
+              typeof input.classification === "string"
+                ? input.classification
+                : input.classification === null
+                  ? null
+                  : undefined,
+            status:
+              input.status === "active" || input.status === "inactive"
+                ? input.status
+                : undefined,
+          }),
+        });
+      }
+      case "updateAccount": {
+        const input = body.input ?? {};
+        const accountId = String(input.accountId ?? body.id ?? "");
+        return NextResponse.json({
+          success: true,
+          data: await service.updateAccount({
+            accountId,
+            name: typeof input.name === "string" ? input.name : undefined,
+            code: typeof input.code === "string" ? input.code : undefined,
+            accountType:
+              typeof input.accountType === "string"
+                ? (input.accountType as never)
+                : undefined,
+            classification:
+              typeof input.classification === "string"
+                ? input.classification
+                : input.classification === null
+                  ? null
+                  : undefined,
+            status:
+              input.status === "active" || input.status === "inactive"
+                ? input.status
+                : undefined,
+          }),
+        });
+      }
+      case "setAccountStatus": {
+        const input = body.input ?? {};
+        const accountId = String(input.accountId ?? body.id ?? "");
+        const status = input.status;
+        if (status !== "active" && status !== "inactive") {
+          return NextResponse.json(
+            { success: false, message: "status must be active or inactive." },
+            { status: 400 }
+          );
+        }
+        return NextResponse.json({
+          success: true,
+          data: await service.setAccountStatus({ accountId, status }),
+        });
+      }
       case "listPeriods":
         if (!companyId) {
           return NextResponse.json(
@@ -204,6 +311,21 @@ export async function POST(request: Request) {
             month: Number(input.month),
             startDate: String(input.startDate ?? ""),
             endDate: String(input.endDate ?? ""),
+          }),
+        });
+      }
+      case "generatePeriodCalendar": {
+        const input = body.input ?? {};
+        const genCompanyId = String(input.companyId ?? "");
+        await requirePlatformFinanceAccess({
+          capability: PLATFORM_FINANCE_CAPABILITIES.manage_periods,
+          companyId: genCompanyId,
+        });
+        return NextResponse.json({
+          success: true,
+          data: await service.generatePeriodCalendar({
+            companyId: genCompanyId,
+            year: Number(input.year),
           }),
         });
       }
@@ -286,6 +408,46 @@ export async function POST(request: Request) {
         return NextResponse.json({
           success: true,
           data: journal,
+        });
+      }
+      case "listJournals": {
+        const input = body.input ?? {};
+        return NextResponse.json({
+          success: true,
+          data: await service.listJournals(access.profileId, {
+            companyId:
+              typeof input.companyId === "string" ? input.companyId : null,
+            periodId:
+              typeof input.periodId === "string" ? input.periodId : null,
+            dateFrom:
+              typeof input.dateFrom === "string" ? input.dateFrom : null,
+            dateTo: typeof input.dateTo === "string" ? input.dateTo : null,
+            status:
+              typeof input.status === "string"
+                ? (input.status as never)
+                : "posted",
+            sourceType:
+              typeof input.sourceType === "string"
+                ? (input.sourceType as never)
+                : null,
+            search: typeof input.search === "string" ? input.search : null,
+            page: typeof input.page === "number" ? input.page : Number(input.page ?? 1),
+            pageSize:
+              typeof input.pageSize === "number"
+                ? input.pageSize
+                : Number(input.pageSize ?? 25),
+          }),
+        });
+      }
+      case "getJournalDetail": {
+        const journalId = String(body.id ?? body.input?.journalId ?? "");
+        const detail = await service.getJournalDetail(
+          access.profileId,
+          journalId
+        );
+        return NextResponse.json({
+          success: true,
+          data: detail,
         });
       }
       default:

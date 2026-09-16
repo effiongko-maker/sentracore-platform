@@ -1,5 +1,15 @@
 export { PlatformFinanceFoundationPage } from "./components/PlatformFinanceFoundationPage";
 export { PlatformFinanceOverviewPage } from "./components/PlatformFinanceOverviewPage";
+export { PlatformFinanceAccountingPage } from "./components/PlatformFinanceAccountingPage";
+export { PlatformFinanceChartOfAccountsPage } from "./components/PlatformFinanceChartOfAccountsPage";
+export { PlatformFinancePeriodsPage } from "./components/PlatformFinancePeriodsPage";
+export { PlatformFinanceJournalPage } from "./components/PlatformFinanceJournalPage";
+export { PlatformFinanceJournalDetailPage } from "./components/PlatformFinanceJournalDetailPage";
+export { PlatformFinanceRequestsPage } from "./components/PlatformFinanceRequestsPage";
+export { PlatformFinanceNewRequestPage } from "./components/PlatformFinanceNewRequestPage";
+export { PlatformFinanceRequestReviewPage } from "./components/PlatformFinanceRequestReviewPage";
+export { PlatformFinancePayablesPage } from "./components/PlatformFinancePayablesPage";
+export { PlatformFinancePayableDetailPage } from "./components/PlatformFinancePayableDetailPage";
 export {
   PLATFORM_FINANCE_MODULE_SLUG,
   PLATFORM_FINANCE_WORKSPACE_ID,
@@ -18,6 +28,36 @@ export {
   isFinancialRequestStatus,
   assertFinancialRequestTransition,
   isFinancialRequestTerminalStatus,
+  FINANCE_PAYABLE_STATUSES,
+  FINANCE_PAYABLE_TRANSITIONS,
+  FINANCE_PAYABLE_BANKING_DEFERRED_TRANSITIONS,
+  FINANCE_PAYABLE_SOURCE_TYPES,
+  FINANCE_PAYABLE_PAYEE_TYPES,
+  FINANCE_PAYABLE_EVENT_TYPES,
+  FINANCE_PAYABLE_CAPABILITIES,
+  FINANCE_PAYABLE_INVARIANTS,
+  financePayableOutstandingAmount,
+  toFinancePayableView,
+  isFinancePayableStatus,
+  isAllowedFinancePayableTransition,
+  assertFinancePayableTransition,
+  isFinancePayableSourceType,
+  FINANCE_VENDOR_BILL_STATUSES,
+  FINANCE_VENDOR_BILL_TERMINAL_STATUSES,
+  FINANCE_VENDOR_BILL_TRANSITIONS,
+  FINANCE_VENDOR_BILL_INPUTTER_EDITABLE_STATUSES,
+  FINANCE_VENDOR_BILL_PAYEE_TYPES,
+  FINANCE_VENDOR_BILL_DOCUMENT_ROLES,
+  FINANCE_VENDOR_BILL_EVENT_TYPES,
+  FINANCE_VENDOR_BILL_CAPABILITIES,
+  FINANCE_VENDOR_BILL_CEO_APPROVAL_CAPABILITY,
+  FINANCE_VENDOR_BILL_SEPARATION_OF_DUTIES,
+  FINANCE_VENDOR_BILL_INVARIANTS,
+  financeVendorBillDisallowedAmount,
+  isFinanceVendorBillStatus,
+  isAllowedFinanceVendorBillTransition,
+  assertFinanceVendorBillTransition,
+  isFinanceVendorBillTerminalStatus,
   type PlatformFinanceCapability,
   type FinanceFoundationStatus,
   type FinanceCompany,
@@ -35,6 +75,27 @@ export {
   type FinancialRequestEventType,
   type FinancialRequestDocumentRole,
   type FinancialRequestCapability,
+  type FinancePayable,
+  type FinancePayableView,
+  type FinancePayableSourceRequestSummary,
+  type FinancePayableStatus,
+  type FinancePayableSourceType,
+  type FinancePayablePayeeType,
+  type FinancePayableEvent,
+  type FinancePayableEventType,
+  type FinancePayableDocument,
+  type FinancePayableDocumentRole,
+  type FinancePayableCapability,
+  type FinanceVendorBill,
+  type FinanceVendorBillStatus,
+  type FinanceVendorBillTerminalStatus,
+  type FinanceVendorBillPayeeType,
+  type FinanceVendorBillDocument,
+  type FinanceVendorBillDocumentRole,
+  type FinanceVendorBillEvent,
+  type FinanceVendorBillEventType,
+  type FinanceVendorBillPayableSummary,
+  type FinanceVendorBillCapability,
 } from "./types";
 export type { FinanceOverviewSnapshot } from "./overviewTypes";
 export { PLATFORM_FINANCE_CAPABILITY_LIST } from "./constants";
@@ -49,5 +110,14 @@ export {
 } from "./domain/invariants";
 export { PlatformFinanceService } from "@/services/platform-finance/PlatformFinanceService";
 export { PlatformFinanceRequestsService } from "@/services/platform-finance/PlatformFinanceRequestsService";
+export { PlatformFinancePayablesService } from "@/services/platform-finance/PlatformFinancePayablesService";
 export { PlatformFinanceRequestsServerService } from "./server/PlatformFinanceRequestsServerService";
 export { PlatformFinanceRequestsRepository } from "./server/PlatformFinanceRequestsRepository";
+export { PlatformFinancePayablesServerService } from "./server/PlatformFinancePayablesServerService";
+export { PlatformFinancePayablesRepository } from "./server/PlatformFinancePayablesRepository";
+export { PlatformFinanceVendorBillsService } from "@/services/platform-finance/PlatformFinanceVendorBillsService";
+export { PlatformFinanceVendorBillsServerService } from "./server/PlatformFinanceVendorBillsServerService";
+export { PlatformFinanceVendorBillsRepository } from "./server/PlatformFinanceVendorBillsRepository";
+export { PlatformFinanceVendorBillsPage } from "./components/PlatformFinanceVendorBillsPage";
+export { PlatformFinanceNewVendorBillPage } from "./components/PlatformFinanceNewVendorBillPage";
+export { PlatformFinanceVendorBillDetailPage } from "./components/PlatformFinanceVendorBillDetailPage";

@@ -67,8 +67,56 @@ export const PlatformFinanceService = {
     return postAction("listCompanies");
   },
 
+  listAccessibleCompanies(): Promise<FinanceCompany[]> {
+    return postAction("listAccessibleCompanies");
+  },
+
+  getMyAccountingCapabilities(): Promise<{
+    view: boolean;
+    manageCoa: boolean;
+    managePeriods: boolean;
+    manageSetup: boolean;
+  }> {
+    return postAction("getMyAccountingCapabilities");
+  },
+
   listAccounts(): Promise<FinanceAccount[]> {
     return postAction("listAccounts");
+  },
+
+  getAccount(accountId: string): Promise<{
+    account: FinanceAccount;
+    hasPostedUsage: boolean;
+  }> {
+    return postAction("getAccount", { id: accountId });
+  },
+
+  createAccount(input: {
+    code: string;
+    name: string;
+    accountType: string;
+    classification?: string | null;
+    status?: "active" | "inactive";
+  }): Promise<FinanceAccount> {
+    return postAction("createAccount", { input });
+  },
+
+  updateAccount(input: {
+    accountId: string;
+    code?: string;
+    name?: string;
+    accountType?: string;
+    classification?: string | null;
+    status?: "active" | "inactive";
+  }): Promise<FinanceAccount> {
+    return postAction("updateAccount", { input });
+  },
+
+  setAccountStatus(input: {
+    accountId: string;
+    status: "active" | "inactive";
+  }): Promise<FinanceAccount> {
+    return postAction("setAccountStatus", { input });
   },
 
   listPeriods(companyId?: string): Promise<FinancePeriod[]> {
@@ -87,6 +135,19 @@ export const PlatformFinanceService = {
     endDate: string;
   }): Promise<FinancePeriod> {
     return postAction("createPeriod", { input });
+  },
+
+  generatePeriodCalendar(input: {
+    companyId: string;
+    year: number;
+  }): Promise<{
+    companyId: string;
+    year: number;
+    createdCount: number;
+    existingCount: number;
+    periods: FinancePeriod[];
+  }> {
+    return postAction("generatePeriodCalendar", { input });
   },
 
   createTransaction(input: {
@@ -121,5 +182,77 @@ export const PlatformFinanceService = {
     journalEntryId: string
   ): Promise<{ entry: FinanceJournalEntry; lines: FinanceJournalLine[] }> {
     return postAction("getJournal", { id: journalEntryId });
+  },
+
+  listJournals(input?: {
+    companyId?: string | null;
+    periodId?: string | null;
+    dateFrom?: string | null;
+    dateTo?: string | null;
+    status?: string | null;
+    sourceType?: string | null;
+    search?: string | null;
+    page?: number;
+    pageSize?: number;
+  }): Promise<{
+    rows: Array<{
+      id: string;
+      journalNo: string;
+      entryDate: string;
+      periodId: string;
+      periodLabel: string;
+      companyId: string;
+      companyName: string;
+      description: string;
+      sourceType: string | null;
+      reference: string;
+      totalDebit: number;
+      totalCredit: number;
+      status: string;
+      transactionId: string;
+      postedAt: string;
+    }>;
+    total: number;
+    page: number;
+    pageSize: number;
+  }> {
+    return postAction("listJournals", { input: input ?? {} });
+  },
+
+  getJournalDetail(journalEntryId: string): Promise<{
+    id: string;
+    journalNo: string;
+    description: string;
+    status: string;
+    sourceType: string | null;
+    reference: string;
+    transactionId: string;
+    transactionReference: string;
+    transactionHref: string | null;
+    companyId: string;
+    companyName: string;
+    periodId: string;
+    periodLabel: string;
+    entryDate: string;
+    createdByName: string | null;
+    createdAt: string;
+    postedByName: string | null;
+    postedAt: string;
+    lines: Array<{
+      id: string;
+      lineNo: number;
+      accountId: string;
+      accountCode: string;
+      accountName: string;
+      accountType: string;
+      description: string | null;
+      debit: number;
+      credit: number;
+    }>;
+    totalDebit: number;
+    totalCredit: number;
+    balanced: boolean;
+  }> {
+    return postAction("getJournalDetail", { id: journalEntryId });
   },
 };

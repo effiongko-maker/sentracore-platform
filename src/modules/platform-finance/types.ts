@@ -25,6 +25,15 @@ export const PLATFORM_FINANCE_CAPABILITIES = {
   request_view_own: "platform_finance.request.view_own",
   request_review: "platform_finance.request.review",
   request_approve: "platform_finance.request.approve",
+  payable_view: "platform_finance.payable.view",
+  payable_create: "platform_finance.payable.create",
+  payable_review: "platform_finance.payable.review",
+  payable_approve: "platform_finance.payable.approve",
+  // Vendor Bill has no dedicated approve capability: CEO authority over every
+  // obligation is request_approve above.
+  vendor_bill_view: "platform_finance.vendor_bill.view",
+  vendor_bill_create: "platform_finance.vendor_bill.create",
+  vendor_bill_review: "platform_finance.vendor_bill.review",
 } as const;
 
 export {
@@ -53,6 +62,66 @@ export {
   type FinancialRequestPayeeType,
   type FinancialRequestCapability,
 } from "./domain/requests";
+
+export {
+  FINANCE_PAYABLE_STATUSES,
+  FINANCE_PAYABLE_PRIMARY_STATUSES,
+  FINANCE_PAYABLE_EXCEPTION_STATUSES,
+  FINANCE_PAYABLE_TRANSITIONS,
+  FINANCE_PAYABLE_BANKING_DEFERRED_TRANSITIONS,
+  FINANCE_PAYABLE_SOURCE_TYPES,
+  FINANCE_PAYABLE_PAYEE_TYPES,
+  FINANCE_PAYABLE_EVENT_TYPES,
+  FINANCE_PAYABLE_DOCUMENT_ROLES,
+  FINANCE_PAYABLE_CAPABILITIES,
+  FINANCE_PAYABLE_INVARIANTS,
+  financePayableOutstandingAmount,
+  toFinancePayableView,
+  isFinancePayableStatus,
+  isAllowedFinancePayableTransition,
+  assertFinancePayableTransition,
+  isFinancePayableSourceType,
+  type FinancePayable,
+  type FinancePayableView,
+  type FinancePayableSourceRequestSummary,
+  type FinancePayableStatus,
+  type FinancePayableSourceType,
+  type FinancePayablePayeeType,
+  type FinancePayableEvent,
+  type FinancePayableEventType,
+  type FinancePayableDocument,
+  type FinancePayableDocumentRole,
+  type FinancePayableCapability,
+} from "./domain/payables";
+
+export {
+  FINANCE_VENDOR_BILL_STATUSES,
+  FINANCE_VENDOR_BILL_TERMINAL_STATUSES,
+  FINANCE_VENDOR_BILL_TRANSITIONS,
+  FINANCE_VENDOR_BILL_INPUTTER_EDITABLE_STATUSES,
+  FINANCE_VENDOR_BILL_PAYEE_TYPES,
+  FINANCE_VENDOR_BILL_DOCUMENT_ROLES,
+  FINANCE_VENDOR_BILL_EVENT_TYPES,
+  FINANCE_VENDOR_BILL_CAPABILITIES,
+  FINANCE_VENDOR_BILL_CEO_APPROVAL_CAPABILITY,
+  FINANCE_VENDOR_BILL_SEPARATION_OF_DUTIES,
+  FINANCE_VENDOR_BILL_INVARIANTS,
+  financeVendorBillDisallowedAmount,
+  isFinanceVendorBillStatus,
+  isAllowedFinanceVendorBillTransition,
+  assertFinanceVendorBillTransition,
+  isFinanceVendorBillTerminalStatus,
+  type FinanceVendorBill,
+  type FinanceVendorBillStatus,
+  type FinanceVendorBillTerminalStatus,
+  type FinanceVendorBillPayeeType,
+  type FinanceVendorBillDocument,
+  type FinanceVendorBillDocumentRole,
+  type FinanceVendorBillEvent,
+  type FinanceVendorBillEventType,
+  type FinanceVendorBillPayableSummary,
+  type FinanceVendorBillCapability,
+} from "./domain/vendorBills";
 
 export type PlatformFinanceCapability =
   (typeof PLATFORM_FINANCE_CAPABILITIES)[keyof typeof PLATFORM_FINANCE_CAPABILITIES];

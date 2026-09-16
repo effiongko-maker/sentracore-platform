@@ -30,6 +30,16 @@ export function resolveFinanceVerifyDatabaseUrl(): string | null {
   return process.env.PLATFORM_FINANCE_VERIFY_DATABASE_URL?.trim() || null;
 }
 
+/** Broader URL resolution for one-shot migration apply in slice verifies only. */
+export function resolveFinanceVerifyDatabaseUrlLoose(): string | null {
+  return (
+    process.env.PLATFORM_FINANCE_VERIFY_DATABASE_URL?.trim() ||
+    process.env.DATABASE_URL?.trim() ||
+    process.env.SUPABASE_DB_URL?.trim() ||
+    null
+  );
+}
+
 export async function loadPgModule(): Promise<typeof import("pg") | null> {
   try {
     return await import("pg");
@@ -105,11 +115,19 @@ export async function expectSqlFailure(
   sql: string,
   params: unknown[] = []
 ): Promise<string> {
+  const sp = `pf_expect_fail_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+  await client.query(`SAVEPOINT ${sp}`);
   try {
     await client.query(sql, params);
+    await client.query(`RELEASE SAVEPOINT ${sp}`);
     throw new Error("expected SQL failure but statement succeeded");
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+    try {
+      await client.query(`ROLLBACK TO SAVEPOINT ${sp}`);
+    } catch {
+      /* transaction may already be broken */
+    }
     if (message === "expected SQL failure but statement succeeded") throw e;
     return message;
   }

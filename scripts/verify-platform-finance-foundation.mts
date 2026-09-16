@@ -219,10 +219,61 @@ function main() {
     "PlatformModuleSlug includes platform_finance"
   );
 
-  // --- Seed registration ---
+  // --- Seed + developer/QA access bundle ---
+  // Role-based explicit grants for organisation_owner / platform_super_admin
+  // (not email bypass). Full implemented Finance + Command Centre catalog.
   const seed = readSrc("supabase/seed.sql");
   assert(seed.includes("'platform_finance'"), "seed registers platform_finance");
   assert(seed.includes("finance_companies"), "seed mirrors company seed");
+  assert(
+    seed.includes("platform-developer-access-bundle") &&
+      seed.includes("'platform_finance.view'") &&
+      seed.includes("'platform_finance.request.create'") &&
+      seed.includes("'platform_finance.request.review'") &&
+      seed.includes("'platform_finance.request.approve'") &&
+      seed.includes("'platform_finance.vendor_bill.create'") &&
+      seed.includes("'platform_finance.vendor_bill.review'") &&
+      seed.includes("'platform.command_centre.view'") &&
+      seed.includes("'platform.command_centre.decide'"),
+    "seed grants developer/QA Finance + Command Centre capability bundle"
+  );
+  assert(
+    seed.includes("organisation_owner") &&
+      seed.includes("platform_super_admin") &&
+      seed.includes("finance_company_access"),
+    "seed developer access is role-based and includes company access"
+  );
+
+  const developerBundle = readSrc(
+    "scripts/lib/platform-developer-access-bundle.ts"
+  );
+  assert(
+    developerBundle.includes("PLATFORM_FINANCE_CAPABILITIES") &&
+      developerBundle.includes("COMMAND_CENTRE_CAPABILITIES") &&
+      developerBundle.includes("vendor_bill_create") &&
+      developerBundle.includes("request_approve"),
+    "central developer access bundle imports catalog capabilities"
+  );
+
+  const developerGrant = readSrc("scripts/grant-platform-developer-access.mts");
+  assert(
+    developerGrant.includes("PLATFORM_DEVELOPER_FINANCE_CAPABILITIES") &&
+      developerGrant.includes("PLATFORM_DEVELOPER_COMMAND_CENTRE_CAPABILITIES") &&
+      developerGrant.includes("finance_capability_grants") &&
+      developerGrant.includes("platform_capability_grants") &&
+      developerGrant.includes("finance_company_access"),
+    "developer grant script upserts Finance, Command Centre, and company grants"
+  );
+
+  const legacyGrant = readSrc("scripts/grant-platform-finance-dev-access.mts");
+  assert(
+    legacyGrant.includes("grant-platform-developer-access.mts"),
+    "legacy finance grant script delegates to central developer grant"
+  );
+  assert(
+    !legacyGrant.includes("PLATFORM_FINANCE_CAPABILITIES.request_review"),
+    "legacy finance grant script does not invent its own capability list"
+  );
 
   // --- Verification lifecycle hardening (static) ---
   const txHelperPath = "scripts/lib/platform-finance-verify-transaction.ts";
