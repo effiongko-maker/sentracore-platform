@@ -24,6 +24,8 @@ type PlatformFinanceAction =
   | "generatePeriodCalendar"
   | "createTransaction"
   | "postTransaction"
+  | "postManualJournal"
+  | "findOpenPeriodForDate"
   | "closePeriod"
   | "getJournal"
   | "listJournals"
@@ -86,6 +88,7 @@ function capabilityForAction(
     case "createTransaction":
       return PLATFORM_FINANCE_CAPABILITIES.create_transaction;
     case "postTransaction":
+    case "postManualJournal":
       return PLATFORM_FINANCE_CAPABILITIES.post;
     case "getOverview":
     case "getMyAccountingCapabilities":
@@ -94,6 +97,7 @@ function capabilityForAction(
     case "getAccount":
     case "listJournals":
     case "getJournalDetail":
+    case "findOpenPeriodForDate":
     default:
       return PLATFORM_FINANCE_CAPABILITIES.view;
   }
@@ -373,6 +377,74 @@ export async function POST(request: Request) {
               typeof input.periodId === "string" ? input.periodId : null,
             reason: typeof input.reason === "string" ? input.reason : null,
           }),
+        });
+      }
+      case "postManualJournal": {
+        const input = body.input ?? {};
+        const manualCompanyId = String(input.companyId ?? body.companyId ?? "");
+        if (!manualCompanyId) {
+          return NextResponse.json(
+            { success: false, message: "Company is required." },
+            { status: 400 }
+          );
+        }
+        // Posting a manual journal requires both create_transaction and post.
+        await requirePlatformFinanceAccess({
+          capability: PLATFORM_FINANCE_CAPABILITIES.create_transaction,
+          companyId: manualCompanyId,
+        });
+        await requirePlatformFinanceAccess({
+          capability: PLATFORM_FINANCE_CAPABILITIES.post,
+          companyId: manualCompanyId,
+        });
+        const rawLines = Array.isArray(input.lines) ? input.lines : [];
+        return NextResponse.json({
+          success: true,
+          data: await service.postManualJournal({
+            companyId: manualCompanyId,
+            transactionDate: String(input.transactionDate ?? ""),
+            description: String(input.description ?? ""),
+            actorProfileId: access.profileId,
+            periodId:
+              typeof input.periodId === "string" ? input.periodId : null,
+            reason: typeof input.reason === "string" ? input.reason : null,
+            lines: rawLines.map((line) => {
+              const row = (line ?? {}) as Record<string, unknown>;
+              return {
+                accountId: String(row.accountId ?? ""),
+                debit: Number(row.debit) || 0,
+                credit: Number(row.credit) || 0,
+                description:
+                  typeof row.description === "string"
+                    ? row.description
+                    : null,
+              };
+            }),
+          }),
+        });
+      }
+      case "findOpenPeriodForDate": {
+        const input = body.input ?? {};
+        const periodCompanyId = String(
+          input.companyId ?? body.companyId ?? ""
+        );
+        const transactionDate = String(input.transactionDate ?? "");
+        if (!periodCompanyId) {
+          return NextResponse.json(
+            { success: false, message: "companyId is required." },
+            { status: 400 }
+          );
+        }
+        await requirePlatformFinanceAccess({
+          capability: PLATFORM_FINANCE_CAPABILITIES.view,
+          companyId: periodCompanyId,
+        });
+        return NextResponse.json({
+          success: true,
+          data: await service.findOpenPeriodForDate(
+            periodCompanyId,
+            transactionDate
+          ),
         });
       }
       case "closePeriod": {

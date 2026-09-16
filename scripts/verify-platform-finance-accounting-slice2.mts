@@ -62,6 +62,64 @@ function main() {
   assert(!/JE-2026-00012|500,?000|website development/i.test(register), "no mock JE copy");
   assert(!register.includes("createJournal"), "no create journal UI");
   assert(!register.includes("deleteJournal"), "no delete journal UI");
+  assert(register.includes("New Journal Entry"), "new journal CTA");
+  assert(
+    register.includes("pf-journal-toolbar-cta"),
+    "CTA lives in register toolbar with search"
+  );
+  assert(
+    !register.includes("pf-journal-header-cta") &&
+      !register.includes("pf-journal-header-actions"),
+    "CTA not in page header / old toolbar group"
+  );
+  assert(
+    !/>\s*Filters\s*</.test(register) && !register.includes(">Filters<"),
+    "no Filters toggle button"
+  );
+  assert(!register.includes("filtersOpen"), "filters always visible");
+  assert(register.includes("All Companies"), "company filter default");
+  assert(register.includes(">Date</th>"), "Date column");
+  assert(register.includes(">Ref No</th>"), "Ref No column");
+  assert(register.includes(">Description</th>"), "Description column");
+  assert(register.includes(">Code</th>"), "Code column");
+  assert(register.includes(">Account Name</th>"), "Account Name column");
+  assert(register.includes("Debit (₦)"), "Debit column");
+  assert(register.includes("Credit (₦)"), "Credit column");
+  assert(register.includes(">Prepared By</th>"), "Prepared By column");
+  assert(register.includes(">Period</th>"), "Period column");
+  assert(
+    !register.includes("<th>Company</th>") &&
+      !register.includes("<th>Journal No.</th>") &&
+      !register.includes("<th>Source Type</th>") &&
+      !register.includes("<th>Status</th>"),
+    "no company/journal-no/source/status columns"
+  );
+  assert(
+    register.includes("No posted journal entries yet."),
+    "restrained empty message"
+  );
+  assert(
+    !register.includes("pf-req-empty"),
+    "empty state does not replace table with blank card"
+  );
+  assert(register.includes("journalEntryId"), "line rows open journal detail");
+
+  const types = readSrc("src/modules/platform-finance/journalTypes.ts");
+  assert(types.includes("accountCode"), "register row has accountCode");
+  assert(types.includes("preparedByName"), "register row has preparedByName");
+  assert(types.includes("journalEntryId"), "register row has journalEntryId");
+  assert(types.includes("pageDebitTotal"), "page debit total");
+
+  const repo = readSrc(
+    "src/modules/platform-finance/server/PlatformFinanceRepository.ts"
+  );
+  assert(repo.includes("queryJournalRegister"), "register query");
+  assert(repo.includes("enrichJournalRegisterLines"), "line-level enrichment");
+  assert(repo.includes("listJournalLinesWithAccounts"), "lines+accounts");
+  assert(
+    repo.includes("created_by_profile_id"),
+    "preparer sourced from FT"
+  );
 
   const detail = readSrc(
     "src/modules/platform-finance/components/PlatformFinanceJournalDetailPage.tsx"
@@ -69,6 +127,7 @@ function main() {
   assert(detail.includes("Journal is balanced"), "balance indicator");
   assert(detail.includes("Journal is not balanced"), "unbalanced integrity alert");
   assert(detail.includes("transactionHref"), "FT link gated");
+  assert(detail.includes("<dt>Company</dt>"), "detail keeps Company attribute");
   assert(!detail.includes("Edit journal"), "no edit action");
   assert(!detail.includes("Delete"), "no delete action on detail");
 
@@ -81,12 +140,7 @@ function main() {
     service.includes("listAccessibleCompanyIds"),
     "company access enforced"
   );
-
-  const repo = readSrc(
-    "src/modules/platform-finance/server/PlatformFinanceRepository.ts"
-  );
-  assert(repo.includes("queryJournalRegister"), "register query");
-  assert(repo.includes("listJournalLinesWithAccounts"), "lines+accounts");
+  assert(service.includes("preparedByName"), "service maps preparedByName");
 
   // Ops domains still not posting
   assert(

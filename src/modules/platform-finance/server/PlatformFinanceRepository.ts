@@ -610,7 +610,9 @@ export class PlatformFinanceRepository {
   }
 
   /**
-   * Journal register query — posted journals with FT source metadata + line totals.
+   * Journal register query — posted journals expanded to line-level rows
+   * with account codes/names and FT preparer. Paginated by journal entry;
+   * each page returns all lines for those entries in line_no order.
    * Company scope must be pre-filtered to accessible company IDs by the service.
    */
   async queryJournalRegister(input: {
@@ -627,10 +629,11 @@ export class PlatformFinanceRepository {
   }): Promise<{
     rows: Array<{
       entry: FinanceJournalEntry;
+      line: FinanceJournalLine;
+      accountCode: string;
+      accountName: string;
       sourceType: string | null;
-      transactionReference: string | null;
-      totalDebit: number;
-      totalCredit: number;
+      preparedByProfileId: string | null;
     }>;
     total: number;
   }> {
@@ -678,7 +681,6 @@ export class PlatformFinanceRepository {
           );
     }
 
-    // Source-type filter needs FT join — fetch candidates then filter when set.
     const needsSourceFilter =
       Boolean(input.sourceType) && input.sourceType !== "all";
 
@@ -690,35 +692,42 @@ export class PlatformFinanceRepository {
       const to = from + pageSize - 1;
       const { data, error, count } = await query.range(from, to);
       if (error) throwDb(error, "Failed to query journals.");
-      const entries = (data as JournalEntryRow[] | null)?.map(mapJournalEntry) ?? [];
-      const enriched = await this.enrichJournalRows(entries);
-      return { rows: enriched, total: count ?? enriched.length };
+      const entries =
+        (data as JournalEntryRow[] | null)?.map(mapJournalEntry) ?? [];
+      const enriched = await this.enrichJournalRegisterLines(entries);
+      return { rows: enriched, total: count ?? entries.length };
     }
 
-    // Source filter: load matching window (capped), filter, then page in memory.
     const { data, error } = await query.limit(2000);
     if (error) throwDb(error, "Failed to query journals for source filter.");
-    const entries = (data as JournalEntryRow[] | null)?.map(mapJournalEntry) ?? [];
-    const enriched = await this.enrichJournalRows(entries);
-    const filtered = enriched.filter(
-      (row) => row.sourceType === input.sourceType
+    const entries =
+      (data as JournalEntryRow[] | null)?.map(mapJournalEntry) ?? [];
+    const enrichedAll = await this.enrichJournalRegisterLines(entries);
+    const matchingEntryIds = new Set(
+      enrichedAll
+        .filter((row) => row.sourceType === input.sourceType)
+        .map((row) => row.entry.id)
     );
+    const filteredEntries = entries.filter((e) => matchingEntryIds.has(e.id));
     const from = (page - 1) * pageSize;
+    const pageEntries = filteredEntries.slice(from, from + pageSize);
+    const enriched = await this.enrichJournalRegisterLines(pageEntries);
     return {
-      rows: filtered.slice(from, from + pageSize),
-      total: filtered.length,
+      rows: enriched,
+      total: filteredEntries.length,
     };
   }
 
-  private async enrichJournalRows(
+  private async enrichJournalRegisterLines(
     entries: FinanceJournalEntry[]
   ): Promise<
     Array<{
       entry: FinanceJournalEntry;
+      line: FinanceJournalLine;
+      accountCode: string;
+      accountName: string;
       sourceType: string | null;
-      transactionReference: string | null;
-      totalDebit: number;
-      totalCredit: number;
+      preparedByProfileId: string | null;
     }>
   > {
     if (entries.length === 0) return [];
@@ -730,16 +739,17 @@ export class PlatformFinanceRepository {
       await Promise.all([
         db()
           .from("finance_transactions")
-          .select("id, transaction_type, reference, source_type")
+          .select("id, transaction_type, reference, source_type, created_by_profile_id")
           .eq("organisation_id", this.organisationId)
           .in("id", txIds),
         db()
           .from("finance_journal_lines")
-          .select("journal_entry_id, debit, credit")
-          .in("journal_entry_id", entryIds),
+          .select("*")
+          .in("journal_entry_id", entryIds)
+          .order("line_no", { ascending: true }),
       ]);
     if (txErr) throwDb(txErr, "Failed to load journal transactions.");
-    if (lineErr) throwDb(lineErr, "Failed to load journal line totals.");
+    if (lineErr) throwDb(lineErr, "Failed to load journal lines.");
 
     const txById = new Map(
       (txRows ?? []).map((row) => [
@@ -748,31 +758,69 @@ export class PlatformFinanceRepository {
           transactionType: String(row.transaction_type),
           reference: String(row.reference),
           sourceType: (row.source_type as string | null) ?? null,
+          createdByProfileId: String(row.created_by_profile_id ?? ""),
         },
       ])
     );
 
-    const totals = new Map<string, { debit: number; credit: number }>();
-    for (const row of lineRows ?? []) {
-      const id = row.journal_entry_id as string;
-      const cur = totals.get(id) ?? { debit: 0, credit: 0 };
-      cur.debit += Number(row.debit ?? 0);
-      cur.credit += Number(row.credit ?? 0);
-      totals.set(id, cur);
+    const lines =
+      (lineRows as JournalLineRow[] | null)?.map(mapJournalLine) ?? [];
+    const accountIds = [...new Set(lines.map((l) => l.accountId))];
+    const accountById = new Map<
+      string,
+      { code: string; name: string }
+    >();
+    if (accountIds.length > 0) {
+      const { data: accountRows, error: accountErr } = await db()
+        .from("finance_accounts")
+        .select("id, code, name")
+        .eq("organisation_id", this.organisationId)
+        .in("id", accountIds);
+      if (accountErr) throwDb(accountErr, "Failed to load journal line accounts.");
+      for (const row of accountRows ?? []) {
+        accountById.set(row.id as string, {
+          code: String(row.code),
+          name: String(row.name),
+        });
+      }
     }
 
-    return entries.map((entry) => {
+    const linesByEntry = new Map<string, FinanceJournalLine[]>();
+    for (const line of lines) {
+      const list = linesByEntry.get(line.journalEntryId) ?? [];
+      list.push(line);
+      linesByEntry.set(line.journalEntryId, list);
+    }
+    for (const list of linesByEntry.values()) {
+      list.sort((a, b) => a.lineNo - b.lineNo);
+    }
+
+    const result: Array<{
+      entry: FinanceJournalEntry;
+      line: FinanceJournalLine;
+      accountCode: string;
+      accountName: string;
+      sourceType: string | null;
+      preparedByProfileId: string | null;
+    }> = [];
+
+    for (const entry of entries) {
+      const entryLines = linesByEntry.get(entry.id) ?? [];
       const tx = txById.get(entry.transactionId);
-      const tot = totals.get(entry.id) ?? { debit: 0, credit: 0 };
-      return {
-        entry,
-        // Prefer FT transaction_type for register "Source Type" (payment/expense/…)
-        sourceType: tx?.transactionType ?? null,
-        transactionReference: tx?.reference ?? null,
-        totalDebit: tot.debit,
-        totalCredit: tot.credit,
-      };
-    });
+      for (const line of entryLines) {
+        const account = accountById.get(line.accountId);
+        result.push({
+          entry,
+          line,
+          accountCode: account?.code ?? "—",
+          accountName: account?.name ?? "Unknown account",
+          sourceType: tx?.transactionType ?? null,
+          preparedByProfileId: tx?.createdByProfileId || null,
+        });
+      }
+    }
+
+    return result;
   }
 
   async listJournalLinesWithAccounts(journalEntryId: string): Promise<

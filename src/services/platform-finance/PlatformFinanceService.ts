@@ -9,6 +9,7 @@ import type {
   FinanceTransaction,
 } from "@/modules/platform-finance/types";
 import type { FinanceOverviewSnapshot } from "@/modules/platform-finance/overviewTypes";
+import type { FinanceJournalRegisterResult } from "@/modules/platform-finance/journalTypes";
 
 const API_PATH = "/api/platform-finance";
 
@@ -76,6 +77,8 @@ export const PlatformFinanceService = {
     manageCoa: boolean;
     managePeriods: boolean;
     manageSetup: boolean;
+    createTransaction: boolean;
+    post: boolean;
   }> {
     return postAction("getMyAccountingCapabilities");
   },
@@ -171,6 +174,38 @@ export const PlatformFinanceService = {
     return postAction("postTransaction", { input });
   },
 
+  findOpenPeriodForDate(input: {
+    companyId: string;
+    transactionDate: string;
+  }): Promise<FinancePeriod | null> {
+    return postAction("findOpenPeriodForDate", {
+      companyId: input.companyId,
+      input: {
+        companyId: input.companyId,
+        transactionDate: input.transactionDate,
+      },
+    });
+  },
+
+  postManualJournal(input: {
+    companyId: string;
+    transactionDate: string;
+    description: string;
+    lines: FinancePostingLineInput[];
+    periodId?: string | null;
+    reason?: string | null;
+  }): Promise<{
+    journalEntryId: string;
+    transaction: FinanceTransaction;
+    period: FinancePeriod;
+    reference: string;
+  }> {
+    return postAction("postManualJournal", {
+      companyId: input.companyId,
+      input,
+    });
+  },
+
   closePeriod(input: {
     periodId: string;
     reason?: string | null;
@@ -194,28 +229,7 @@ export const PlatformFinanceService = {
     search?: string | null;
     page?: number;
     pageSize?: number;
-  }): Promise<{
-    rows: Array<{
-      id: string;
-      journalNo: string;
-      entryDate: string;
-      periodId: string;
-      periodLabel: string;
-      companyId: string;
-      companyName: string;
-      description: string;
-      sourceType: string | null;
-      reference: string;
-      totalDebit: number;
-      totalCredit: number;
-      status: string;
-      transactionId: string;
-      postedAt: string;
-    }>;
-    total: number;
-    page: number;
-    pageSize: number;
-  }> {
+  }): Promise<FinanceJournalRegisterResult> {
     return postAction("listJournals", { input: input ?? {} });
   },
 

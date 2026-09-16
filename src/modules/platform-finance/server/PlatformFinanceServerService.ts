@@ -14,6 +14,7 @@ import {
   normalizeAccountName,
 } from "@/modules/platform-finance/domain/coa";
 import { yearMonthBounds } from "@/modules/platform-finance/domain/periods";
+import { assertValidPostingLines } from "@/modules/platform-finance/domain/invariants";
 import type {
   FinanceAccount,
   FinanceAccountStatus,
@@ -28,6 +29,7 @@ import type {
   PlatformFinanceCapability,
 } from "@/modules/platform-finance/types";
 import { PLATFORM_FINANCE_CAPABILITIES } from "@/modules/platform-finance/types";
+import { randomBytes } from "node:crypto";
 import type { FinanceOverviewSnapshot } from "@/modules/platform-finance/overviewTypes";
 import type {
   FinanceJournalDetail,
@@ -38,6 +40,10 @@ import type {
 import { PlatformFinanceRequestsRepository } from "@/modules/platform-finance/server/PlatformFinanceRequestsRepository";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { financePeriodLabel } from "@/modules/platform-finance/domain/periods";
+
+function roundMoney2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
 
 const MONTH_LABELS = [
   "January",
@@ -155,6 +161,8 @@ export class PlatformFinanceServerService {
     manageCoa: boolean;
     managePeriods: boolean;
     manageSetup: boolean;
+    createTransaction: boolean;
+    post: boolean;
   }> {
     const admin = createAdminClient();
     const wanted = [
@@ -162,6 +170,8 @@ export class PlatformFinanceServerService {
       PLATFORM_FINANCE_CAPABILITIES.manage_coa,
       PLATFORM_FINANCE_CAPABILITIES.manage_periods,
       PLATFORM_FINANCE_CAPABILITIES.manage_setup,
+      PLATFORM_FINANCE_CAPABILITIES.create_transaction,
+      PLATFORM_FINANCE_CAPABILITIES.post,
     ] as const;
     const { data, error } = await admin
       .from("finance_capability_grants")
@@ -183,7 +193,33 @@ export class PlatformFinanceServerService {
       manageCoa: granted.has(PLATFORM_FINANCE_CAPABILITIES.manage_coa),
       managePeriods: granted.has(PLATFORM_FINANCE_CAPABILITIES.manage_periods),
       manageSetup: granted.has(PLATFORM_FINANCE_CAPABILITIES.manage_setup),
+      createTransaction: granted.has(
+        PLATFORM_FINANCE_CAPABILITIES.create_transaction
+      ),
+      post: granted.has(PLATFORM_FINANCE_CAPABILITIES.post),
     };
+  }
+
+  /**
+   * Resolve the open company period covering a transaction date.
+   * Used for UI period preview and server-side period pinning before post.
+   */
+  async findOpenPeriodForDate(
+    companyId: string,
+    transactionDate: string
+  ): Promise<FinancePeriod | null> {
+    if (!companyId || !/^\d{4}-\d{2}-\d{2}$/.test(transactionDate)) {
+      return null;
+    }
+    const periods = await this.repo.listPeriods(companyId);
+    return (
+      periods.find(
+        (p) =>
+          p.status === "open" &&
+          p.startDate <= transactionDate &&
+          p.endDate >= transactionDate
+      ) ?? null
+    );
   }
 
   async listAccounts() {
@@ -478,6 +514,207 @@ export class PlatformFinanceServerService {
     return { journalEntryId, transaction };
   }
 
+  /**
+   * Controlled manual journal: create draft FT then atomically post via
+   * finance_post_transaction. Reference is server-generated (authoritative).
+   * Does not invent a second posting engine or draft journal-line store.
+   */
+  async postManualJournal(input: {
+    companyId: string;
+    transactionDate: string;
+    description: string;
+    lines: FinancePostingLineInput[];
+    actorProfileId: string;
+    periodId?: string | null;
+    reason?: string | null;
+  }): Promise<{
+    journalEntryId: string;
+    transaction: FinanceTransaction;
+    period: FinancePeriod;
+    reference: string;
+  }> {
+    const companyId = input.companyId?.trim();
+    if (!companyId) {
+      throw new ActionError("VALIDATION_ERROR", "Company is required.");
+    }
+
+    const companies = await this.repo.listCompanies();
+    const company = companies.find((c) => c.id === companyId);
+    if (!company || company.status !== "active") {
+      throw new ActionError(
+        "VALIDATION_ERROR",
+        "Company is not available for posting."
+      );
+    }
+
+    const transactionDate = input.transactionDate?.trim();
+    if (!transactionDate || !/^\d{4}-\d{2}-\d{2}$/.test(transactionDate)) {
+      throw new ActionError(
+        "VALIDATION_ERROR",
+        "A valid transaction date is required."
+      );
+    }
+
+    const description = input.description?.trim();
+    if (!description) {
+      throw new ActionError("VALIDATION_ERROR", "Description is required.");
+    }
+
+    const lines = (input.lines ?? []).map((line) => ({
+      accountId: String(line.accountId ?? "").trim(),
+      debit: roundMoney2(Number(line.debit) || 0),
+      credit: roundMoney2(Number(line.credit) || 0),
+      description:
+        typeof line.description === "string"
+          ? line.description.trim() || null
+          : null,
+    }));
+
+    try {
+      assertValidPostingLines(lines);
+    } catch (err) {
+      throw new ActionError(
+        "VALIDATION_ERROR",
+        err instanceof Error ? err.message : "Journal lines are invalid."
+      );
+    }
+
+    const accounts = await this.repo.listAccounts();
+    const byId = new Map(accounts.map((a) => [a.id, a]));
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i]!;
+      const account = byId.get(line.accountId);
+      if (!account) {
+        throw new ActionError(
+          "VALIDATION_ERROR",
+          `line ${i + 1}: account not found.`
+        );
+      }
+      if (account.status !== "active") {
+        throw new ActionError(
+          "VALIDATION_ERROR",
+          `line ${i + 1}: account ${account.code} is inactive.`
+        );
+      }
+    }
+
+    let period: FinancePeriod | null = null;
+    if (input.periodId) {
+      period = await this.repo.getPeriod(input.periodId);
+      if (!period || period.companyId !== companyId) {
+        throw new ActionError(
+          "VALIDATION_ERROR",
+          "Period does not belong to the selected company."
+        );
+      }
+      if (period.status !== "open") {
+        throw new ActionError(
+          "VALIDATION_ERROR",
+          "Cannot post into a closed period."
+        );
+      }
+      if (
+        period.startDate > transactionDate ||
+        period.endDate < transactionDate
+      ) {
+        throw new ActionError(
+          "VALIDATION_ERROR",
+          "Transaction date is outside the selected period."
+        );
+      }
+    } else {
+      period = await this.findOpenPeriodForDate(companyId, transactionDate);
+      if (!period) {
+        throw new ActionError(
+          "VALIDATION_ERROR",
+          "No open accounting period covers this transaction date."
+        );
+      }
+    }
+
+    const totalDebit = lines.reduce((sum, line) => sum + line.debit, 0);
+
+    let transaction: FinanceTransaction | null = null;
+    let reference = "";
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      reference = this.generateManualJournalReference();
+      try {
+        transaction = await this.repo.createTransaction({
+          companyId,
+          reference,
+          transactionDate,
+          description,
+          transactionType: "adjustment",
+          amount: totalDebit,
+          currency: "NGN",
+          sourceType: "manual_journal",
+          sourceId: null,
+          metadata: { channel: "platform_finance.manual_journal" },
+          createdByProfileId: input.actorProfileId,
+        });
+        break;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (!/duplicate|unique|already exists/i.test(message) || attempt === 7) {
+          throw err instanceof ActionError
+            ? err
+            : new ActionError("VALIDATION_ERROR", message);
+        }
+      }
+    }
+    if (!transaction) {
+      throw new ActionError(
+        "INTERNAL_ERROR",
+        "Unable to allocate a unique journal reference."
+      );
+    }
+
+    let journalEntryId: string;
+    try {
+      journalEntryId = await postFinanceTransaction({
+        transactionId: transaction.id,
+        actorProfileId: input.actorProfileId,
+        lines,
+        periodId: period.id,
+        reason: input.reason ?? null,
+      });
+    } catch (err) {
+      throw new ActionError(
+        "VALIDATION_ERROR",
+        err instanceof Error
+          ? err.message
+          : "Failed to post journal through the accounting engine."
+      );
+    }
+
+    const posted = await this.repo.getTransaction(transaction.id);
+    if (!posted || posted.status !== "posted") {
+      throw new ActionError(
+        "INTERNAL_ERROR",
+        "Posting completed without a posted financial transaction."
+      );
+    }
+    if (posted.companyId !== companyId) {
+      throw new ActionError(
+        "INTERNAL_ERROR",
+        "Posted transaction company does not match selection."
+      );
+    }
+
+    return {
+      journalEntryId,
+      transaction: posted,
+      period,
+      reference: posted.reference,
+    };
+  }
+
+  private generateManualJournalReference(): string {
+    const day = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const suffix = randomBytes(3).toString("hex").toUpperCase();
+    return `MJ-${day}-${suffix}`;
+  }
+
   async closePeriod(input: {
     periodId: string;
     actorProfileId: string;
@@ -531,8 +768,6 @@ export class PlatformFinanceServerService {
       pageSize,
     });
 
-    const companies = await this.repo.listCompanies();
-    const companyName = new Map(companies.map((c) => [c.id, c.name]));
     const periods = filters.companyId
       ? await this.repo.listPeriods(filters.companyId)
       : (
@@ -544,25 +779,42 @@ export class PlatformFinanceServerService {
       periods.map((p) => [p.id, financePeriodLabel(p.year, p.month)])
     );
 
+    const preparerIds = rows
+      .map((row) => row.preparedByProfileId)
+      .filter(Boolean) as string[];
+    const preparerNames = await this.repo.getProfilesByIds(preparerIds);
+
     const mapped: FinanceJournalRegisterRow[] = rows.map((row) => ({
-      id: row.entry.id,
-      journalNo: row.entry.reference,
+      id: row.line.id,
+      journalEntryId: row.entry.id,
+      lineNo: row.line.lineNo,
+      reference: row.entry.reference,
       entryDate: row.entry.entryDate,
       periodId: row.entry.periodId,
       periodLabel: periodLabel.get(row.entry.periodId) ?? "—",
       companyId: row.entry.companyId,
-      companyName: companyName.get(row.entry.companyId) ?? "—",
       description: row.entry.description,
-      sourceType: (row.sourceType as FinanceJournalRegisterRow["sourceType"]) ?? null,
-      reference: row.entry.reference,
-      totalDebit: row.totalDebit,
-      totalCredit: row.totalCredit,
-      status: row.entry.status,
+      accountCode: row.accountCode,
+      accountName: row.accountName,
+      debit: row.line.debit,
+      credit: row.line.credit,
+      preparedByName: row.preparedByProfileId
+        ? preparerNames.get(row.preparedByProfileId) ?? null
+        : null,
       transactionId: row.entry.transactionId,
-      postedAt: row.entry.postedAt,
     }));
 
-    return { rows: mapped, total, page, pageSize };
+    const pageDebitTotal = mapped.reduce((sum, row) => sum + row.debit, 0);
+    const pageCreditTotal = mapped.reduce((sum, row) => sum + row.credit, 0);
+
+    return {
+      rows: mapped,
+      total,
+      page,
+      pageSize,
+      pageDebitTotal,
+      pageCreditTotal,
+    };
   }
 
   async getJournalDetail(

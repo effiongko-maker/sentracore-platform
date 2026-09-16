@@ -673,13 +673,32 @@
 }
 
 .pf-btn-primary {
-  border: 1px solid var(--pf-navy);
-  background: var(--pf-navy);
+  border: 1px solid var(--pf-navy, #1e3a5f);
+  background: var(--pf-navy, #1e3a5f);
   color: #fff;
 }
 
-.pf-btn-primary:hover:not(:disabled) {
-  background: var(--pf-navy-hover);
+.pf-btn-primary:hover:not(:disabled),
+a.pf-btn-primary:hover:not(:disabled) {
+  background: var(--pf-navy-hover, #172e4c);
+  border-color: var(--pf-navy-hover, #172e4c);
+  color: #fff;
+  opacity: 1;
+}
+
+.pf-btn-primary:focus-visible,
+a.pf-btn-primary:focus-visible {
+  outline: 2px solid var(--pf-navy, #1e3a5f);
+  outline-offset: 2px;
+  color: #fff;
+  opacity: 1;
+}
+
+.pf-btn-primary:active:not(:disabled),
+a.pf-btn-primary:active:not(:disabled) {
+  background: var(--pf-navy-hover, #172e4c);
+  color: #fff;
+  opacity: 1;
 }
 
 .pf-btn-primary:disabled {
@@ -3355,6 +3374,7 @@ a.pf-new-save-success-action {
   --pf-card: #ffffff;
   --pf-soft: #f9fafb;
   --pf-navy: #1e3a5f;
+  --pf-navy-hover: #172e4c;
 
   display: grid;
   gap: 1rem;
@@ -3658,11 +3678,12 @@ a.pf-new-save-success-action {
 }
 
 .pf-journal-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.pf-journal-header-copy {
+  min-width: 0;
 }
 
 .pf-journal-title {
@@ -3680,16 +3701,21 @@ a.pf-new-save-success-action {
   color: var(--pf-muted, #6b7280);
 }
 
-.pf-journal-header-actions {
+.pf-journal-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.55rem;
+  gap: 0.65rem;
   align-items: center;
 }
 
 .pf-journal-search {
   position: relative;
-  min-width: min(22rem, 100%);
+  min-width: min(18rem, 100%);
+  flex: 1 1 18rem;
+}
+
+.pf-journal-toolbar-cta {
+  flex-shrink: 0;
 }
 
 .pf-journal-search svg {
@@ -3743,7 +3769,68 @@ a.pf-new-save-success-action {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.8125rem;
-  min-width: 64rem;
+  min-width: 72rem;
+}
+
+.pf-journal-register-table th,
+.pf-journal-register-table td {
+  padding: 0.55rem 0.7rem;
+}
+
+.pf-journal-code {
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.pf-journal-empty-row td {
+  padding: 1.25rem 0.9rem;
+  text-align: left;
+  background: #fcfcfd;
+}
+
+.pf-journal-empty-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: var(--pf-ink, #111827);
+}
+
+.pf-journal-empty-copy {
+  margin: 0.3rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--pf-muted, #6b7280);
+  max-width: 36rem;
+  line-height: 1.45;
+}
+
+.pf-journal-register-totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 12rem));
+  gap: 0.75rem 1.5rem;
+  justify-content: end;
+  padding: 0.35rem 0.15rem;
+}
+
+.pf-journal-register-totals > div {
+  display: grid;
+  gap: 0.15rem;
+  text-align: right;
+}
+
+.pf-journal-register-totals span {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pf-muted, #6b7280);
+}
+
+.pf-journal-register-totals strong {
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--pf-ink, #111827);
 }
 
 .pf-journal-table th {
@@ -3979,6 +4066,331 @@ a.pf-new-save-success-action {
   }
 
   .pf-accounting-hub-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* —— New Journal Entry (side panel) —— */
+.pf-journal-entry-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: rgba(15, 23, 42, 0.4);
+  display: grid;
+  justify-items: end;
+}
+
+.pf-journal-entry-drawer {
+  width: min(26.5rem, 100%);
+  height: 100%;
+  background: #f8fafc;
+  border-left: 1px solid #d7dee8;
+  box-shadow: -6px 0 18px rgba(15, 23, 42, 0.1);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 0;
+}
+
+.pf-journal-entry-drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  background: var(--pf-navy, #1e3a5f);
+  color: #fff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pf-journal-entry-drawer-head h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+
+.pf-journal-entry-drawer-lede {
+  margin: 0.2rem 0 0;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.pf-journal-entry-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  margin: -0.15rem -0.2rem 0 0;
+  border: none;
+  border-radius: 0.4rem;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.pf-journal-entry-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.pf-journal-entry-drawer-body {
+  overflow: auto;
+  padding: 0.7rem 0.85rem 0.85rem;
+  min-height: 0;
+}
+
+.pf-journal-entry-form {
+  display: grid;
+  gap: 0.5rem;
+  align-content: start;
+}
+
+.pf-journal-entry-form .pf-journal-entry-field {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.pf-journal-entry-form .pf-journal-entry-field > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 0;
+}
+
+.pf-journal-entry-form .pf-journal-entry-field label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #334155;
+  line-height: 1.2;
+}
+
+.pf-journal-entry-form .pf-journal-entry-field input,
+.pf-journal-entry-form .pf-journal-entry-field button[aria-haspopup="listbox"] {
+  min-height: 2.1rem;
+  height: 2.1rem !important;
+  border-radius: 0.45rem !important;
+  padding-left: 0.65rem !important;
+  padding-right: 0.65rem !important;
+  font-size: 0.8125rem !important;
+  background: #fff !important;
+}
+
+.pf-journal-entry-form .pf-error {
+  padding: 0.4rem 0.55rem;
+  font-size: 0.75rem;
+}
+
+.pf-journal-entry-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: end;
+}
+
+.pf-journal-entry-period-inline {
+  min-width: 0;
+  display: grid;
+  gap: 0.2rem;
+  padding-bottom: 0.05rem;
+}
+
+.pf-journal-entry-period-value {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  min-height: 2.1rem;
+  padding: 0 0.65rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.45rem;
+  background: #fff;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  color: #0f172a;
+}
+
+.pf-journal-entry-period-value.is-open {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  color: var(--pf-navy, #1e3a5f);
+}
+
+.pf-journal-entry-period-value.is-missing {
+  border-color: #fecaca;
+  background: #fff7f7;
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.pf-journal-entry-section {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.1rem;
+  padding: 0.5rem 0.6rem 0.55rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  background: #fff;
+}
+
+.pf-journal-entry-section-body {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.pf-journal-entry-section-title {
+  margin: 0;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.pf-journal-entry-balance-hint {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+  color: #166534;
+}
+
+.pf-journal-entry-balance-hint.is-balanced {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+}
+
+.pf-journal-entry-balance-mark {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.08rem 0.32rem;
+  border-radius: 0.25rem;
+  background: #dcfce7;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #15803d;
+}
+
+.pf-journal-entry-meta {
+  display: grid;
+  gap: 0.2rem;
+  margin-top: 0.05rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  background: #fff;
+}
+
+.pf-journal-entry-meta-value {
+  margin: 0.2rem 0 0;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  color: #0f172a;
+  line-height: 1.25;
+}
+
+.pf-journal-entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.1rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.pf-journal-entry-actions .pf-btn-primary,
+.pf-journal-entry-actions .pf-btn-secondary {
+  padding: 0.42rem 0.8rem;
+  font-size: 0.8125rem;
+}
+
+.pf-journal-entry-form .is-amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.pf-journal-new-period-error {
+  margin: -0.1rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #b91c1c;
+}
+
+.pf-journal-new-period-link {
+  color: var(--pf-navy, #1e3a5f);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.pf-journal-new-period-link:hover {
+  color: var(--pf-navy-hover, #172e4c);
+}
+
+.pf-journal-posted-notice {
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #bbf7d0;
+  border-radius: 0.65rem;
+  background: #f0fdf4;
+  color: #166534;
+  font-size: 0.875rem;
+}
+
+.pf-journal-new-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  color: var(--pf-muted, #6b7280);
+}
+
+.pf-journal-new-confirm {
+  margin: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.pf-journal-new-confirm > div {
+  display: grid;
+  grid-template-columns: 8rem 1fr;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.pf-journal-new-confirm dt {
+  margin: 0;
+  color: var(--pf-muted, #6b7280);
+}
+
+.pf-journal-new-confirm dd {
+  margin: 0;
+  font-weight: 650;
+  color: var(--pf-ink, #111827);
+}
+
+.pf-error {
+  margin: 0;
+  padding: 0.65rem 0.8rem;
+  border-radius: 0.5rem;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 0.875rem;
+}
+
+@media (max-width: 420px) {
+  .pf-journal-entry-row {
     grid-template-columns: 1fr;
   }
 }

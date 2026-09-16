@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { selectClassName } from "@/components/forms/FormField";
 import { cn } from "@/lib/utils";
@@ -50,6 +51,8 @@ function optionMatches(option: SearchableSelectOption, query: string) {
 /**
  * Searchable single-select matching SentraCore form select styling.
  * Persists `option.value` only — never the display label.
+ * Menu portals to document.body so it is not clipped by overflow ancestors
+ * (tables, modals, drawers).
  */
 export function SearchableSelect({
   id,
@@ -70,9 +73,16 @@ export function SearchableSelect({
 }: SearchableSelectProps) {
   const listboxId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [menuPos, setMenuPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
+  const [portalReady, setPortalReady] = useState(false);
 
   const flatOptions = useMemo(() => {
     if (optionGroups?.length) {
@@ -104,15 +114,50 @@ export function SearchableSelect({
   }, [optionGroups, query]);
 
   useEffect(() => {
+    setPortalReady(true);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuPos(null);
+      return;
+    }
+    function updatePosition() {
+      const rect = rootRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = Math.max(rect.width, 220);
+      const left = Math.min(
+        rect.left,
+        Math.max(8, window.innerWidth - width - 8)
+      );
+      const top = Math.min(rect.bottom + 6, window.innerHeight - 16);
+      setMenuPos({ top, left, width });
+    }
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-        setQuery("");
+      const target = event.target as Node;
+      if (
+        rootRef.current?.contains(target) ||
+        menuRef.current?.contains(target)
+      ) {
+        return;
       }
+      setOpen(false);
+      setQuery("");
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        event.stopPropagation();
         setOpen(false);
         setQuery("");
       }
@@ -171,6 +216,93 @@ export function SearchableSelect({
     );
   }
 
+  const menu =
+    open && portalReady && menuPos
+      ? createPortal(
+          <div
+            ref={menuRef}
+            className={cn(
+              "overflow-hidden rounded-[12px] border border-border bg-card shadow-lg",
+              menuClassName
+            )}
+            style={{
+              position: "fixed",
+              top: menuPos.top,
+              left: menuPos.left,
+              width: menuPos.width,
+              zIndex: 80,
+            }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            {hideSearch ? null : (
+              <div className="border-b border-border/70 p-2">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+                  <input
+                    ref={searchRef}
+                    type="search"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder={searchPlaceholder}
+                    className="h-9 w-full rounded-md border border-border bg-white pl-8 pr-2.5 text-sm text-foreground outline-none placeholder:text-slate-400 focus:border-accent/40 focus:ring-2 focus:ring-accent/15"
+                    aria-label={searchPlaceholder}
+                  />
+                </div>
+              </div>
+            )}
+
+            <ul
+              id={listboxId}
+              role="listbox"
+              className="max-h-56 overflow-y-auto py-1"
+            >
+              {allowEmpty ? (
+                <li role="option" aria-selected={!value}>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/40",
+                      !value && "bg-muted/30 font-medium text-foreground"
+                    )}
+                    onClick={() => selectValue("")}
+                  >
+                    <span className="min-w-0 flex-1 truncate text-muted">
+                      {emptyOptionLabel}
+                    </span>
+                    {!value ? (
+                      <Check className="h-3.5 w-3.5 shrink-0 text-accent" />
+                    ) : null}
+                  </button>
+                </li>
+              ) : null}
+
+              {!hasMatches ? (
+                <li className="px-3 py-2 text-sm text-muted">
+                  {flatOptions.length === 0 ? "No options available" : "No matches"}
+                </li>
+              ) : filteredGroups ? (
+                filteredGroups.map((group) => (
+                  <li key={group.label} role="presentation">
+                    <div
+                      className="px-3 pb-1 pt-2 text-[0.65rem] font-semibold uppercase tracking-[0.06em] text-slate-400"
+                      aria-hidden
+                    >
+                      {group.label}
+                    </div>
+                    <ul role="group" aria-label={group.label}>
+                      {group.options.map(renderOption)}
+                    </ul>
+                  </li>
+                ))
+              ) : (
+                filteredFlat.map(renderOption)
+              )}
+            </ul>
+          </div>,
+          document.body
+        )
+      : null;
+
   return (
     <div ref={rootRef} className={cn("relative", className)}>
       <button
@@ -200,78 +332,7 @@ export function SearchableSelect({
           aria-hidden
         />
       </button>
-
-      {open ? (
-        <div
-          className={cn(
-            "absolute left-0 right-0 z-50 mt-1.5 overflow-hidden rounded-[12px] border border-border bg-card shadow-lg",
-            menuClassName
-          )}
-        >
-          {hideSearch ? null : (
-            <div className="border-b border-border/70 p-2">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
-                <input
-                  ref={searchRef}
-                  type="search"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={searchPlaceholder}
-                  className="h-9 w-full rounded-md border border-border bg-white pl-8 pr-2.5 text-sm text-foreground outline-none placeholder:text-slate-400 focus:border-accent/40 focus:ring-2 focus:ring-accent/15"
-                  aria-label={searchPlaceholder}
-                />
-              </div>
-            </div>
-          )}
-
-          <ul
-            id={listboxId}
-            role="listbox"
-            className="max-h-56 overflow-y-auto py-1"
-          >
-            {allowEmpty ? (
-              <li role="option" aria-selected={!value}>
-                <button
-                  type="button"
-                  className={cn(
-                    "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/40",
-                    !value && "bg-muted/30 font-medium text-foreground"
-                  )}
-                  onClick={() => selectValue("")}
-                >
-                  <span className="min-w-0 flex-1 truncate text-muted">
-                    {emptyOptionLabel}
-                  </span>
-                  {!value ? (
-                    <Check className="h-3.5 w-3.5 shrink-0 text-accent" />
-                  ) : null}
-                </button>
-              </li>
-            ) : null}
-
-            {!hasMatches ? (
-              <li className="px-3 py-2 text-sm text-muted">No matches</li>
-            ) : filteredGroups ? (
-              filteredGroups.map((group) => (
-                <li key={group.label} role="presentation">
-                  <div
-                    className="px-3 pb-1 pt-2 text-[0.65rem] font-semibold uppercase tracking-[0.06em] text-slate-400"
-                    aria-hidden
-                  >
-                    {group.label}
-                  </div>
-                  <ul role="group" aria-label={group.label}>
-                    {group.options.map(renderOption)}
-                  </ul>
-                </li>
-              ))
-            ) : (
-              filteredFlat.map(renderOption)
-            )}
-          </ul>
-        </div>
-      ) : null}
+      {menu}
     </div>
   );
 }

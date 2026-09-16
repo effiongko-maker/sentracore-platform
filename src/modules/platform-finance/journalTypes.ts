@@ -27,29 +27,35 @@ export type FinanceJournalListFilters = {
 };
 
 export type FinanceJournalRegisterRow = {
+  /** Journal line id (row key). */
   id: string;
-  /** Authoritative journal reference (from posted FT). */
-  journalNo: string;
+  /** Parent journal entry — opens Journal Detail. */
+  journalEntryId: string;
+  lineNo: number;
+  /** Authoritative journal / FT reference (Ref No). */
+  reference: string;
   entryDate: string;
   periodId: string;
   periodLabel: string;
   companyId: string;
-  companyName: string;
   description: string;
-  sourceType: FinanceTransactionType | null;
-  reference: string;
-  totalDebit: number;
-  totalCredit: number;
-  status: FinanceJournalEntryStatus;
+  accountCode: string;
+  accountName: string;
+  debit: number;
+  credit: number;
+  preparedByName: string | null;
   transactionId: string;
-  postedAt: string;
 };
 
 export type FinanceJournalRegisterResult = {
   rows: FinanceJournalRegisterRow[];
+  /** Matching journal entry count (pagination unit). */
   total: number;
   page: number;
   pageSize: number;
+  /** Debit/credit sums for lines on this page (no double-count). */
+  pageDebitTotal: number;
+  pageCreditTotal: number;
 };
 
 export type FinanceJournalDetailLine = {

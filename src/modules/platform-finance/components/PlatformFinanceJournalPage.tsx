@@ -6,68 +6,55 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { inputClassName } from "@/components/forms/FormField";
 import { SearchableSelect } from "@/components/forms/SearchableSelect";
+import { PlatformFinanceNewJournalDrawer } from "@/modules/platform-finance/components/PlatformFinanceNewJournalPage";
 import { PlatformFinanceService } from "@/services/platform-finance/PlatformFinanceService";
-import {
-  PLATFORM_FINANCE_JOURNAL_STATUS_LABELS,
-  PLATFORM_FINANCE_TRANSACTION_TYPE_LABELS,
-} from "@/modules/platform-finance/constants";
+import { PLATFORM_FINANCE_TRANSACTION_TYPE_LABELS } from "@/modules/platform-finance/constants";
+import type { FinanceJournalRegisterRow } from "@/modules/platform-finance/journalTypes";
 import type { FinanceCompany, FinancePeriod } from "@/modules/platform-finance/types";
 import { financePeriodLabel } from "@/modules/platform-finance/domain/periods";
-
-type JournalRow = {
-  id: string;
-  journalNo: string;
-  entryDate: string;
-  periodId: string;
-  periodLabel: string;
-  companyId: string;
-  companyName: string;
-  description: string;
-  sourceType: string | null;
-  reference: string;
-  totalDebit: number;
-  totalCredit: number;
-  status: string;
-};
 
 const PAGE_SIZE = 25;
 
 function formatNaira(amount: number): string {
   if (!Number.isFinite(amount)) return "—";
   return `₦${amount.toLocaleString("en-NG", {
-    minimumFractionDigits: 0,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+function formatNairaCell(amount: number): string {
+  if (!Number.isFinite(amount) || amount === 0) return "";
+  return formatNaira(amount);
 }
 
 function formatDate(iso: string): string {
   const d = new Date(iso.includes("T") ? iso : `${iso}T00:00:00`);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
+    day: "2-digit",
+    month: "2-digit",
     year: "numeric",
   });
-}
-
-function sourceTypeLabel(value: string | null): string {
-  if (!value) return "—";
-  const known =
-    PLATFORM_FINANCE_TRANSACTION_TYPE_LABELS[
-      value as keyof typeof PLATFORM_FINANCE_TRANSACTION_TYPE_LABELS
-    ];
-  return (known ?? value).toUpperCase();
 }
 
 export function PlatformFinanceJournalPage() {
   const router = useRouter();
   const [companies, setCompanies] = useState<FinanceCompany[]>([]);
   const [periods, setPeriods] = useState<FinancePeriod[]>([]);
-  const [rows, setRows] = useState<JournalRow[]>([]);
+  const [rows, setRows] = useState<FinanceJournalRegisterRow[]>([]);
   const [total, setTotal] = useState(0);
+  const [pageDebitTotal, setPageDebitTotal] = useState(0);
+  const [pageCreditTotal, setPageCreditTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [entryOpen, setEntryOpen] = useState(false);
+  const [entryBusy, setEntryBusy] = useState(false);
+  const [postedNotice, setPostedNotice] = useState<{
+    journalEntryId: string;
+    reference: string;
+  } | null>(null);
 
   const [search, setSearch] = useState("");
   const [searchApplied, setSearchApplied] = useState("");
@@ -77,7 +64,6 @@ export function PlatformFinanceJournalPage() {
   const [dateTo, setDateTo] = useState("");
   const [status, setStatus] = useState("posted");
   const [sourceType, setSourceType] = useState("all");
-  const [filtersOpen, setFiltersOpen] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -137,6 +123,8 @@ export function PlatformFinanceJournalPage() {
       });
       setRows(result.rows);
       setTotal(result.total);
+      setPageDebitTotal(result.pageDebitTotal);
+      setPageCreditTotal(result.pageCreditTotal);
       setError(null);
     } catch (err: unknown) {
       setError(
@@ -144,6 +132,8 @@ export function PlatformFinanceJournalPage() {
       );
       setRows([]);
       setTotal(0);
+      setPageDebitTotal(0);
+      setPageCreditTotal(0);
     } finally {
       setLoading(false);
     }
@@ -205,41 +195,76 @@ export function PlatformFinanceJournalPage() {
     setPage(1);
   }
 
+  function openJournal(journalEntryId: string) {
+    router.push(`/platform-finance/accounting/journal/${journalEntryId}`);
+  }
+
+  function closeEntryPanel() {
+    if (entryBusy) return;
+    setEntryOpen(false);
+  }
+
+  async function handleJournalPosted(result: {
+    journalEntryId: string;
+    reference: string;
+  }) {
+    setEntryOpen(false);
+    setEntryBusy(false);
+    setPostedNotice(result);
+    setPage(1);
+    await load();
+  }
+
   return (
     <div className="pf-journal">
       <header className="pf-journal-header">
-        <div>
+        <div className="pf-journal-header-copy">
           <h1 className="pf-journal-title">Journal</h1>
           <p className="pf-journal-desc">
             View posted journal entries and their accounting details.
           </p>
         </div>
-        <div className="pf-journal-header-actions">
-          <div className="pf-journal-search">
-            <Search size={16} aria-hidden />
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") applySearch();
-              }}
-              placeholder="Search by journal no., description or reference…"
-              aria-label="Search journals"
-            />
-          </div>
-          <button
-            type="button"
-            className="pf-btn-secondary"
-            onClick={() => setFiltersOpen((v) => !v)}
-          >
-            Filters
-          </button>
-        </div>
       </header>
 
-      {filtersOpen ? (
-        <div className="pf-journal-filters">
+      {postedNotice ? (
+        <p className="pf-journal-posted-notice" role="status">
+          Journal <strong>{postedNotice.reference}</strong> posted.{" "}
+          <Link
+            href={`/platform-finance/accounting/journal/${postedNotice.journalEntryId}`}
+            className="pf-journal-new-period-link"
+          >
+            View entry
+          </Link>
+        </p>
+      ) : null}
+
+      <div className="pf-journal-toolbar">
+        <div className="pf-journal-search">
+          <Search size={16} aria-hidden />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") applySearch();
+            }}
+            placeholder="Search by reference or description…"
+            aria-label="Search journals"
+          />
+        </div>
+        <button
+          type="button"
+          className="pf-btn-primary pf-journal-toolbar-cta"
+          onClick={() => {
+            setPostedNotice(null);
+            setEntryOpen(true);
+          }}
+        >
+          New Journal Entry
+        </button>
+      </div>
+
+      <div className="pf-journal-filters">
           <SearchableSelect
             className="pf-journal-filter-control"
             aria-label="Company"
@@ -249,8 +274,8 @@ export function PlatformFinanceJournalPage() {
               setPage(1);
             }}
             allowEmpty
-            emptyOptionLabel="All companies"
-            placeholder="All companies"
+            emptyOptionLabel="All Companies"
+            placeholder="All Companies"
             options={companies.map((c) => ({
               value: c.id,
               label: c.name,
@@ -335,8 +360,7 @@ export function PlatformFinanceJournalPage() {
               Clear filters
             </button>
           ) : null}
-        </div>
-      ) : null}
+      </div>
 
       {error ? (
         <div className="pf-vb-alert is-danger" role="alert">
@@ -346,105 +370,120 @@ export function PlatformFinanceJournalPage() {
 
       {loading ? (
         <p className="pf-empty-copy">Loading journals…</p>
-      ) : rows.length === 0 ? (
-        <div className="pf-req-empty">
-          <p className="pf-empty-title">No journal entries</p>
-          <p className="pf-empty-copy">
-            Posted journal entries will appear here once financial transactions
-            are posted through the accounting engine.
-          </p>
-        </div>
       ) : (
         <>
           <div className="pf-journal-table-wrap">
-            <table className="pf-journal-table">
+            <table className="pf-journal-table pf-journal-register-table">
               <thead>
                 <tr>
-                  <th>Journal No.</th>
                   <th>Date</th>
-                  <th>Period</th>
-                  <th>Company</th>
+                  <th>Ref No</th>
                   <th>Description</th>
-                  <th>Source Type</th>
-                  <th>Reference</th>
+                  <th>Code</th>
+                  <th>Account Name</th>
                   <th className="is-num">Debit (₦)</th>
                   <th className="is-num">Credit (₦)</th>
-                  <th>Status</th>
+                  <th>Prepared By</th>
+                  <th>Period</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="pf-journal-row"
-                    onClick={() =>
-                      router.push(
-                        `/platform-finance/accounting/journal/${row.id}`
-                      )
-                    }
-                  >
-                    <td>
-                      <Link
-                        href={`/platform-finance/accounting/journal/${row.id}`}
-                        className="pf-journal-link"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {row.journalNo}
-                      </Link>
-                    </td>
-                    <td>{formatDate(row.entryDate)}</td>
-                    <td>{row.periodLabel}</td>
-                    <td>{row.companyName}</td>
-                    <td className="pf-journal-desc-cell">{row.description}</td>
-                    <td className="pf-journal-source">
-                      {sourceTypeLabel(row.sourceType)}
-                    </td>
-                    <td>{row.reference}</td>
-                    <td className="is-num">{formatNaira(row.totalDebit)}</td>
-                    <td className="is-num">{formatNaira(row.totalCredit)}</td>
-                    <td>
-                      <span
-                        className={`pf-journal-status is-${row.status}`}
-                      >
-                        {PLATFORM_FINANCE_JOURNAL_STATUS_LABELS[
-                          row.status as keyof typeof PLATFORM_FINANCE_JOURNAL_STATUS_LABELS
-                        ] ?? row.status}
-                      </span>
+                {rows.length === 0 ? (
+                  <tr className="pf-journal-empty-row">
+                    <td colSpan={9}>
+                      <p className="pf-journal-empty-title">
+                        No posted journal entries yet.
+                      </p>
+                      <p className="pf-journal-empty-copy">
+                        Posted accounting entries will appear here once
+                        transactions are posted through the accounting engine.
+                      </p>
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  rows.map((row) => (
+                    <tr
+                      key={row.id}
+                      className="pf-journal-row"
+                      onClick={() => openJournal(row.journalEntryId)}
+                    >
+                      <td>{formatDate(row.entryDate)}</td>
+                      <td>
+                        <Link
+                          href={`/platform-finance/accounting/journal/${row.journalEntryId}`}
+                          className="pf-journal-link"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {row.reference}
+                        </Link>
+                      </td>
+                      <td className="pf-journal-desc-cell">{row.description}</td>
+                      <td className="pf-journal-code">{row.accountCode}</td>
+                      <td>{row.accountName}</td>
+                      <td className="is-num">
+                        {formatNairaCell(row.debit)}
+                      </td>
+                      <td className="is-num">
+                        {formatNairaCell(row.credit)}
+                      </td>
+                      <td>{row.preparedByName ?? "—"}</td>
+                      <td>{row.periodLabel}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
 
-          <footer className="pf-journal-pager">
-            <span>
-              Showing {from}–{to} of {total} journal entries
-            </span>
-            <div className="pf-journal-pager-controls">
-              <button
-                type="button"
-                className="pf-btn-secondary"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                Previous
-              </button>
-              <span>
-                {page} / {pageCount}
-              </span>
-              <button
-                type="button"
-                className="pf-btn-secondary"
-                disabled={page >= pageCount}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </button>
+          <div className="pf-journal-register-totals" aria-live="polite">
+            <div>
+              <span>Total Debit</span>
+              <strong>{formatNaira(pageDebitTotal)}</strong>
             </div>
-          </footer>
+            <div>
+              <span>Total Credit</span>
+              <strong>{formatNaira(pageCreditTotal)}</strong>
+            </div>
+          </div>
+
+          {total > 0 ? (
+            <footer className="pf-journal-pager">
+              <span>
+                Showing journal entries {from}–{to} of {total}
+                {rows.length > 0 ? ` · ${rows.length} lines on this page` : ""}
+              </span>
+              <div className="pf-journal-pager-controls">
+                <button
+                  type="button"
+                  className="pf-btn-secondary"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  Previous
+                </button>
+                <span>
+                  {page} / {pageCount}
+                </span>
+                <button
+                  type="button"
+                  className="pf-btn-secondary"
+                  disabled={page >= pageCount}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </button>
+              </div>
+            </footer>
+          ) : null}
         </>
       )}
+
+      <PlatformFinanceNewJournalDrawer
+        open={entryOpen}
+        onClose={closeEntryPanel}
+        onPosted={handleJournalPosted}
+        onBusyChange={setEntryBusy}
+      />
     </div>
   );
 }
