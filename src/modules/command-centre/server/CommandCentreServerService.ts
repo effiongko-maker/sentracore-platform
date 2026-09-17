@@ -342,7 +342,7 @@ export class CommandCentreServerService {
         openPayablesLine = null;
       }
 
-      const pending = overview.requests.pendingCeoApproval.count;
+      const pending = overview.pendingCeoDecisions.count;
       const awaiting = overview.requests.awaitingReview.count;
       const lines: string[] = [];
       lines.push(
@@ -469,7 +469,7 @@ export class CommandCentreServerService {
       access.profileId,
       COMMAND_CENTRE_CAPABILITIES.decide
     );
-    if (!canApprove || !canDecide) return { state: "empty", items: [] };
+    if (!canApprove || !canDecide) return { state: "restricted", items: [] };
 
     try {
       const requestsSvc = new PlatformFinanceRequestsServerService(

@@ -1,10 +1,10 @@
 /**
- * Home Operational Picture metrics — derived from existing domain pools.
+ * Operational Picture metrics — derived from authoritative domain rows.
  *
  * Critical uses the exact Maintenance criticalWorkTotal KPI.
- * In Progress / Awaiting Action / Overdue are counted from the same
- * bounded Home pools used for attention (WORKSPACE_HOME_POOL_SIZE).
- * They are real operational signals, not invented workflows.
+ * Consumers choose whether those rows are a bounded Home pool or a complete
+ * register walk. The predicates live here so Home and Command Centre cannot
+ * drift semantically.
  */
 
 import type { Approval } from "@/modules/approvals/types";
@@ -76,7 +76,7 @@ export function buildOperationalPictureMetrics(input: {
     : null;
 
   let awaitingAction: number | null = null;
-  if (maintenance || workOrders || approvals) {
+  if (maintenance && workOrders && approvals) {
     let count = 0;
     if (maintenance) {
       for (const row of maintenance) {
@@ -99,7 +99,7 @@ export function buildOperationalPictureMetrics(input: {
   }
 
   let overdue: number | null = null;
-  if (maintenance || workOrders) {
+  if (maintenance && workOrders) {
     let count = 0;
     if (maintenance) {
       for (const row of maintenance) {

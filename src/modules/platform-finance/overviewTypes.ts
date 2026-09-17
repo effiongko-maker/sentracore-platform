@@ -60,6 +60,8 @@ export type FinanceOverviewSnapshot = {
     queried: FinanceOverviewMetricBucket;
     approvedThisMonth: FinanceOverviewMetricBucket;
   };
+  /** Combined FR + Vendor Bill queue currently awaiting CEO funding decisions. */
+  pendingCeoDecisions: FinanceOverviewMetricBucket;
   needsAttention: FinanceOverviewAttentionItem[];
   accounting: FinanceOverviewAccountingSnapshot;
   recentActivity: FinanceOverviewActivityItem[];

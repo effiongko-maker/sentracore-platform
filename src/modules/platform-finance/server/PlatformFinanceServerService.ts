@@ -39,6 +39,7 @@ import type {
   FinanceJournalRegisterRow,
 } from "@/modules/platform-finance/journalTypes";
 import { PlatformFinanceRequestsRepository } from "@/modules/platform-finance/server/PlatformFinanceRequestsRepository";
+import { PlatformFinanceVendorBillsRepository } from "@/modules/platform-finance/server/PlatformFinanceVendorBillsRepository";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { financePeriodLabel } from "@/modules/platform-finance/domain/periods";
 
@@ -987,6 +988,11 @@ export class PlatformFinanceServerService {
       : companies.map((c) => c.id);
     const requests =
       await this.requestsRepo.listRequestsForCompanies(companyIdsForRequests);
+    const vendorBills = organisationWide
+      ? await new PlatformFinanceVendorBillsRepository(
+          this.organisationId
+        ).listApprovalQueue(companyIdsForRequests)
+      : [];
 
     const awaiting = requests.filter(
       (r) =>
@@ -1135,6 +1141,10 @@ export class PlatformFinanceServerService {
           approvedThisMonth.map((r) => r.approvedAmount)
         ),
       },
+      pendingCeoDecisions: sumBucket([
+        ...pendingCeo.map((r) => r.requestedAmount),
+        ...vendorBills.map((bill) => bill.billedAmount),
+      ]),
       needsAttention,
       accounting: {
         revenue,

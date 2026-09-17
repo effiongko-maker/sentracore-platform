@@ -30,6 +30,7 @@ import { IncidentService } from "@/services/incidents/IncidentService";
 import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 import { UserService } from "@/services/users/UserService";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
+import { loadAllPages } from "@/services/reporting/loadAllPages";
 import {
   ACTIVE_INCIDENT_STATUSES,
   ACTIVE_MAINTENANCE_STATUSES,
@@ -643,36 +644,60 @@ export type WorkspaceProgressiveLoad = {
 };
 
 /**
- * Authoritative FM read composition for consumers outside the Home UI.
- * Reuses the same bounded domain pools, exact Critical Work total, and
- * Operational Picture definitions as Facility Management Home.
+ * Authoritative FM read composition for Command Centre and other consumers
+ * that require exact organisational metrics. Critical retains the register KPI;
+ * every other source is walked to its final page before shared predicates run.
+ * A failed source remains null through the metric dependency rules.
  */
 export async function loadOperationalPictureMetrics(
   asOf = new Date().toISOString()
 ) {
-  const pool = WORKSPACE_HOME_POOL_SIZE;
+  const pageSize = WORKSPACE_HOME_POOL_SIZE;
+  const emptyMnt: Maintenance[] = [];
   const emptyWo: WorkOrder[] = [];
   const emptyApr: Approval[] = [];
 
-  const [maintenanceHome, workOrders, approvals] = await Promise.all([
-    settleMaintenanceHome(pool),
+  const [maintenanceHome, maintenance, workOrders, approvals] = await Promise.all([
+    settleMaintenanceHome(pageSize),
     settleDomain(
       (signal) =>
-        WorkOrderService.listWorkOrders(
-          { page: 1, pageSize: pool },
-          { signal }
+        loadAllPages(
+          (page, size) =>
+            MaintenanceService.listMaintenance(
+              { page, pageSize: size, status: "active" },
+              { signal }
+            ),
+          pageSize
         )
-          .then((page) => ({ ok: true as const, data: page.data ?? emptyWo }))
+          .then((data) => ({ ok: true as const, data }))
+          .catch(() => ({ ok: false as const, data: emptyMnt })),
+      emptyMnt
+    ),
+    settleDomain(
+      (signal) =>
+        loadAllPages(
+          (page, size) =>
+            WorkOrderService.listWorkOrders(
+              { page, pageSize: size },
+              { signal }
+            ),
+          pageSize
+        )
+          .then((data) => ({ ok: true as const, data }))
           .catch(() => ({ ok: false as const, data: emptyWo })),
       emptyWo
     ),
     settleDomain(
       (signal) =>
-        ApprovalService.listApprovals(
-          { page: 1, pageSize: pool },
-          { signal }
+        loadAllPages(
+          (page, size) =>
+            ApprovalService.listApprovals(
+              { page, pageSize: size },
+              { signal }
+            ),
+          pageSize
         )
-          .then((page) => ({ ok: true as const, data: page.data ?? emptyApr }))
+          .then((data) => ({ ok: true as const, data }))
           .catch(() => ({ ok: false as const, data: emptyApr })),
       emptyApr
     ),
@@ -683,9 +708,7 @@ export async function loadOperationalPictureMetrics(
     criticalWork: maintenanceHome.criticalWork.ok
       ? maintenanceHome.criticalWork.total
       : null,
-    maintenance: maintenanceHome.maintenance.ok
-      ? maintenanceHome.maintenance.data
-      : null,
+    maintenance: maintenance.ok ? maintenance.data : null,
     workOrders: workOrders.ok ? workOrders.data : null,
     approvals: approvals.ok ? approvals.data : null,
   });

@@ -1,0 +1,100 @@
+/** Non-mutating verification for the final Command Centre v1 truthfulness pass. */
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { buildOperationalPictureMetrics } from "../src/modules/workspace/operationalPicture";
+import { composeFinanceDecisionQueue } from "../src/modules/command-centre/server/composeFinanceDecisionQueue";
+import type { Maintenance } from "../src/modules/maintenance/types";
+import type { WorkOrder } from "../src/modules/work-orders/types";
+import type { Approval } from "../src/modules/approvals/types";
+import type { FinancialRequest } from "../src/modules/platform-finance/types";
+import type { FinanceVendorBill } from "../src/modules/platform-finance/domain/vendorBills";
+
+function assert(value: unknown, message: string): asserts value {
+  if (!value) throw new Error(message);
+  console.log(`PASS ${message}`);
+}
+
+const asOf = "2026-09-17T12:00:00.000Z";
+const maintenance = Array.from({ length: 135 }, (_, index) => ({
+  id: `MNT-${index}`,
+  status: "in_progress",
+  dueAt: index < 121 ? "2026-09-15T00:00:00.000Z" : "2026-09-20T00:00:00.000Z",
+  requiresWorkOrder: index < 125,
+  workOrderId: undefined,
+  workOrderIds: [],
+})) as unknown as Maintenance[];
+maintenance.push({ id: "MNT-DONE", status: "completed", dueAt: "2026-09-01T00:00:00.000Z" } as Maintenance);
+
+const workOrders = Array.from({ length: 130 }, (_, index) => ({
+  id: `WO-${index}`,
+  status: index < 115 ? "on_hold" : "in_progress",
+  dueAt: index < 123 ? "2026-09-14T00:00:00.000Z" : "2026-09-20T00:00:00.000Z",
+})) as unknown as WorkOrder[];
+workOrders.push({ id: "WO-CLOSED", status: "closed", dueAt: "2026-09-01T00:00:00.000Z" } as WorkOrder);
+
+const approvals = Array.from({ length: 110 }, (_, index) => ({
+  id: `APR-${index}`,
+  status: "submitted",
+})) as unknown as Approval[];
+
+const metrics = buildOperationalPictureMetrics({
+  asOf,
+  criticalWork: 17,
+  maintenance,
+  workOrders,
+  approvals,
+});
+assert(metrics.inProgress === 135, "exact In Progress exceeds 100");
+assert(metrics.awaitingAction === 350, "exact Awaiting Action exceeds source page sizes");
+assert(metrics.overdue === 244, "exact Overdue exceeds source page sizes");
+assert(metrics.critical === 17, "Critical preserves the authoritative KPI");
+assert(Number(metrics.overdue) !== 246, "completed and closed rows are excluded from Overdue");
+
+const failedMaintenance = buildOperationalPictureMetrics({
+  asOf,
+  criticalWork: null,
+  maintenance: null,
+  workOrders,
+  approvals,
+});
+assert(failedMaintenance.inProgress === null, "Maintenance failure is not numeric zero");
+assert(failedMaintenance.awaitingAction === null, "Awaiting Action is unavailable when a required source fails");
+assert(failedMaintenance.overdue === null, "Overdue is unavailable when a required source fails");
+
+const request = (id: string, status: string, companyId: string) => ({
+  id,
+  status,
+  companyId,
+  currency: "NGN",
+  requestedAmount: 100,
+  updatedAt: asOf,
+}) as FinancialRequest;
+const bill = (id: string, status: string, companyId: string) => ({
+  id,
+  status,
+  companyId,
+  currency: "NGN",
+  billedAmount: 200,
+  updatedAt: asOf,
+}) as FinanceVendorBill;
+const queue = composeFinanceDecisionQueue({
+  requests: [request("FR-CEO", "pending_ceo_approval", "A"), request("FR-REVIEW", "under_review", "B")],
+  vendorBills: [bill("VB-CEO", "pending_ceo_approval", "B"), bill("VB-SUBMITTED", "submitted", "A")],
+  categories: [],
+});
+assert(queue.items.some((item) => item.source === "finance_request"), "FR pending CEO contributes");
+assert(queue.items.some((item) => item.source === "vendor_bill"), "VB pending CEO contributes");
+assert(queue.items.length === 2, "review-stage FR and VB do not contribute");
+
+const service = readFileSync(resolve("src/modules/command-centre/server/CommandCentreServerService.ts"), "utf8");
+const finance = readFileSync(resolve("src/modules/platform-finance/server/PlatformFinanceServerService.ts"), "utf8");
+const workspace = readFileSync(resolve("src/services/workspace/WorkspaceService.ts"), "utf8");
+assert(workspace.includes("loadAllPages("), "Operations exact path walks pagination instead of enlarging one page");
+assert(finance.includes("organisationWide") && finance.includes("PlatformFinanceVendorBillsRepository"), "Finance Pulse projection is organisation-wide and includes Vendor Bills");
+assert(service.includes("listApprovalQueue(actor)"), "Your Decisions remains actor/company scoped");
+assert(service.includes("overview.pendingCeoDecisions.count"), "Pulse and Decisions use intentionally different scopes");
+assert((service.match(/if \(!canApprove \|\| !canDecide\) return \{ state: \"restricted\"/g) ?? []).length >= 1, "missing decision authority is restricted, not empty");
+assert(!service.includes("isSuperAdmin && canDecide"), "Super Admin does not bypass business decision grants");
+assert(service.includes('state: items.length === 0 ? "empty" : "healthy"'), "authorised zero combined queue remains truthfully empty");
+
+console.log("\nCommand Centre truthfulness verification passed.");

@@ -98,8 +98,13 @@ function main() {
       !/pageSize:\s*1/.test(ws),
     "Home no longer issues separate high_or_critical pageSize:1 count request"
   );
+  const homeMaintenanceLoader = ws.slice(
+    ws.indexOf("function settleMaintenanceHome"),
+    ws.indexOf("function startCoreDomainLists")
+  );
   assert(
-    (ws.match(/MaintenanceService\.listMaintenance/g) || []).length === 1,
+    (homeMaintenanceLoader.match(/MaintenanceService\.listMaintenance/g) || [])
+      .length === 1,
     "Home core path calls listMaintenance exactly once"
   );
   assert(
