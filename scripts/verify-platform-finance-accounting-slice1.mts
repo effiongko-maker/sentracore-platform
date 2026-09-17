@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   FINANCE_ACCOUNT_TYPES,
-  FINANCE_COA_V1_PROPOSAL,
+  PAYCHEX_AUTHORITATIVE_COA,
   isFinanceAccountType,
   normalizeAccountCode,
 } from "../src/modules/platform-finance/domain/coa";
@@ -32,8 +32,8 @@ function main() {
   assert(!isFinanceAccountType("bank"), "no invented types");
   assert(normalizeAccountCode(" 1000 ") === "1000", "code normalize");
   assert(
-    FINANCE_COA_V1_PROPOSAL.length >= 10,
-    "v1 proposal documented (not auto-seeded)"
+    PAYCHEX_AUTHORITATIVE_COA.length === 60,
+    "authoritative PayChex COA contains 60 accounts"
   );
 
   // Domain: periods
