@@ -16,6 +16,7 @@ import {
   type FinancePayableStatus,
   type FinancePayableView,
 } from "@/modules/platform-finance/domain/payables";
+import { maskedPaymentDestinationFromRow } from "@/modules/platform-finance/domain/paymentDestination";
 
 function db() {
   return createAdminClient();
@@ -39,6 +40,10 @@ type PayableRow = {
   paid_amount: number | string;
   payee_name: string;
   payee_type: string;
+  payment_method: string | null;
+  payment_bank_name: string | null;
+  payment_account_name: string | null;
+  payment_account_number_last4: string | null;
   description: string | null;
   due_date: string | null;
   source_type: string;
@@ -92,6 +97,7 @@ export function mapFinancePayable(row: PayableRow): FinancePayableView {
     paidAmount: Number(row.paid_amount),
     payeeName: row.payee_name,
     payeeType: row.payee_type as FinancePayablePayeeType,
+    paymentDestination: maskedPaymentDestinationFromRow(row),
     description: row.description,
     dueDate: row.due_date,
     sourceType: row.source_type as FinancePayableSourceType,
@@ -137,7 +143,14 @@ function mapDocument(row: DocumentRow): FinancePayableDocument {
   };
 }
 
-const PAYABLE_SELECT = "*";
+// Explicit safe projection: encrypted snapshot material never reaches generic reads.
+const PAYABLE_SELECT = [
+  "id", "organisation_id", "company_id", "created_by_profile_id", "status",
+  "currency", "payable_amount", "paid_amount", "payee_name", "payee_type",
+  "description", "due_date", "source_type", "source_id", "project_contract_ref",
+  "period_id", "created_at", "updated_at", "payment_method", "payment_bank_name",
+  "payment_account_name", "payment_account_number_last4",
+].join(",");
 
 export class PlatformFinancePayablesRepository {
   constructor(private readonly organisationId: string) {}
@@ -150,7 +163,7 @@ export class PlatformFinancePayablesRepository {
       .eq("id", payableId)
       .maybeSingle();
     if (error) throwDb(error, "Failed to load finance payable.");
-    return data ? mapFinancePayable(data as PayableRow) : null;
+    return data ? mapFinancePayable(data as unknown as PayableRow) : null;
   }
 
   async listMyPayables(createdByProfileId: string): Promise<FinancePayableView[]> {
@@ -161,7 +174,7 @@ export class PlatformFinancePayablesRepository {
       .eq("created_by_profile_id", createdByProfileId)
       .order("created_at", { ascending: false });
     if (error) throwDb(error, "Failed to list my finance payables.");
-    return (data ?? []).map((row) => mapFinancePayable(row as PayableRow));
+    return (data ?? []).map((row) => mapFinancePayable(row as unknown as PayableRow));
   }
 
   async listPayablesForCompanies(
@@ -176,7 +189,7 @@ export class PlatformFinancePayablesRepository {
       .order("created_at", { ascending: false })
       .limit(500);
     if (error) throwDb(error, "Failed to list finance payables for companies.");
-    return (data ?? []).map((row) => mapFinancePayable(row as PayableRow));
+    return (data ?? []).map((row) => mapFinancePayable(row as unknown as PayableRow));
   }
 
   async listAccessibleCompanyIds(profileId: string): Promise<string[]> {

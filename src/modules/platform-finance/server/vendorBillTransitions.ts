@@ -9,6 +9,7 @@
 
 import { createAdminClient } from "@/utils/supabase/admin";
 import type { FinanceVendorBillPayeeType } from "@/modules/platform-finance/domain/vendorBills";
+import type { EncryptedPaymentDestination } from "@/modules/platform-finance/server/paymentDestinationCrypto";
 
 async function callUuidRpc(
   fn: string,
@@ -40,13 +41,15 @@ export type CreateFinanceVendorBillRpcInput = {
   dueDate?: string | null;
   projectContractRef?: string | null;
   currency?: string;
+  encryptedPaymentDestination?: EncryptedPaymentDestination | null;
 };
 
 export async function rpcCreateFinanceVendorBill(
   input: CreateFinanceVendorBillRpcInput
 ): Promise<string> {
+  // Phase 2B wrapper delegates atomically to "finance_vendor_bill_create".
   return callUuidRpc(
-    "finance_vendor_bill_create",
+    "finance_vendor_bill_create_with_payment_destination",
     {
       p_actor_profile_id: input.actorProfileId,
       p_organisation_id: input.organisationId,
@@ -62,6 +65,7 @@ export async function rpcCreateFinanceVendorBill(
       p_due_date: input.dueDate ?? null,
       p_project_contract_ref: input.projectContractRef ?? null,
       p_currency: input.currency ?? "NGN",
+      p_destination: input.encryptedPaymentDestination ?? null,
     },
     "Failed to create vendor bill."
   );
@@ -83,13 +87,15 @@ export type UpdateFinanceVendorBillDraftRpcInput = {
   clearDueDate?: boolean;
   projectContractRef?: string | null;
   currency?: string | null;
+  paymentDestinationAction?: "preserve" | "replace" | "remove";
+  encryptedPaymentDestination?: EncryptedPaymentDestination | null;
 };
 
 export async function rpcUpdateFinanceVendorBillDraft(
   input: UpdateFinanceVendorBillDraftRpcInput
 ): Promise<string> {
   return callUuidRpc(
-    "finance_vendor_bill_update_draft",
+    "finance_vendor_bill_update_draft_with_payment_destination",
     {
       p_actor_profile_id: input.actorProfileId,
       p_vendor_bill_id: input.vendorBillId,
@@ -106,6 +112,8 @@ export async function rpcUpdateFinanceVendorBillDraft(
       p_clear_due_date: input.clearDueDate ?? false,
       p_project_contract_ref: input.projectContractRef ?? null,
       p_currency: input.currency ?? null,
+      p_destination_action: input.paymentDestinationAction ?? "preserve",
+      p_destination: input.encryptedPaymentDestination ?? null,
     },
     "Failed to update draft vendor bill."
   );
@@ -167,13 +175,15 @@ export type ResubmitFinanceVendorBillRpcInput = {
   dueDate?: string | null;
   clearDueDate?: boolean;
   projectContractRef?: string | null;
+  paymentDestinationAction?: "preserve" | "replace" | "remove";
+  encryptedPaymentDestination?: EncryptedPaymentDestination | null;
 };
 
 export async function rpcResubmitFinanceVendorBill(
   input: ResubmitFinanceVendorBillRpcInput
 ): Promise<string> {
   return callUuidRpc(
-    "finance_vendor_bill_resubmit",
+    "finance_vendor_bill_resubmit_with_payment_destination",
     {
       p_actor_profile_id: input.actorProfileId,
       p_vendor_bill_id: input.vendorBillId,
@@ -189,6 +199,8 @@ export async function rpcResubmitFinanceVendorBill(
       p_due_date: input.dueDate ?? null,
       p_clear_due_date: input.clearDueDate ?? false,
       p_project_contract_ref: input.projectContractRef ?? null,
+      p_destination_action: input.paymentDestinationAction ?? "preserve",
+      p_destination: input.encryptedPaymentDestination ?? null,
     },
     "Failed to resubmit vendor bill."
   );

@@ -1,5 +1,15 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Finance payment-destination encryption
+
+Phase 2B requires the server-only environment variable
+`PLATFORM_FINANCE_PAYMENT_DESTINATION_KEY_V1`. Its value must be a canonical
+base64 encoding of exactly 32 cryptographically random bytes. Configure it in
+every application runtime before Payment Destination writes are enabled. Never
+expose it through a `NEXT_PUBLIC_` variable or store it in the database. Key
+version `1` is persisted with ciphertext for future controlled rotation; Phase
+2B performs no automatic rotation.
+
 ## Getting Started
 
 First, run the development server:

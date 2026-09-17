@@ -3,6 +3,8 @@
  * Status transition map and SoD constants only (no executable transition engine).
  */
 
+import type { PaymentDestination } from "./paymentDestination";
+
 export const FINANCIAL_REQUEST_STATUSES = [
   "draft",
   "submitted",
@@ -177,6 +179,7 @@ export type FinancialRequest = {
   description: string | null;
   payeeName: string;
   payeeType: FinancialRequestPayeeType;
+  paymentDestination: PaymentDestination | null;
   requiredByDate: string | null;
   externalReference: string | null;
   projectContractRef: string | null;

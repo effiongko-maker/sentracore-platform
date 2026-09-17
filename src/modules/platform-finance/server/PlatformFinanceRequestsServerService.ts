@@ -10,7 +10,13 @@ import {
   type FinancialRequestEvent,
   type FinancialRequestPayeeType,
   type FinancialRequestStatus,
+  type PaymentDestinationInput,
+  type PaymentDestinationMutation,
 } from "@/modules/platform-finance/types";
+import {
+  encryptPaymentDestination,
+  preparePaymentDestinationMutation,
+} from "@/modules/platform-finance/server/paymentDestinationCryptoCore";
 import { PlatformFinanceRequestsRepository } from "@/modules/platform-finance/server/PlatformFinanceRequestsRepository";
 import {
   buildFinanceRequestDocumentStoragePath,
@@ -295,6 +301,7 @@ export class PlatformFinanceRequestsServerService {
       externalReference?: string | null;
       projectContractRef?: string | null;
       currency?: string;
+      paymentDestination?: PaymentDestinationInput | null;
     }
   ): Promise<FinancialRequest> {
     if (!input.companyId) {
@@ -319,6 +326,9 @@ export class PlatformFinanceRequestsServerService {
     assertPayeeType(input.payeeType);
 
     try {
+      const encryptedPaymentDestination = input.paymentDestination
+        ? encryptPaymentDestination(input.paymentDestination)
+        : null;
       const id = await rpcCreateFinancialRequest({
         actorProfileId: actor.profileId,
         organisationId: actor.organisationId,
@@ -333,6 +343,7 @@ export class PlatformFinanceRequestsServerService {
         externalReference: input.externalReference ?? null,
         projectContractRef: input.projectContractRef ?? null,
         currency: input.currency ?? "NGN",
+        encryptedPaymentDestination,
       });
       return this.reload(id);
     } catch (error) {
@@ -354,6 +365,7 @@ export class PlatformFinanceRequestsServerService {
       clearRequiredByDate?: boolean;
       externalReference?: string | null;
       projectContractRef?: string | null;
+      paymentDestinationMutation?: PaymentDestinationMutation;
     }
   ): Promise<FinancialRequest> {
     if (input.payeeType != null) assertPayeeType(input.payeeType);
@@ -367,10 +379,15 @@ export class PlatformFinanceRequestsServerService {
     }
 
     try {
+      const destination = preparePaymentDestinationMutation(
+        input.paymentDestinationMutation
+      );
       const id = await rpcUpdateDraftFinancialRequest({
         actorProfileId: actor.profileId,
         requestId,
         ...input,
+        paymentDestinationAction: destination.action,
+        encryptedPaymentDestination: destination.encrypted,
       });
       return this.reload(id);
     } catch (error) {
@@ -443,14 +460,20 @@ export class PlatformFinanceRequestsServerService {
       clearRequiredByDate?: boolean;
       externalReference?: string | null;
       projectContractRef?: string | null;
+      paymentDestinationMutation?: PaymentDestinationMutation;
     } = {}
   ): Promise<FinancialRequest> {
     if (input.payeeType != null) assertPayeeType(input.payeeType);
     try {
+      const destination = preparePaymentDestinationMutation(
+        input.paymentDestinationMutation
+      );
       const id = await rpcResubmitFinancialRequest({
         actorProfileId: actor.profileId,
         requestId,
         ...input,
+        paymentDestinationAction: destination.action,
+        encryptedPaymentDestination: destination.encrypted,
       });
       return this.reload(id);
     } catch (error) {

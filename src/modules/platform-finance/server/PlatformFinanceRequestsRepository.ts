@@ -7,6 +7,7 @@ import type {
   FinancialRequestPayeeType,
   FinancialRequestStatus,
 } from "@/modules/platform-finance/domain/requests";
+import { maskedPaymentDestinationFromRow } from "@/modules/platform-finance/domain/paymentDestination";
 
 function db() {
   return createAdminClient();
@@ -34,6 +35,10 @@ type RequestRow = {
   description: string | null;
   payee_name: string;
   payee_type: string;
+  payment_method: string | null;
+  payment_bank_name: string | null;
+  payment_account_name: string | null;
+  payment_account_number_last4: string | null;
   required_by_date: string | null;
   external_reference: string | null;
   project_contract_ref: string | null;
@@ -92,6 +97,7 @@ export function mapFinancialRequest(row: RequestRow): FinancialRequest {
     description: row.description,
     payeeName: row.payee_name,
     payeeType: row.payee_type as FinancialRequestPayeeType,
+    paymentDestination: maskedPaymentDestinationFromRow(row),
     requiredByDate: row.required_by_date,
     externalReference: row.external_reference,
     projectContractRef: row.project_contract_ref,
@@ -139,7 +145,16 @@ function mapDocument(row: DocumentRow): FinancialRequestDocument {
   };
 }
 
-const REQUEST_SELECT = "*";
+// Explicit safe projection: cryptographic columns must never enter ordinary DTOs.
+const REQUEST_SELECT = [
+  "id", "organisation_id", "company_id", "requester_profile_id", "status",
+  "currency", "requested_amount", "approved_amount", "paid_amount", "category_id",
+  "purpose", "description", "payee_name", "payee_type", "required_by_date",
+  "external_reference", "project_contract_ref", "finance_notes", "ceo_decision_notes",
+  "queried_at", "submitted_at", "reviewed_at", "decided_at", "created_at", "updated_at",
+  "payment_method", "payment_bank_name", "payment_account_name",
+  "payment_account_number_last4",
+].join(",");
 
 export class PlatformFinanceRequestsRepository {
   constructor(private readonly organisationId: string) {}
@@ -152,7 +167,7 @@ export class PlatformFinanceRequestsRepository {
       .eq("id", requestId)
       .maybeSingle();
     if (error) throwDb(error, "Failed to load financial request.");
-    return data ? mapFinancialRequest(data as RequestRow) : null;
+    return data ? mapFinancialRequest(data as unknown as RequestRow) : null;
   }
 
   async listMyRequests(
@@ -165,7 +180,7 @@ export class PlatformFinanceRequestsRepository {
       .eq("requester_profile_id", requesterProfileId)
       .order("created_at", { ascending: false });
     if (error) throwDb(error, "Failed to list my financial requests.");
-    return (data ?? []).map((row) => mapFinancialRequest(row as RequestRow));
+    return (data ?? []).map((row) => mapFinancialRequest(row as unknown as RequestRow));
   }
 
   async listReviewQueue(
@@ -180,7 +195,7 @@ export class PlatformFinanceRequestsRepository {
       .in("status", ["submitted", "under_review", "resubmitted"])
       .order("created_at", { ascending: true });
     if (error) throwDb(error, "Failed to list review queue.");
-    return (data ?? []).map((row) => mapFinancialRequest(row as RequestRow));
+    return (data ?? []).map((row) => mapFinancialRequest(row as unknown as RequestRow));
   }
 
   async listApprovalQueue(
@@ -195,7 +210,7 @@ export class PlatformFinanceRequestsRepository {
       .eq("status", "pending_ceo_approval")
       .order("created_at", { ascending: true });
     if (error) throwDb(error, "Failed to list approval queue.");
-    return (data ?? []).map((row) => mapFinancialRequest(row as RequestRow));
+    return (data ?? []).map((row) => mapFinancialRequest(row as unknown as RequestRow));
   }
 
   async listAccessibleCompanyIds(profileId: string): Promise<string[]> {
@@ -442,7 +457,7 @@ export class PlatformFinanceRequestsRepository {
       .order("created_at", { ascending: false })
       .limit(500);
     if (error) throwDb(error, "Failed to list financial requests.");
-    return (data ?? []).map((row) => mapFinancialRequest(row as RequestRow));
+    return (data ?? []).map((row) => mapFinancialRequest(row as unknown as RequestRow));
   }
 
   async listRecentRequestEvents(limit = 12): Promise<FinancialRequestEvent[]> {

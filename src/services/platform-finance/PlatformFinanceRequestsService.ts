@@ -5,6 +5,10 @@ import type {
   FinancialRequestEvent,
   FinancialRequestPayeeType,
 } from "@/modules/platform-finance/domain/requests";
+import type {
+  PaymentDestinationInput,
+  PaymentDestinationMutation,
+} from "@/modules/platform-finance/domain/paymentDestination";
 
 const API_PATH = "/api/platform-finance/requests";
 
@@ -59,6 +63,7 @@ export type CreateFinancialRequestClientInput = {
   externalReference?: string | null;
   projectContractRef?: string | null;
   currency?: string;
+  paymentDestination?: PaymentDestinationInput | null;
 };
 
 export type UpdateDraftFinancialRequestClientInput = {
@@ -72,6 +77,7 @@ export type UpdateDraftFinancialRequestClientInput = {
   clearRequiredByDate?: boolean;
   externalReference?: string | null;
   projectContractRef?: string | null;
+  paymentDestinationMutation?: PaymentDestinationMutation;
 };
 
 export type FinancialRequestProfileSummary = {

@@ -13,6 +13,10 @@ import type {
   FinanceVendorBillPayableSummary,
   FinanceVendorBillPayeeType,
 } from "@/modules/platform-finance/domain/vendorBills";
+import type {
+  PaymentDestinationInput,
+  PaymentDestinationMutation,
+} from "@/modules/platform-finance/domain/paymentDestination";
 
 const API_PATH = "/api/platform-finance/vendor-bills";
 
@@ -67,6 +71,7 @@ export type CreateFinanceVendorBillClientInput = {
   dueDate?: string | null;
   projectContractRef?: string | null;
   currency?: string;
+  paymentDestination?: PaymentDestinationInput | null;
 };
 
 export type UpdateDraftFinanceVendorBillClientInput = {
@@ -83,6 +88,7 @@ export type UpdateDraftFinanceVendorBillClientInput = {
   clearDueDate?: boolean;
   projectContractRef?: string | null;
   currency?: string | null;
+  paymentDestinationMutation?: PaymentDestinationMutation;
 };
 
 export type ResubmitFinanceVendorBillClientInput =

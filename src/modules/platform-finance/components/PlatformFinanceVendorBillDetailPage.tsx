@@ -213,6 +213,10 @@ export function PlatformFinanceVendorBillDetailPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [destinationMode, setDestinationMode] = useState<"preserve" | "replace" | "remove">("preserve");
+  const [replacementBankName, setReplacementBankName] = useState("");
+  const [replacementAccountName, setReplacementAccountName] = useState("");
+  const [replacementAccountNumber, setReplacementAccountNumber] = useState("");
 
   const load = useCallback(async () => {
     if (!vendorBillId) {
@@ -234,6 +238,10 @@ export function PlatformFinanceVendorBillDetailPage() {
       setCompanies(cos);
       setNotesDraft(billDetail.vendorBill.financeNotes ?? "");
       setCeoNotes(billDetail.vendorBill.ceoDecisionNotes ?? "");
+      setDestinationMode("preserve");
+      setReplacementBankName(billDetail.vendorBill.paymentDestination?.bankName ?? "");
+      setReplacementAccountName(billDetail.vendorBill.paymentDestination?.accountName ?? "");
+      setReplacementAccountNumber("");
       setPartialAmount(
         billDetail.vendorBill.billedAmount
           ? String(billDetail.vendorBill.billedAmount)
@@ -250,7 +258,8 @@ export function PlatformFinanceVendorBillDetailPage() {
   }, [vendorBillId]);
 
   useEffect(() => {
-    void load();
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
   }, [load]);
 
   const bill = detail?.vendorBill ?? null;
@@ -328,10 +337,28 @@ export function PlatformFinanceVendorBillDetailPage() {
         await PlatformFinanceVendorBillsService.rejectVendorBill(bill.id, reason);
       } else if (action === "resubmit") {
         const note = commentDraft.trim();
+        if (
+          destinationMode === "replace" &&
+          (!replacementBankName.trim() || !replacementAccountName.trim() || !replacementAccountNumber.trim())
+        ) {
+          throw new Error("Complete all replacement payment destination fields.");
+        }
         await PlatformFinanceVendorBillsService.resubmitVendorBill(bill.id, {
           description: note
             ? `${bill.description ?? bill.purpose}\n\nResolution: ${note}`
             : undefined,
+          paymentDestinationMutation:
+            destinationMode === "replace"
+              ? {
+                  action: "replace",
+                  destination: {
+                    paymentMethod: "bank_transfer",
+                    bankName: replacementBankName.trim(),
+                    accountName: replacementAccountName.trim(),
+                    accountNumber: replacementAccountNumber.trim(),
+                  },
+                }
+              : { action: destinationMode },
         });
         setCommentDraft("");
       }
@@ -788,6 +815,25 @@ export function PlatformFinanceVendorBillDetailPage() {
                 showQueryResolve) &&
               !isTerminal ? (
                 <div className="pf-vb-comment-compose">
+                  {showQueryResolve ? (
+                    <div className="pf-vb-create-fields">
+                      <label>
+                        Payment destination
+                        <select className={inputClassName} value={destinationMode} onChange={(e) => setDestinationMode(e.target.value as typeof destinationMode)} disabled={actionBusy}>
+                          <option value="preserve">Preserve existing details</option>
+                          <option value="replace">Replace bank details</option>
+                          <option value="remove">Remove payment destination</option>
+                        </select>
+                      </label>
+                      {destinationMode === "replace" ? (
+                        <>
+                          <label>Bank name<input className={inputClassName} value={replacementBankName} onChange={(e) => setReplacementBankName(e.target.value)} /></label>
+                          <label>Account name<input className={inputClassName} value={replacementAccountName} onChange={(e) => setReplacementAccountName(e.target.value)} /></label>
+                          <label>New account number<input className={inputClassName} inputMode="numeric" autoComplete="off" value={replacementAccountNumber} onChange={(e) => setReplacementAccountNumber(e.target.value.replace(/\D/g, ""))} /></label>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <textarea
                     className={`${inputClassName} pf-new-textarea`}
                     rows={3}
@@ -889,6 +935,14 @@ export function PlatformFinanceVendorBillDetailPage() {
               <div>
                 <dt>Company</dt>
                 <dd>{company?.name ?? "—"}</dd>
+              </div>
+              <div>
+                <dt>Payment destination</dt>
+                <dd>
+                  {bill.paymentDestination
+                    ? `${bill.paymentDestination.bankName} · ${bill.paymentDestination.accountName} · •••• ${bill.paymentDestination.accountNumberLast4}`
+                    : "Not supplied"}
+                </dd>
               </div>
             </dl>
           </section>

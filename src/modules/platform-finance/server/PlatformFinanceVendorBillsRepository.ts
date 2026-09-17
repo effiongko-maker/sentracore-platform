@@ -12,6 +12,7 @@ import type {
   FinanceVendorBillPayeeType,
   FinanceVendorBillStatus,
 } from "@/modules/platform-finance/domain/vendorBills";
+import { maskedPaymentDestinationFromRow } from "@/modules/platform-finance/domain/paymentDestination";
 
 function db() {
   return createAdminClient();
@@ -32,6 +33,10 @@ type VendorBillRow = {
   approved_amount: number | string;
   payee_name: string;
   payee_type: string;
+  payment_method: string | null;
+  payment_bank_name: string | null;
+  payment_account_name: string | null;
+  payment_account_number_last4: string | null;
   invoice_reference: string | null;
   invoice_date: string | null;
   description: string | null;
@@ -90,6 +95,7 @@ export function mapFinanceVendorBill(row: VendorBillRow): FinanceVendorBill {
     approvedAmount: Number(row.approved_amount),
     payeeName: row.payee_name,
     payeeType: row.payee_type as FinanceVendorBillPayeeType,
+    paymentDestination: maskedPaymentDestinationFromRow(row),
     invoiceReference: row.invoice_reference,
     invoiceDate: row.invoice_date,
     description: row.description,
@@ -141,7 +147,16 @@ function mapDocument(row: DocumentRow): FinanceVendorBillDocument {
   };
 }
 
-const VENDOR_BILL_SELECT = "*";
+// Explicit safe projection: cryptographic columns must never enter ordinary DTOs.
+const VENDOR_BILL_SELECT = [
+  "id", "organisation_id", "company_id", "inputter_profile_id", "status",
+  "currency", "billed_amount", "approved_amount", "payee_name", "payee_type",
+  "invoice_reference", "invoice_date", "description", "purpose",
+  "goods_services_received", "due_date", "project_contract_ref", "finance_notes",
+  "ceo_decision_notes", "queried_at", "submitted_at", "reviewed_at", "decided_at",
+  "created_at", "updated_at", "payment_method", "payment_bank_name",
+  "payment_account_name", "payment_account_number_last4",
+].join(",");
 
 export class PlatformFinanceVendorBillsRepository {
   constructor(private readonly organisationId: string) {}
@@ -154,7 +169,7 @@ export class PlatformFinanceVendorBillsRepository {
       .eq("id", vendorBillId)
       .maybeSingle();
     if (error) throwDb(error, "Failed to load vendor bill.");
-    return data ? mapFinanceVendorBill(data as VendorBillRow) : null;
+    return data ? mapFinanceVendorBill(data as unknown as VendorBillRow) : null;
   }
 
   async listMyVendorBills(
@@ -167,7 +182,7 @@ export class PlatformFinanceVendorBillsRepository {
       .eq("inputter_profile_id", inputterProfileId)
       .order("created_at", { ascending: false });
     if (error) throwDb(error, "Failed to list my vendor bills.");
-    return (data ?? []).map((row) => mapFinanceVendorBill(row as VendorBillRow));
+    return (data ?? []).map((row) => mapFinanceVendorBill(row as unknown as VendorBillRow));
   }
 
   async listVendorBillsForCompanies(
@@ -182,7 +197,7 @@ export class PlatformFinanceVendorBillsRepository {
       .order("created_at", { ascending: false })
       .limit(500);
     if (error) throwDb(error, "Failed to list vendor bills for companies.");
-    return (data ?? []).map((row) => mapFinanceVendorBill(row as VendorBillRow));
+    return (data ?? []).map((row) => mapFinanceVendorBill(row as unknown as VendorBillRow));
   }
 
   async listReviewQueue(
@@ -197,7 +212,7 @@ export class PlatformFinanceVendorBillsRepository {
       .in("status", ["submitted", "under_review", "resubmitted"])
       .order("created_at", { ascending: true });
     if (error) throwDb(error, "Failed to list vendor bill review queue.");
-    return (data ?? []).map((row) => mapFinanceVendorBill(row as VendorBillRow));
+    return (data ?? []).map((row) => mapFinanceVendorBill(row as unknown as VendorBillRow));
   }
 
   async listApprovalQueue(
@@ -212,7 +227,7 @@ export class PlatformFinanceVendorBillsRepository {
       .eq("status", "pending_ceo_approval")
       .order("created_at", { ascending: true });
     if (error) throwDb(error, "Failed to list vendor bill approval queue.");
-    return (data ?? []).map((row) => mapFinanceVendorBill(row as VendorBillRow));
+    return (data ?? []).map((row) => mapFinanceVendorBill(row as unknown as VendorBillRow));
   }
 
   async listAccessibleCompanyIds(profileId: string): Promise<string[]> {
@@ -418,7 +433,7 @@ export class PlatformFinanceVendorBillsRepository {
   ): Promise<FinanceVendorBillPayableSummary | null> {
     const { data, error } = await db()
       .from("finance_payables")
-      .select("id, status, payable_amount, paid_amount, currency, due_date")
+      .select("id, status, payable_amount, paid_amount, currency, due_date, payment_method, payment_bank_name, payment_account_name, payment_account_number_last4")
       .eq("organisation_id", this.organisationId)
       .eq("source_type", "vendor_bill")
       .eq("source_id", vendorBillId)
@@ -432,6 +447,7 @@ export class PlatformFinanceVendorBillsRepository {
       paidAmount: Number(data.paid_amount),
       currency: String(data.currency),
       dueDate: data.due_date ? String(data.due_date) : null,
+      paymentDestination: maskedPaymentDestinationFromRow(data),
     };
   }
 }

@@ -6,6 +6,8 @@
  * status model but transition RPCs are not implemented until Banking/Payments exists.
  */
 
+import type { PaymentDestination } from "./paymentDestination";
+
 export const FINANCE_PAYABLE_STATUSES = [
   "draft",
   "pending_approval",
@@ -180,6 +182,7 @@ export type FinancePayable = {
   paidAmount: number;
   payeeName: string;
   payeeType: FinancePayablePayeeType;
+  paymentDestination: PaymentDestination | null;
   description: string | null;
   dueDate: string | null;
   sourceType: FinancePayableSourceType;

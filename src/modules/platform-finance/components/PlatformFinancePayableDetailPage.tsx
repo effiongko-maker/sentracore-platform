@@ -293,7 +293,8 @@ export function PlatformFinancePayableDetailPage() {
   }, [payableId]);
 
   useEffect(() => {
-    void load();
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
   }, [load]);
 
   useEffect(() => {
@@ -614,6 +615,16 @@ export function PlatformFinancePayableDetailPage() {
                 </InfoCard>
                 <InfoCard icon={<UserRound size={15} />} title="Payee">
                   <p className="pf-payd-strong">{payable.payeeName}</p>
+                </InfoCard>
+                <InfoCard icon={<UserRound size={15} />} title="Payment Destination">
+                  {payable.paymentDestination ? (
+                    <>
+                      <p className="pf-payd-strong">{payable.paymentDestination.bankName}</p>
+                      <p className="pf-payd-muted">{payable.paymentDestination.accountName} · •••• {payable.paymentDestination.accountNumberLast4}</p>
+                    </>
+                  ) : (
+                    <p className="pf-payd-muted">Not supplied</p>
+                  )}
                 </InfoCard>
               </div>
 

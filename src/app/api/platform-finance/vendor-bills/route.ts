@@ -19,6 +19,8 @@ import {
   type FinanceVendorBillDocumentRole,
   type FinanceVendorBillPayeeType,
   type PlatformFinanceCapability,
+  type PaymentDestinationInput,
+  type PaymentDestinationMutation,
 } from "@/modules/platform-finance/types";
 import {
   requirePlatformFinanceAccess,
@@ -130,6 +132,38 @@ function requirePayeeType(value: unknown): FinanceVendorBillPayeeType {
   return value as FinanceVendorBillPayeeType;
 }
 
+function parsePaymentDestination(value: unknown): PaymentDestinationInput | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw Object.assign(new Error("paymentDestination must be an object."), { statusHint: 400 });
+  }
+  const row = value as Record<string, unknown>;
+  if (row.paymentMethod !== "bank_transfer") {
+    throw Object.assign(new Error("paymentMethod must be bank_transfer."), { statusHint: 400 });
+  }
+  return {
+    paymentMethod: "bank_transfer",
+    bankName: requireNonEmptyString(row.bankName, "bankName"),
+    accountName: requireNonEmptyString(row.accountName, "accountName"),
+    accountNumber: requireNonEmptyString(row.accountNumber, "accountNumber"),
+  };
+}
+
+function parsePaymentDestinationMutation(value: unknown): PaymentDestinationMutation {
+  if (value === undefined || value === null) return { action: "preserve" };
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw Object.assign(new Error("paymentDestinationMutation must be an object."), { statusHint: 400 });
+  }
+  const row = value as Record<string, unknown>;
+  if (row.action === "preserve" || row.action === "remove") return { action: row.action };
+  if (row.action === "replace") {
+    const destination = parsePaymentDestination(row.destination);
+    if (!destination) throw Object.assign(new Error("replacement destination is required."), { statusHint: 400 });
+    return { action: "replace", destination };
+  }
+  throw Object.assign(new Error("payment destination action must be preserve, replace, or remove."), { statusHint: 400 });
+}
+
 function requireDocumentRole(value: unknown): FinanceVendorBillDocumentRole {
   if (!isFinanceVendorBillDocumentRole(value)) {
     throw Object.assign(
@@ -225,6 +259,13 @@ function sanitizeClientMessage(message: string): string {
     .replace(/\b(sqlstate|postgres|plpgsql)\b/gi, "")
     .trim()
     .slice(0, 280);
+}
+
+function rejectClientCryptographicFields(input: Record<string, unknown>) {
+  const encoded = JSON.stringify(input);
+  if (/ciphertext|authTag|auth_tag|encryptionKey|key_version|accountNumberLast4|account_number_last4/i.test(encoded)) {
+    throw Object.assign(new Error("Client must not supply encrypted payment destination fields."), { statusHint: 400 });
+  }
 }
 
 function actionErrorStatus(code: string, message: string): number {
@@ -400,6 +441,7 @@ export async function POST(request: Request) {
     }
 
     const input = body.input ?? {};
+    rejectClientCryptographicFields(input);
 
     switch (action) {
       case "listMyVendorBills": {
@@ -580,6 +622,7 @@ export async function POST(request: Request) {
               asOptionalString(input.projectContractRef) ?? null,
             currency:
               typeof input.currency === "string" ? input.currency : undefined,
+            paymentDestination: parsePaymentDestination(input.paymentDestination),
           }),
         });
       }
@@ -631,6 +674,9 @@ export async function POST(request: Request) {
               clearDueDate: Boolean(input.clearDueDate),
               projectContractRef: asOptionalString(input.projectContractRef),
               currency: asOptionalString(input.currency),
+              paymentDestinationMutation: parsePaymentDestinationMutation(
+                input.paymentDestinationMutation
+              ),
             }
           ),
         });
@@ -729,6 +775,9 @@ export async function POST(request: Request) {
               dueDate: asOptionalString(input.dueDate),
               clearDueDate: Boolean(input.clearDueDate),
               projectContractRef: asOptionalString(input.projectContractRef),
+              paymentDestinationMutation: parsePaymentDestinationMutation(
+                input.paymentDestinationMutation
+              ),
             }
           ),
         });

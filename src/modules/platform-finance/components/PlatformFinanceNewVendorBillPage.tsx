@@ -116,6 +116,10 @@ export function PlatformFinanceNewVendorBillPage() {
   const [payeeName, setPayeeName] = useState("");
   const [payeeType, setPayeeType] =
     useState<FinanceVendorBillPayeeType>("vendor");
+  const [destinationEnabled, setDestinationEnabled] = useState(false);
+  const [bankName, setBankName] = useState("");
+  const [accountName, setAccountName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
   const [invoiceReference, setInvoiceReference] = useState("");
   const [invoiceDate, setInvoiceDate] = useState("");
   const [amountDisplay, setAmountDisplay] = useState("");
@@ -183,6 +187,9 @@ export function PlatformFinanceNewVendorBillPage() {
       throw new Error("Amount must be a number greater than or equal to 0.");
     }
     if (!purpose.trim()) throw new Error("Description / Purpose is required.");
+    if (destinationEnabled && (!bankName.trim() || !accountName.trim() || !accountNumber.trim())) {
+      throw new Error("Complete bank name, account name, and account number, or remove payment details.");
+    }
 
     const created = await PlatformFinanceVendorBillsService.createVendorBill({
       companyId,
@@ -197,8 +204,17 @@ export function PlatformFinanceNewVendorBillPage() {
       dueDate: dueDate || null,
       projectContractRef: projectContractRef.trim() || null,
       currency,
+      paymentDestination: destinationEnabled
+        ? {
+            paymentMethod: "bank_transfer",
+            bankName: bankName.trim(),
+            accountName: accountName.trim(),
+            accountNumber: accountNumber.trim(),
+          }
+        : null,
     });
     setBill(created);
+    setAccountNumber("");
     return created;
   }
 
@@ -209,6 +225,20 @@ export function PlatformFinanceNewVendorBillPage() {
     }
     if (!payeeName.trim()) throw new Error("Vendor / Payee name is required.");
     if (!purpose.trim()) throw new Error("Description / Purpose is required.");
+    const existingDestination = existing.paymentDestination;
+    if (destinationEnabled && (!bankName.trim() || !accountName.trim())) {
+      throw new Error("Bank name and account name are required for payment details.");
+    }
+    if (destinationEnabled && !existingDestination && !accountNumber.trim()) {
+      throw new Error("Account number is required for new payment details.");
+    }
+    if (
+      destinationEnabled && existingDestination && !accountNumber.trim() &&
+      (bankName.trim() !== existingDestination.bankName ||
+        accountName.trim() !== existingDestination.accountName)
+    ) {
+      throw new Error("Enter the account number to replace existing payment details.");
+    }
 
     const updated = await PlatformFinanceVendorBillsService.updateDraftVendorBill(
       existing.id,
@@ -226,9 +256,25 @@ export function PlatformFinanceNewVendorBillPage() {
         clearDueDate: !dueDate,
         projectContractRef: projectContractRef.trim() || null,
         currency,
+        paymentDestinationMutation: !destinationEnabled
+          ? existingDestination
+            ? { action: "remove" }
+            : { action: "preserve" }
+          : accountNumber.trim()
+            ? {
+                action: "replace",
+                destination: {
+                  paymentMethod: "bank_transfer",
+                  bankName: bankName.trim(),
+                  accountName: accountName.trim(),
+                  accountNumber: accountNumber.trim(),
+                },
+              }
+            : { action: "preserve" },
       }
     );
     setBill(updated);
+    setAccountNumber("");
     return updated;
   }
 
@@ -395,6 +441,27 @@ export function PlatformFinanceNewVendorBillPage() {
               />
             </FormField>
           </div>
+        </section>
+
+        <section className="pf-vb-create-section">
+          <h2 className="pf-vb-create-section-title">Payment Destination</h2>
+          <label className="pf-new-check-row">
+            <input type="checkbox" checked={destinationEnabled} onChange={(e) => setDestinationEnabled(e.target.checked)} disabled={busy} />
+            Add bank-transfer payment details (optional)
+          </label>
+          {destinationEnabled ? (
+            <div className="pf-vb-create-fields pf-vb-create-fields-vendor">
+              <FormField label="Bank name" htmlFor="vb-bank-name" required>
+                <input id="vb-bank-name" className={inputClassName} value={bankName} onChange={(e) => setBankName(e.target.value)} disabled={busy} />
+              </FormField>
+              <FormField label="Account name" htmlFor="vb-account-name" required>
+                <input id="vb-account-name" className={inputClassName} value={accountName} onChange={(e) => setAccountName(e.target.value)} disabled={busy} />
+              </FormField>
+              <FormField label={bill?.paymentDestination ? "Replacement account number" : "Account number"} htmlFor="vb-account-number" required={!bill?.paymentDestination}>
+                <input id="vb-account-number" className={inputClassName} inputMode="numeric" autoComplete="off" value={accountNumber} placeholder={bill?.paymentDestination ? `Existing •••• ${bill.paymentDestination.accountNumberLast4}; blank preserves` : "Account number"} onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ""))} disabled={busy} />
+              </FormField>
+            </div>
+          ) : null}
         </section>
 
         <section className="pf-vb-create-section">

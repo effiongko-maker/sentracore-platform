@@ -184,6 +184,12 @@ export function PlatformFinanceNewRequestPage() {
   const [payeeName, setPayeeName] = useState("");
   const [payeeType, setPayeeType] =
     useState<FinancialRequestPayeeType>("other");
+  const [destinationEnabled, setDestinationEnabled] = useState(false);
+  const [bankName, setBankName] = useState("");
+  const [accountName, setAccountName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [existingDestination, setExistingDestination] =
+    useState<FinancialRequest["paymentDestination"]>(null);
 
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
@@ -224,7 +230,8 @@ export function PlatformFinanceNewRequestPage() {
   }, []);
 
   useEffect(() => {
-    void load();
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
   }, [load]);
 
   useEffect(() => {
@@ -256,6 +263,11 @@ export function PlatformFinanceNewRequestPage() {
         );
         setPayeeName(request.payeeName);
         setPayeeType(request.payeeType);
+        setExistingDestination(request.paymentDestination);
+        setDestinationEnabled(Boolean(request.paymentDestination));
+        setBankName(request.paymentDestination?.bankName ?? "");
+        setAccountName(request.paymentDestination?.accountName ?? "");
+        setAccountNumber("");
         setDocuments(detail.documents);
         const supporting = detail.documents.some(
           (d) => d.documentRole === "supporting" && d.supersededAt == null
@@ -313,13 +325,16 @@ export function PlatformFinanceNewRequestPage() {
 
   useEffect(() => {
     if ((step === 3 || step === 4) && draftId) {
-      void refreshDocuments(draftId).catch((err: unknown) => {
-        setFormError(
-          err instanceof Error
-            ? err.message
-            : "Unable to load request documents."
-        );
-      });
+      const timer = window.setTimeout(() => {
+        void refreshDocuments(draftId).catch((err: unknown) => {
+          setFormError(
+            err instanceof Error
+              ? err.message
+              : "Unable to load request documents."
+          );
+        });
+      }, 0);
+      return () => window.clearTimeout(timer);
     }
   }, [step, draftId, refreshDocuments]);
 
@@ -383,6 +398,27 @@ export function PlatformFinanceNewRequestPage() {
   }, [categoryId, title, companyId, amountValue, payeeName, payeeType]);
 
   async function persistDraft(): Promise<FinancialRequest> {
+    if (destinationEnabled && (!bankName.trim() || !accountName.trim())) {
+      throw new Error("Bank name and account name are required for payment details.");
+    }
+    if (destinationEnabled && !existingDestination && !accountNumber.trim()) {
+      throw new Error("Account number is required for new payment details.");
+    }
+    if (
+      destinationEnabled && existingDestination && !accountNumber.trim() &&
+      (bankName.trim() !== existingDestination.bankName ||
+        accountName.trim() !== existingDestination.accountName)
+    ) {
+      throw new Error("Enter the account number to replace existing payment details.");
+    }
+    const paymentDestination = destinationEnabled && accountNumber.trim()
+      ? {
+          paymentMethod: "bank_transfer" as const,
+          bankName: bankName.trim(),
+          accountName: accountName.trim(),
+          accountNumber: accountNumber.trim(),
+        }
+      : null;
     const payload = {
       companyId,
       categoryId,
@@ -393,9 +429,10 @@ export function PlatformFinanceNewRequestPage() {
       payeeType,
       requiredByDate: requiredBy || null,
       currency: "NGN",
+      paymentDestination,
     };
     if (draftId) {
-      return PlatformFinanceRequestsService.updateDraftRequest(draftId, {
+      const updated = await PlatformFinanceRequestsService.updateDraftRequest(draftId, {
         categoryId: payload.categoryId,
         requestedAmount: payload.requestedAmount,
         purpose: payload.purpose,
@@ -403,10 +440,22 @@ export function PlatformFinanceNewRequestPage() {
         payeeName: payload.payeeName,
         payeeType: payload.payeeType,
         requiredByDate: payload.requiredByDate,
+        paymentDestinationMutation: !destinationEnabled
+          ? existingDestination
+            ? { action: "remove" as const }
+            : { action: "preserve" as const }
+          : paymentDestination
+            ? { action: "replace" as const, destination: paymentDestination }
+            : { action: "preserve" as const },
       });
+      setExistingDestination(updated.paymentDestination);
+      setAccountNumber("");
+      return updated;
     }
     const created = await PlatformFinanceRequestsService.createRequest(payload);
     setDraftId(created.id);
+    setExistingDestination(created.paymentDestination);
+    setAccountNumber("");
     return created;
   }
 
@@ -883,6 +932,35 @@ export function PlatformFinanceNewRequestPage() {
                     </span>
                   </div>
                 </FormField>
+
+                <div className="pf-new-field pf-new-field-wide">
+                  <label className="pf-new-check-row">
+                    <input
+                      type="checkbox"
+                      checked={destinationEnabled}
+                      onChange={(e) => setDestinationEnabled(e.target.checked)}
+                    />
+                    Add bank-transfer payment details (optional)
+                  </label>
+                </div>
+                {destinationEnabled ? (
+                  <>
+                    <FormField label="Bank name" htmlFor="pf-new-bank-name" required>
+                      <input id="pf-new-bank-name" className={inputClassName} value={bankName} onChange={(e) => setBankName(e.target.value)} />
+                    </FormField>
+                    <FormField label="Account name" htmlFor="pf-new-account-name" required>
+                      <input id="pf-new-account-name" className={inputClassName} value={accountName} onChange={(e) => setAccountName(e.target.value)} />
+                    </FormField>
+                    <FormField
+                      label={existingDestination ? "Replacement account number" : "Account number"}
+                      htmlFor="pf-new-account-number"
+                      required={!existingDestination}
+                      hint={existingDestination ? `Existing account •••• ${existingDestination.accountNumberLast4}. Leave blank to preserve it.` : "Stored using authenticated encryption; never returned to the browser."}
+                    >
+                      <input id="pf-new-account-number" className={inputClassName} inputMode="numeric" autoComplete="off" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ""))} />
+                    </FormField>
+                  </>
+                ) : null}
               </div>
             </div>
           ) : null}

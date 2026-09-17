@@ -10,6 +10,8 @@
  * platform_finance.request.approve capability.
  */
 
+import type { PaymentDestination } from "./paymentDestination";
+
 export const FINANCE_VENDOR_BILL_STATUSES = [
   "draft",
   "submitted",
@@ -202,6 +204,7 @@ export type FinanceVendorBill = {
   approvedAmount: number;
   payeeName: string;
   payeeType: FinanceVendorBillPayeeType;
+  paymentDestination: PaymentDestination | null;
   invoiceReference: string | null;
   invoiceDate: string | null;
   description: string | null;
@@ -263,4 +266,5 @@ export type FinanceVendorBillPayableSummary = {
   paidAmount: number;
   currency: string;
   dueDate: string | null;
+  paymentDestination: PaymentDestination | null;
 };

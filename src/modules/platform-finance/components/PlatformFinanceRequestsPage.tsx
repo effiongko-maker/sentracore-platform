@@ -263,7 +263,8 @@ export function PlatformFinanceRequestsPage() {
   }, []);
 
   useEffect(() => {
-    void load();
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
   }, [load]);
 
   useEffect(() => {
@@ -314,35 +315,38 @@ export function PlatformFinanceRequestsPage() {
   }, [companyId]);
 
   useEffect(() => {
-    if (!selectedId) {
-      setDetail(null);
-      setDetailError(null);
-      return;
-    }
     let cancelled = false;
-    setDetailLoading(true);
-    setDetailError(null);
-    setDrawerTab("details");
-    setPendingAction(null);
-    setReasonDraft("");
-    setActionError(null);
-    void PlatformFinanceRequestsService.getRequestDetail(selectedId)
-      .then((data) => {
-        if (!cancelled) setDetail(data);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setDetail(null);
-          setDetailError(
-            err instanceof Error ? err.message : "Unable to load request."
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setDetailLoading(false);
-      });
+    const timer = window.setTimeout(() => {
+      if (!selectedId) {
+        setDetail(null);
+        setDetailError(null);
+        return;
+      }
+      setDetailLoading(true);
+      setDetailError(null);
+      setDrawerTab("details");
+      setPendingAction(null);
+      setReasonDraft("");
+      setActionError(null);
+      void PlatformFinanceRequestsService.getRequestDetail(selectedId)
+        .then((data) => {
+          if (!cancelled) setDetail(data);
+        })
+        .catch((err: unknown) => {
+          if (!cancelled) {
+            setDetail(null);
+            setDetailError(
+              err instanceof Error ? err.message : "Unable to load request."
+            );
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setDetailLoading(false);
+        });
+    }, 0);
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [selectedId]);
 
@@ -404,7 +408,8 @@ export function PlatformFinanceRequestsPage() {
   ]);
 
   useEffect(() => {
-    setPage(1);
+    const timer = window.setTimeout(() => setPage(1), 0);
+    return () => window.clearTimeout(timer);
   }, [
     tab,
     companyId,
@@ -1256,6 +1261,14 @@ function RequestDetailDrawer({
                   <div>
                     <dt>Required by</dt>
                     <dd>{formatDate(request.requiredByDate)}</dd>
+                  </div>
+                  <div>
+                    <dt>Payment destination</dt>
+                    <dd>
+                      {request.paymentDestination
+                        ? `${request.paymentDestination.bankName} · ${request.paymentDestination.accountName} · •••• ${request.paymentDestination.accountNumberLast4}`
+                        : "Not supplied"}
+                    </dd>
                   </div>
                   <div>
                     <dt>Company</dt>

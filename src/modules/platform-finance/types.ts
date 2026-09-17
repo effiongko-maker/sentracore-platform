@@ -10,6 +10,16 @@ export const PLATFORM_FINANCE_MODULE_SLUG =
 
 export const PLATFORM_FINANCE_WORKSPACE_ID = "finance" as const;
 
+export {
+  PAYMENT_DESTINATION_METHODS,
+  validatePaymentDestinationInput,
+  paymentDestinationLast4,
+  type PaymentDestination,
+  type PaymentDestinationInput,
+  type PaymentDestinationMethod,
+  type PaymentDestinationMutation,
+} from "./domain/paymentDestination";
+
 export type PlatformFinanceModuleSlug = typeof PLATFORM_FINANCE_MODULE_SLUG;
 export type PlatformFinanceWorkspaceId = typeof PLATFORM_FINANCE_WORKSPACE_ID;
 

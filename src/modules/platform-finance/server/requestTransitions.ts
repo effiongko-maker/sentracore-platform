@@ -4,6 +4,7 @@
  */
 import { createAdminClient } from "@/utils/supabase/admin";
 import type { FinancialRequestPayeeType } from "@/modules/platform-finance/domain/requests";
+import type { EncryptedPaymentDestination } from "@/modules/platform-finance/server/paymentDestinationCrypto";
 
 function throwRpc(
   error: { message?: string } | null,
@@ -39,13 +40,14 @@ export type CreateFinancialRequestRpcInput = {
   externalReference?: string | null;
   projectContractRef?: string | null;
   currency?: string;
+  encryptedPaymentDestination?: EncryptedPaymentDestination | null;
 };
 
 export async function rpcCreateFinancialRequest(
   input: CreateFinancialRequestRpcInput
 ): Promise<string> {
   return callUuidRpc(
-    "finance_request_create",
+    "finance_request_create_with_payment_destination",
     {
       p_actor_profile_id: input.actorProfileId,
       p_organisation_id: input.organisationId,
@@ -60,6 +62,7 @@ export async function rpcCreateFinancialRequest(
       p_external_reference: input.externalReference ?? null,
       p_project_contract_ref: input.projectContractRef ?? null,
       p_currency: input.currency ?? "NGN",
+      p_destination: input.encryptedPaymentDestination ?? null,
     },
     "Failed to create financial request."
   );
@@ -78,13 +81,15 @@ export type UpdateDraftFinancialRequestRpcInput = {
   clearRequiredByDate?: boolean;
   externalReference?: string | null;
   projectContractRef?: string | null;
+  paymentDestinationAction?: "preserve" | "replace" | "remove";
+  encryptedPaymentDestination?: EncryptedPaymentDestination | null;
 };
 
 export async function rpcUpdateDraftFinancialRequest(
   input: UpdateDraftFinancialRequestRpcInput
 ): Promise<string> {
   return callUuidRpc(
-    "finance_request_update_draft",
+    "finance_request_update_draft_with_payment_destination",
     {
       p_actor_profile_id: input.actorProfileId,
       p_request_id: input.requestId,
@@ -98,6 +103,8 @@ export async function rpcUpdateDraftFinancialRequest(
       p_clear_required_by_date: input.clearRequiredByDate ?? false,
       p_external_reference: input.externalReference ?? null,
       p_project_contract_ref: input.projectContractRef ?? null,
+      p_destination_action: input.paymentDestinationAction ?? "preserve",
+      p_destination: input.encryptedPaymentDestination ?? null,
     },
     "Failed to update draft financial request."
   );
@@ -156,7 +163,7 @@ export async function rpcResubmitFinancialRequest(
   input: ResubmitFinancialRequestRpcInput
 ): Promise<string> {
   return callUuidRpc(
-    "finance_request_resubmit",
+    "finance_request_resubmit_with_payment_destination",
     {
       p_actor_profile_id: input.actorProfileId,
       p_request_id: input.requestId,
@@ -170,6 +177,8 @@ export async function rpcResubmitFinancialRequest(
       p_clear_required_by_date: input.clearRequiredByDate ?? false,
       p_external_reference: input.externalReference ?? null,
       p_project_contract_ref: input.projectContractRef ?? null,
+      p_destination_action: input.paymentDestinationAction ?? "preserve",
+      p_destination: input.encryptedPaymentDestination ?? null,
     },
     "Failed to resubmit financial request."
   );

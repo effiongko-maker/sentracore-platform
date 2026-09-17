@@ -22,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
+import { inputClassName } from "@/components/forms/FormField";
 import { PlatformFinanceService } from "@/services/platform-finance/PlatformFinanceService";
 import {
   PlatformFinanceRequestsService,
@@ -246,6 +247,10 @@ export function PlatformFinanceRequestReviewPage() {
   const [docMenuId, setDocMenuId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadingAll, setDownloadingAll] = useState(false);
+  const [destinationMode, setDestinationMode] = useState<"preserve" | "replace" | "remove">("preserve");
+  const [replacementBankName, setReplacementBankName] = useState("");
+  const [replacementAccountName, setReplacementAccountName] = useState("");
+  const [replacementAccountNumber, setReplacementAccountNumber] = useState("");
 
   const load = useCallback(async () => {
     if (!requestId) {
@@ -275,6 +280,10 @@ export function PlatformFinanceRequestReviewPage() {
       setNotesDraft(requestDetail.request.financeNotes ?? "");
       setCeoNotesDraft(requestDetail.request.ceoDecisionNotes ?? "");
       setPartialAmount("");
+      setDestinationMode("preserve");
+      setReplacementBankName(requestDetail.request.paymentDestination?.bankName ?? "");
+      setReplacementAccountName(requestDetail.request.paymentDestination?.accountName ?? "");
+      setReplacementAccountNumber("");
     } catch (err: unknown) {
       setDetail(null);
       setError(
@@ -286,7 +295,8 @@ export function PlatformFinanceRequestReviewPage() {
   }, [requestId]);
 
   useEffect(() => {
-    void load();
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
   }, [load]);
 
   useEffect(() => {
@@ -807,6 +817,14 @@ export function PlatformFinanceRequestReviewPage() {
                           request.payeeType}
                       </dd>
                     </div>
+                    <div>
+                      <dt>Payment destination</dt>
+                      <dd>
+                        {request.paymentDestination
+                          ? `${request.paymentDestination.bankName} · ${request.paymentDestination.accountName} · •••• ${request.paymentDestination.accountNumberLast4}`
+                          : "Not supplied"}
+                      </dd>
+                    </div>
                   </dl>
                 </section>
               </div>
@@ -1267,6 +1285,42 @@ export function PlatformFinanceRequestReviewPage() {
                   payment or posting
                 </li>
               </ul>
+            </section>
+          ) : null}
+
+          {isOwn && request.status === "query" ? (
+            <section className="pf-rev-card">
+              <h3 className="pf-rev-aside-title">Resolve Query</h3>
+              <p className="pf-req-meta">Payment details are optional. Preserve, replace, or explicitly remove them before resubmitting.</p>
+              <select className={inputClassName} value={destinationMode} onChange={(e) => setDestinationMode(e.target.value as typeof destinationMode)} disabled={actionBusy}>
+                <option value="preserve">Preserve existing details</option>
+                <option value="replace">Replace bank details</option>
+                <option value="remove">Remove payment destination</option>
+              </select>
+              {destinationMode === "replace" ? (
+                <div className="pf-vb-create-fields">
+                  <label>Bank name<input className={inputClassName} value={replacementBankName} onChange={(e) => setReplacementBankName(e.target.value)} /></label>
+                  <label>Account name<input className={inputClassName} value={replacementAccountName} onChange={(e) => setReplacementAccountName(e.target.value)} /></label>
+                  <label>New account number<input className={inputClassName} inputMode="numeric" autoComplete="off" value={replacementAccountNumber} onChange={(e) => setReplacementAccountNumber(e.target.value.replace(/\D/g, ""))} /></label>
+                </div>
+              ) : null}
+              <button
+                type="button"
+                className="pf-btn-primary pf-rev-action-btn"
+                disabled={actionBusy}
+                onClick={() => void runAction(async () => {
+                  if (destinationMode === "replace" && (!replacementBankName.trim() || !replacementAccountName.trim() || !replacementAccountNumber.trim())) {
+                    throw new Error("Complete all replacement payment destination fields.");
+                  }
+                  await PlatformFinanceRequestsService.resubmitRequest(requestId, {
+                    paymentDestinationMutation: destinationMode === "replace"
+                      ? { action: "replace", destination: { paymentMethod: "bank_transfer", bankName: replacementBankName.trim(), accountName: replacementAccountName.trim(), accountNumber: replacementAccountNumber.trim() } }
+                      : { action: destinationMode },
+                  });
+                })}
+              >
+                Resolve &amp; Resubmit
+              </button>
             </section>
           ) : null}
 

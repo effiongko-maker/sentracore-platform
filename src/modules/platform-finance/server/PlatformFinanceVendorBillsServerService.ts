@@ -15,7 +15,13 @@ import {
   PLATFORM_FINANCE_CAPABILITIES,
   type FinanceVendorBillPayeeType,
   type FinanceVendorBillStatus,
+  type PaymentDestinationInput,
+  type PaymentDestinationMutation,
 } from "@/modules/platform-finance/types";
+import {
+  encryptPaymentDestination,
+  preparePaymentDestinationMutation,
+} from "@/modules/platform-finance/server/paymentDestinationCryptoCore";
 import { PlatformFinanceVendorBillsRepository } from "@/modules/platform-finance/server/PlatformFinanceVendorBillsRepository";
 import {
   buildFinanceVendorBillDocumentStoragePath,
@@ -319,6 +325,7 @@ export class PlatformFinanceVendorBillsServerService {
       dueDate?: string | null;
       projectContractRef?: string | null;
       currency?: string;
+      paymentDestination?: PaymentDestinationInput | null;
     }
   ): Promise<FinanceVendorBill> {
     if (!input.companyId) {
@@ -341,6 +348,9 @@ export class PlatformFinanceVendorBillsServerService {
 
     let id: string;
     try {
+      const encryptedPaymentDestination = input.paymentDestination
+        ? encryptPaymentDestination(input.paymentDestination)
+        : null;
       id = await rpcCreateFinanceVendorBill({
         actorProfileId: actor.profileId,
         organisationId: actor.organisationId,
@@ -356,6 +366,7 @@ export class PlatformFinanceVendorBillsServerService {
         dueDate: input.dueDate ?? null,
         projectContractRef: input.projectContractRef ?? null,
         currency: input.currency ?? "NGN",
+        encryptedPaymentDestination,
       });
     } catch (error) {
       mapRpcError(error);
@@ -380,6 +391,7 @@ export class PlatformFinanceVendorBillsServerService {
       clearDueDate?: boolean;
       projectContractRef?: string | null;
       currency?: string | null;
+      paymentDestinationMutation?: PaymentDestinationMutation;
     }
   ): Promise<FinanceVendorBill> {
     if (input.payeeType != null) assertPayeeType(input.payeeType);
@@ -393,6 +405,9 @@ export class PlatformFinanceVendorBillsServerService {
       throw new ActionError("VALIDATION_ERROR", "billedAmount must be >= 0.");
     }
     try {
+      const destination = preparePaymentDestinationMutation(
+        input.paymentDestinationMutation
+      );
       await rpcUpdateFinanceVendorBillDraft({
         actorProfileId: actor.profileId,
         vendorBillId,
@@ -409,6 +424,8 @@ export class PlatformFinanceVendorBillsServerService {
         clearDueDate: input.clearDueDate,
         projectContractRef: input.projectContractRef,
         currency: input.currency,
+        paymentDestinationAction: destination.action,
+        encryptedPaymentDestination: destination.encrypted,
       });
     } catch (error) {
       mapRpcError(error);
@@ -486,6 +503,7 @@ export class PlatformFinanceVendorBillsServerService {
       dueDate?: string | null;
       clearDueDate?: boolean;
       projectContractRef?: string | null;
+      paymentDestinationMutation?: PaymentDestinationMutation;
     } = {}
   ): Promise<FinanceVendorBill> {
     if (input.payeeType != null) assertPayeeType(input.payeeType);
@@ -499,6 +517,9 @@ export class PlatformFinanceVendorBillsServerService {
       throw new ActionError("VALIDATION_ERROR", "billedAmount must be > 0.");
     }
     try {
+      const destination = preparePaymentDestinationMutation(
+        input.paymentDestinationMutation
+      );
       await rpcResubmitFinanceVendorBill({
         actorProfileId: actor.profileId,
         vendorBillId,
@@ -514,6 +535,8 @@ export class PlatformFinanceVendorBillsServerService {
         dueDate: input.dueDate,
         clearDueDate: input.clearDueDate,
         projectContractRef: input.projectContractRef,
+        paymentDestinationAction: destination.action,
+        encryptedPaymentDestination: destination.encrypted,
       });
     } catch (error) {
       mapRpcError(error);
