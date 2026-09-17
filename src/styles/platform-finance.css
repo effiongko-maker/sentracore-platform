@@ -4452,3 +4452,46 @@ a.pf-new-save-success-action {
     grid-template-columns: 1fr;
   }
 }
+
+.pf-payd-pay-form {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+}
+
+.pf-payd-pay-form label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  color: var(--pf-muted, #6b7280);
+}
+
+.pf-payd-pay-form input,
+.pf-payd-pay-form select {
+  border: 1px solid var(--pf-border, #e5e7eb);
+  border-radius: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  color: var(--pf-ink, #111827);
+  background: #fff;
+}
+
+.pf-payd-pay-history {
+  margin-top: 1rem;
+}
+
+.pf-payd-pay-history ul,
+ul.pf-payd-pay-history {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.pf-payd-pay-history li {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--pf-border, #e5e7eb);
+  border-radius: 0.5rem;
+  background: #fafafa;
+}

@@ -46,6 +46,8 @@ export const PLATFORM_FINANCE_CAPABILITIES = {
   vendor_bill_view: "platform_finance.vendor_bill.view",
   vendor_bill_create: "platform_finance.vendor_bill.create",
   vendor_bill_review: "platform_finance.vendor_bill.review",
+  payment_view: "platform_finance.payment.view",
+  payment_execute: "platform_finance.payment.execute",
 } as const;
 
 export {
@@ -81,6 +83,7 @@ export {
   FINANCE_PAYABLE_EXCEPTION_STATUSES,
   FINANCE_PAYABLE_TRANSITIONS,
   FINANCE_PAYABLE_BANKING_DEFERRED_TRANSITIONS,
+  FINANCE_PAYABLE_PAYMENT_ELIGIBLE_STATUSES,
   FINANCE_PAYABLE_SOURCE_TYPES,
   FINANCE_PAYABLE_PAYEE_TYPES,
   FINANCE_PAYABLE_EVENT_TYPES,
@@ -90,6 +93,7 @@ export {
   financePayableOutstandingAmount,
   toFinancePayableView,
   isFinancePayableStatus,
+  isFinancePayablePaymentEligible,
   isAllowedFinancePayableTransition,
   assertFinancePayableTransition,
   isFinancePayableSourceType,
@@ -105,6 +109,18 @@ export {
   type FinancePayableDocumentRole,
   type FinancePayableCapability,
 } from "./domain/payables";
+
+export {
+  FINANCE_PAYMENT_STATUSES,
+  FINANCE_PAYMENT_CAPABILITIES,
+  FINANCE_PAYMENT_INVARIANTS,
+  isFinancePaymentStatus,
+  type FinancePayment,
+  type FinancePaymentView,
+  type FinancePaymentStatus,
+  type FinancePaymentCapability,
+  type ConfirmFinancePaymentInput,
+} from "./domain/payments";
 
 export {
   FINANCE_VENDOR_BILL_STATUSES,

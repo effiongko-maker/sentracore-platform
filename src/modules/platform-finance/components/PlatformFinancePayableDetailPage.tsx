@@ -17,6 +17,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
+  Coins,
   Download,
   ExternalLink,
   FileImage,
@@ -39,6 +40,11 @@ import {
   type FinancePayableCapabilities,
   type FinancePayableDetail,
 } from "@/services/platform-finance/PlatformFinancePayablesService";
+import {
+  PlatformFinancePaymentsService,
+  type FinancePaymentCapabilities,
+  type RevealedPayableDestination,
+} from "@/services/platform-finance/PlatformFinancePaymentsService";
 import type {
   FinancePayableDocument,
   FinancePayableDocumentRole,
@@ -46,6 +52,9 @@ import type {
   FinancePayableStatus,
   FinancePayableView,
 } from "@/modules/platform-finance/domain/payables";
+import { isFinancePayablePaymentEligible } from "@/modules/platform-finance/domain/payables";
+import type { FinancePaymentView } from "@/modules/platform-finance/domain/payments";
+import type { FinanceFinancialAccountView } from "@/modules/platform-finance/types";
 import {
   FINANCE_PAYABLE_DOCUMENT_ACCEPT,
   FINANCE_PAYABLE_DOCUMENT_ROLE_LABELS,
@@ -55,7 +64,7 @@ import {
   prevalidateFinancePayableDocumentFile,
 } from "@/modules/platform-finance/payableDocumentUi";
 
-type WorkspaceTab = "overview" | "documents" | "history";
+type WorkspaceTab = "overview" | "documents" | "history" | "payments";
 type PendingAction = null | "query" | "reject" | "partial" | "cancel";
 
 type AccessibleCompany = {
@@ -69,6 +78,7 @@ const STATUS_LABELS: Record<FinancePayableStatus, string> = {
   draft: "Draft",
   pending_approval: "Pending Approval",
   approved: "Approved",
+  partially_paid: "Partially Paid",
   scheduled: "Scheduled",
   payment_pending: "Payment Pending",
   paid: "Paid",
@@ -81,6 +91,7 @@ const STATUS_TONE: Record<FinancePayableStatus, string> = {
   draft: "is-muted",
   pending_approval: "is-info",
   approved: "is-success",
+  partially_paid: "is-amber",
   scheduled: "is-amber",
   payment_pending: "is-amber",
   paid: "is-success",
@@ -102,6 +113,7 @@ const EVENT_LABELS: Record<string, string> = {
   rejected: "Rejected",
   scheduled: "Scheduled",
   payment_initiated: "Payment initiated",
+  partially_paid: "Partially paid",
   paid: "Paid",
   cancelled: "Cancelled",
   disputed: "Disputed",
@@ -236,6 +248,12 @@ export function PlatformFinancePayableDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<FinancePayableDetail | null>(null);
   const [caps, setCaps] = useState<FinancePayableCapabilities | null>(null);
+  const [paymentCaps, setPaymentCaps] =
+    useState<FinancePaymentCapabilities | null>(null);
+  const [payments, setPayments] = useState<FinancePaymentView[]>([]);
+  const [sourceAccounts, setSourceAccounts] = useState<
+    FinanceFinancialAccountView[]
+  >([]);
   const [companies, setCompanies] = useState<AccessibleCompany[]>([]);
   const [tab, setTab] = useState<WorkspaceTab>("overview");
 
@@ -244,6 +262,16 @@ export function PlatformFinancePayableDetailPage() {
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [reasonDraft, setReasonDraft] = useState("");
   const [partialAmount, setPartialAmount] = useState("");
+
+  const [payAmount, setPayAmount] = useState("");
+  const [payDate, setPayDate] = useState("");
+  const [payReference, setPayReference] = useState("");
+  const [payAccountId, setPayAccountId] = useState("");
+  const [revealedDestination, setRevealedDestination] =
+    useState<RevealedPayableDestination | null>(null);
+  const [revealBusy, setRevealBusy] = useState(false);
+  const [payBusy, setPayBusy] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
 
   const [editingDraft, setEditingDraft] = useState(false);
   const [draftPayeeName, setDraftPayeeName] = useState("");
@@ -268,12 +296,17 @@ export function PlatformFinancePayableDetailPage() {
     setError(null);
     setActionError(null);
     try {
-      const [capability, payableDetail, cos] = await Promise.all([
-        PlatformFinancePayablesService.getMyPayableCapabilities(),
-        PlatformFinancePayablesService.getPayableDetail(payableId),
-        PlatformFinancePayablesService.listAccessibleCompanies(),
-      ]);
+      const [capability, payableDetail, cos, paymentCapability] =
+        await Promise.all([
+          PlatformFinancePayablesService.getMyPayableCapabilities(),
+          PlatformFinancePayablesService.getPayableDetail(payableId),
+          PlatformFinancePayablesService.listAccessibleCompanies(),
+          PlatformFinancePaymentsService.getMyPaymentCapabilities().catch(
+            () => ({ view: false, execute: false })
+          ),
+        ]);
       setCaps(capability);
+      setPaymentCaps(paymentCapability);
       setDetail(payableDetail);
       setCompanies(cos.filter((c) => c.status === "active"));
       setDraftPayeeName(payableDetail.payable.payeeName);
@@ -284,6 +317,35 @@ export function PlatformFinancePayableDetailPage() {
       setPendingAction(null);
       setReasonDraft("");
       setPartialAmount("");
+      setPayAmount(String(payableDetail.payable.outstandingAmount));
+      setPayDate(new Date().toISOString().slice(0, 10));
+      setPayReference("");
+      setPayAccountId("");
+      setRevealedDestination(null);
+      setPayError(null);
+
+      if (paymentCapability.view || paymentCapability.execute) {
+        const history =
+          await PlatformFinancePaymentsService.listPaymentsForPayable(
+            payableId
+          ).catch(() => [] as FinancePaymentView[]);
+        setPayments(history);
+      } else {
+        setPayments([]);
+      }
+
+      if (
+        paymentCapability.execute &&
+        isFinancePayablePaymentEligible(payableDetail.payable.status)
+      ) {
+        const accounts =
+          await PlatformFinancePaymentsService.listPayableSourceFinancialAccounts(
+            payableId
+          ).catch(() => [] as FinanceFinancialAccountView[]);
+        setSourceAccounts(accounts);
+      } else {
+        setSourceAccounts([]);
+      }
     } catch (err: unknown) {
       setDetail(null);
       setError(err instanceof Error ? err.message : "Unable to load payable.");
@@ -332,6 +394,70 @@ export function PlatformFinancePayableDetailPage() {
     [events]
   );
   const lastEvent = events.length > 0 ? events[events.length - 1]! : null;
+
+  const canConfirmPayment = Boolean(
+    paymentCaps?.execute &&
+      payable &&
+      isFinancePayablePaymentEligible(payable.status) &&
+      payable.paymentDestination
+  );
+
+  async function revealDestination() {
+    if (!payableId) return;
+    setRevealBusy(true);
+    setPayError(null);
+    try {
+      const revealed =
+        await PlatformFinancePaymentsService.revealPayableDestination(
+          payableId
+        );
+      setRevealedDestination(revealed);
+    } catch (err: unknown) {
+      setPayError(
+        err instanceof Error ? err.message : "Unable to reveal account number."
+      );
+    } finally {
+      setRevealBusy(false);
+    }
+  }
+
+  async function confirmExternalPayment() {
+    if (!payable || !payableId) return;
+    const amount = Number(payAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setPayError("Enter a payment amount greater than zero.");
+      return;
+    }
+    if (!payAccountId) {
+      setPayError("Select the corporate financial account used for payment.");
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(payDate)) {
+      setPayError("Enter a valid payment date.");
+      return;
+    }
+    setPayBusy(true);
+    setPayError(null);
+    try {
+      await PlatformFinancePaymentsService.confirmPayment({
+        payableId,
+        sourceFinancialAccountId: payAccountId,
+        amount,
+        paymentDate: payDate,
+        externalReference: payReference.trim() || null,
+      });
+      setRevealedDestination(null);
+      await load();
+    } catch (err: unknown) {
+      setPayError(
+        err instanceof Error
+          ? err.message
+          : "Unable to confirm external payment."
+      );
+    } finally {
+      setPayBusy(false);
+    }
+  }
 
   const isOwn = Boolean(
     payable && caps && payable.createdByProfileId === caps.profileId
@@ -555,6 +681,7 @@ export function PlatformFinancePayableDetailPage() {
         {(
           [
             ["overview", "Overview"],
+            ["payments", `Payments (${payments.length})`],
             ["documents", `Documents (${activeDocuments.length})`],
             ["history", `History (${events.length})`],
           ] as const
@@ -620,13 +747,149 @@ export function PlatformFinancePayableDetailPage() {
                   {payable.paymentDestination ? (
                     <>
                       <p className="pf-payd-strong">{payable.paymentDestination.bankName}</p>
-                      <p className="pf-payd-muted">{payable.paymentDestination.accountName} · •••• {payable.paymentDestination.accountNumberLast4}</p>
+                      <p className="pf-payd-muted">
+                        {payable.paymentDestination.accountName} · ••••{" "}
+                        {payable.paymentDestination.accountNumberLast4}
+                      </p>
+                      {revealedDestination ? (
+                        <p className="pf-payd-strong">
+                          Account number: {revealedDestination.accountNumber}
+                        </p>
+                      ) : null}
+                      {canConfirmPayment ? (
+                        <button
+                          type="button"
+                          className="pf-btn is-ghost"
+                          disabled={revealBusy}
+                          onClick={() => void revealDestination()}
+                        >
+                          {revealBusy
+                            ? "Revealing…"
+                            : revealedDestination
+                              ? "Revealed for external transfer"
+                              : "Reveal account number"}
+                        </button>
+                      ) : null}
                     </>
                   ) : (
                     <p className="pf-payd-muted">Not supplied</p>
                   )}
                 </InfoCard>
               </div>
+
+              {canConfirmPayment || payments.length > 0 ? (
+                <section className="pf-rev-card">
+                  <div className="pf-rev-card-head">
+                    <div className="pf-rev-card-title">
+                      <Coins size={15} aria-hidden />
+                      <h2>Record external payment</h2>
+                    </div>
+                  </div>
+                  <p className="pf-payd-muted">
+                    Confirm a disbursement already made outside SentraCore
+                    through the company&apos;s bank or payment channel. SentraCore
+                    does not send money.
+                  </p>
+                  {canConfirmPayment ? (
+                    <div className="pf-payd-pay-form">
+                      <label>
+                        <span>Payment amount</span>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={payAmount}
+                          onChange={(e) => setPayAmount(e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>Payment date</span>
+                        <input
+                          type="date"
+                          value={payDate}
+                          onChange={(e) => setPayDate(e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>External bank / transaction reference</span>
+                        <input
+                          type="text"
+                          value={payReference}
+                          onChange={(e) => setPayReference(e.target.value)}
+                          placeholder="Optional"
+                        />
+                      </label>
+                      <label>
+                        <span>Paid from financial account</span>
+                        <select
+                          value={payAccountId}
+                          onChange={(e) => setPayAccountId(e.target.value)}
+                        >
+                          <option value="">Select account…</option>
+                          {sourceAccounts.map((account) => (
+                            <option key={account.id} value={account.id}>
+                              {account.name}
+                              {account.accountNumberLast4
+                                ? ` · •••• ${account.accountNumberLast4}`
+                                : ""}{" "}
+                              ({account.currency})
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {payError ? (
+                        <p className="pf-form-error" role="alert">
+                          {payError}
+                        </p>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="pf-btn is-primary"
+                        disabled={payBusy || sourceAccounts.length === 0}
+                        onClick={() => void confirmExternalPayment()}
+                      >
+                        {payBusy
+                          ? "Confirming…"
+                          : "Confirm external payment"}
+                      </button>
+                      {sourceAccounts.length === 0 ? (
+                        <p className="pf-payd-muted">
+                          No active same-company financial accounts are available
+                          for payment.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {payments.length > 0 ? (
+                    <div className="pf-payd-pay-history">
+                      <h3>Payment history</h3>
+                      <ul>
+                        {payments.map((payment) => (
+                          <li key={payment.id}>
+                            <strong>
+                              {formatNaira(payment.amount, payment.currency)}
+                            </strong>{" "}
+                            on {formatDate(payment.paymentDate)}
+                            {payment.externalReference
+                              ? ` · ${payment.externalReference}`
+                              : ""}
+                            <br />
+                            <span className="pf-payd-muted">
+                              From{" "}
+                              {payment.sourceFinancialAccountName ??
+                                "financial account"}
+                              {payment.sourceFinancialAccountLast4
+                                ? ` · •••• ${payment.sourceFinancialAccountLast4}`
+                                : ""}{" "}
+                              · {payment.status}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </section>
+              ) : null}
 
               <section className="pf-rev-card">
                 <div className="pf-rev-card-head">
@@ -708,6 +971,45 @@ export function PlatformFinancePayableDetailPage() {
 
               <HistorySection events={events} />
             </>
+          ) : null}
+
+          {tab === "payments" ? (
+            <section className="pf-rev-card">
+              <div className="pf-rev-card-head">
+                <div className="pf-rev-card-title">
+                  <Coins size={15} aria-hidden />
+                  <h2>Payments ({payments.length})</h2>
+                </div>
+              </div>
+              {payments.length === 0 ? (
+                <p className="pf-payd-muted">No payments recorded yet.</p>
+              ) : (
+                <ul className="pf-payd-pay-history">
+                  {payments.map((payment) => (
+                    <li key={payment.id}>
+                      <strong>
+                        {formatNaira(payment.amount, payment.currency)}
+                      </strong>{" "}
+                      on {formatDate(payment.paymentDate)}
+                      {payment.externalReference
+                        ? ` · ${payment.externalReference}`
+                        : ""}
+                      <br />
+                      <span className="pf-payd-muted">
+                        From{" "}
+                        {payment.sourceFinancialAccountName ??
+                          "financial account"}
+                        {payment.sourceFinancialAccountLast4
+                          ? ` · •••• ${payment.sourceFinancialAccountLast4}`
+                          : ""}{" "}
+                        · recorded {formatDateTime(payment.createdAt)} ·{" "}
+                        {payment.status}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
           ) : null}
 
           {tab === "documents" ? (

@@ -208,8 +208,8 @@ function runStatic(results: CheckResult[]) {
   }
 
   try {
-    assert(FINANCE_PAYABLE_STATUSES.length === 9, "9 statuses");
-    assert(FINANCE_PAYABLE_PRIMARY_STATUSES.length === 6, "6 primary");
+    assert(FINANCE_PAYABLE_STATUSES.length === 10, "10 statuses");
+    assert(FINANCE_PAYABLE_PRIMARY_STATUSES.length === 7, "7 primary");
     assert(FINANCE_PAYABLE_EXCEPTION_STATUSES.length === 3, "3 exception");
     for (const s of FINANCE_PAYABLE_STATUSES) {
       assert(isFinancePayableStatus(s), s);

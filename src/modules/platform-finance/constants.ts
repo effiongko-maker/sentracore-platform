@@ -35,6 +35,8 @@ export const PLATFORM_FINANCE_CAPABILITY_LABELS: Record<
   [PLATFORM_FINANCE_CAPABILITIES.vendor_bill_view]: "View vendor bills",
   [PLATFORM_FINANCE_CAPABILITIES.vendor_bill_create]: "Input vendor bills",
   [PLATFORM_FINANCE_CAPABILITIES.vendor_bill_review]: "Review vendor bills",
+  [PLATFORM_FINANCE_CAPABILITIES.payment_view]: "View payments",
+  [PLATFORM_FINANCE_CAPABILITIES.payment_execute]: "Confirm payments",
 };
 
 export const PLATFORM_FINANCE_ENTITY_STATUS_LABELS: Record<

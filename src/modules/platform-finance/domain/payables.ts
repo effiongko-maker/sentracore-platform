@@ -1,9 +1,10 @@
 /**
- * Payables — domain source of truth (Slice 1 foundation + Slice 2 lifecycle).
+ * Payables — domain source of truth (Slice 1–2 + Phase 2C settlement).
  * Obligation records distinct from Financial Requests, Payments, and Journal.
  *
- * Banking-boundary statuses SCHEDULED / PAYMENT_PENDING / PAID remain in the
- * status model but transition RPCs are not implemented until Banking/Payments exists.
+ * Phase 2C settles via finance_payment_confirm_against_payable:
+ * approved|partially_paid → partially_paid|paid.
+ * SCHEDULED / PAYMENT_PENDING remain unused optional vocabulary.
  */
 
 import type { PaymentDestination } from "./paymentDestination";
@@ -12,6 +13,7 @@ export const FINANCE_PAYABLE_STATUSES = [
   "draft",
   "pending_approval",
   "approved",
+  "partially_paid",
   "scheduled",
   "payment_pending",
   "paid",
@@ -27,6 +29,7 @@ export const FINANCE_PAYABLE_PRIMARY_STATUSES = [
   "draft",
   "pending_approval",
   "approved",
+  "partially_paid",
   "scheduled",
   "payment_pending",
   "paid",
@@ -40,7 +43,8 @@ export const FINANCE_PAYABLE_EXCEPTION_STATUSES = [
 
 /**
  * Authoritative allowed transitions.
- * SCHEDULED / PAYMENT_PENDING / PAID edges are reserved for Banking/Payments (not implemented in Slice 2).
+ * Payment confirmation owns approved|partially_paid → partially_paid|paid.
+ * SCHEDULED / PAYMENT_PENDING remain unused in Phase 2C.
  * Query returns PENDING_APPROVAL → DRAFT (no invented QUERY status).
  */
 export const FINANCE_PAYABLE_TRANSITIONS: Readonly<
@@ -48,7 +52,15 @@ export const FINANCE_PAYABLE_TRANSITIONS: Readonly<
 > = {
   draft: ["pending_approval", "cancelled"],
   pending_approval: ["approved", "rejected", "cancelled", "draft"],
-  approved: ["scheduled", "payment_pending", "disputed", "cancelled"],
+  approved: [
+    "partially_paid",
+    "paid",
+    "scheduled",
+    "payment_pending",
+    "disputed",
+    "cancelled",
+  ],
+  partially_paid: ["partially_paid", "paid", "disputed", "cancelled"],
   scheduled: ["payment_pending", "disputed", "cancelled"],
   payment_pending: ["paid", "disputed"],
   paid: [],
@@ -57,13 +69,25 @@ export const FINANCE_PAYABLE_TRANSITIONS: Readonly<
   disputed: ["approved", "cancelled"],
 };
 
-/** Banking/Payments-owned transitions — not implemented in Slice 2 RPCs. */
+/** Statuses eligible for Phase 2C payment confirmation. */
+export const FINANCE_PAYABLE_PAYMENT_ELIGIBLE_STATUSES = [
+  "approved",
+  "partially_paid",
+] as const satisfies readonly FinancePayableStatus[];
+
+/** Optional scheduling vocabulary — not required by Phase 2C confirmation. */
 export const FINANCE_PAYABLE_BANKING_DEFERRED_TRANSITIONS = [
   "scheduled",
   "payment_pending",
-  "paid",
 ] as const satisfies readonly FinancePayableStatus[];
 
+export function isFinancePayablePaymentEligible(
+  status: FinancePayableStatus
+): boolean {
+  return (
+    FINANCE_PAYABLE_PAYMENT_ELIGIBLE_STATUSES as readonly string[]
+  ).includes(status);
+}
 export function isFinancePayableStatus(
   value: unknown
 ): value is FinancePayableStatus {
@@ -125,6 +149,7 @@ export const FINANCE_PAYABLE_EVENT_TYPES = [
   "rejected",
   "scheduled",
   "payment_initiated",
+  "partially_paid",
   "paid",
   "cancelled",
   "disputed",
