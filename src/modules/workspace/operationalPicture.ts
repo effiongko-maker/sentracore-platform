@@ -30,6 +30,48 @@ export type OperationalPictureMetrics = {
   overdue: number | null;
 };
 
+export type OperationalPictureAggregate = {
+  maintenance:
+    | {
+        state: "healthy";
+        critical: number;
+        inProgress: number;
+        awaitingAction: number;
+        overdue: number;
+      }
+    | { state: "unavailable" };
+  workOrders:
+    | { state: "healthy"; awaitingAction: number; overdue: number }
+    | { state: "unavailable" };
+  approvals:
+    | { state: "healthy"; awaitingAction: number }
+    | { state: "unavailable" };
+};
+
+/** Compose executive metrics without erasing aggregate domain availability. */
+export function buildOperationalPictureMetricsFromAggregate(
+  aggregate: OperationalPictureAggregate
+): OperationalPictureMetrics {
+  const { maintenance, workOrders, approvals } = aggregate;
+  return {
+    critical: maintenance.state === "healthy" ? maintenance.critical : null,
+    inProgress:
+      maintenance.state === "healthy" ? maintenance.inProgress : null,
+    awaitingAction:
+      maintenance.state === "healthy" &&
+      workOrders.state === "healthy" &&
+      approvals.state === "healthy"
+        ? maintenance.awaitingAction +
+          workOrders.awaitingAction +
+          approvals.awaitingAction
+        : null,
+    overdue:
+      maintenance.state === "healthy" && workOrders.state === "healthy"
+        ? maintenance.overdue + workOrders.overdue
+        : null,
+  };
+}
+
 const OPEN_MNT = ACTIVE_MAINTENANCE_STATUSES;
 const OPEN_WO = WORKSPACE_ASSIGNED_WORK_ORDER_STATUSES;
 

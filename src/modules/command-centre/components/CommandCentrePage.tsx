@@ -280,7 +280,11 @@ function AssignmentsBlock({
               <span className="scc-decision-main">
                 <span className="scc-decision-title">{item.label}</span>
                 <span className="scc-decision-meta">
-                  <span>{item.count} active</span>
+                  <span>
+                    {item.state === "unavailable"
+                      ? "Unavailable"
+                      : `${item.count} active`}
+                  </span>
                 </span>
               </span>
               <span className="scc-decision-aside">

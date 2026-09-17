@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Release: **v0.8.6.19** — Work Orders explicit persisted Order Type
+Release: **v0.8.6.20** — Command Centre versioned FM aggregate contracts
 
 Use this checklist with `DEPLOYMENT_PACK.md` open. Someone unfamiliar
 with the project should be able to deploy from these steps alone.
@@ -51,6 +51,7 @@ Current pack file list:
 - [ ] `ApprovalService.gs`
 - [ ] `AssetService.gs`
 - [ ] `CatalogCacheService.gs`
+- [ ] `CommandCentreFmSummaryService.gs`
 - [ ] `ConsumablesUpdateService.gs`
 - [ ] `CostRecordService.gs`
 - [ ] `CostSubmissionService.gs`
@@ -75,6 +76,7 @@ Current pack file list:
 - [ ] `WorkOrderService.gs`
 - [ ] `ApprovalsController.gs`
 - [ ] `AssetsController.gs`
+- [ ] `CommandCentreFmSummaryController.gs`
 - [ ] `ConsumablesUpdateController.gs`
 - [ ] `CostRecordsController.gs`
 - [ ] `CostSubmissionsController.gs`
@@ -180,6 +182,7 @@ live errors such as `GeneratorLogController is not defined`.
 - [ ] Create or replace `ApprovalService.gs`
 - [ ] Create or replace `AssetService.gs`
 - [ ] Create or replace `CatalogCacheService.gs`
+- [ ] Create or replace `CommandCentreFmSummaryService.gs`
 - [ ] Create or replace `ConsumablesUpdateService.gs`
 - [ ] Create or replace `CostRecordService.gs`
 - [ ] Create or replace `CostSubmissionService.gs`
@@ -204,6 +207,7 @@ live errors such as `GeneratorLogController is not defined`.
 - [ ] Create or replace `WorkOrderService.gs`
 - [ ] Create or replace `ApprovalsController.gs`
 - [ ] Create or replace `AssetsController.gs`
+- [ ] Create or replace `CommandCentreFmSummaryController.gs`
 - [ ] Create or replace `ConsumablesUpdateController.gs`
 - [ ] Create or replace `CostRecordsController.gs`
 - [ ] Create or replace `CostSubmissionsController.gs`
@@ -287,16 +291,10 @@ With `npm run dev` running:
 npm run typecheck
 ```
 
-### Work instruction kind
+### Command Centre FM aggregate golden contract
 
 ```bash
-node scripts/verify-work-instruction-kind.cjs
-```
-
-### Work orders WIP register
-
-```bash
-node scripts/verify-work-orders-wip-register.cjs
+npx tsx --tsconfig tsconfig.json scripts/verify-command-centre-fm-aggregate-contract.mts
 ```
 
 Expected checks:

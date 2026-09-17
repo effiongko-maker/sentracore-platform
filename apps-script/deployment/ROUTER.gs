@@ -9,7 +9,7 @@
  * {
  *   resource: "users" | "facilities" | "assets" | "work-orders" |
  *             "incidents" | "maintenance" | "approvals" | "requests" |
- *             "master-data" | "reporting-snapshot" | "operational-workload" |
+ *             "master-data" | "reporting-snapshot" | "operational-workload" | "command-centre-fm" |
  *             "cost-records" | "cost-submissions" | "reimbursement-payments" |
  *             "diesel-usage" | "consumables-update" | "waste-log" | "fumigation-log" | "deep-cleaning-log",
  *   action: string,
@@ -105,6 +105,8 @@ function doPost(e) {
       result = ReportingSnapshotController.handle(action, payload);
     } else if (resource === "operational-workload") {
       result = OperationalWorkloadController.handle(action, payload);
+    } else if (resource === "command-centre-fm") {
+      result = CommandCentreFmSummaryController.handle(action, payload);
     } else if (resource === "cost-records") {
       result = CostRecordsController.handle(action, payload);
     } else if (resource === "cost-submissions") {
@@ -189,6 +191,7 @@ function doGet() {
       "master-data",
       "reporting-snapshot",
       "operational-workload",
+      "command-centre-fm",
       "cost-records",
       "cost-submissions",
       "reimbursement-payments",

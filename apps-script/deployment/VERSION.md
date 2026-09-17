@@ -1,18 +1,19 @@
 Release:
-v0.8.6.19
+v0.8.6.20
 
 Title:
-Work Orders explicit persisted Order Type
+Command Centre versioned FM aggregate contracts
 
 Generated:
-2026-09-14T08:40:38.658Z
+2026-09-17T10:07:26.188Z
 
 Features
-- Persist Order Type (work_order | job_order) on Work Orders sheet
-- Order Type is user-selected; estimated cost is financial only
-- Legacy missing Order Type resolves to work_order
+- Add operational-picture.v1 organisational FM summary
+- Add assignment-summary.v1 operational-user assignment summary
+- Preserve per-domain unavailable state and caller-controlled asOf
 
 Performance
+- Replace Command Centre full-register and paginated reads with two count-only Apps Script requests
 
 Files Changed
 - ROUTER.gs
@@ -41,6 +42,7 @@ Files Changed
 - ApprovalService.gs
 - AssetService.gs
 - CatalogCacheService.gs
+- CommandCentreFmSummaryService.gs
 - ConsumablesUpdateService.gs
 - CostRecordService.gs
 - CostSubmissionService.gs
@@ -65,6 +67,7 @@ Files Changed
 - WorkOrderService.gs
 - ApprovalsController.gs
 - AssetsController.gs
+- CommandCentreFmSummaryController.gs
 - ConsumablesUpdateController.gs
 - CostRecordsController.gs
 - CostSubmissionsController.gs
@@ -109,29 +112,24 @@ Typecheck:
 npm run typecheck
 ```
 
-Work instruction kind:
+Command Centre FM aggregate golden contract:
 
 ```bash
-node scripts/verify-work-instruction-kind.cjs
-```
-
-Work orders WIP register:
-
-```bash
-node scripts/verify-work-orders-wip-register.cjs
+npx tsx --tsconfig tsconfig.json scripts/verify-command-centre-fm-aggregate-contract.mts
 ```
 
 Notes
-- Order Type is explicit and persisted. Estimated Cost must not classify Work Order vs Job Order.
+- The Apps Script addition is backward-compatible; existing getAll resources remain unchanged.
+- TypeScript remains the canonical predicate reference and the golden verifier controls mirror drift.
 
 Deployment semantics
 - `deploymentRequired`: Pack intent: a new Web App deploy is required to apply this source release when cutting from the repo. Not a live deployment status flag.
-- `appsScriptRedeploy`: Required — update WorkOrderRepository for Order Type read/write. Client already classifies via persisted orderType.
+- `appsScriptRedeploy`: Required — deploy the additive command-centre-fm resource before enabling the dependent Next.js build.
 
 Live verification (read-only audit)
 - resourceLive: no
 - Notes:
-  - Redeploy Apps Script before validating Order Type tabs against live sheet.
-  - Legacy rows without Order Type resolve to Work Order after client update; sheet column is added on write.
+  - Deploy Apps Script first to avoid a Next.js contract-order outage.
+  - After deployment, validate one Operational Picture and one Assignment Summary request before warm-load observation.
 
 <!-- GENERATED FILE — do not edit by hand. npm run apps-script:pack -->

@@ -92,7 +92,10 @@ async function main() {
   assert.match(access, /sheetUserId: operationalUserId/);
   assert.match(api, /operationalUserId: operatingAccess\.sheetUserId/);
   assert.match(workspace, /currentUser\?\.operationalUserId/);
-  assert.match(commandCentre, /loadAssignedWorkSummary\(operatingAccess\.sheetUserId\)/);
+  assert.match(
+    commandCentre,
+    /loadAssignmentSummary\(operatingAccess\.sheetUserId\)/
+  );
   assert.doesNotMatch(maintenance, /reportedByUserId:\s*validated\.reportedByUserId \|\| context\.userId/);
   assert.doesNotMatch(issue, /reportedByUserId:\s*context\.userId/);
   assert.match(incident, /createdByUserId: actorUserId/);

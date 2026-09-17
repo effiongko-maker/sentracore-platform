@@ -30,9 +30,11 @@ import { PlatformFinanceRequestsServerService } from "@/modules/platform-finance
 import { PlatformFinancePayablesServerService } from "@/modules/platform-finance/server/PlatformFinancePayablesServerService";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
-  loadAssignedWorkSummary,
-  loadOperationalPictureMetrics,
-} from "@/services/workspace/WorkspaceService";
+  loadAssignmentSummary,
+  loadOperationalPictureSummary,
+  type OperationalPictureSummary,
+} from "@/services/workspace/CommandCentreFmSummaryService";
+import { buildOperationalPictureMetricsFromAggregate } from "@/modules/workspace/operationalPicture";
 import { COMMAND_CENTRE_CAPABILITIES } from "@/modules/command-centre/types";
 import { composeLastVisitChanges } from "@/modules/command-centre/server/composeLastVisitChanges";
 import { composeFinanceDecisionQueue } from "@/modules/command-centre/server/composeFinanceDecisionQueue";
@@ -149,11 +151,21 @@ export class CommandCentreServerService {
       enabledModules: access.session.enabledModules,
       operatingAccess,
     });
+    const fmEnabled =
+      isPlatformSuperAdminFromSlugs(access.session.roleSlugs) ||
+      hasModule(access.session.enabledModules, "facility_management");
+    const operationalPicture = fmEnabled
+      ? loadOperationalPictureSummary(asOf)
+      : Promise.resolve<OperationalPictureSummary | null>(null);
 
     const [financePulse, operationsPulse, decisions, attentionFinance, eccPulse, assignments, lastVisit] =
       await Promise.all([
         this.composeFinancePulse(access, workspaceEntry),
-        this.composeOperationsPulse(access, asOf, workspaceEntry),
+        this.composeOperationsPulse(
+          access,
+          workspaceEntry,
+          operationalPicture
+        ),
         this.composeDecisions(access),
         this.composeFinanceAttention(access),
         this.composeEccPulse(access, workspaceEntry),
@@ -221,8 +233,8 @@ export class CommandCentreServerService {
 
   private async composeOperationsPulse(
     access: CommandCentreAccessContext,
-    asOf: string,
-    workspaceEntry: WorkspaceAccessChrome
+    workspaceEntry: WorkspaceAccessChrome,
+    operationalPicture: Promise<OperationalPictureSummary | null>
   ): Promise<CommandCentrePulseCard> {
     const base: CommandCentrePulseCard = {
       domain: "operations",
@@ -251,7 +263,9 @@ export class CommandCentreServerService {
     }
 
     try {
-      const picture = await loadOperationalPictureMetrics(asOf);
+      const aggregate = await operationalPicture;
+      if (!aggregate) return base;
+      const picture = buildOperationalPictureMetricsFromAggregate(aggregate);
       const value = (count: number | null) =>
         count == null ? "Unavailable" : count.toLocaleString("en-NG");
       const available = Object.values(picture).some((count) => count != null);
@@ -615,8 +629,54 @@ export class CommandCentreServerService {
           items: [],
         };
       }
-      const items = await loadAssignedWorkSummary(operatingAccess.sheetUserId);
-      const assigned = items.filter((item) => item.count > 0);
+      const summary = await loadAssignmentSummary(operatingAccess.sheetUserId);
+      const domains = [
+        {
+          id: "assigned-work",
+          label: "Assigned Work",
+          href: "/work",
+          source: summary.maintenance,
+        },
+        {
+          id: "assigned-work-orders",
+          label: "Assigned Work Orders",
+          href: "/work-orders",
+          source: summary.workOrders,
+        },
+        {
+          id: "assigned-legacy-incidents",
+          label: "Legacy Incidents Assigned",
+          href: "/incidents",
+          source: summary.incidents,
+        },
+      ];
+      const unavailable = domains.filter(
+        (item) => item.source.state === "unavailable"
+      );
+      if (unavailable.length === domains.length) {
+        return {
+          state: "error",
+          message: "Assignments could not be loaded.",
+          detail: "Facility Management assignment data is temporarily unavailable.",
+          items: [],
+        };
+      }
+      const assigned = domains
+        .filter(
+          (item) =>
+            item.source.state === "unavailable" || item.source.active > 0
+        )
+        .map((item) => ({
+          id: item.id,
+          label: item.label,
+          count:
+            item.source.state === "healthy" ? item.source.active : null,
+          state:
+            item.source.state === "healthy"
+              ? ("healthy" as const)
+              : ("unavailable" as const),
+          href: item.href,
+        }));
       return {
         state: assigned.length === 0 ? "empty" : "healthy",
         message: assigned.length === 0 ? "You have no active assignments." : "",

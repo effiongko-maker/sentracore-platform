@@ -222,8 +222,9 @@ function runStatic(results: CheckResult[]) {
     );
     assert(service.includes("composeAssignments"), "assignment composition");
     assert(
-      service.includes("loadAssignedWorkSummary"),
-      "authoritative FM assignments"
+      service.includes("loadOperationalPictureSummary") &&
+        service.includes("loadAssignmentSummary"),
+      "authoritative versioned FM summary contracts"
     );
     assert(
       service.includes("getCommandCentreOverview"),

@@ -23,7 +23,6 @@ import type {
   OrganisationalPulse,
   AttentionModel,
 } from "@/modules/workspace/types";
-import type { PaginatedResult } from "@/types";
 import { isSameDay, labelize } from "@/modules/workspace/utils";
 import { ApprovalService } from "@/services/approvals/ApprovalService";
 import { FacilityService } from "@/services/facilities/FacilityService";
@@ -31,7 +30,6 @@ import { IncidentService } from "@/services/incidents/IncidentService";
 import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 import { UserService } from "@/services/users/UserService";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
-import { loadAllPages } from "@/services/reporting/loadAllPages";
 import {
   ACTIVE_INCIDENT_STATUSES,
   ACTIVE_MAINTENANCE_STATUSES,
@@ -53,58 +51,102 @@ function sortByDateDesc<T>(
   });
 }
 
-function buildMyWork(
+export function buildMyWork(
   userId: string | undefined,
   workOrders: WorkOrder[],
   incidents: Incident[],
   maintenance: Maintenance[]
 ): WorkspaceWorkSummary[] {
-  const assignedWorkOrders = userId
-    ? workOrders.filter(
-        (row) => row.assignedToUserId === userId && OPEN_WO.has(row.status)
-      )
-    : [];
-  const assignedWork = userId
-    ? maintenance.filter(
-        (row) =>
-          row.assignedToUserId === userId && OPEN_MAINTENANCE.has(row.status)
-      )
-    : [];
-  const assignedLegacyIncidents = userId
-    ? incidents.filter(
-        (row) =>
-          row.assignedToUserId === userId && OPEN_INCIDENT.has(row.status)
-      )
-    : [];
+  if (!userId) {
+    return [
+      {
+        id: "assigned-work",
+        label: "Assigned Work",
+        count: 0,
+        href: "/work",
+        emptyLabel: "You're all caught up.",
+      },
+      {
+        id: "assigned-work-orders",
+        label: "Assigned Work Orders",
+        count: 0,
+        href: "/work-orders",
+        emptyLabel: "You're all caught up.",
+      },
+    ];
+  }
+  const domains = buildAssignedWorkDomains(userId, {
+    workOrders,
+    incidents,
+    maintenance,
+  });
+  return domains
+    .filter(
+      (item) =>
+        item.id !== "assigned-legacy-incidents" || (item.count ?? 0) > 0
+    )
+    .map((item) => ({ ...item, count: item.count ?? 0 }));
+}
 
-  const rows: WorkspaceWorkSummary[] = [
+export type AssignedWorkDomainSummary = {
+  id: WorkspaceWorkSummary["id"];
+  label: string;
+  count: number | null;
+  href: string;
+  emptyLabel: string;
+};
+
+/**
+ * Canonical per-domain assignment projection. A null source stays unknown;
+ * available rows use the same predicates as Workspace My Work.
+ */
+export function buildAssignedWorkDomains(
+  userId: string,
+  sources: {
+    workOrders: WorkOrder[] | null;
+    incidents: Incident[] | null;
+    maintenance: Maintenance[] | null;
+  }
+): AssignedWorkDomainSummary[] {
+  const project = <T extends WorkOrder | Incident | Maintenance>(
+    rows: T[] | null,
+    isActive: (row: T) => boolean
+  ) =>
+    rows === null
+      ? null
+      : rows.filter(
+          (row) => row.assignedToUserId === userId && isActive(row)
+        ).length;
+
+  return [
     {
       id: "assigned-work",
       label: "Assigned Work",
-      count: assignedWork.length,
+      count: project(
+        sources.maintenance,
+        (row) => OPEN_MAINTENANCE.has(row.status)
+      ),
       href: "/work",
       emptyLabel: "You're all caught up.",
     },
     {
       id: "assigned-work-orders",
       label: "Assigned Work Orders",
-      count: assignedWorkOrders.length,
+      count: project(sources.workOrders, (row) => OPEN_WO.has(row.status)),
       href: "/work-orders",
       emptyLabel: "You're all caught up.",
     },
-  ];
-
-  if (assignedLegacyIncidents.length > 0) {
-    rows.push({
+    {
       id: "assigned-legacy-incidents",
       label: "Legacy Incidents Assigned",
-      count: assignedLegacyIncidents.length,
+      count: project(
+        sources.incidents,
+        (row) => OPEN_INCIDENT.has(row.status)
+      ),
       href: "/incidents",
       emptyLabel: "You're all caught up.",
-    });
-  }
-
-  return rows;
+    },
+  ];
 }
 
 function buildSchedule(
@@ -334,10 +376,6 @@ function buildOperationalState(
 
 type DomainResult<T> = { ok: boolean; data: T[] };
 
-type OperationalMaintenanceWalkResult = DomainResult<Maintenance> & {
-  criticalWork: number | null;
-};
-
 /** Exact filtered register total — never treat !ok as total 0 for KPIs. */
 type DomainCountResult = { ok: boolean; total: number };
 
@@ -382,33 +420,6 @@ export function mapHomeMaintenancePageResult(page: {
         ? { ok: false, total: 0 }
         : { ok: true, total },
   };
-}
-
-/**
- * Complete active-Maintenance walk for authoritative Operational Picture data.
- * Page 1 also carries the exact Critical Work KPI; later pages only contribute
- * rows. The result is returned only after every advertised page succeeds.
- *
- * @internal Exported for Command Centre truthfulness verification.
- */
-export async function loadOperationalMaintenancePages(
-  listPage: (
-    page: number,
-    pageSize: number,
-    includeCriticalWorkTotal: boolean
-  ) => Promise<PaginatedResult<Maintenance>>,
-  pageSize = WORKSPACE_HOME_POOL_SIZE
-): Promise<{ data: Maintenance[]; criticalWork: number | null }> {
-  let criticalWork: number | null = null;
-  const data = await loadAllPages(async (page, size) => {
-    const result = await listPage(page, size, page === 1);
-    if (page === 1) {
-      criticalWork = parseHomeCriticalWorkTotal(result.criticalWorkTotal);
-    }
-    return result;
-  }, pageSize);
-
-  return { data, criticalWork };
 }
 
 type NonCoreDomainLists = {
@@ -683,97 +694,27 @@ export type WorkspaceProgressiveLoad = {
   complete: Promise<WorkspaceSnapshot>;
 };
 
-/**
- * Authoritative FM read composition for Command Centre and other consumers
- * that require exact organisational metrics. Critical retains the register KPI;
- * every other source is walked to its final page before shared predicates run.
- * A failed source remains null through the metric dependency rules.
- */
-export async function loadOperationalPictureMetrics(
-  asOf = new Date().toISOString()
-) {
-  const pageSize = WORKSPACE_HOME_POOL_SIZE;
-  const emptyWo: WorkOrder[] = [];
-  const emptyApr: Approval[] = [];
-
-  const [maintenance, workOrders, approvals] = await Promise.all([
-    settleValue<OperationalMaintenanceWalkResult>(
-      (signal) =>
-        loadOperationalMaintenancePages(
-          (page, size, includeCriticalWorkTotal) =>
-            MaintenanceService.listMaintenance(
-              {
-                page,
-                pageSize: size,
-                status: "active",
-                ...(includeCriticalWorkTotal
-                  ? { includeCriticalWorkTotal: true }
-                  : {}),
-              },
-              { signal }
-            ),
-          pageSize
-        )
-          .then(({ data, criticalWork }) => ({
-            ok: true as const,
-            data,
-            criticalWork,
-          }))
-          .catch(() => ({
-            ok: false as const,
-            data: [] as Maintenance[],
-            criticalWork: null,
-          })),
-      { ok: false, data: [], criticalWork: null }
-    ),
-    settleDomain(
-      (signal) =>
-        loadAllPages(
-          (page, size) =>
-            WorkOrderService.listWorkOrders(
-              { page, pageSize: size },
-              { signal }
-            ),
-          pageSize
-        )
-          .then((data) => ({ ok: true as const, data }))
-          .catch(() => ({ ok: false as const, data: emptyWo })),
-      emptyWo
-    ),
-    settleDomain(
-      (signal) =>
-        loadAllPages(
-          (page, size) =>
-            ApprovalService.listApprovals(
-              { page, pageSize: size },
-              { signal }
-            ),
-          pageSize
-        )
-          .then((data) => ({ ok: true as const, data }))
-          .catch(() => ({ ok: false as const, data: emptyApr })),
-      emptyApr
-    ),
-  ]);
-
-  return buildOperationalPictureMetrics({
-    asOf,
-    criticalWork: maintenance.ok ? maintenance.criticalWork : null,
-    maintenance: maintenance.ok ? maintenance.data : null,
-    workOrders: workOrders.ok ? workOrders.data : null,
-    approvals: approvals.ok ? approvals.data : null,
-  });
-}
-
 /** Personal FM assignments keyed by the canonical People-register user id. */
 export async function loadAssignedWorkSummary(
   assigneeUserId: string
 ): Promise<WorkspaceWorkSummary[]> {
   const pool = WORKSPACE_HOME_POOL_SIZE;
   const [workOrders, incidents, maintenance] = await Promise.all([
-    WorkOrderService.listWorkOrders({ page: 1, pageSize: pool, assignedToUserId: assigneeUserId }),
-    IncidentService.listIncidents({ page: 1, pageSize: pool, assignedToUserId: assigneeUserId }),
-    MaintenanceService.listMaintenance({ page: 1, pageSize: pool, assignedToUserId: assigneeUserId }),
+    WorkOrderService.listWorkOrders({
+      page: 1,
+      pageSize: pool,
+      assignedToUserId: assigneeUserId,
+    }),
+    IncidentService.listIncidents({
+      page: 1,
+      pageSize: pool,
+      assignedToUserId: assigneeUserId,
+    }),
+    MaintenanceService.listMaintenance({
+      page: 1,
+      pageSize: pool,
+      assignedToUserId: assigneeUserId,
+    }),
   ]);
   return buildMyWork(
     assigneeUserId,

@@ -97,7 +97,13 @@ export type CommandCentreSnapshot = {
     state: CommandCentreSurfaceState;
     message: string;
     detail: string;
-    items: Array<{ id: string; label: string; count: number; href: string }>;
+    items: Array<{
+      id: string;
+      label: string;
+      count: number | null;
+      state: "healthy" | "unavailable";
+      href: string;
+    }>;
   };
   askSentraCore: {
     state: "unavailable";

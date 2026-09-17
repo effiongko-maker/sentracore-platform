@@ -1,24 +1,26 @@
 {
-  "release": "v0.8.6.19",
-  "title": "Work Orders explicit persisted Order Type",
+  "release": "v0.8.6.20",
+  "title": "Command Centre versioned FM aggregate contracts",
   "features": [
-    "Persist Order Type (work_order | job_order) on Work Orders sheet",
-    "Order Type is user-selected; estimated cost is financial only",
-    "Legacy missing Order Type resolves to work_order"
+    "Add operational-picture.v1 organisational FM summary",
+    "Add assignment-summary.v1 operational-user assignment summary",
+    "Preserve per-domain unavailable state and caller-controlled asOf"
   ],
-  "performance": [],
+  "performance": [
+    "Replace Command Centre full-register and paginated reads with two count-only Apps Script requests"
+  ],
   "deploymentRequired": true,
   "deploymentSemantics": {
     "deploymentRequired": "Pack intent: a new Web App deploy is required to apply this source release when cutting from the repo. Not a live deployment status flag.",
-    "appsScriptRedeploy": "Required — update WorkOrderRepository for Order Type read/write. Client already classifies via persisted orderType."
+    "appsScriptRedeploy": "Required — deploy the additive command-centre-fm resource before enabling the dependent Next.js build."
   },
   "liveVerification": {
     "verifiedAt": null,
     "method": null,
     "resourceLive": false,
     "notes": [
-      "Redeploy Apps Script before validating Order Type tabs against live sheet.",
-      "Legacy rows without Order Type resolve to Work Order after client update; sheet column is added on write."
+      "Deploy Apps Script first to avoid a Next.js contract-order outage.",
+      "After deployment, validate one Operational Picture and one Assignment Summary request before warm-load observation."
     ]
   },
   "triggerRequired": false,
@@ -29,15 +31,12 @@
       "command": "npm run typecheck"
     },
     {
-      "name": "Work instruction kind",
-      "command": "node scripts/verify-work-instruction-kind.cjs"
-    },
-    {
-      "name": "Work orders WIP register",
-      "command": "node scripts/verify-work-orders-wip-register.cjs"
+      "name": "Command Centre FM aggregate golden contract",
+      "command": "npx tsx --tsconfig tsconfig.json scripts/verify-command-centre-fm-aggregate-contract.mts"
     }
   ],
   "notes": [
-    "Order Type is explicit and persisted. Estimated Cost must not classify Work Order vs Job Order."
+    "The Apps Script addition is backward-compatible; existing getAll resources remain unchanged.",
+    "TypeScript remains the canonical predicate reference and the golden verifier controls mirror drift."
   ]
 }
