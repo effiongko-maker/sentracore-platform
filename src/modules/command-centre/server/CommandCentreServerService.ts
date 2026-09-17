@@ -4,6 +4,12 @@
  */
 import { isActionError } from "@/lib/actions/errors";
 import { isPlatformSuperAdminFromSlugs } from "@/lib/access/platformRoles";
+import { resolveOperatingAccess } from "@/lib/access/server";
+import type { OperatingAccess } from "@/lib/access/resolveAccess";
+import {
+  resolveWorkspaceAccessChrome,
+  type WorkspaceAccessChrome,
+} from "@/lib/access/workspaceAccessChrome";
 import { hasModule } from "@/lib/actions/moduleAccess";
 import type { PlatformSession } from "@/lib/auth/types";
 import type { CommandCentreAccessContext } from "@/modules/command-centre/server/requireCommandCentreAccess";
@@ -14,18 +20,22 @@ import type {
   CommandCentreSnapshot,
   CommandCentreSurfaceState,
 } from "@/modules/command-centre/presentationTypes";
-import { tryGetEccAccess } from "@/modules/ecc-operations/server/requireEccAccess";
 import { EccOperationsServerService } from "@/modules/ecc-operations/server/EccOperationsServerService";
+import { ECC_MODULE_SLUG } from "@/modules/ecc-operations/types";
 import {
   FINANCIAL_REQUEST_CAPABILITIES,
-  PLATFORM_FINANCE_CAPABILITIES,
   PLATFORM_FINANCE_MODULE_SLUG,
-  FINANCE_PAYABLE_CAPABILITIES,
 } from "@/modules/platform-finance/types";
 import { PlatformFinanceServerService } from "@/modules/platform-finance/server/PlatformFinanceServerService";
 import { PlatformFinanceRequestsServerService } from "@/modules/platform-finance/server/PlatformFinanceRequestsServerService";
 import { PlatformFinancePayablesServerService } from "@/modules/platform-finance/server/PlatformFinancePayablesServerService";
 import { createAdminClient } from "@/utils/supabase/admin";
+import {
+  loadAssignedWorkSummary,
+  loadOperationalPictureMetrics,
+} from "@/services/workspace/WorkspaceService";
+import { COMMAND_CENTRE_CAPABILITIES } from "@/modules/command-centre/types";
+import { composeLastVisitChanges } from "@/modules/command-centre/server/composeLastVisitChanges";
 
 function displayNameFromSession(session: PlatformSession): string {
   const profile = session.profile;
@@ -88,6 +98,22 @@ async function hasFinanceCapability(
   return Boolean(data);
 }
 
+async function hasPlatformCapability(
+  organisationId: string,
+  profileId: string,
+  capability: string
+): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("platform_capability_grants")
+    .select("id")
+    .eq("organisation_id", organisationId)
+    .eq("profile_id", profileId)
+    .eq("capability", capability)
+    .maybeSingle();
+  return !error && Boolean(data);
+}
+
 function actorFromSession(session: PlatformSession, organisationId: string) {
   return {
     profileId: session.profile.id,
@@ -114,46 +140,41 @@ export class CommandCentreServerService {
     const now = new Date(asOf);
     const displayName = displayNameFromSession(access.session);
     const greeting = `${greetingForNow(now)}, ${displayName}.`;
+    const operatingAccess = await resolveOperatingAccess(access.session);
+    const workspaceEntry = await resolveWorkspaceAccessChrome({
+      organisationId: access.organisationId,
+      profileId: access.profileId,
+      roleSlugs: access.session.roleSlugs,
+      enabledModules: access.session.enabledModules,
+      operatingAccess,
+    });
 
-    const [financePulse, decisions, attentionFinance, eccPulse, attentionEcc] =
+    const [financePulse, operationsPulse, decisions, attentionFinance, eccPulse, assignments, lastVisit] =
       await Promise.all([
-        this.composeFinancePulse(access),
+        this.composeFinancePulse(access, workspaceEntry),
+        this.composeOperationsPulse(access, asOf, workspaceEntry),
         this.composeDecisions(access),
         this.composeFinanceAttention(access),
-        this.composeEccPulse(access),
-        this.composeEccAttention(access),
+        this.composeEccPulse(access, workspaceEntry),
+        this.composeAssignments(access, operatingAccess),
+        this.composeLastVisit(access, asOf, workspaceEntry),
       ]);
 
-    const attentionItems = [...attentionFinance.items, ...attentionEcc.items].slice(
-      0,
-      8
-    );
+    const attentionItems = attentionFinance.items.slice(0, 8);
     const attentionState: CommandCentreSurfaceState =
-      attentionFinance.state === "error" && attentionEcc.state === "error"
+      attentionFinance.state === "error"
         ? "error"
         : attentionItems.length > 0
           ? "healthy"
-          : attentionFinance.state === "restricted" &&
-              attentionEcc.state === "restricted"
+          : attentionFinance.state === "restricted"
             ? "restricted"
-            : attentionFinance.state === "unavailable" &&
-                attentionEcc.state === "unavailable"
+            : attentionFinance.state === "unavailable"
               ? "unavailable"
               : "empty";
 
     const pulse: CommandCentrePulseCard[] = [
       financePulse,
-      {
-        domain: "operations",
-        label: "Operations",
-        state: "unavailable",
-        statusLabel: "Not connected yet",
-        lines: [
-          "Facility Management pulse is not composed server-side yet.",
-          "Open Operations for live operational attention.",
-        ],
-        href: "/operations",
-      },
+      operationsPulse,
       eccPulse,
       {
         domain: "projects_construction",
@@ -162,6 +183,7 @@ export class CommandCentreServerService {
         statusLabel: "Not available yet",
         lines: ["Coming soon to your Command Centre."],
         href: null,
+        disabledNavigationLabel: null,
       },
     ];
 
@@ -181,18 +203,8 @@ export class CommandCentreServerService {
         state: attentionState,
         items: attentionItems,
       },
-      lastVisit: {
-        state: "unavailable",
-        message: "Change tracking is not yet enabled.",
-        detail:
-          "Once last-visit infrastructure exists, this surface will show meaningful organisational changes.",
-      },
-      assignments: {
-        state: "unavailable",
-        message: "CEO assignments are not enabled yet.",
-        detail:
-          "Active assignments, due dates, updates, and outcomes will appear here when the domain is available.",
-      },
+      lastVisit,
+      assignments,
       askSentraCore: {
         state: "unavailable",
         prompt: "What would you like to know?",
@@ -206,8 +218,79 @@ export class CommandCentreServerService {
     };
   }
 
+  private async composeOperationsPulse(
+    access: CommandCentreAccessContext,
+    asOf: string,
+    workspaceEntry: WorkspaceAccessChrome
+  ): Promise<CommandCentrePulseCard> {
+    const base: CommandCentrePulseCard = {
+      domain: "operations",
+      label: "Operations",
+      state: "unavailable",
+      statusLabel: "Unavailable",
+      lines: ["Facility Management data is unavailable."],
+      href: workspaceEntry.facilityManagement ? "/operations" : null,
+      disabledNavigationLabel: workspaceEntry.facilityManagement
+        ? null
+        : "Workspace access required",
+    };
+
+    const moduleEnabled =
+      isPlatformSuperAdminFromSlugs(access.session.roleSlugs) ||
+      hasModule(access.session.enabledModules, "facility_management");
+    if (!moduleEnabled) {
+      return {
+        ...base,
+        state: "restricted",
+        statusLabel: "No access",
+        lines: ["Facility Management is not available for your account."],
+        href: null,
+        disabledNavigationLabel: null,
+      };
+    }
+
+    try {
+      const picture = await loadOperationalPictureMetrics(asOf);
+      const value = (count: number | null) =>
+        count == null ? "Unavailable" : count.toLocaleString("en-NG");
+      const available = Object.values(picture).some((count) => count != null);
+
+      if (!available) {
+        return {
+          ...base,
+          state: "error",
+          statusLabel: "Unable to load",
+          lines: ["Facility Management pulse could not be loaded."],
+        };
+      }
+
+      return {
+        domain: "operations",
+        label: "Operations",
+        state: "healthy",
+        statusLabel: "Live data",
+        lines: [
+          `Critical ${value(picture.critical)} · In Progress ${value(picture.inProgress)}`,
+          `Awaiting Action ${value(picture.awaitingAction)} · Overdue ${value(picture.overdue)}`,
+        ],
+        href: workspaceEntry.facilityManagement ? "/operations" : null,
+        disabledNavigationLabel: workspaceEntry.facilityManagement
+          ? null
+          : "Workspace access required",
+      };
+    } catch {
+      return {
+        ...base,
+        state: "error",
+        statusLabel: "Unable to load",
+        lines: ["Facility Management pulse could not be loaded."],
+      };
+    }
+  }
+
   private async composeFinancePulse(
-    access: CommandCentreAccessContext
+    access: CommandCentreAccessContext,
+    workspaceEntry: WorkspaceAccessChrome
   ): Promise<CommandCentrePulseCard> {
     const base: CommandCentrePulseCard = {
       domain: "finance",
@@ -215,7 +298,10 @@ export class CommandCentreServerService {
       state: "unavailable",
       statusLabel: "Unavailable",
       lines: ["Finance pulse could not be composed."],
-      href: "/platform-finance",
+      href: workspaceEntry.platformFinance ? "/platform-finance" : null,
+      disabledNavigationLabel: workspaceEntry.platformFinance
+        ? null
+        : "Workspace access required",
     };
 
     if (!financeModuleEnabled(access.session)) {
@@ -225,57 +311,34 @@ export class CommandCentreServerService {
         statusLabel: "No access",
         lines: ["Platform Finance is not available for your account."],
         href: null,
-      };
-    }
-
-    const canView = await hasFinanceCapability(
-      access.organisationId,
-      access.profileId,
-      PLATFORM_FINANCE_CAPABILITIES.view
-    );
-    if (!canView) {
-      return {
-        ...base,
-        state: "restricted",
-        statusLabel: "No access",
-        lines: ["Finance overview requires platform finance view access."],
-        href: null,
+        disabledNavigationLabel: null,
       };
     }
 
     try {
       const finance = new PlatformFinanceServerService(access.organisationId);
-      const overview = await finance.getOverview({
+      const overview = await finance.getCommandCentreOverview({
         profileId: access.profileId,
       });
 
       let openPayablesLine: string | null = null;
-      const canViewPayables = await hasFinanceCapability(
-        access.organisationId,
-        access.profileId,
-        FINANCE_PAYABLE_CAPABILITIES.view
-      );
-      if (canViewPayables) {
-        try {
-          const payablesSvc = new PlatformFinancePayablesServerService(
-            access.organisationId
-          );
-          const payables = await payablesSvc.listAccessiblePayables(
-            actorFromSession(access.session, access.organisationId)
-          );
-          const open = payables.filter(
-            (p) =>
-              p.status !== "paid" &&
-              p.status !== "cancelled" &&
-              p.status !== "rejected"
-          );
-          openPayablesLine =
-            open.length === 1
-              ? "1 open payable"
-              : `${open.length} open payables`;
-        } catch {
-          openPayablesLine = null;
-        }
+      try {
+        const payablesSvc = new PlatformFinancePayablesServerService(
+          access.organisationId
+        );
+        const payables = await payablesSvc.listCommandCentrePayables(
+          access.profileId
+        );
+        const open = payables.filter(
+          (p) =>
+            p.status !== "paid" &&
+            p.status !== "cancelled" &&
+            p.status !== "rejected"
+        );
+        openPayablesLine =
+          open.length === 1 ? "1 open payable" : `${open.length} open payables`;
+      } catch {
+        openPayablesLine = null;
       }
 
       const pending = overview.requests.pendingCeoApproval.count;
@@ -286,15 +349,15 @@ export class CommandCentreServerService {
           ? "1 pending CEO decision"
           : `${pending} pending CEO decisions`
       );
-      if (openPayablesLine) {
-        lines.push(openPayablesLine);
-      } else if (awaiting > 0) {
-        lines.push(
-          awaiting === 1
-            ? "1 request awaiting review"
-            : `${awaiting} requests awaiting review`
-        );
-      }
+      const awaitingLine =
+        awaiting === 1
+          ? "1 awaiting Finance review"
+          : `${awaiting} awaiting Finance review`;
+      lines.push(
+        openPayablesLine
+          ? `${awaitingLine} · ${openPayablesLine}`
+          : awaitingLine
+      );
 
       const busy = pending > 0 || awaiting > 0;
       return {
@@ -303,7 +366,10 @@ export class CommandCentreServerService {
         state: "healthy",
         statusLabel: busy ? "Needs attention" : "Stable",
         lines,
-        href: "/platform-finance",
+        href: workspaceEntry.platformFinance ? "/platform-finance" : null,
+        disabledNavigationLabel: workspaceEntry.platformFinance
+          ? null
+          : "Workspace access required",
       };
     } catch (error) {
       if (isActionError(error) && error.code === "FORBIDDEN") {
@@ -313,6 +379,7 @@ export class CommandCentreServerService {
           statusLabel: "No access",
           lines: ["Finance data is restricted for your account."],
           href: null,
+          disabledNavigationLabel: null,
         };
       }
       return {
@@ -327,12 +394,6 @@ export class CommandCentreServerService {
   private async composeDecisions(access: CommandCentreAccessContext): Promise<
     CommandCentreSnapshot["decisions"]
   > {
-    const empty: CommandCentreSnapshot["decisions"] = {
-      state: "empty",
-      items: [],
-      viewAllHref: "/platform-finance/requests",
-    };
-
     if (!financeModuleEnabled(access.session)) {
       return {
         state: "restricted",
@@ -346,7 +407,12 @@ export class CommandCentreServerService {
       access.profileId,
       FINANCIAL_REQUEST_CAPABILITIES.approve
     );
-    if (!canApprove) {
+    const canDecide = await hasPlatformCapability(
+      access.organisationId,
+      access.profileId,
+      COMMAND_CENTRE_CAPABILITIES.decide
+    );
+    if (!canApprove || !canDecide) {
       return {
         state: "restricted",
         items: [],
@@ -394,33 +460,24 @@ export class CommandCentreServerService {
     if (!financeModuleEnabled(access.session)) {
       return { state: "restricted", items: [] };
     }
-    const canView = await hasFinanceCapability(
+    const canApprove = await hasFinanceCapability(
       access.organisationId,
       access.profileId,
-      PLATFORM_FINANCE_CAPABILITIES.view
+      FINANCIAL_REQUEST_CAPABILITIES.approve
     );
-    if (!canView) return { state: "restricted", items: [] };
+    const canDecide = await hasPlatformCapability(
+      access.organisationId,
+      access.profileId,
+      COMMAND_CENTRE_CAPABILITIES.decide
+    );
+    if (!canApprove || !canDecide) return { state: "empty", items: [] };
 
     try {
       const finance = new PlatformFinanceServerService(access.organisationId);
-      const overview = await finance.getOverview({
+      const overview = await finance.getCommandCentreOverview({
         profileId: access.profileId,
       });
-      const items: CommandCentreAttentionItem[] = overview.needsAttention.map(
-        (item) => ({
-          id: `finance:${item.id}`,
-          title: item.label,
-          detail: item.detail,
-          tone:
-            item.tone === "critical"
-              ? "critical"
-              : item.tone === "warning"
-                ? "high"
-                : "medium",
-          href: "/platform-finance/requests",
-          sourceLabel: "Finance",
-        })
-      );
+      const items: CommandCentreAttentionItem[] = [];
 
       const pending = overview.requests.pendingCeoApproval.count;
       if (pending > 0) {
@@ -450,23 +507,23 @@ export class CommandCentreServerService {
   }
 
   private async composeEccPulse(
-    access: CommandCentreAccessContext
+    access: CommandCentreAccessContext,
+    workspaceEntry: WorkspaceAccessChrome
   ): Promise<CommandCentrePulseCard> {
-    void access;
-    const eccAccess = await tryGetEccAccess();
-    if (!eccAccess) {
+    if (!hasModule(access.session.enabledModules, ECC_MODULE_SLUG)) {
       return {
         domain: "ecc",
         label: "ECC",
         state: "restricted",
-        statusLabel: "No access",
-        lines: ["ECC Operations is not available for your account."],
+        statusLabel: "Not enabled",
+        lines: ["ECC Operations is not enabled for this organisation."],
         href: null,
+        disabledNavigationLabel: null,
       };
     }
 
     try {
-      const ecc = new EccOperationsServerService(eccAccess.organisationId);
+      const ecc = new EccOperationsServerService(access.organisationId);
       const overview = await ecc.getOverview();
       const lines: string[] = [];
       if (overview.highUrgentOpenCount === 0 && overview.escalatedIssueCount === 0) {
@@ -504,7 +561,10 @@ export class CommandCentreServerService {
         state: "healthy",
         statusLabel: pressured ? "Needs attention" : "Stable",
         lines,
-        href: "/ecc-operations",
+        href: workspaceEntry.eccOperations ? "/ecc-operations" : null,
+        disabledNavigationLabel: workspaceEntry.eccOperations
+          ? null
+          : "Workspace access required",
       };
     } catch {
       return {
@@ -513,42 +573,139 @@ export class CommandCentreServerService {
         state: "error",
         statusLabel: "Unable to load",
         lines: ["ECC pulse could not be loaded."],
-        href: "/ecc-operations",
+        href: workspaceEntry.eccOperations ? "/ecc-operations" : null,
+        disabledNavigationLabel: workspaceEntry.eccOperations
+          ? null
+          : "Workspace access required",
       };
     }
   }
 
-  private async composeEccAttention(
-    access: CommandCentreAccessContext
-  ): Promise<{ state: CommandCentreSurfaceState; items: CommandCentreAttentionItem[] }> {
-    void access;
-    const eccAccess = await tryGetEccAccess();
-    if (!eccAccess) return { state: "restricted", items: [] };
-
-    try {
-      const ecc = new EccOperationsServerService(eccAccess.organisationId);
-      const overview = await ecc.getOverview();
-      const items: CommandCentreAttentionItem[] = overview.attentionItems
-        .slice(0, 5)
-        .map((item) => ({
-          id: `ecc:${item.id}`,
-          title: item.title,
-          detail: item.detail,
-          tone:
-            item.kind === "escalation"
-              ? "critical"
-              : item.kind === "issue"
-                ? "high"
-                : "medium",
-          href: item.href,
-          sourceLabel: "ECC",
-        }));
+  private async composeAssignments(
+    access: CommandCentreAccessContext,
+    operatingAccess: OperatingAccess
+  ): Promise<CommandCentreSnapshot["assignments"]> {
+    if (!hasModule(access.session.enabledModules, "facility_management")) {
       return {
-        state: items.length === 0 ? "empty" : "healthy",
-        items,
+        state: "unavailable",
+        message: "No assignment source is enabled.",
+        detail: "Facility Management is not enabled for this organisation.",
+        items: [],
+      };
+    }
+    try {
+      if (!operatingAccess.sheetUserId) {
+        return {
+          state: "unavailable",
+          message: "No operational identity is linked to your account.",
+          detail: "Assignments require a matching People-register identity.",
+          items: [],
+        };
+      }
+      const items = await loadAssignedWorkSummary(operatingAccess.sheetUserId);
+      const assigned = items.filter((item) => item.count > 0);
+      return {
+        state: assigned.length === 0 ? "empty" : "healthy",
+        message: assigned.length === 0 ? "You have no active assignments." : "",
+        detail: "Only active work assigned to your People-register identity is shown.",
+        items: assigned,
       };
     } catch {
-      return { state: "error", items: [] };
+      return {
+        state: "error",
+        message: "Assignments could not be loaded.",
+        detail: "Facility Management assignment data is temporarily unavailable.",
+        items: [],
+      };
     }
+  }
+
+  private async composeLastVisit(
+    access: CommandCentreAccessContext,
+    asOf: string,
+    workspaceEntry: WorkspaceAccessChrome
+  ): Promise<CommandCentreSnapshot["lastVisit"]> {
+    const admin = createAdminClient();
+    const { data: marker, error: markerError } = await admin
+      .from("command_centre_visits")
+      .select("last_visited_at")
+      .eq("organisation_id", access.organisationId)
+      .eq("profile_id", access.profileId)
+      .maybeSingle();
+
+    if (markerError) {
+      return {
+        state: "unavailable",
+        message: "Change tracking is awaiting its database migration.",
+        detail: markerError.message,
+        items: [],
+      };
+    }
+
+    const previous = marker?.last_visited_at ? String(marker.last_visited_at) : null;
+    if (!previous) {
+      const { error: firstVisitError } = await admin
+        .from("command_centre_visits")
+        .insert({
+          organisation_id: access.organisationId,
+          profile_id: access.profileId,
+          last_visited_at: asOf,
+        });
+      return {
+        state: firstVisitError ? "error" : "empty",
+        message: firstVisitError
+          ? "Your visit marker could not be created."
+          : "This is your first tracked Command Centre visit.",
+        detail: firstVisitError?.message ?? "Changes will be measured from this visit onward.",
+        items: [],
+      };
+    }
+
+    const visibility = {
+      operations: hasModule(access.session.enabledModules, "facility_management"),
+      finance: financeModuleEnabled(access.session),
+      ecc: hasModule(access.session.enabledModules, ECC_MODULE_SLUG),
+    };
+    const changes = await composeLastVisitChanges({
+      db: admin,
+      organisationId: access.organisationId,
+      previous,
+      asOf,
+      visibility,
+      workspaceEntry,
+    });
+    if (changes.sourceErrors.length > 0) {
+      return {
+        state: "error",
+        message: "Changes could not be loaded.",
+        detail: `Unavailable sources: ${changes.sourceErrors.join(", ")}. Visit marker was not advanced.`,
+        items: [],
+      };
+    }
+
+    const { error: writeError } = await admin
+      .from("command_centre_visits")
+      .update({ last_visited_at: asOf })
+      .eq("organisation_id", access.organisationId)
+      .eq("profile_id", access.profileId);
+    if (writeError) {
+      return {
+        state: "error",
+        message: "Your visit marker could not be updated.",
+        detail: writeError.message,
+        items: [],
+      };
+    }
+
+    const total = changes.items.length;
+    return {
+      state: total === 0 ? "empty" : "healthy",
+      message:
+        total === 0
+          ? "No meaningful changes since your last visit."
+          : `${total} meaningful change${total === 1 ? "" : "s"} since your last visit.`,
+      detail: `Measured from ${previous}.`,
+      items: changes.items,
+    };
   }
 }

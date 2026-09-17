@@ -215,6 +215,31 @@ export class PlatformFinancePayablesServerService {
     );
   }
 
+  /** Organisation-wide executive projection, independently grant-checked. */
+  async listCommandCentrePayables(profileId: string): Promise<FinancePayableView[]> {
+    const admin = createAdminClient();
+    const { data: grant, error } = await admin
+      .from("platform_capability_grants")
+      .select("id")
+      .eq("organisation_id", this.organisationId)
+      .eq("profile_id", profileId)
+      .eq("capability", "platform.command_centre.view")
+      .maybeSingle();
+    if (error || !grant) {
+      throw new ActionError("FORBIDDEN", "Command Centre composition is not authorised.");
+    }
+    const { data: companies, error: companiesError } = await admin
+      .from("finance_companies")
+      .select("id")
+      .eq("organisation_id", this.organisationId);
+    if (companiesError) {
+      throw new ActionError("INTERNAL_ERROR", "Unable to compose Finance payables.");
+    }
+    return this.repo.listPayablesForCompanies(
+      (companies ?? []).map((company) => String(company.id))
+    );
+  }
+
   async listAccessibleCompanies(
     actor: FinancePayableActorContext
   ): Promise<Array<{ id: string; code: string; name: string; status: string }>> {

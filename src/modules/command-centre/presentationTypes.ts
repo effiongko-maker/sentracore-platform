@@ -23,6 +23,23 @@ export type CommandCentrePulseCard = {
   statusLabel: string;
   lines: string[];
   href: string | null;
+  disabledNavigationLabel: string | null;
+};
+
+export type CommandCentreChangeItem = {
+  id: string;
+  sourceId: string;
+  sourceType:
+    | "operational_event"
+    | "finance_request_event"
+    | "finance_audit_event"
+    | "ecc_audit_event";
+  title: string;
+  detail: string;
+  sourceLabel: "Finance" | "Operations" | "ECC";
+  occurredAt: string;
+  timeLabel: string;
+  href: string | null;
 };
 
 export type CommandCentreDecisionItem = {
@@ -69,14 +86,16 @@ export type CommandCentreSnapshot = {
     items: CommandCentreAttentionItem[];
   };
   lastVisit: {
-    state: "unavailable";
+    state: CommandCentreSurfaceState;
     message: string;
     detail: string;
+    items: CommandCentreChangeItem[];
   };
   assignments: {
-    state: "unavailable";
+    state: CommandCentreSurfaceState;
     message: string;
     detail: string;
+    items: Array<{ id: string; label: string; count: number; href: string }>;
   };
   askSentraCore: {
     state: "unavailable";

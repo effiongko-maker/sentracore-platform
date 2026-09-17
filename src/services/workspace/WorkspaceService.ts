@@ -642,6 +642,73 @@ export type WorkspaceProgressiveLoad = {
 };
 
 /**
+ * Authoritative FM read composition for consumers outside the Home UI.
+ * Reuses the same bounded domain pools, exact Critical Work total, and
+ * Operational Picture definitions as Facility Management Home.
+ */
+export async function loadOperationalPictureMetrics(
+  asOf = new Date().toISOString()
+) {
+  const pool = WORKSPACE_HOME_POOL_SIZE;
+  const emptyWo: WorkOrder[] = [];
+  const emptyApr: Approval[] = [];
+
+  const [maintenanceHome, workOrders, approvals] = await Promise.all([
+    settleMaintenanceHome(pool),
+    settleDomain(
+      (signal) =>
+        WorkOrderService.listWorkOrders(
+          { page: 1, pageSize: pool },
+          { signal }
+        )
+          .then((page) => ({ ok: true as const, data: page.data ?? emptyWo }))
+          .catch(() => ({ ok: false as const, data: emptyWo })),
+      emptyWo
+    ),
+    settleDomain(
+      (signal) =>
+        ApprovalService.listApprovals(
+          { page: 1, pageSize: pool },
+          { signal }
+        )
+          .then((page) => ({ ok: true as const, data: page.data ?? emptyApr }))
+          .catch(() => ({ ok: false as const, data: emptyApr })),
+      emptyApr
+    ),
+  ]);
+
+  return buildOperationalPictureMetrics({
+    asOf,
+    criticalWork: maintenanceHome.criticalWork.ok
+      ? maintenanceHome.criticalWork.total
+      : null,
+    maintenance: maintenanceHome.maintenance.ok
+      ? maintenanceHome.maintenance.data
+      : null,
+    workOrders: workOrders.ok ? workOrders.data : null,
+    approvals: approvals.ok ? approvals.data : null,
+  });
+}
+
+/** Personal FM assignments keyed by the canonical People-register user id. */
+export async function loadAssignedWorkSummary(
+  assigneeUserId: string
+): Promise<WorkspaceWorkSummary[]> {
+  const pool = WORKSPACE_HOME_POOL_SIZE;
+  const [workOrders, incidents, maintenance] = await Promise.all([
+    WorkOrderService.listWorkOrders({ page: 1, pageSize: pool, assignedToUserId: assigneeUserId }),
+    IncidentService.listIncidents({ page: 1, pageSize: pool, assignedToUserId: assigneeUserId }),
+    MaintenanceService.listMaintenance({ page: 1, pageSize: pool, assignedToUserId: assigneeUserId }),
+  ]);
+  return buildMyWork(
+    assigneeUserId,
+    workOrders.data ?? [],
+    incidents.data ?? [],
+    maintenance.data ?? []
+  );
+}
+
+/**
  * Home composition service.
  * Aggregates only data needed for personal daily work.
  * Must not call DashboardService / ReportingService.

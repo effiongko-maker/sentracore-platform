@@ -165,13 +165,52 @@ function runStatic(results: CheckResult[]) {
       service.includes("listApprovalQueue"),
       "uses finance approval queue"
     );
+    assert(service.includes("composeLastVisit"), "last-visit composition");
     assert(
-      service.includes("Change tracking is not yet enabled"),
-      "honest last-visit unavailable"
+      service.includes('from("command_centre_visits")'),
+      "per-user visit marker"
     );
     assert(
-      service.includes("CEO assignments are not enabled yet"),
-      "honest assignments unavailable"
+      service.includes("composeLastVisitChanges"),
+      "authoritative change feed composer"
+    );
+    assert(
+      service.includes("resolveWorkspaceAccessChrome"),
+      "shared workspace-entry resolver"
+    );
+    assert(
+      !service.includes("recorded organisational change"),
+      "does not reduce changes to a raw count"
+    );
+    const commandPage = readSrc(
+      "src/modules/command-centre/components/CommandCentrePage.tsx"
+    );
+    assert(commandPage.includes("LastVisitBlock"), "renders composed change rows");
+    assert(
+      commandPage.includes("disabledNavigationLabel") &&
+        service.includes("Workspace access required"),
+      "renders disabled workspace-entry affordance"
+    );
+    const composer = readSrc(
+      "src/modules/command-centre/server/composeLastVisitChanges.ts"
+    );
+    assert(
+      composer.includes("FINANCE_REQUEST_TITLES") &&
+        composer.includes("OPERATION_TITLES"),
+      "whitelists meaningful executive events"
+    );
+    assert(service.includes("composeAssignments"), "assignment composition");
+    assert(
+      service.includes("loadAssignedWorkSummary"),
+      "authoritative FM assignments"
+    );
+    assert(
+      service.includes("getCommandCentreOverview"),
+      "grant-checked Finance executive projection"
+    );
+    assert(
+      !service.includes("overview.needsAttention.map"),
+      "organisational Finance queue not copied into personal attention"
     );
 
     const accessCaps = readSrc("src/lib/access/capabilities.ts");

@@ -911,10 +911,44 @@ export class PlatformFinanceServerService {
     companyId?: string | null;
     periodId?: string | null;
   }): Promise<FinanceOverviewSnapshot> {
+    return this.getOverviewForCompanyScope(input);
+  }
+
+  /**
+   * Organisation-wide executive projection. The domain service re-verifies the
+   * Command Centre grant; callers cannot opt into this scope with a flag.
+   */
+  async getCommandCentreOverview(input: {
+    profileId: string;
+  }): Promise<FinanceOverviewSnapshot> {
+    const admin = createAdminClient();
+    const { data: grant, error } = await admin
+      .from("platform_capability_grants")
+      .select("id")
+      .eq("organisation_id", this.organisationId)
+      .eq("profile_id", input.profileId)
+      .eq("capability", "platform.command_centre.view")
+      .maybeSingle();
+    if (error || !grant) {
+      throw new ActionError("FORBIDDEN", "Command Centre composition is not authorised.");
+    }
+    return this.getOverviewForCompanyScope(input, true);
+  }
+
+  private async getOverviewForCompanyScope(
+    input: {
+      profileId: string;
+      companyId?: string | null;
+      periodId?: string | null;
+    },
+    organisationWide = false
+  ): Promise<FinanceOverviewSnapshot> {
     const asOf = new Date().toISOString();
     const allCompanies = await this.repo.listCompanies();
     const accessibleIds = new Set(
-      await this.repo.listAccessibleCompanyIds(input.profileId)
+      organisationWide
+        ? allCompanies.map((company) => company.id)
+        : await this.repo.listAccessibleCompanyIds(input.profileId)
     );
     const companies = allCompanies.filter((c) => accessibleIds.has(c.id));
 

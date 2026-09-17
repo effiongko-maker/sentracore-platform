@@ -125,8 +125,16 @@ function PulseCard({ card }: { card: CommandCentrePulseCard }) {
             {card.statusLabel}
           </span>
         </div>
-        {card.href ? (
-          <span className="scc-pulse-chevron" aria-hidden>
+        {card.href || card.disabledNavigationLabel ? (
+          <span
+            className={cn(
+              "scc-pulse-chevron",
+              card.disabledNavigationLabel && "scc-pulse-chevron--disabled"
+            )}
+            title={card.disabledNavigationLabel ?? undefined}
+            aria-label={card.disabledNavigationLabel ?? undefined}
+            aria-hidden={card.disabledNavigationLabel ? undefined : true}
+          >
             <ChevronRight className="h-3.5 w-3.5" />
           </span>
         ) : null}
@@ -258,20 +266,90 @@ function DecisionsBlock({
   return <QuietEmpty label="Not available yet." />;
 }
 
+function AssignmentsBlock({
+  assignments,
+}: {
+  assignments: CommandCentreSnapshot["assignments"];
+}) {
+  if (assignments.state === "healthy" && assignments.items.length > 0) {
+    return (
+      <ul className="scc-decision-list">
+        {assignments.items.map((item) => (
+          <li key={item.id}>
+            <Link href={item.href} className="scc-decision-row">
+              <span className="scc-decision-main">
+                <span className="scc-decision-title">{item.label}</span>
+                <span className="scc-decision-meta">
+                  <span>{item.count} active</span>
+                </span>
+              </span>
+              <span className="scc-decision-aside">
+                <ChevronRight className="h-4 w-4" aria-hidden />
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  return <QuietEmpty label={assignments.message} />;
+}
+
+function LastVisitBlock({
+  lastVisit,
+}: {
+  lastVisit: CommandCentreSnapshot["lastVisit"];
+}) {
+  if (lastVisit.state !== "healthy" || lastVisit.items.length === 0) {
+    return <QuietEmpty label={lastVisit.message} />;
+  }
+
+  return (
+    <ul className="scc-change-list">
+      {lastVisit.items.map((item) => {
+        const body = (
+          <>
+            <span className="scc-change-dot" aria-hidden />
+            <span className="scc-change-body">
+              <span className="scc-change-title">{item.title}</span>
+              <span className="scc-change-detail">
+                {item.detail}
+                <span aria-hidden> · </span>
+                <time dateTime={item.occurredAt}>{item.timeLabel}</time>
+              </span>
+            </span>
+          </>
+        );
+        return (
+          <li key={item.id}>
+            {item.href ? (
+              <Link href={item.href} className="scc-change-row">
+                {body}
+              </Link>
+            ) : (
+              <div className="scc-change-row">{body}</div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export function CommandCentrePage({
   snapshot,
 }: {
   snapshot: CommandCentreSnapshot;
 }) {
   const dateLabel = formatAsOfDate(snapshot.asOf);
-  const { decisions, attention, askSentraCore } = snapshot;
+  const { decisions, attention, assignments, askSentraCore } = snapshot;
 
   return (
     <div className="scc">
       <header className="scc-hero">
         <div className="scc-hero-media" aria-hidden>
           <Image
-            src="/platform/hero-architecture.jpg"
+            src="/command-centre/hero-city-sunset.png"
             alt=""
             fill
             priority
@@ -316,11 +394,7 @@ export function CommandCentrePage({
           </div>
           {dateLabel ? (
             <p className="scc-pulse-meta">
-              <span>{dateLabel}</span>
-              <span className="scc-pulse-meta-sep" aria-hidden>
-                ·
-              </span>
-              <span>Lagos, Nigeria</span>
+              <span>As of {dateLabel}</span>
             </p>
           ) : null}
         </div>
@@ -339,7 +413,7 @@ export function CommandCentrePage({
               title="Since Your Last Visit"
               actionHref={null}
             />
-            <QuietEmpty label="Change tracking not yet enabled." />
+            <LastVisitBlock lastVisit={snapshot.lastVisit} />
           </article>
 
           <article
@@ -353,7 +427,7 @@ export function CommandCentrePage({
                 <ClipboardList className="h-3.5 w-3.5 scc-panel-glyph" aria-hidden />
               }
             />
-            <QuietEmpty label="Assignments not enabled yet." />
+            <AssignmentsBlock assignments={assignments} />
           </article>
         </div>
 
@@ -375,7 +449,7 @@ export function CommandCentrePage({
               <span className="scc-ask-badge">Beta</span>
             </div>
             <div className="scc-ask-field" aria-disabled="true">
-              <span>Ask anything about your organisation…</span>
+              <span>{askSentraCore.prompt}</span>
             </div>
             <div className="scc-ask-chips">
               {askSentraCore.suggestions.map((chip) => (
@@ -404,7 +478,7 @@ export function CommandCentrePage({
           <aside className="scc-editorial" aria-label="SentraCore brand">
             <div className="scc-editorial-media" aria-hidden>
               <Image
-                src="/platform/hero-architecture.jpg"
+                src="/command-centre/editorial-mountain-sunset.png"
                 alt=""
                 fill
                 className="scc-editorial-image"

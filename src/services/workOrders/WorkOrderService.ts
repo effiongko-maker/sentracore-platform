@@ -317,6 +317,18 @@ export const WorkOrderService = {
       dueDate: params.dueDate ?? "",
     });
     return sharedRequest(key, async () => {
+      if (typeof window === "undefined") {
+        const data = await postToAppsScriptData(
+          {
+            resource: "work-orders",
+            action: "getAll",
+            payload: params,
+          },
+          { resource: "work-orders", action: "getAll" },
+          "WorkOrderService.listWorkOrders"
+        );
+        return toPaginatedWorkOrders(data, params);
+      }
       const response = await apiClient.post<unknown>(
         "/work-orders",
         {
