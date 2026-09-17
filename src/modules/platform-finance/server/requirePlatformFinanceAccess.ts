@@ -105,6 +105,45 @@ async function assertFinanceCompanyAccess(
 
 /**
  * Session + active org + module enabled (SA may bypass module enablement only).
+ * At least one finance_capability_grants row required to enter the Platform Finance
+ * workspace shell — does not require a specific action capability.
+ * Action APIs still use requirePlatformFinanceAccess / AccessAny for their caps.
+ * Super Admin does not auto-receive finance capabilities.
+ */
+export async function requirePlatformFinanceWorkspaceAccess(): Promise<{
+  session: PlatformSession;
+  organisationId: string;
+  profileId: string;
+}> {
+  const { session, organisationId, profileId } =
+    await resolvePlatformFinanceSessionContext();
+
+  const admin = createAdminClient();
+  const { data: capRows, error: capError } = await admin
+    .from("finance_capability_grants")
+    .select("id")
+    .eq("organisation_id", organisationId)
+    .eq("profile_id", profileId)
+    .limit(1);
+
+  if (capError) {
+    throw new ActionError(
+      "INTERNAL_ERROR",
+      "Unable to verify finance workspace access."
+    );
+  }
+  if (!capRows?.length) {
+    throw new ActionError(
+      "FORBIDDEN",
+      "You do not have Platform Finance access for this organisation."
+    );
+  }
+
+  return { session, organisationId, profileId };
+}
+
+/**
+ * Session + active org + module enabled (SA may bypass module enablement only).
  * Capability must exist in finance_capability_grants — SA does not auto-receive capabilities.
  * When companyId is provided, finance_company_access is required — SA does not bypass.
  */

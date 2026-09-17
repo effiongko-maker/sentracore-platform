@@ -3,19 +3,35 @@ import { ActionError } from "@/lib/actions/errors";
 import { isPlatformSuperAdminFromSlugs } from "@/lib/access/platformRoles";
 import { getPlatformSession } from "@/lib/auth/session";
 import type { PlatformSession } from "@/lib/auth/types";
-import { ECC_MODULE_SLUG } from "@/modules/ecc-operations/types";
+import { createAdminClient } from "@/utils/supabase/admin";
+import {
+  ECC_CAPABILITIES,
+  ECC_MODULE_SLUG,
+  type EccCapability,
+} from "@/modules/ecc-operations/types";
 
 export type EccAccessContext = {
   session: PlatformSession;
   organisationId: string;
+  profileId: string;
+  capability: EccCapability;
+};
+
+export type RequireEccAccessOptions = {
+  capability?: EccCapability;
 };
 
 /**
- * Authenticated platform session + organisation membership + ecc_operations enabled.
- * Platform Super Admins may enter even when the module is not org-enabled.
- * Does not invent ECC-specific capabilities.
+ * Session + active org + ecc_operations module (SA may bypass module only)
+ * + explicit platform.ecc_operations.* grant.
+ *
+ * Super Admin does NOT auto-receive ECC capabilities
+ * (same discipline as Platform Finance / Command Centre).
  */
-export async function requireEccAccess(): Promise<EccAccessContext> {
+export async function requireEccAccess(
+  options: RequireEccAccessOptions = {}
+): Promise<EccAccessContext> {
+  const capability = options.capability ?? ECC_CAPABILITIES.view;
   const session = await getPlatformSession();
   if (!session) {
     throw new ActionError("UNAUTHENTICATED");
@@ -32,26 +48,42 @@ export async function requireEccAccess(): Promise<EccAccessContext> {
     throw new ActionError("ORGANISATION_INACTIVE");
   }
 
+  const profileId = session.profile.id;
+  if (!profileId) {
+    throw new ActionError("PROFILE_NOT_FOUND");
+  }
+
   const isSuperAdmin = isPlatformSuperAdminFromSlugs(session.roleSlugs);
   if (!isSuperAdmin && !hasModule(session.enabledModules, ECC_MODULE_SLUG)) {
     throw new ActionError("MODULE_NOT_ENABLED");
   }
 
-  return { session, organisationId };
+  const admin = createAdminClient();
+  const { data: capRow, error: capError } = await admin
+    .from("platform_capability_grants")
+    .select("id")
+    .eq("organisation_id", organisationId)
+    .eq("profile_id", profileId)
+    .eq("capability", capability)
+    .maybeSingle();
+
+  if (capError) {
+    throw new ActionError(
+      "INTERNAL_ERROR",
+      "Unable to verify ECC Operations capability."
+    );
+  }
+  if (!capRow) {
+    throw new ActionError("FORBIDDEN", `Missing capability ${capability}.`);
+  }
+
+  return { session, organisationId, profileId, capability };
 }
 
 export async function tryGetEccAccess(): Promise<EccAccessContext | null> {
-  const session = await getPlatformSession();
-  if (!session) return null;
-  const organisationId =
-    session.organisation?.id ?? session.profile.organisationId ?? null;
-  if (!organisationId) return null;
-  if (session.organisation && session.organisation.status !== "active") {
+  try {
+    return await requireEccAccess();
+  } catch {
     return null;
   }
-  const isSuperAdmin = isPlatformSuperAdminFromSlugs(session.roleSlugs);
-  if (!isSuperAdmin && !hasModule(session.enabledModules, ECC_MODULE_SLUG)) {
-    return null;
-  }
-  return { session, organisationId };
 }

@@ -31,6 +31,7 @@ import {
   PLATFORM_DEVELOPER_ACCESS_ORG_SLUG,
   PLATFORM_DEVELOPER_ACCESS_ROLE_SLUGS,
   PLATFORM_DEVELOPER_COMMAND_CENTRE_CAPABILITIES,
+  PLATFORM_DEVELOPER_ECC_CAPABILITIES,
   PLATFORM_DEVELOPER_FINANCE_CAPABILITIES,
   PLATFORM_DEVELOPER_ACCESS_NOTES,
 } from "./lib/platform-developer-access-bundle";
@@ -197,6 +198,7 @@ async function main() {
   let financeCapUpserts = 0;
   let companyUpserts = 0;
   let ccCapUpserts = 0;
+  let eccCapUpserts = 0;
 
   for (const profile of profiles) {
     for (const capability of PLATFORM_DEVELOPER_FINANCE_CAPABILITIES) {
@@ -229,6 +231,22 @@ async function main() {
       );
       if (error) throw error;
       ccCapUpserts += 1;
+    }
+
+    for (const capability of PLATFORM_DEVELOPER_ECC_CAPABILITIES) {
+      const { error } = await admin.from("platform_capability_grants").upsert(
+        {
+          organisation_id: org.id,
+          profile_id: profile.id,
+          capability,
+        },
+        {
+          onConflict: "profile_id,organisation_id,capability",
+          ignoreDuplicates: true,
+        }
+      );
+      if (error) throw error;
+      eccCapUpserts += 1;
     }
 
     for (const company of companies) {
@@ -268,11 +286,13 @@ async function main() {
         financeCapabilities: PLATFORM_DEVELOPER_FINANCE_CAPABILITIES,
         commandCentreCapabilities:
           PLATFORM_DEVELOPER_COMMAND_CENTRE_CAPABILITIES,
+        eccCapabilities: PLATFORM_DEVELOPER_ECC_CAPABILITIES,
         companyCount: companies.length,
         companyCodes: companies.map((c) => c.code),
         upsertAttempts: {
           financeCapabilityRows: financeCapUpserts,
           commandCentreCapabilityRows: ccCapUpserts,
+          eccCapabilityRows: eccCapUpserts,
           companyAccessRows: companyUpserts,
         },
         notes: PLATFORM_DEVELOPER_ACCESS_NOTES,
@@ -309,6 +329,9 @@ async function main() {
     const missingCc = PLATFORM_DEVELOPER_COMMAND_CENTRE_CAPABILITIES.filter(
       (c) => !ccGranted.has(c)
     );
+    const missingEcc = PLATFORM_DEVELOPER_ECC_CAPABILITIES.filter(
+      (c) => !ccGranted.has(c)
+    );
 
     const { count: companyAccessCount } = await admin
       .from("finance_company_access")
@@ -319,14 +342,15 @@ async function main() {
     const ok =
       missingFinance.length === 0 &&
       missingCc.length === 0 &&
+      missingEcc.length === 0 &&
       (companyAccessCount ?? 0) >= companies.length;
 
     console.log(
-      `verify profile=${profile.id} name=${profile.full_name ?? "?"}: financeMissing=${missingFinance.length} ccMissing=${missingCc.length} companies=${companyAccessCount ?? 0}/${companies.length} ok=${ok}`
+      `verify profile=${profile.id} name=${profile.full_name ?? "?"}: financeMissing=${missingFinance.length} ccMissing=${missingCc.length} eccMissing=${missingEcc.length} companies=${companyAccessCount ?? 0}/${companies.length} ok=${ok}`
     );
     if (!ok) {
       throw new Error(
-        `profile ${profile.id} missing developer access: finance=${missingFinance.join(",")} cc=${missingCc.join(",")}`
+        `profile ${profile.id} missing developer access: finance=${missingFinance.join(",")} cc=${missingCc.join(",")} ecc=${missingEcc.join(",")}`
       );
     }
   }

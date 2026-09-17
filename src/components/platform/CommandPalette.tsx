@@ -6,6 +6,11 @@ import {
   filterOperatingLayers,
   OPERATING_LAYERS,
 } from "@/lib/platform/layers";
+import {
+  OPERATIONS_HOME,
+  getWorkspace,
+  resolveWorkspaceDirectoryState,
+} from "@/lib/platform/workspaces";
 import { cn } from "@/lib/utils";
 import { usePlatformSession } from "@/hooks/usePlatformSession";
 import { useOperatingAccess } from "@/hooks/useOperatingAccess";
@@ -50,7 +55,8 @@ const CREATE_ACTIONS: PaletteAction[] = [
 
 export function CommandPalette() {
   const router = useRouter();
-  const { enabledModules } = usePlatformSession();
+  const { enabledModules, isSuperAdmin, workspaceAccess } =
+    usePlatformSession();
   const { access, can, loading: accessLoading } = useOperatingAccess();
   const { commandPaletteOpen, closeCommandPalette } = usePlatformShell();
   const [query, setQuery] = useState("");
@@ -64,6 +70,16 @@ export function CommandPalette() {
       enabledModules,
       visibility
     );
+    const fmWorkspace = getWorkspace("operations");
+    const fmState = fmWorkspace
+      ? resolveWorkspaceDirectoryState(fmWorkspace, {
+          enabledModules,
+          sessionLoading: false,
+          isSuperAdmin,
+          workspaceAccess,
+        })
+      : null;
+
     const nav: PaletteAction[] = [
       {
         id: "nav-platform",
@@ -72,36 +88,50 @@ export function CommandPalette() {
         href: "/",
         group: "Navigate",
       },
-      {
+    ];
+
+    if (fmState?.kind === "enter") {
+      nav.push({
         id: "nav-operations",
         label: "Enter Facility Management",
         description: "Facility Management",
-        href: "/operations",
+        href: OPERATIONS_HOME.href,
         group: "Navigate",
-      },
-    ];
+      });
+    }
 
-    for (const layer of layers) {
-      for (const mod of layer.modules) {
-        if (mod.comingSoon) continue;
-        nav.push({
-          id: `nav-${mod.href}`,
-          label: mod.label,
-          description: layer.label,
-          href: mod.href,
-          group: "Navigate",
-        });
+    // Only surface FM module shortcuts when FM is enterable.
+    if (fmState?.kind === "enter") {
+      for (const layer of layers) {
+        for (const mod of layer.modules) {
+          if (mod.comingSoon) continue;
+          nav.push({
+            id: `nav-${mod.href}`,
+            label: mod.label,
+            description: layer.label,
+            href: mod.href,
+            group: "Navigate",
+          });
+        }
       }
     }
 
     const creates = CREATE_ACTIONS.filter((action) => {
+      if (fmState?.kind !== "enter") return false;
       if (!action.requireCapability) return true;
       if (accessLoading || !access) return false;
       return can(action.requireCapability);
     });
 
     return [...creates, ...nav];
-  }, [enabledModules, access, accessLoading, can]);
+  }, [
+    enabledModules,
+    access,
+    accessLoading,
+    can,
+    isSuperAdmin,
+    workspaceAccess,
+  ]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

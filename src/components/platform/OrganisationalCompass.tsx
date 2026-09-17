@@ -21,8 +21,6 @@ import {
   COMMAND_CENTRE_HOME,
 } from "@/lib/platform/workspaces";
 import { hasModule } from "@/lib/actions/moduleAccess";
-import { ECC_MODULE_SLUG } from "@/modules/ecc-operations/types";
-import { PLATFORM_FINANCE_MODULE_SLUG } from "@/modules/platform-finance/types";
 import { cn } from "@/lib/utils";
 import { usePlatformSession } from "@/hooks/usePlatformSession";
 import { useOperatingAccess } from "@/hooks/useOperatingAccess";
@@ -55,7 +53,7 @@ export function OrganisationalCompass() {
   const pathname = usePathname();
   const {
     enabledModules,
-    isSuperAdmin,
+    workspaceAccess,
     loading: sessionLoading,
   } = usePlatformSession();
   const {
@@ -84,14 +82,9 @@ export function OrganisationalCompass() {
   const inEccOperations = isEccOperationsPath(pathname);
   const inPlatformFinance = isPlatformFinancePath(pathname);
   const inCommandCentre = isCommandCentrePath(pathname);
-  const canUseEcc =
-    isSuperAdmin ||
-    (enabledModules !== null &&
-      hasModule(enabledModules, ECC_MODULE_SLUG));
-  const canUsePlatformFinance =
-    isSuperAdmin ||
-    (enabledModules !== null &&
-      hasModule(enabledModules, PLATFORM_FINANCE_MODULE_SLUG));
+  const canUseEcc = Boolean(workspaceAccess?.eccOperations);
+  const canUsePlatformFinance = Boolean(workspaceAccess?.platformFinance);
+  const canUseCommandCentre = Boolean(workspaceAccess?.commandCentre);
   const isOpsHome =
     pathname === COMMAND_HOME.href ||
     pathname.startsWith(`${COMMAND_HOME.href}/`);
@@ -475,26 +468,36 @@ export function OrganisationalCompass() {
               <>
                 <div className="os-compass-command-block">
                   <p className="os-compass-workspace-caption">Command Centre</p>
-                  <Link
-                    href={COMMAND_CENTRE_HOME.href}
-                    onClick={closeMobileNav}
-                    aria-current={inCommandCentre ? "page" : undefined}
-                    className={cn(
-                      "os-compass-command-centre",
-                      inCommandCentre && "os-compass-command-centre-active"
-                    )}
-                  >
-                    <Hexagon
-                      className="h-4 w-4 shrink-0 opacity-80"
-                      aria-hidden
-                    />
-                    <span className="os-compass-command-centre-label">
-                      {COMMAND_CENTRE_HOME.label}
-                    </span>
-                  </Link>
-                  <p className="os-compass-command-centre-hint">
-                    Your organisation
-                  </p>
+                  {sessionLoading || workspaceAccess == null ? (
+                    <p className="os-compass-nav-status" role="status">
+                      Checking access…
+                    </p>
+                  ) : canUseCommandCentre ? (
+                    <>
+                      <Link
+                        href={COMMAND_CENTRE_HOME.href}
+                        onClick={closeMobileNav}
+                        aria-current={inCommandCentre ? "page" : undefined}
+                        className={cn(
+                          "os-compass-command-centre",
+                          inCommandCentre && "os-compass-command-centre-active"
+                        )}
+                      >
+                        <Hexagon
+                          className="h-4 w-4 shrink-0 opacity-80"
+                          aria-hidden
+                        />
+                        <span className="os-compass-command-centre-label">
+                          {COMMAND_CENTRE_HOME.label}
+                        </span>
+                      </Link>
+                      <p className="os-compass-command-centre-hint">
+                        Your organisation
+                      </p>
+                    </>
+                  ) : (
+                    <p className="os-compass-nav-status">No access</p>
+                  )}
                 </div>
 
                 <div className="os-compass-group">

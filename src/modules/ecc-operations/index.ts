@@ -12,11 +12,13 @@ export type { IEccOperationsService } from "./services/EccOperationsService";
 export {
   ECC_MODULE_SLUG,
   ECC_WORKSPACE_ID,
+  ECC_CAPABILITIES,
   DEFAULT_ECC_CENTRE,
   createEccModuleContext,
   type EccModuleContext,
   type EccModuleSlug,
   type EccWorkspaceId,
+  type EccCapability,
   type EccDailyOpsRecord,
   type EccIssue,
   type EccRequest,

@@ -80,11 +80,11 @@ export const PLATFORM_WORKSPACES: PlatformWorkspace[] = [
     id: "finance",
     label: "Finance",
     title: "Finance",
-    status: "in_development",
-    statusLabel: "In development",
-    statusDetail: "Being built for your organisation",
+    status: "active",
+    statusLabel: "Active",
     description:
       "Organisation-wide financial operations, planning and reporting.",
+    href: "/platform-finance",
     previewHref: "/workspaces/finance",
     capabilities: [
       "Financial controls",
@@ -153,6 +153,16 @@ type WorkspaceAccessOptions = {
   enabledModules: Array<{ slug: string; status: string }> | null;
   sessionLoading?: boolean;
   isSuperAdmin?: boolean;
+  /**
+   * User-level workspace enter flags from grants ∩ module enablement.
+   * `null` / omitted while unresolved; when chrome is loaded, booleans are definitive.
+   */
+  workspaceAccess?: {
+    facilityManagement?: boolean | null;
+    eccOperations?: boolean | null;
+    platformFinance?: boolean | null;
+    commandCentre?: boolean | null;
+  } | null;
 };
 
 function hasEnabledModule(
@@ -167,6 +177,11 @@ function hasEnabledModule(
 /**
  * Module directory / switcher enterability.
  * Visibility ≠ authorization — server gates remain authoritative.
+ *
+ * Org module enablement and user grants are independent:
+ * - Facility Management: org module (SA may bypass module)
+ * - ECC: org module (SA may bypass module) AND user ECC grant
+ * - Platform Finance: org module (SA may bypass module) AND Finance grant
  */
 export function resolveWorkspaceDirectoryState(
   workspace: PlatformWorkspace,
@@ -188,6 +203,24 @@ export function resolveWorkspaceDirectoryState(
     return { kind: "unavailable", label: "Coming soon" };
   }
 
+  if (
+    workspace.id === "finance" &&
+    (options.sessionLoading || options.enabledModules === null)
+  ) {
+    // Unresolved enablement must not be treated as "no access".
+    return { kind: "loading" };
+  }
+
+  const wa = options.workspaceAccess;
+  if (workspace.id === "finance") {
+    if (wa == null || wa.platformFinance == null) {
+      return { kind: "loading" };
+    }
+    return wa.platformFinance
+      ? { kind: "enter", href: workspace.href }
+      : { kind: "no_access", label: "No access" };
+  }
+
   const moduleSlug = WORKSPACE_MODULE_SLUG[workspace.id];
   if (!moduleSlug) {
     return { kind: "enter", href: workspace.href };
@@ -196,6 +229,31 @@ export function resolveWorkspaceDirectoryState(
   if (options.sessionLoading || options.enabledModules === null) {
     // Unresolved enablement must not be treated as "no access".
     return { kind: "loading" };
+  }
+
+  if (workspace.id === "ecc-operations") {
+    if (wa == null || wa.eccOperations == null) {
+      return { kind: "loading" };
+    }
+    return wa.eccOperations
+      ? { kind: "enter", href: workspace.href }
+      : { kind: "no_access", label: "No access" };
+  }
+
+  if (workspace.id === "operations") {
+    if (wa?.facilityManagement != null) {
+      return wa.facilityManagement
+        ? { kind: "enter", href: workspace.href }
+        : { kind: "no_access", label: "No access" };
+    }
+    // Fallback: org module only when chrome grants not yet wired.
+    if (
+      options.isSuperAdmin ||
+      hasEnabledModule(options.enabledModules, moduleSlug)
+    ) {
+      return { kind: "enter", href: workspace.href };
+    }
+    return { kind: "no_access", label: "No access" };
   }
 
   if (
@@ -243,7 +301,7 @@ export function resolveCurrentWorkspaceId(
     return "ecc-operations";
   }
 
-  // Platform Finance module route (catalogue stays in_development / no href).
+  // Platform Finance module route.
   if (isPlatformFinancePath(pathname)) {
     return "finance";
   }
@@ -346,8 +404,7 @@ export function isEccOperationsPath(pathname: string): boolean {
 }
 
 /**
- * Platform Finance module routes (not FM `/finance`, not catalogue href).
- * Catalogue Finance remains `in_development` without an `href`.
+ * Platform Finance module routes (not FM `/finance`).
  */
 export function isPlatformFinancePath(pathname: string): boolean {
   return (

@@ -41,12 +41,13 @@ export function WorkspaceSwitcher({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { enabledModules, isSuperAdmin, loading: sessionLoading } =
+  const { enabledModules, isSuperAdmin, workspaceAccess, loading: sessionLoading } =
     usePlatformSession();
   const accessOptions = {
     enabledModules,
     sessionLoading,
     isSuperAdmin,
+    workspaceAccess,
   };
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -58,6 +59,8 @@ export function WorkspaceSwitcher({
     (getActiveWorkspace().href ? getActiveWorkspace() : null);
   const onHome = isPlatformHomePath(pathname);
   const onCommandCentre = isCommandCentrePath(pathname);
+  const canUseCommandCentre = Boolean(workspaceAccess?.commandCentre);
+  const commandCentreLoading = sessionLoading || workspaceAccess == null;
   const triggerLabel = onCommandCentre
     ? COMMAND_CENTRE_HOME.label
     : onHome
@@ -117,11 +120,23 @@ export function WorkspaceSwitcher({
                 type="button"
                 role="option"
                 aria-selected={onCommandCentre}
+                aria-disabled={
+                  !onCommandCentre &&
+                  (commandCentreLoading || !canUseCommandCentre)
+                }
+                disabled={
+                  !onCommandCentre &&
+                  (commandCentreLoading || !canUseCommandCentre)
+                }
                 className={cn(
                   "sc-ws-switcher-option",
-                  onCommandCentre && "sc-ws-switcher-option-current"
+                  onCommandCentre && "sc-ws-switcher-option-current",
+                  !onCommandCentre &&
+                    (commandCentreLoading || !canUseCommandCentre) &&
+                    "sc-ws-switcher-option-disabled"
                 )}
                 onClick={() => {
+                  if (commandCentreLoading || !canUseCommandCentre) return;
                   setOpen(false);
                   router.push(COMMAND_CENTRE_HOME.href);
                 }}
@@ -134,7 +149,13 @@ export function WorkspaceSwitcher({
                     {COMMAND_CENTRE_HOME.label}
                   </span>
                   <span className="sc-ws-switcher-option-status">
-                    {onCommandCentre ? "Active" : "Organisation overview"}
+                    {onCommandCentre
+                      ? "Active"
+                      : commandCentreLoading
+                        ? "Checking access…"
+                        : canUseCommandCentre
+                          ? "Organisation overview"
+                          : "No access"}
                   </span>
                 </span>
               </button>

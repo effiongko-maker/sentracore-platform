@@ -103,11 +103,11 @@ function main() {
   }
   assert(PLATFORM_FINANCE_MODULE_SLUG === "platform_finance", "module slug");
 
-  // --- Workspace catalogue freeze ---
+  // --- Live workspace catalogue identity ---
   const financeWs = getWorkspace("finance");
   assert(financeWs, "finance workspace exists");
-  assert(financeWs!.status === "in_development", "finance stays in_development");
-  assert(financeWs!.href === undefined, "finance catalogue has no href");
+  assert(financeWs!.status === "active", "finance catalogue is live");
+  assert(financeWs!.href === "/platform-finance", "finance catalogue entry route");
   assert(
     resolveCurrentWorkspaceId("/platform-finance") === "finance",
     "/platform-finance → finance workspace"
@@ -119,16 +119,12 @@ function main() {
     workspacesSrc.indexOf('id: "construction"')
   );
   assert(
-    !/(^|\n)\s*href\s*:/.test(platformFinanceBlock),
-    "finance workspace block must not define href"
+    platformFinanceBlock.includes('href: "/platform-finance"'),
+    "finance workspace route in source"
   );
   assert(
-    platformFinanceBlock.includes('status: "in_development"'),
-    "finance workspace in_development in source"
-  );
-  assert(
-    workspacesSrc.includes("isPlatformFinancePath"),
-    "isPlatformFinancePath helper present"
+    platformFinanceBlock.includes('status: "active"'),
+    "finance workspace active in source"
   );
 
   // --- No FM finance module imports ---
@@ -370,7 +366,7 @@ function main() {
 
   console.log("PASS verify-platform-finance-foundation");
   console.log(
-    "  domain invariants + static isolation + migrations + workspace freeze + verify lifecycle"
+    "  domain invariants + static isolation + migrations + live workspace catalogue + verify lifecycle"
   );
 }
 

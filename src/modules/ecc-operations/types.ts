@@ -13,6 +13,26 @@ import type { PlatformModuleSlug } from "@/lib/actions/types";
 export const ECC_MODULE_SLUG = "ecc_operations" satisfies PlatformModuleSlug;
 export const ECC_WORKSPACE_ID = "ecc-operations" as const;
 
+/**
+ * ECC user capabilities (platform_capability_grants).
+ * Organisation module enablement is separate — module on ≠ user access.
+ * Super Admin does not auto-receive these grants.
+ */
+export const ECC_CAPABILITIES = {
+  /** Enter and use ECC Operations workspace surfaces. */
+  view: "platform.ecc_operations.view",
+} as const;
+
+export type EccCapability =
+  (typeof ECC_CAPABILITIES)[keyof typeof ECC_CAPABILITIES];
+
+export function isEccCapability(value: unknown): value is EccCapability {
+  return (
+    typeof value === "string" &&
+    (Object.values(ECC_CAPABILITIES) as string[]).includes(value)
+  );
+}
+
 export type EccModuleSlug = typeof ECC_MODULE_SLUG;
 export type EccWorkspaceId = typeof ECC_WORKSPACE_ID;
 

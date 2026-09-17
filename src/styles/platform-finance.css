@@ -1,3 +1,35 @@
+
+.pf-access-denied {
+  max-width: 32rem;
+  margin: 3rem auto;
+  padding: 1.5rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  background: #fff;
+  color: #374151;
+}
+
+.pf-access-denied h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.35rem;
+  color: #111827;
+}
+
+.pf-access-denied p {
+  margin: 0 0 0.75rem;
+  line-height: 1.45;
+}
+
+.pf-access-denied-note {
+  font-size: 0.8125rem;
+  color: #6b7280;
+}
+
+.pf-access-denied a {
+  color: #1e3a5f;
+  font-weight: 600;
+}
+
 /* Platform Finance Overview — calm, restrained, reference-faithful */
 
 .pf-overview {

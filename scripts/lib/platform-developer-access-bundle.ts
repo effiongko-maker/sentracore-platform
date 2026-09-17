@@ -13,6 +13,7 @@
  */
 
 import { COMMAND_CENTRE_CAPABILITIES } from "../../src/modules/command-centre/types";
+import { ECC_CAPABILITIES } from "../../src/modules/ecc-operations/types";
 import { PLATFORM_FINANCE_CAPABILITIES } from "../../src/modules/platform-finance/types";
 
 /** Default org for local/dev QA grants (PayChex). */
@@ -62,15 +63,20 @@ export const PLATFORM_DEVELOPER_COMMAND_CENTRE_CAPABILITIES = [
   COMMAND_CENTRE_CAPABILITIES.decide,
 ] as const;
 
+/** ECC Operations capabilities (platform_capability_grants). */
+export const PLATFORM_DEVELOPER_ECC_CAPABILITIES = [
+  ECC_CAPABILITIES.view,
+] as const;
+
 /**
  * Human-readable map for audits / script output.
- * FM/ECC: no DB capability grants — session role + organisation_modules.
+ * FM: operating role capabilities (People sheet). ECC/Finance/CC: grant tables.
  */
 export const PLATFORM_DEVELOPER_ACCESS_NOTES = {
   facilityManagement:
     "FM uses in-memory ACCESS_CAPABILITIES from operating role / Super Admin override — no finance/platform capability table.",
   eccOperations:
-    "ECC uses organisation_modules enablement only — no ECC capability grant table.",
+    "ECC requires organisation_modules enablement AND platform.ecc_operations.view grant — module on ≠ user access.",
   constructionProjects:
     "Not implemented — no capabilities to grant.",
   separationOfDuties:

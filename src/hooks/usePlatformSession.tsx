@@ -10,15 +10,18 @@ import {
 } from "react";
 import type { AuthEnabledModule } from "@/lib/auth/types";
 import { isPlatformSuperAdminFromSlugs } from "@/lib/access/platformRoles";
+import type { WorkspaceAccessChrome } from "@/lib/access/workspaceAccessChrome";
 
 export type PlatformSessionChrome = {
   enabledModules: AuthEnabledModule[] | null;
   roleSlugs: string[];
+  workspaceAccess: WorkspaceAccessChrome | null;
 };
 
 type PlatformSessionState = {
   enabledModules: AuthEnabledModule[] | null;
   roleSlugs: string[];
+  workspaceAccess: WorkspaceAccessChrome | null;
   isSuperAdmin: boolean;
   loading: boolean;
 };
@@ -26,24 +29,39 @@ type PlatformSessionState = {
 const PlatformSessionContext = createContext<PlatformSessionState>({
   enabledModules: null,
   roleSlugs: [],
+  workspaceAccess: null,
   isSuperAdmin: false,
   loading: true,
 });
 
 function chromeFromInitial(
   initial: PlatformSessionChrome | null | undefined
-): Pick<PlatformSessionState, "enabledModules" | "roleSlugs" | "loading"> {
+): Pick<
+  PlatformSessionState,
+  "enabledModules" | "roleSlugs" | "workspaceAccess" | "loading"
+> {
   // undefined → not hydrated (legacy mount); fetch on client.
   if (initial === undefined) {
-    return { enabledModules: null, roleSlugs: [], loading: true };
+    return {
+      enabledModules: null,
+      roleSlugs: [],
+      workspaceAccess: null,
+      loading: true,
+    };
   }
   // null → bootstrap ran, no session (fail closed, not loading).
   if (initial === null) {
-    return { enabledModules: null, roleSlugs: [], loading: false };
+    return {
+      enabledModules: null,
+      roleSlugs: [],
+      workspaceAccess: null,
+      loading: false,
+    };
   }
   return {
     enabledModules: initial.enabledModules,
     roleSlugs: initial.roleSlugs,
+    workspaceAccess: initial.workspaceAccess,
     loading: false,
   };
 }
@@ -62,6 +80,8 @@ export function PlatformSessionProvider({
     AuthEnabledModule[] | null
   >(seeded.enabledModules);
   const [roleSlugs, setRoleSlugs] = useState<string[]>(seeded.roleSlugs);
+  const [workspaceAccess, setWorkspaceAccess] =
+    useState<WorkspaceAccessChrome | null>(seeded.workspaceAccess);
   const [loading, setLoading] = useState(seeded.loading);
 
   useEffect(() => {
@@ -80,6 +100,7 @@ export function PlatformSessionProvider({
           data?: {
             enabledModules?: AuthEnabledModule[];
             roleSlugs?: string[];
+            workspaceAccess?: WorkspaceAccessChrome;
           };
         };
         return {
@@ -87,12 +108,14 @@ export function PlatformSessionProvider({
           roleSlugs: Array.isArray(json.data?.roleSlugs)
             ? json.data.roleSlugs.map(String)
             : [],
+          workspaceAccess: json.data?.workspaceAccess ?? null,
         };
       })
       .then((payload) => {
         if (!cancelled) {
           setEnabledModules(payload?.enabledModules ?? null);
           setRoleSlugs(payload?.roleSlugs ?? []);
+          setWorkspaceAccess(payload?.workspaceAccess ?? null);
           setLoading(false);
         }
       })
@@ -102,6 +125,7 @@ export function PlatformSessionProvider({
           // "no modules" on a transient session fetch failure.
           setEnabledModules(null);
           setRoleSlugs([]);
+          setWorkspaceAccess(null);
           setLoading(false);
         }
       });
@@ -117,8 +141,14 @@ export function PlatformSessionProvider({
   );
 
   const value = useMemo(
-    () => ({ enabledModules, roleSlugs, isSuperAdmin, loading }),
-    [enabledModules, roleSlugs, isSuperAdmin, loading]
+    () => ({
+      enabledModules,
+      roleSlugs,
+      workspaceAccess,
+      isSuperAdmin,
+      loading,
+    }),
+    [enabledModules, roleSlugs, workspaceAccess, isSuperAdmin, loading]
   );
 
   return (

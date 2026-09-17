@@ -29,30 +29,12 @@ function main() {
   assert(platformFinance.id === "finance", "platform Finance id");
   assert(platformFinance.label === "Finance", "platform Finance label");
   assert(
-    platformFinance.previewHref === "/workspaces/finance",
-    "platform Finance entry is /workspaces/finance"
+    platformFinance.href === "/platform-finance",
+    "platform Finance entry is /platform-finance"
   );
   assert(
-    platformFinance.href !== "/finance",
-    "platform Finance must not use FM Finance href"
-  );
-  assert(
-    !platformFinance.href?.startsWith("/finance"),
-    "platform Finance href must not be under /finance"
-  );
-  assert(
-    platformFinance.status !== "active" ||
-      platformFinance.href === "/workspaces/finance",
-    "if platform Finance is active, entry must still be workspace-scoped"
-  );
-
-  assert(
-    platformFinance.status === "in_development",
-    "platform Finance catalogue remains in_development"
-  );
-  assert(
-    platformFinance.href === undefined,
-    "platform Finance catalogue must not expose href yet"
+    platformFinance.status === "active",
+    "platform Finance catalogue is active"
   );
   assert(FM_FINANCE_HOME.href === "/finance", "FM Finance home preserved");
   assert(FM_FINANCE_HOME.label === "Finance", "FM Finance label");
@@ -194,7 +176,7 @@ function main() {
   }
 
   console.log("PASS verify-workspace-finance-identity");
-  console.log("  Platform Finance → /workspaces/finance (workspace id: finance)");
+  console.log("  Platform Finance → /platform-finance (workspace id: finance)");
   console.log("  FM Finance → /finance (workspace id: operations)");
 }
 

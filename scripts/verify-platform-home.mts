@@ -47,7 +47,10 @@ function main() {
   );
 
   const compass = readSrc("src/components/platform/OrganisationalCompass.tsx");
-  assert(compass.includes("listEnterableWorkspaces"), "platform home lists enterable workspaces");
+  assert(
+    compass.includes("workspaceAccess"),
+    "compass uses shared workspace access chrome"
+  );
   assert(compass.includes("Loading navigation"), "loading nav state");
   assert(
     compass.includes("Facility Management"),
@@ -55,11 +58,23 @@ function main() {
   );
   assert(
     compass.includes("canUseEcc"),
-    "ECC sidebar gated on module access"
+    "ECC sidebar gated on workspace access chrome"
   );
   assert(
-    !compass.includes("@/modules/platform-finance"),
-    "compass must not import platform-finance module"
+    compass.includes("canUsePlatformFinance"),
+    "Platform Finance sidebar gated on workspace access chrome"
+  );
+  assert(
+    compass.includes("canUseCommandCentre"),
+    "Command Centre gated on workspace access chrome"
+  );
+  assert(
+    compass.includes("@/modules/platform-finance/nav"),
+    "compass uses platform-finance nav IA only when inside Finance"
+  );
+  assert(
+    !compass.includes("@/modules/platform-finance/server"),
+    "compass must not import platform-finance server authority"
   );
 
   const layers = readSrc("src/lib/platform/layers.ts");
@@ -74,27 +89,82 @@ function main() {
   );
 
   const platformFinance = getWorkspace("finance");
-  assert(platformFinance?.previewHref === "/workspaces/finance", "platform finance route");
-  assert(platformFinance?.href !== "/finance", "platform finance not FM route");
-  assert(platformFinance?.status === "in_development", "finance in development");
+  assert(platformFinance?.href === "/platform-finance", "platform finance route");
+  assert(platformFinance?.status === "active", "finance is live");
   assert(FM_FINANCE_HOME.href === "/finance", "FM finance route preserved");
 
-  const financeState = resolveWorkspaceDirectoryState(platformFinance!, {
-    enabledModules: [{ slug: "facility_management", status: "enabled" }],
+  const financeLoading = resolveWorkspaceDirectoryState(platformFinance!, {
+    enabledModules: [{ slug: "platform_finance", status: "enabled" }],
     sessionLoading: false,
     isSuperAdmin: false,
   });
-  assert(financeState.kind === "unavailable", "finance not enterable from directory");
+  assert(financeLoading.kind === "loading", "finance waits for access chrome");
 
-  const eccNoAccess = resolveWorkspaceDirectoryState(
+  const financeNoAccess = resolveWorkspaceDirectoryState(platformFinance!, {
+    enabledModules: [{ slug: "platform_finance", status: "enabled" }],
+    sessionLoading: false,
+    isSuperAdmin: false,
+    workspaceAccess: { platformFinance: false },
+  });
+  assert(financeNoAccess.kind === "no_access", "finance requires genuine authority");
+
+  const financeEnter = resolveWorkspaceDirectoryState(platformFinance!, {
+    enabledModules: [{ slug: "platform_finance", status: "enabled" }],
+    sessionLoading: false,
+    isSuperAdmin: false,
+    workspaceAccess: { platformFinance: true },
+  });
+  assert(
+    financeEnter.kind === "enter" && financeEnter.href === "/platform-finance",
+    "authorised Finance user can enter the live workspace"
+  );
+
+  const financeSuperAdminWithoutGrant = resolveWorkspaceDirectoryState(
+    platformFinance!,
+    {
+      enabledModules: [],
+      sessionLoading: false,
+      isSuperAdmin: true,
+      workspaceAccess: { platformFinance: false },
+    }
+  );
+  assert(
+    financeSuperAdminWithoutGrant.kind === "no_access",
+    "super admin does not receive blanket Finance operating access"
+  );
+
+  const eccLoading = resolveWorkspaceDirectoryState(
     getWorkspace("ecc-operations")!,
     {
-      enabledModules: [{ slug: "facility_management", status: "enabled" }],
+      enabledModules: [
+        { slug: "facility_management", status: "enabled" },
+        { slug: "ecc_operations", status: "enabled" },
+      ],
       sessionLoading: false,
       isSuperAdmin: false,
     }
   );
-  assert(eccNoAccess.kind === "no_access", "ECC no access without module");
+  assert(
+    eccLoading.kind === "loading",
+    "ECC waits for workspace access chrome (grant ∩ module)"
+  );
+
+  const eccNoAccess = resolveWorkspaceDirectoryState(
+    getWorkspace("ecc-operations")!,
+    {
+      enabledModules: [
+        { slug: "facility_management", status: "enabled" },
+        { slug: "ecc_operations", status: "enabled" },
+      ],
+      sessionLoading: false,
+      isSuperAdmin: false,
+      workspaceAccess: { eccOperations: false },
+    }
+  );
+  assert(
+    eccNoAccess.kind === "no_access",
+    "ECC no access when org module on but user grant missing"
+  );
 
   const eccEnter = resolveWorkspaceDirectoryState(
     getWorkspace("ecc-operations")!,
@@ -104,9 +174,13 @@ function main() {
         { slug: "ecc_operations", status: "enabled" },
       ],
       sessionLoading: false,
+      workspaceAccess: { eccOperations: true },
     }
   );
-  assert(eccEnter.kind === "enter", "ECC enterable when enabled");
+  assert(
+    eccEnter.kind === "enter",
+    "ECC enterable when module enabled and user granted"
+  );
 
   const loadingState = resolveWorkspaceDirectoryState(
     getWorkspace("operations")!,
@@ -124,7 +198,7 @@ function main() {
   );
 
   const live = PLATFORM_WORKSPACES.filter((w) => w.status === "active");
-  assert(live.length === 2, "two live environments");
+  assert(live.length === 3, "three live environments");
   assert(
     /ENVIRONMENT_DISPLAY_ORDER[\s\S]*?"operations",\s*"ecc-operations",\s*"finance"/.test(
       home
@@ -150,7 +224,7 @@ function main() {
   assert(energyPage.includes("canCreate={false}"), "FM cannot create AEDC readings");
 
   console.log("PASS verify-platform-home");
-  console.log("  directory access states; FM/ECC gating; Finance non-enterable; AEDC FM ownership removed");
+  console.log("  directory access states; FM/ECC/Finance gating; AEDC FM ownership removed");
 }
 
 main();

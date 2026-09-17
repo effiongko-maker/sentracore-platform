@@ -99,11 +99,18 @@ function EnvironmentCard({
   sessionLoading,
   enabledModules,
   isSuperAdmin,
+  workspaceAccess,
 }: {
   workspace: PlatformWorkspace;
   sessionLoading: boolean;
   enabledModules: Array<{ slug: string; status: string }> | null;
   isSuperAdmin: boolean;
+  workspaceAccess: {
+    facilityManagement: boolean;
+    eccOperations: boolean;
+    platformFinance: boolean;
+    commandCentre: boolean;
+  } | null;
 }) {
   const Icon = ENV_ICON[workspace.id] ?? Database;
   const tone = statusTone(workspace.status);
@@ -112,6 +119,7 @@ function EnvironmentCard({
     enabledModules,
     sessionLoading,
     isSuperAdmin,
+    workspaceAccess,
   });
 
   let action: ReactNode;
@@ -188,8 +196,12 @@ function PlatformHeroVisual() {
 }
 
 export function PlatformHomePage() {
-  const { enabledModules, isSuperAdmin, loading: sessionLoading } =
-    usePlatformSession();
+  const {
+    enabledModules,
+    isSuperAdmin,
+    workspaceAccess,
+    loading: sessionLoading,
+  } = usePlatformSession();
   const environments = orderedEnvironments();
 
   return (
@@ -248,6 +260,7 @@ export function PlatformHomePage() {
               sessionLoading={sessionLoading}
               enabledModules={enabledModules}
               isSuperAdmin={isSuperAdmin}
+              workspaceAccess={workspaceAccess}
             />
           ))}
         </div>
