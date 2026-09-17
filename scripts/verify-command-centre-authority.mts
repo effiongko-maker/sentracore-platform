@@ -15,6 +15,12 @@ import {
   resolveFinanceVerifyDatabaseUrlLoose,
   withFinanceVerifyTransaction,
 } from "./lib/platform-finance-verify-transaction";
+import { composeFinanceDecisionQueue } from "../src/modules/command-centre/server/composeFinanceDecisionQueue";
+import type {
+  FinancialRequest,
+  FinancialRequestCategory,
+} from "../src/modules/platform-finance/types";
+import type { FinanceVendorBill } from "../src/modules/platform-finance/domain/vendorBills";
 
 type CheckResult = {
   name: string;
@@ -165,6 +171,21 @@ function runStatic(results: CheckResult[]) {
       service.includes("listApprovalQueue"),
       "uses finance approval queue"
     );
+    assert(
+      service.includes("PlatformFinanceVendorBillsServerService"),
+      "uses authoritative vendor-bill service"
+    );
+    assert(
+      service.includes("FINANCIAL_REQUEST_CAPABILITIES.approve") &&
+        service.includes("COMMAND_CENTRE_CAPABILITIES.decide"),
+      "requires both finance approve and command-centre decide"
+    );
+    assert(
+      !/isSuperAdmin[^\n]*composeDecisions|composeDecisions[^]*isSuperAdmin/.test(
+        service.slice(service.indexOf("private async composeDecisions"), service.indexOf("private async composeFinanceAttention"))
+      ),
+      "decision composition has no Super Admin bypass"
+    );
     assert(service.includes("composeLastVisit"), "last-visit composition");
     assert(
       service.includes('from("command_centre_visits")'),
@@ -223,6 +244,80 @@ function runStatic(results: CheckResult[]) {
     push(
       results,
       "static.ui_route_and_composition",
+      "FAIL",
+      (e as Error).message
+    );
+  }
+
+  try {
+    const category = {
+      id: "cat-1",
+      name: "Operations",
+    } as FinancialRequestCategory;
+    const request = {
+      id: "fr-1",
+      status: "pending_ceo_approval",
+      currency: "NGN",
+      requestedAmount: 100,
+      categoryId: category.id,
+      purpose: "Authorised request",
+      externalReference: "FR-001",
+      updatedAt: "2026-09-17T10:00:00.000Z",
+    } as FinancialRequest;
+    const vendorBill = {
+      id: "vb-1",
+      status: "pending_ceo_approval",
+      currency: "NGN",
+      billedAmount: 250,
+      purpose: "Authorised vendor bill",
+      invoiceReference: "INV-001",
+      payeeName: "Vendor Ltd",
+      updatedAt: "2026-09-17T09:00:00.000Z",
+    } as FinanceVendorBill;
+    const submittedRequest = {
+      ...request,
+      id: "fr-submitted",
+      status: "submitted",
+    } as FinancialRequest;
+    const submittedBill = {
+      ...vendorBill,
+      id: "vb-submitted",
+      status: "submitted",
+    } as FinanceVendorBill;
+    const composed = composeFinanceDecisionQueue({
+      requests: [request, submittedRequest],
+      vendorBills: [vendorBill, submittedBill],
+      categories: [category],
+    });
+    assert(composed.items.length === 2, "only CEO-pending rows compose");
+    assert(composed.items[0]?.source === "vendor_bill", "oldest decision first");
+    assert(
+      composed.items.some(
+        (item) =>
+          item.source === "finance_request" &&
+          item.href === "/platform-finance/requests/fr-1"
+      ),
+      "financial-request deep link"
+    );
+    assert(
+      composed.items.some(
+        (item) =>
+          item.source === "vendor_bill" &&
+          item.href === "/platform-finance/vendor-bills/vb-1"
+      ),
+      "vendor-bill deep link"
+    );
+    assert(composed.totalsByCurrency.get("NGN") === 350, "combined amount");
+    assert(
+      composeFinanceDecisionQueue({ requests: [], vendorBills: [], categories: [] })
+        .items.length === 0,
+      "combined empty queue"
+    );
+    push(results, "static.finance_decision_composition", "PASS");
+  } catch (e) {
+    push(
+      results,
+      "static.finance_decision_composition",
       "FAIL",
       (e as Error).message
     );

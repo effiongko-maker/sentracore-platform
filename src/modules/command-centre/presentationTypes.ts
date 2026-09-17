@@ -44,6 +44,8 @@ export type CommandCentreChangeItem = {
 
 export type CommandCentreDecisionItem = {
   id: string;
+  source: "finance_request" | "vendor_bill";
+  decisionLabel: "Financial Request" | "Vendor Bill";
   title: string;
   reference: string | null;
   categoryLabel: string | null;

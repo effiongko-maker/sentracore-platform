@@ -245,7 +245,7 @@ function DecisionsBlock({
               </span>
               <span className="scc-decision-aside">
                 <span className="scc-decision-amount">{item.amountLabel}</span>
-                <span className="scc-decision-badge">CEO Approval</span>
+                <span className="scc-decision-badge">{item.decisionLabel}</span>
               </span>
             </Link>
           </li>

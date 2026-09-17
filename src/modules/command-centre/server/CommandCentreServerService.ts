@@ -15,7 +15,6 @@ import type { PlatformSession } from "@/lib/auth/types";
 import type { CommandCentreAccessContext } from "@/modules/command-centre/server/requireCommandCentreAccess";
 import type {
   CommandCentreAttentionItem,
-  CommandCentreDecisionItem,
   CommandCentrePulseCard,
   CommandCentreSnapshot,
   CommandCentreSurfaceState,
@@ -36,6 +35,8 @@ import {
 } from "@/services/workspace/WorkspaceService";
 import { COMMAND_CENTRE_CAPABILITIES } from "@/modules/command-centre/types";
 import { composeLastVisitChanges } from "@/modules/command-centre/server/composeLastVisitChanges";
+import { composeFinanceDecisionQueue } from "@/modules/command-centre/server/composeFinanceDecisionQueue";
+import { PlatformFinanceVendorBillsServerService } from "@/modules/platform-finance/server/PlatformFinanceVendorBillsServerService";
 
 function displayNameFromSession(session: PlatformSession): string {
   const profile = session.profile;
@@ -424,33 +425,31 @@ export class CommandCentreServerService {
       const requestsSvc = new PlatformFinanceRequestsServerService(
         access.organisationId
       );
+      const vendorBillsSvc = new PlatformFinanceVendorBillsServerService(
+        access.organisationId
+      );
       const actor = actorFromSession(access.session, access.organisationId);
-      const [queue, categories] = await Promise.all([
+      const [requests, vendorBills, categories] = await Promise.all([
         requestsSvc.listApprovalQueue(actor),
+        vendorBillsSvc.listApprovalQueue(actor),
         requestsSvc.listCategories(actor),
       ]);
-      const categoryById = new Map(categories.map((c) => [c.id, c.name]));
-
-      const items: CommandCentreDecisionItem[] = queue.map((request) => ({
-        id: request.id,
-        title: request.purpose?.trim() || "Financial request",
-        reference: request.externalReference,
-        categoryLabel: categoryById.get(request.categoryId) ?? null,
-        amountLabel: formatAmount(request.requestedAmount, request.currency),
-        currency: request.currency,
-        href: `/platform-finance/requests/${request.id}`,
-      }));
+      const { items } = composeFinanceDecisionQueue({
+        requests,
+        vendorBills,
+        categories,
+      });
 
       return {
         state: items.length === 0 ? "empty" : "healthy",
         items,
-        viewAllHref: "/platform-finance/requests",
+        viewAllHref: null,
       };
     } catch (error) {
       if (isActionError(error) && error.code === "FORBIDDEN") {
         return { state: "restricted", items: [], viewAllHref: null };
       }
-      return { state: "error", items: [], viewAllHref: "/platform-finance/requests" };
+      return { state: "error", items: [], viewAllHref: null };
     }
   }
 
@@ -473,26 +472,40 @@ export class CommandCentreServerService {
     if (!canApprove || !canDecide) return { state: "empty", items: [] };
 
     try {
-      const finance = new PlatformFinanceServerService(access.organisationId);
-      const overview = await finance.getCommandCentreOverview({
-        profileId: access.profileId,
+      const requestsSvc = new PlatformFinanceRequestsServerService(
+        access.organisationId
+      );
+      const vendorBillsSvc = new PlatformFinanceVendorBillsServerService(
+        access.organisationId
+      );
+      const actor = actorFromSession(access.session, access.organisationId);
+      const [requests, vendorBills, categories] = await Promise.all([
+        requestsSvc.listApprovalQueue(actor),
+        vendorBillsSvc.listApprovalQueue(actor),
+        requestsSvc.listCategories(actor),
+      ]);
+      const decisions = composeFinanceDecisionQueue({
+        requests,
+        vendorBills,
+        categories,
       });
       const items: CommandCentreAttentionItem[] = [];
 
-      const pending = overview.requests.pendingCeoApproval.count;
+      const pending = decisions.items.length;
       if (pending > 0) {
+        const amountDetail = [...decisions.totalsByCurrency.entries()]
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([currency, amount]) => formatAmount(amount, currency))
+          .join(" · ");
         items.unshift({
           id: "finance:pending_ceo",
           title:
             pending === 1
               ? "1 decision awaiting CEO approval"
               : `${pending} decisions awaiting CEO approval`,
-          detail: formatAmount(
-            overview.requests.pendingCeoApproval.totalAmount,
-            "NGN"
-          ),
+          detail: amountDetail || null,
           tone: "high",
-          href: "/platform-finance/requests",
+          href: "/platform-finance",
           sourceLabel: "Finance",
         });
       }
