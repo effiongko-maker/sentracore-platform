@@ -147,7 +147,8 @@ export async function requestMaintenance(
         ...validated,
         createdByUserId: context.userId,
         updatedByUserId: context.userId,
-        reportedByUserId: validated.reportedByUserId || context.userId,
+        reportedByUserId:
+          validated.reportedByUserId || context.operatingAccess?.sheetUserId,
       };
 
       const maintenance = await orchestrateRequestMaintenance({

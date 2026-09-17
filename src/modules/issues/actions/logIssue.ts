@@ -105,7 +105,7 @@ export async function logIssue(
           requiresWorkOrder: false,
           createdByUserId: context.userId,
           updatedByUserId: context.userId,
-          reportedByUserId: context.userId,
+          reportedByUserId: context.operatingAccess?.sheetUserId,
         },
       });
 

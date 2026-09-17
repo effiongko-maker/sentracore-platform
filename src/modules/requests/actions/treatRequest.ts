@@ -136,6 +136,7 @@ function validateMaintenanceInput(
 function validateIncidentInput(
   input: CreateIncidentInput,
   actorUserId: string,
+  operationalReporterUserId: string | undefined,
   now: string
 ): CreateIncidentInput {
   const title = input.title?.trim() ?? "";
@@ -187,7 +188,7 @@ function validateIncidentInput(
     reportedVia,
     reportedAt,
     reportedByUserId:
-      optionalIncidentString(input.reportedByUserId) ?? actorUserId,
+      optionalIncidentString(input.reportedByUserId) ?? operationalReporterUserId,
     sourceRequestId: optionalIncidentString(input.sourceRequestId),
     assignedToUserId: optionalIncidentString(input.assignedToUserId),
     assetId: optionalIncidentString(input.assetId),
@@ -246,6 +247,7 @@ export async function createIncidentFromRequest(input: {
       const validated = validateIncidentInput(
         raw.incident,
         context.userId,
+        context.operatingAccess?.sheetUserId,
         context.now
       );
       return orchestrateCreateIncidentFromRequest({
@@ -392,4 +394,3 @@ export async function searchIncidentsForRequestLink(input: {
     handler: async (_context, raw) => searchLinkableIncidents(raw),
   });
 }
-

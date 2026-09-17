@@ -388,6 +388,7 @@ type DomainLists = CoreDomainLists & NonCoreDomainLists;
 type CurrentUserLite = {
   id?: string;
   name?: string;
+  operationalUserId?: string | null;
 } | null;
 
 /**
@@ -575,7 +576,7 @@ export function composeWorkspaceSnapshot(
   const coreFailed =
     !domains.workOrders || !domains.incidents || !domains.maintenance;
 
-  const userId = currentUser?.id;
+  const userId = currentUser?.operationalUserId ?? undefined;
   const facilityNameById = new Map(
     lists.facilities.data.map((facility) => [facility.id, facility.name])
   );
@@ -734,7 +735,11 @@ export const WorkspaceService = {
     const userPromise = UserService.getCurrentUser()
       .then((user) => {
         latestUser = user
-          ? { id: user.id, name: user.name }
+          ? {
+              id: user.id,
+              name: user.name,
+              operationalUserId: user.operationalUserId,
+            }
           : null;
         return latestUser;
       })

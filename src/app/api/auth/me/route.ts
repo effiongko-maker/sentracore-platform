@@ -43,7 +43,10 @@ export async function GET() {
     success: true,
     status: 200,
     data: {
-      identity: toSessionIdentity(session),
+      identity: {
+        ...toSessionIdentity(session),
+        operationalUserId: operatingAccess.sheetUserId ?? null,
+      },
       organisation: session.organisation,
       roleSlugs: session.roleSlugs,
       roleAssignments: session.roleAssignments,

@@ -63,6 +63,7 @@ function optionalEnum<T extends string>(
 function enrichReportIncidentInput(
   input: ReportIncidentInput,
   actorUserId: string,
+  operationalReporterUserId: string | undefined,
   reportedAtDefault: string
 ): CreateIncidentInput {
   const title = input.title?.trim() ?? "";
@@ -92,7 +93,7 @@ function enrichReportIncidentInput(
     "portal";
 
   const reportedByUserId =
-    optionalString(input.reportedByUserId) ?? actorUserId;
+    optionalString(input.reportedByUserId) ?? operationalReporterUserId;
 
   let reportedAt = reportedAtDefault;
   const reportedAtRaw = optionalString(input.reportedAt);
@@ -159,6 +160,7 @@ export async function reportIncident(
       const writeInput = enrichReportIncidentInput(
         rawInput,
         context.userId,
+        context.operatingAccess?.sheetUserId,
         context.now
       );
 

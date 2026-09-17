@@ -66,6 +66,8 @@ export type OperatingAccess = {
   inactive: boolean;
   capabilities: AccessCapability[];
   sheetUserId?: string;
+  /** How the FM People identity was selected; never an authorization grant. */
+  operationalIdentitySource?: "explicit_link" | "email_fallback";
 };
 
 export function isInactiveUserStatus(status: string | null | undefined): boolean {

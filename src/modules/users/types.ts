@@ -67,6 +67,8 @@ export interface CurrentUser {
   organisationId?: string | null;
   organisationName?: string | null;
   roleSlugs?: string[];
+  /** FM People ID resolved server-side; distinct from authenticated profile id. */
+  operationalUserId?: string | null;
 }
 
 export type UserModalState =

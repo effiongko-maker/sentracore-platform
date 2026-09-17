@@ -628,7 +628,9 @@ export async function orchestrateCreateMaintenanceFromIncident(options: {
           : "medium",
       status: "requested",
       reportedAt: options.context.now,
-      reportedByUserId: options.context.userId,
+      reportedByUserId:
+        options.incident.reportedByUserId ??
+        options.context.operatingAccess?.sheetUserId,
       createdByUserId: options.context.userId,
       updatedByUserId: options.context.userId,
     },

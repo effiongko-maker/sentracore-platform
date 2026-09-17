@@ -20,6 +20,12 @@ import {
 } from "./resolveAccess";
 import type { AccessCapability } from "./capabilities";
 import { isPlatformSuperAdminFromSlugs } from "./platformRoles";
+import { createClient } from "@/utils/supabase/server";
+import { cookies } from "next/headers";
+import {
+  resolveFmOperationalIdentity,
+  type FmIdentityLink,
+} from "./operationalIdentity";
 
 type RemoteUser = Record<string, unknown>;
 
@@ -122,6 +128,68 @@ export async function loadSheetUserForAccessByEmail(
   );
 }
 
+export async function loadSheetUserForAccessById(
+  id: string
+): Promise<
+  Pick<User, "id" | "role" | "status" | "facility" | "name" | "email"> | null
+> {
+  const target = id.trim().toUpperCase();
+  if (!/^USR-\d{4,}$/.test(target)) return null;
+  const key = stableRequestKey(`${CacheNamespaces.accessSheetUserByEmail}:id`, {
+    id: target,
+  });
+  return sharedRequest(
+    key,
+    async () => {
+      const payload = await postToAppsScriptData(
+        {
+          resource: "users",
+          action: "getAll",
+          payload: {
+            page: 1,
+            pageSize: 500,
+            search: target,
+            status: "all",
+          },
+        },
+        { resource: "users", action: "getAll" },
+        "access/sheet-user-by-id"
+      );
+      const user = extractUserRows(payload)
+        .map(mapSheetUserLite)
+        .find((candidate) => candidate.id.trim().toUpperCase() === target);
+      return user?.id.trim().toUpperCase() === target ? user : null;
+    },
+    { ttlMs: ACCESS_SHEET_USER_TTL_MS }
+  );
+}
+
+async function loadExplicitFmIdentityLink(
+  session: PlatformSession
+): Promise<FmIdentityLink | null> {
+  const organisationId = session.organisation?.id ?? session.profile.organisationId;
+  if (!organisationId) return null;
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+  const { data, error } = await supabase
+    .from("operational_identity_links")
+    .select("external_identity_id, status")
+    .eq("organisation_id", organisationId)
+    .eq("profile_id", session.userId)
+    .eq("identity_domain", "facility_management")
+    .maybeSingle();
+  if (error) {
+    // A missing table during rollout behaves as no link, preserving the legacy path.
+    if (error.code === "42P01" || error.code === "PGRST205") return null;
+    throw error;
+  }
+  if (!data) return null;
+  return {
+    externalIdentityId: String(data.external_identity_id),
+    status: String(data.status) as FmIdentityLink["status"],
+  };
+}
+
 /** @deprecated Prefer loadSheetUserForAccessByEmail — kept for diagnostics. */
 export async function loadSheetUsersForAccess(): Promise<
   Array<Pick<User, "id" | "role" | "status" | "facility" | "name" | "email">>
@@ -143,9 +211,27 @@ export async function resolveOperatingAccess(
 ): Promise<OperatingAccess> {
   const identity = toSessionIdentity(session);
   let sheetUser: ReturnType<typeof findSheetUserByEmail> = null;
+  let identitySource: OperatingAccess["operationalIdentitySource"];
+  let operationalUserId: string | null = null;
   let lookupFailed = false;
   try {
-    sheetUser = await loadSheetUserForAccessByEmail(identity.email);
+    const explicitLink = await loadExplicitFmIdentityLink(session);
+    const resolution = await resolveFmOperationalIdentity({
+      explicitLink,
+      email: identity.email,
+      loadById: loadSheetUserForAccessById,
+      loadByEmail: loadSheetUserForAccessByEmail,
+    });
+    sheetUser = resolution.user;
+    operationalUserId = resolution.operationalUserId;
+    if (resolution.source !== "none") identitySource = resolution.source;
+    if (
+      resolution.source === "explicit_link" &&
+      (resolution.enrichment === "unavailable" ||
+        resolution.enrichment === "not_found")
+    ) {
+      lookupFailed = true;
+    }
   } catch (error) {
     lookupFailed = true;
     console.warn(
@@ -178,7 +264,15 @@ export async function resolveOperatingAccess(
       );
 
   const isSuperAdmin = isPlatformSuperAdminFromSlugs(session.roleSlugs);
-  return applyPlatformSuperAdmin(base, isSuperAdmin);
+  const resolved = {
+    ...base,
+    ...(operationalUserId ? { sheetUserId: operationalUserId } : {}),
+    ...(identitySource ? { operationalIdentitySource: identitySource } : {}),
+  };
+  return applyPlatformSuperAdmin(
+    resolved,
+    isSuperAdmin
+  );
 }
 
 export async function getOperatingAccess(): Promise<OperatingAccess | null> {
