@@ -32,7 +32,7 @@ function main() {
   assert(!isFinanceAccountType("bank"), "no invented types");
   assert(normalizeAccountCode(" 1000 ") === "1000", "code normalize");
   assert(
-    PAYCHEX_AUTHORITATIVE_COA.length === 60,
+    PAYCHEX_AUTHORITATIVE_COA.length === 61,
     "authoritative PayChex COA contains 60 accounts"
   );
 

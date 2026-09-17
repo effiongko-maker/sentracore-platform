@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { isActionError } from "@/lib/actions/errors";
 import { requirePlatformFinanceAccess } from "@/modules/platform-finance/server/requirePlatformFinanceAccess";
 import { PlatformFinanceFinancialAccountsServerService } from "@/modules/platform-finance/server/PlatformFinanceFinancialAccountsServerService";
+import { PlatformFinanceOpeningPositionsServerService } from "@/modules/platform-finance/server/PlatformFinanceOpeningPositionsServerService";
+import { PlatformFinanceServerService } from "@/modules/platform-finance/server/PlatformFinanceServerService";
 import { PLATFORM_FINANCE_CAPABILITIES } from "@/modules/platform-finance/types";
 
 type Action =
@@ -12,12 +14,17 @@ type Action =
   | "update"
   | "setStatus"
   | "grantAccess"
-  | "revokeAccess";
+  | "revokeAccess"
+  | "listOpeningPositions"
+  | "getOpeningPositionReview"
+  | "updateOpeningPositionDraft"
+  | "postOpeningPosition";
 
 type Body = {
   action?: Action;
   id?: string;
   companyId?: string;
+  financialAccountId?: string;
   input?: Record<string, unknown>;
 };
 
@@ -82,13 +89,37 @@ export async function POST(request: Request) {
     const service = new PlatformFinanceFinancialAccountsServerService(
       access.organisationId
     );
+    const openings = new PlatformFinanceOpeningPositionsServerService(
+      access.organisationId
+    );
+    const actor = {
+      organisationId: access.organisationId,
+      profileId: access.profileId,
+    };
+    const financialAccountId = String(
+      body.financialAccountId ??
+        body.id ??
+        input.financialAccountId ??
+        ""
+    );
 
     switch (action) {
-      case "getContext":
+      case "getContext": {
+        const [context, accountingCaps] = await Promise.all([
+          service.getContext(access.profileId),
+          new PlatformFinanceServerService(
+            access.organisationId
+          ).getMyAccountingCapabilities(access.profileId),
+        ]);
         return NextResponse.json({
           success: true,
-          data: await service.getContext(access.profileId),
+          data: {
+            ...context,
+            canPrepareOpening: accountingCaps.createTransaction,
+            canPostOpening: accountingCaps.post,
+          },
         });
+      }
       case "list":
         return NextResponse.json({
           success: true,
@@ -158,6 +189,38 @@ export async function POST(request: Request) {
           String(input.profileId ?? "")
         );
         return NextResponse.json({ success: true, data: null });
+      case "listOpeningPositions": {
+        const rows = await service.listVisible(
+          access.profileId,
+          typeof body.companyId === "string" ? body.companyId : null
+        );
+        return NextResponse.json({
+          success: true,
+          data: await openings.listForVisibleAccounts(
+            actor,
+            rows.map((row) => row.id)
+          ),
+        });
+      }
+      case "getOpeningPositionReview":
+        return NextResponse.json({
+          success: true,
+          data: await openings.getReview(actor, financialAccountId),
+        });
+      case "updateOpeningPositionDraft":
+        return NextResponse.json({
+          success: true,
+          data: await openings.updateDraft(actor, financialAccountId, {
+            amount: input.amount,
+            cutoverDate:
+              typeof input.cutoverDate === "string" ? input.cutoverDate : null,
+          }),
+        });
+      case "postOpeningPosition":
+        return NextResponse.json({
+          success: true,
+          data: await openings.post(actor, financialAccountId),
+        });
     }
   } catch (error) {
     return errorResponse(error);

@@ -45,6 +45,8 @@ export const PAYCHEX_AUTHORITATIVE_COA = [
   { code: "2040", name: "Dividends Declared Payable", accountType: "liability", classification: "current_liability" },
   { code: "3000", name: "Share Capital / Owner Contributions", accountType: "equity", classification: "equity" },
   { code: "3010", name: "Accumulated Earnings (Profit/Loss)", accountType: "equity", classification: "equity" },
+  // Phase 2E transitional cutover control — not permanent owner equity.
+  { code: "3020", name: "Opening Balance Clearing", accountType: "equity", classification: "equity" },
   { code: "4000", name: "Facility Management Service Revenue", accountType: "revenue", classification: "project_revenue" },
   { code: "4010", name: "Construction Project Revenue", accountType: "revenue", classification: "project_revenue" },
   { code: "4020", name: "Procurement & Supply Chain Management Fees", accountType: "revenue", classification: "project_revenue" },

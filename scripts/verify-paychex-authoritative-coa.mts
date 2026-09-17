@@ -33,8 +33,8 @@ function mainStatic() {
     PAYCHEX_AUTHORITATIVE_COA.map((account) => [account.code, account])
   );
 
-  assert(PAYCHEX_AUTHORITATIVE_COA.length === 60, "source account count is 60");
-  assert(new Set(codes).size === 60, "all source account codes are unique");
+  assert(PAYCHEX_AUTHORITATIVE_COA.length === 61, "source account count is 61");
+  assert(new Set(codes).size === 61, "all source account codes are unique");
   assert(
     PAYCHEX_AUTHORITATIVE_COA.every(
       (account) =>
@@ -49,7 +49,7 @@ function mainStatic() {
   const expectedByType = {
     asset: 10,
     liability: 5,
-    equity: 2,
+    equity: 3,
     revenue: 5,
     expense: 38,
   } as const;
@@ -63,6 +63,10 @@ function mainStatic() {
 
   assert(byCode.get("1000")?.name === "Land & Permanent Structures", "1000 name");
   assert(byCode.get("1060")?.name === "Cash & Bank Balances", "1060 name");
+  assert(
+    byCode.get("3020")?.name === "Opening Balance Clearing",
+    "3020 Opening Balance Clearing"
+  );
   assert(byCode.get("1080")?.name === "Due From Related Parties", "1080 name");
   assert(byCode.get("2020")?.name === "Due to Related Parties", "2020 name");
   assert(
@@ -79,6 +83,21 @@ function mainStatic() {
   );
 
   for (const account of PAYCHEX_AUTHORITATIVE_COA) {
+    if (account.code === "3020") {
+      const phase2e = readFileSync(
+        resolve(
+          "supabase/migrations/20260917170000_finance_opening_balance_clearing_coa.sql"
+        ),
+        "utf8"
+      );
+      assert(
+        phase2e.includes("'3020'") &&
+          phase2e.includes("Opening Balance Clearing") &&
+          phase2e.includes("transitional"),
+        "Phase 2E migration adds transitional Opening Balance Clearing"
+      );
+      continue;
+    }
     const sqlTuple = `('${account.code}', '${account.name.replaceAll("'", "''")}', '${account.accountType}', '${account.classification}')`;
     assert(migration.includes(sqlTuple), `migration matches source row ${account.code}`);
   }
@@ -138,7 +157,7 @@ function mainStatic() {
     "existing account-type reports remain available"
   );
 
-  console.log("PASS static - 60 PDF-sourced accounts and controlled migration");
+  console.log("PASS static - 61 COA accounts (60 PayChex + Opening Balance Clearing) and controlled migration");
 }
 
 async function mainDb() {
@@ -167,7 +186,7 @@ async function mainDb() {
        order by code`,
       [PAYCHEX_ORG]
     );
-    assert(accounts.rowCount === 60, "live PayChex account count is 60");
+    assert(accounts.rowCount === 61, "live PayChex account count is 61");
     assert(
       JSON.stringify(accounts.rows) ===
         JSON.stringify(

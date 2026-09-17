@@ -12,6 +12,10 @@ import type {
 } from "@/modules/platform-finance/types";
 import type { FinanceOverviewSnapshot } from "@/modules/platform-finance/overviewTypes";
 import type { FinanceJournalRegisterResult } from "@/modules/platform-finance/journalTypes";
+import type {
+  OpeningPositionListItem,
+  OpeningPositionReview,
+} from "@/modules/platform-finance/domain/openingPositions";
 
 const API_PATH = "/api/platform-finance";
 const FINANCIAL_ACCOUNTS_API_PATH =
@@ -66,6 +70,8 @@ export const PlatformFinanceService = {
     controlGlAccounts: FinanceAccount[];
     canView: boolean;
     canManage: boolean;
+    canPrepareOpening: boolean;
+    canPostOpening: boolean;
   }> {
     return postFinancialAccountAction("getContext");
   },
@@ -73,6 +79,38 @@ export const PlatformFinanceService = {
   listFinancialAccounts(companyId?: string | null): Promise<FinanceFinancialAccountView[]> {
     return postFinancialAccountAction("list", {
       companyId: companyId ?? undefined,
+    });
+  },
+
+  listOpeningPositions(companyId?: string | null): Promise<OpeningPositionListItem[]> {
+    return postFinancialAccountAction("listOpeningPositions", {
+      companyId: companyId ?? undefined,
+    });
+  },
+
+  getOpeningPositionReview(financialAccountId: string): Promise<OpeningPositionReview> {
+    return postFinancialAccountAction("getOpeningPositionReview", {
+      financialAccountId,
+    });
+  },
+
+  updateOpeningPositionDraft(input: {
+    financialAccountId: string;
+    amount: number;
+    cutoverDate?: string | null;
+  }): Promise<OpeningPositionReview> {
+    return postFinancialAccountAction("updateOpeningPositionDraft", {
+      financialAccountId: input.financialAccountId,
+      input: {
+        amount: input.amount,
+        cutoverDate: input.cutoverDate ?? null,
+      },
+    });
+  },
+
+  postOpeningPosition(financialAccountId: string): Promise<OpeningPositionReview> {
+    return postFinancialAccountAction("postOpeningPosition", {
+      financialAccountId,
     });
   },
 

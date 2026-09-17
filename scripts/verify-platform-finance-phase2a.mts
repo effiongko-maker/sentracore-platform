@@ -156,11 +156,13 @@ function mainStatic() {
     "restricted audit events cannot leak through RLS or admin reads"
   );
   assert(
-    ui.includes("Balances and money movements are") &&
+    (ui.includes("Balances and money movements are") ||
+      ui.includes("not a live bank balance")) &&
       !ui.includes("currentBalance") &&
       !ui.includes("availableBalance") &&
       !ui.includes("Payment history") &&
-      !ui.includes("Transfer"),
+      !ui.includes("Transfer") &&
+      !/\b(Current Balance|Available Balance|Bank Balance)\b/.test(ui),
     "minimal Cash & Banks surface has no fabricated treasury features"
   );
   assert(
@@ -176,13 +178,15 @@ function mainStatic() {
     "posting, journal immutability, and period controls untouched"
   );
   assert(
-    PAYCHEX_AUTHORITATIVE_COA.length === 60 &&
+    PAYCHEX_AUTHORITATIVE_COA.length === 61 &&
       PAYCHEX_AUTHORITATIVE_COA.find((row) => row.code === "1060")?.name ===
         "Cash & Bank Balances" &&
+      PAYCHEX_AUTHORITATIVE_COA.find((row) => row.code === "3020")?.name ===
+        "Opening Balance Clearing" &&
       !/insert into public\.finance_accounts|update public\.finance_accounts|delete from public\.finance_accounts/i.test(
         migration
       ),
-    "Phase 1A COA remains intact"
+    "Phase 1A COA base remains intact in Phase 2A migration; 3020 is Phase 2E"
   );
   assert(
     PLATFORM_FINANCE_CAPABILITIES.financial_account_view ===
@@ -218,7 +222,7 @@ async function mainLive() {
         (select count(*)::int from public.finance_financial_accounts where organisation_id = $1) as financial_accounts`,
       [PAYCHEX_ORG]
     );
-    assert(result.rows[0]?.coa_count === 60, "live PayChex COA remains 60");
+    assert(result.rows[0]?.coa_count === 61, "live PayChex COA remains 61");
     assert(
       result.rows[0]?.cash_name === "Cash & Bank Balances",
       "live PayChex 1060 unchanged"
