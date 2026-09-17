@@ -21,6 +21,8 @@ export const PLATFORM_FINANCE_CAPABILITIES = {
   manage_coa: "platform_finance.manage_coa",
   create_transaction: "platform_finance.create_transaction",
   post: "platform_finance.post",
+  financial_account_view: "platform_finance.financial_account.view",
+  financial_account_manage: "platform_finance.financial_account.manage",
   request_create: "platform_finance.request.create",
   request_view_own: "platform_finance.request.view_own",
   request_review: "platform_finance.request.review",
@@ -136,6 +138,33 @@ export type FinanceAccountType =
   | "expense";
 
 export type FinanceAccountStatus = "active" | "inactive";
+
+export type FinanceFinancialAccountType = "bank" | "cash" | "petty_cash";
+
+export type FinanceFinancialAccountVisibility = "company" | "restricted";
+
+export type FinanceFinancialAccount = {
+  id: string;
+  organisationId: string;
+  companyId: string;
+  accountType: FinanceFinancialAccountType;
+  name: string;
+  institutionName: string | null;
+  accountNumberLast4: string | null;
+  currency: string;
+  controlGlAccountId: string;
+  visibilityPolicy: FinanceFinancialAccountVisibility;
+  status: FinanceAccountStatus;
+  createdByProfileId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type FinanceFinancialAccountView = FinanceFinancialAccount & {
+  companyName: string;
+  controlGlAccountCode: string;
+  controlGlAccountName: string;
+};
 
 export type FinancePeriodStatus = "open" | "closed";
 

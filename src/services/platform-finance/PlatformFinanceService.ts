@@ -1,6 +1,8 @@
 import type {
   FinanceAccount,
   FinanceCompany,
+  FinanceFinancialAccount,
+  FinanceFinancialAccountView,
   FinanceFoundationStatus,
   FinanceJournalEntry,
   FinanceJournalLine,
@@ -12,6 +14,8 @@ import type { FinanceOverviewSnapshot } from "@/modules/platform-finance/overvie
 import type { FinanceJournalRegisterResult } from "@/modules/platform-finance/journalTypes";
 
 const API_PATH = "/api/platform-finance";
+const FINANCIAL_ACCOUNTS_API_PATH =
+  "/api/platform-finance/financial-accounts";
 
 type ApiSuccess<T> = { success: true; data: T };
 type ApiFailure = { success: false; message?: string; code?: string };
@@ -36,7 +40,87 @@ async function postAction<T>(
   return json.data;
 }
 
+async function postFinancialAccountAction<T>(
+  action: string,
+  body: Record<string, unknown> = {}
+): Promise<T> {
+  const response = await fetch(FINANCIAL_ACCOUNTS_API_PATH, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, ...body }),
+    credentials: "same-origin",
+  });
+  const json = (await response.json()) as ApiSuccess<T> | ApiFailure;
+  if (!response.ok || !json.success) {
+    throw new Error(
+      ("message" in json && json.message) ||
+        `Financial Account request failed (${action}).`
+    );
+  }
+  return json.data;
+}
+
 export const PlatformFinanceService = {
+  getFinancialAccountContext(): Promise<{
+    companies: FinanceCompany[];
+    controlGlAccounts: FinanceAccount[];
+    canView: boolean;
+    canManage: boolean;
+  }> {
+    return postFinancialAccountAction("getContext");
+  },
+
+  listFinancialAccounts(companyId?: string | null): Promise<FinanceFinancialAccountView[]> {
+    return postFinancialAccountAction("list", {
+      companyId: companyId ?? undefined,
+    });
+  },
+
+  getFinancialAccount(id: string): Promise<FinanceFinancialAccountView> {
+    return postFinancialAccountAction("get", { id });
+  },
+
+  createFinancialAccount(input: {
+    companyId: string;
+    accountType: string;
+    name: string;
+    institutionName?: string | null;
+    accountNumberLast4?: string | null;
+    currency: string;
+    controlGlAccountId: string;
+    visibilityPolicy: string;
+  }): Promise<FinanceFinancialAccount> {
+    return postFinancialAccountAction("create", { input });
+  },
+
+  updateFinancialAccount(input: {
+    financialAccountId: string;
+    companyId: string;
+    accountType: string;
+    name: string;
+    institutionName?: string | null;
+    accountNumberLast4?: string | null;
+    currency: string;
+    controlGlAccountId: string;
+    visibilityPolicy: string;
+    status: "active" | "inactive";
+  }): Promise<FinanceFinancialAccount> {
+    return postFinancialAccountAction("update", {
+      id: input.financialAccountId,
+      input,
+    });
+  },
+
+  setFinancialAccountStatus(
+    financialAccountId: string,
+    status: "active" | "inactive"
+  ): Promise<FinanceFinancialAccount> {
+    return postFinancialAccountAction("setStatus", {
+      id: financialAccountId,
+      input: { status },
+    });
+  },
+
   async getFoundationStatus(): Promise<FinanceFoundationStatus> {
     const response = await fetch(API_PATH, { credentials: "same-origin" });
     const json = (await response.json()) as

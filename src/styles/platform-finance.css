@@ -30,6 +30,23 @@
   font-weight: 600;
 }
 
+.pf-cash-banks {
+  width: 100%;
+}
+
+.pf-cash-toolbar {
+  display: grid;
+  grid-template-columns: minmax(14rem, 20rem) minmax(18rem, 1fr);
+  gap: 0.75rem;
+  align-items: end;
+}
+
+@media (max-width: 760px) {
+  .pf-cash-toolbar {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Platform Finance Overview — calm, restrained, reference-faithful */
 
 .pf-overview {

@@ -1061,7 +1061,7 @@ export class PlatformFinanceServerService {
     const unpostedItems = transactions.filter((t) => t.status === "draft")
       .length;
 
-    const audits = await this.repo.listRecentAuditEvents(10);
+    const audits = await this.repo.listRecentAuditEvents(input.profileId, 10);
     const requestEvents = await this.requestsRepo.listRecentRequestEvents(10);
     const recentActivity = [
       ...audits.map((a) => ({

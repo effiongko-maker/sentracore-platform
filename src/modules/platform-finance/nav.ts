@@ -146,11 +146,10 @@ export const PLATFORM_FINANCE_NAV_ITEMS: readonly PlatformFinanceNavItem[] = [
     ],
   },
   {
-    href: null,
+    href: "/platform-finance/cash-banks",
     label: "Cash & Banks",
     match: "prefix",
     icon: Landmark,
-    comingSoon: true,
   },
   {
     href: "/platform-finance/requests",

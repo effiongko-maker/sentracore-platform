@@ -11,6 +11,7 @@ import type {
   PlatformFinanceModuleSlug,
 } from "@/modules/platform-finance/types";
 import { PLATFORM_FINANCE_MODULE_SLUG } from "@/modules/platform-finance/types";
+import { PlatformFinanceFinancialAccountsRepository } from "@/modules/platform-finance/server/PlatformFinanceFinancialAccountsRepository";
 
 function db() {
   return createAdminClient();
@@ -744,7 +745,7 @@ export class PlatformFinanceRepository {
       Boolean(input.sourceType) && input.sourceType !== "all";
     const { data, error } = await query.limit(needsSourceFilter ? 2000 : 5000);
     if (error) throwDb(error, "Failed to query journals.");
-    let entries =
+    const entries =
       (data as JournalEntryRow[] | null)?.map(mapJournalEntry) ?? [];
 
     if (!needsSourceFilter || entries.length === 0) {
@@ -980,7 +981,7 @@ export class PlatformFinanceRepository {
     }));
   }
 
-  async listRecentAuditEvents(limit = 12): Promise<
+  async listRecentAuditEvents(profileId: string, limit = 12): Promise<
     Array<{
       id: string;
       action: string;
@@ -998,16 +999,30 @@ export class PlatformFinanceRepository {
       )
       .eq("organisation_id", this.organisationId)
       .order("created_at", { ascending: false })
-      .limit(limit);
+      .limit(Math.max(limit * 5, 50));
     if (error) throwDb(error, "Failed to list finance audit events.");
-    return (data ?? []).map((row) => ({
-      id: row.id as string,
-      action: row.action as string,
-      objectType: row.object_type as string,
-      objectId: row.object_id as string,
-      reason: (row.reason as string | null) ?? null,
-      createdAt: row.created_at as string,
-      companyId: (row.company_id as string | null) ?? null,
-    }));
+    const visibleFinancialAccountIds = new Set(
+      (
+        await new PlatformFinanceFinancialAccountsRepository(
+          this.organisationId
+        ).listVisible(profileId)
+      ).map((row) => row.id)
+    );
+    return (data ?? [])
+      .filter(
+        (row) =>
+          row.object_type !== "financial_account" ||
+          visibleFinancialAccountIds.has(String(row.object_id))
+      )
+      .slice(0, limit)
+      .map((row) => ({
+        id: row.id as string,
+        action: row.action as string,
+        objectType: row.object_type as string,
+        objectId: row.object_id as string,
+        reason: (row.reason as string | null) ?? null,
+        createdAt: row.created_at as string,
+        companyId: (row.company_id as string | null) ?? null,
+      }));
   }
 }
