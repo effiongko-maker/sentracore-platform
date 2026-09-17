@@ -238,7 +238,11 @@ export function PlatformFinanceOverviewPage() {
                 <span className="pf-badge is-critical">{attentionTotal}</span>
               ) : null}
             </div>
-            <span className="pf-link is-disabled">View all</span>
+            {snapshot.needsAttention.length > 0 ? (
+              <a className="pf-link" href="/platform-finance/requests">
+                View all
+              </a>
+            ) : null}
           </div>
           {snapshot.needsAttention.length === 0 ? (
             <div className="pf-empty-box">
@@ -434,7 +438,6 @@ export function PlatformFinanceOverviewPage() {
               </div>
               <h2 className="pf-panel-title">Recent activity</h2>
             </div>
-            <span className="pf-link is-disabled">View all</span>
           </div>
           {snapshot.recentActivity.length === 0 ? (
             <div className="pf-empty-box">

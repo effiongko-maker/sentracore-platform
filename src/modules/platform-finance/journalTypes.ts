@@ -49,7 +49,7 @@ export type FinanceJournalRegisterRow = {
 
 export type FinanceJournalRegisterResult = {
   rows: FinanceJournalRegisterRow[];
-  /** Matching journal entry count (pagination unit). */
+  /** Matching journal line count (pagination unit). */
   total: number;
   page: number;
   pageSize: number;

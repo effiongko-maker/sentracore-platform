@@ -102,3 +102,12 @@ export const PLATFORM_FINANCE_JOURNAL_STATUS_LABELS: Record<
 export const PLATFORM_FINANCE_CAPABILITY_LIST = Object.values(
   PLATFORM_FINANCE_CAPABILITIES
 ) as readonly PlatformFinanceCapability[];
+
+/** Max records shown on Finance Overview list cards (Recent Activity, etc.). */
+export const PLATFORM_FINANCE_OVERVIEW_LIST_LIMIT = 5;
+
+/** Journal Register default line rows per page. */
+export const PLATFORM_FINANCE_JOURNAL_REGISTER_PAGE_SIZE_DEFAULT = 20;
+
+/** Journal Register selectable line page sizes. */
+export const PLATFORM_FINANCE_JOURNAL_REGISTER_PAGE_SIZES = [20, 50] as const;

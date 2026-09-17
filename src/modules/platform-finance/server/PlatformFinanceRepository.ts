@@ -610,9 +610,8 @@ export class PlatformFinanceRepository {
   }
 
   /**
-   * Journal register query — posted journals expanded to line-level rows
-   * with account codes/names and FT preparer. Paginated by journal entry;
-   * each page returns all lines for those entries in line_no order.
+   * Journal register query — line-level rows with account codes/names and FT
+   * preparer. Paginated by journal line in entry_date / posted_at / line_no order.
    * Company scope must be pre-filtered to accessible company IDs by the service.
    */
   async queryJournalRegister(input: {
@@ -641,9 +640,69 @@ export class PlatformFinanceRepository {
       return { rows: [], total: 0 };
     }
 
+    const page = Math.max(1, input.page);
+    const pageSize = input.pageSize === 50 ? 50 : 20;
+    const lineStart = (page - 1) * pageSize;
+
+    const entries = await this.listJournalRegisterEntries(input);
+    if (entries.length === 0) {
+      return { rows: [], total: 0 };
+    }
+
+    const entryIds = entries.map((entry) => entry.id);
+    const lineCountByEntry = await this.countJournalLinesByEntry(entryIds);
+    const totalLines = entries.reduce(
+      (sum, entry) => sum + (lineCountByEntry.get(entry.id) ?? 0),
+      0
+    );
+    if (totalLines === 0) {
+      return { rows: [], total: 0 };
+    }
+
+    const entriesForPage: FinanceJournalEntry[] = [];
+    let lineIndex = 0;
+    const lineEnd = lineStart + pageSize;
+    for (const entry of entries) {
+      const count = lineCountByEntry.get(entry.id) ?? 0;
+      if (count === 0) continue;
+      const entryStart = lineIndex;
+      const entryEnd = lineIndex + count;
+      if (entryEnd > lineStart && entryStart < lineEnd) {
+        entriesForPage.push(entry);
+      }
+      lineIndex += count;
+      if (lineIndex >= lineEnd) break;
+    }
+
+    if (entriesForPage.length === 0) {
+      return { rows: [], total: totalLines };
+    }
+
+    const firstEntryGlobalStart = entries
+      .slice(0, entries.indexOf(entriesForPage[0]!))
+      .reduce((sum, entry) => sum + (lineCountByEntry.get(entry.id) ?? 0), 0);
+    const localStart = Math.max(0, lineStart - firstEntryGlobalStart);
+
+    const enriched = await this.enrichJournalRegisterLines(entriesForPage);
+    return {
+      rows: enriched.slice(localStart, localStart + pageSize),
+      total: totalLines,
+    };
+  }
+
+  private async listJournalRegisterEntries(input: {
+    companyIds: string[];
+    companyId?: string | null;
+    periodId?: string | null;
+    dateFrom?: string | null;
+    dateTo?: string | null;
+    status?: string | null;
+    sourceType?: string | null;
+    search?: string | null;
+  }): Promise<FinanceJournalEntry[]> {
     let query = db()
       .from("finance_journal_entries")
-      .select("*", { count: "exact" })
+      .select("*")
       .eq("organisation_id", this.organisationId)
       .in("company_id", input.companyIds)
       .order("entry_date", { ascending: false })
@@ -683,39 +742,49 @@ export class PlatformFinanceRepository {
 
     const needsSourceFilter =
       Boolean(input.sourceType) && input.sourceType !== "all";
+    const { data, error } = await query.limit(needsSourceFilter ? 2000 : 5000);
+    if (error) throwDb(error, "Failed to query journals.");
+    let entries =
+      (data as JournalEntryRow[] | null)?.map(mapJournalEntry) ?? [];
 
-    const page = Math.max(1, input.page);
-    const pageSize = Math.min(100, Math.max(1, input.pageSize));
-
-    if (!needsSourceFilter) {
-      const from = (page - 1) * pageSize;
-      const to = from + pageSize - 1;
-      const { data, error, count } = await query.range(from, to);
-      if (error) throwDb(error, "Failed to query journals.");
-      const entries =
-        (data as JournalEntryRow[] | null)?.map(mapJournalEntry) ?? [];
-      const enriched = await this.enrichJournalRegisterLines(entries);
-      return { rows: enriched, total: count ?? entries.length };
+    if (!needsSourceFilter || entries.length === 0) {
+      return entries;
     }
 
-    const { data, error } = await query.limit(2000);
-    if (error) throwDb(error, "Failed to query journals for source filter.");
-    const entries =
-      (data as JournalEntryRow[] | null)?.map(mapJournalEntry) ?? [];
-    const enrichedAll = await this.enrichJournalRegisterLines(entries);
-    const matchingEntryIds = new Set(
-      enrichedAll
-        .filter((row) => row.sourceType === input.sourceType)
-        .map((row) => row.entry.id)
+    const txIds = [...new Set(entries.map((entry) => entry.transactionId))];
+    const { data: txRows, error: txErr } = await db()
+      .from("finance_transactions")
+      .select("id, transaction_type")
+      .eq("organisation_id", this.organisationId)
+      .in("id", txIds);
+    if (txErr) throwDb(txErr, "Failed to load journal transactions.");
+    const txTypeById = new Map(
+      (txRows ?? []).map((row) => [
+        row.id as string,
+        String(row.transaction_type),
+      ])
     );
-    const filteredEntries = entries.filter((e) => matchingEntryIds.has(e.id));
-    const from = (page - 1) * pageSize;
-    const pageEntries = filteredEntries.slice(from, from + pageSize);
-    const enriched = await this.enrichJournalRegisterLines(pageEntries);
-    return {
-      rows: enriched,
-      total: filteredEntries.length,
-    };
+    return entries.filter(
+      (entry) => txTypeById.get(entry.transactionId) === input.sourceType
+    );
+  }
+
+  private async countJournalLinesByEntry(
+    entryIds: string[]
+  ): Promise<Map<string, number>> {
+    const counts = new Map<string, number>();
+    if (entryIds.length === 0) return counts;
+
+    const { data, error } = await db()
+      .from("finance_journal_lines")
+      .select("journal_entry_id")
+      .in("journal_entry_id", entryIds);
+    if (error) throwDb(error, "Failed to count journal lines.");
+    for (const row of data ?? []) {
+      const entryId = row.journal_entry_id as string;
+      counts.set(entryId, (counts.get(entryId) ?? 0) + 1);
+    }
+    return counts;
   }
 
   private async enrichJournalRegisterLines(

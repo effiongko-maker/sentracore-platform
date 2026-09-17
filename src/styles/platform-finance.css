@@ -3962,6 +3962,15 @@ a.pf-new-save-success-action {
   gap: 0.5rem;
 }
 
+.pf-journal-page-size-select {
+  width: auto;
+  min-width: 6.5rem;
+  height: 2rem !important;
+  min-height: 2rem;
+  padding: 0 0.55rem !important;
+  font-size: 0.8125rem !important;
+}
+
 .pf-journal-detail {
   display: grid;
   gap: 0.85rem;

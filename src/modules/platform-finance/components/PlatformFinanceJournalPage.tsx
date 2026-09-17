@@ -8,12 +8,14 @@ import { inputClassName } from "@/components/forms/FormField";
 import { SearchableSelect } from "@/components/forms/SearchableSelect";
 import { PlatformFinanceNewJournalDrawer } from "@/modules/platform-finance/components/PlatformFinanceNewJournalPage";
 import { PlatformFinanceService } from "@/services/platform-finance/PlatformFinanceService";
-import { PLATFORM_FINANCE_TRANSACTION_TYPE_LABELS } from "@/modules/platform-finance/constants";
+import {
+  PLATFORM_FINANCE_JOURNAL_REGISTER_PAGE_SIZE_DEFAULT,
+  PLATFORM_FINANCE_JOURNAL_REGISTER_PAGE_SIZES,
+  PLATFORM_FINANCE_TRANSACTION_TYPE_LABELS,
+} from "@/modules/platform-finance/constants";
 import type { FinanceJournalRegisterRow } from "@/modules/platform-finance/journalTypes";
 import type { FinanceCompany, FinancePeriod } from "@/modules/platform-finance/types";
 import { financePeriodLabel } from "@/modules/platform-finance/domain/periods";
-
-const PAGE_SIZE = 25;
 
 function formatNaira(amount: number): string {
   if (!Number.isFinite(amount)) return "—";
@@ -47,6 +49,9 @@ export function PlatformFinanceJournalPage() {
   const [pageDebitTotal, setPageDebitTotal] = useState(0);
   const [pageCreditTotal, setPageCreditTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(
+    PLATFORM_FINANCE_JOURNAL_REGISTER_PAGE_SIZE_DEFAULT
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [entryOpen, setEntryOpen] = useState(false);
@@ -119,7 +124,7 @@ export function PlatformFinanceJournalPage() {
         sourceType: sourceType === "all" ? null : sourceType,
         search: searchApplied || null,
         page,
-        pageSize: PAGE_SIZE,
+        pageSize,
       });
       setRows(result.rows);
       setTotal(result.total);
@@ -146,15 +151,17 @@ export function PlatformFinanceJournalPage() {
     sourceType,
     searchApplied,
     page,
+    pageSize,
   ]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const from = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const to = Math.min(page * PAGE_SIZE, total);
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+  const showPager = total > pageSize;
 
   const hasActiveFilters = useMemo(
     () =>
@@ -446,13 +453,37 @@ export function PlatformFinanceJournalPage() {
             </div>
           </div>
 
-          {total > 0 ? (
+          {showPager ? (
             <footer className="pf-journal-pager">
               <span>
-                Showing journal entries {from}–{to} of {total}
-                {rows.length > 0 ? ` · ${rows.length} lines on this page` : ""}
+                Showing lines {from}–{to} of {total}
               </span>
               <div className="pf-journal-pager-controls">
+                <label className="pf-journal-page-size">
+                  <span className="sr-only">Rows per page</span>
+                  <select
+                    className={`${inputClassName} pf-journal-page-size-select`}
+                    value={pageSize}
+                    onChange={(e) => {
+                      const next = Number(e.target.value);
+                      setPageSize(
+                        next === 50
+                          ? 50
+                          : PLATFORM_FINANCE_JOURNAL_REGISTER_PAGE_SIZE_DEFAULT
+                      );
+                      setPage(1);
+                    }}
+                    aria-label="Rows per page"
+                  >
+                    {PLATFORM_FINANCE_JOURNAL_REGISTER_PAGE_SIZES.map(
+                      (size) => (
+                        <option key={size} value={size}>
+                          {size} rows
+                        </option>
+                      )
+                    )}
+                  </select>
+                </label>
                 <button
                   type="button"
                   className="pf-btn-secondary"

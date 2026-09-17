@@ -30,6 +30,7 @@ import type {
 } from "@/modules/platform-finance/types";
 import { PLATFORM_FINANCE_CAPABILITIES } from "@/modules/platform-finance/types";
 import { randomBytes } from "node:crypto";
+import { PLATFORM_FINANCE_OVERVIEW_LIST_LIMIT } from "@/modules/platform-finance/constants";
 import type { FinanceOverviewSnapshot } from "@/modules/platform-finance/overviewTypes";
 import type {
   FinanceJournalDetail,
@@ -753,7 +754,7 @@ export class PlatformFinanceServerService {
     }
 
     const page = Math.max(1, filters.page ?? 1);
-    const pageSize = Math.min(50, Math.max(1, filters.pageSize ?? 25));
+    const pageSize = filters.pageSize === 50 ? 50 : 20;
 
     const { rows, total } = await this.repo.queryJournalRegister({
       companyIds: accessibleIds,
@@ -977,7 +978,7 @@ export class PlatformFinanceServerService {
     });
 
     const awaitingReview = sumBucket(awaiting.map((r) => r.requestedAmount));
-    const needsAttention =
+    const needsAttention = (
       awaitingReview.count > 0
         ? [
             {
@@ -989,7 +990,8 @@ export class PlatformFinanceServerService {
               tone: "critical" as const,
             },
           ]
-        : [];
+        : []
+    ).slice(0, PLATFORM_FINANCE_OVERVIEW_LIST_LIMIT);
 
     const tb = await this.repo.getTrialBalanceRows({
       companyId: selectedCompanyId,
@@ -1019,8 +1021,8 @@ export class PlatformFinanceServerService {
     const unpostedItems = transactions.filter((t) => t.status === "draft")
       .length;
 
-    const audits = await this.repo.listRecentAuditEvents(16);
-    const requestEvents = await this.requestsRepo.listRecentRequestEvents(16);
+    const audits = await this.repo.listRecentAuditEvents(10);
+    const requestEvents = await this.requestsRepo.listRecentRequestEvents(10);
     const recentActivity = [
       ...audits.map((a) => ({
         id: `audit-${a.id}`,
@@ -1063,7 +1065,7 @@ export class PlatformFinanceServerService {
         })),
     ]
       .sort((a, b) => b.at.localeCompare(a.at))
-      .slice(0, 8);
+      .slice(0, PLATFORM_FINANCE_OVERVIEW_LIST_LIMIT);
 
     const selectedCompanyLabel = selectedCompanyId
       ? (companies.find((c) => c.id === selectedCompanyId)?.name ??
