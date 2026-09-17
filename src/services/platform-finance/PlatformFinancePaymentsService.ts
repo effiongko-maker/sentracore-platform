@@ -3,6 +3,7 @@
  */
 import type { FinancePaymentView } from "@/modules/platform-finance/domain/payments";
 import type { FinanceFinancialAccountView } from "@/modules/platform-finance/types";
+import type { PaymentAccountingReview, PaymentAccountingWorkItem } from "@/modules/platform-finance/domain/paymentAccounting";
 
 const API_PATH = "/api/platform-finance/payments";
 
@@ -77,5 +78,17 @@ export const PlatformFinancePaymentsService = {
     payableId: string
   ): Promise<RevealedPayableDestination> {
     return postAction("revealPayableDestination", { payableId });
+  },
+
+  listPaymentAccountingWork(): Promise<PaymentAccountingWorkItem[]> {
+    return postAction("listPaymentAccountingWork");
+  },
+
+  getPaymentAccountingReview(paymentId: string): Promise<PaymentAccountingReview> {
+    return postAction("getPaymentAccountingReview", { input: { paymentId } });
+  },
+
+  postPaymentAccounting(paymentId: string, debitAccountId: string): Promise<PaymentAccountingReview> {
+    return postAction("postPaymentAccounting", { input: { paymentId, debitAccountId } });
   },
 };

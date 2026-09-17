@@ -55,6 +55,7 @@ import type {
 import { isFinancePayablePaymentEligible } from "@/modules/platform-finance/domain/payables";
 import type { FinancePaymentView } from "@/modules/platform-finance/domain/payments";
 import type { FinanceFinancialAccountView } from "@/modules/platform-finance/types";
+import { PlatformFinancePaymentReviewDrawer } from "@/modules/platform-finance/components/PlatformFinancePaymentReviewDrawer";
 import {
   FINANCE_PAYABLE_DOCUMENT_ACCEPT,
   FINANCE_PAYABLE_DOCUMENT_ROLE_LABELS,
@@ -251,6 +252,7 @@ export function PlatformFinancePayableDetailPage() {
   const [paymentCaps, setPaymentCaps] =
     useState<FinancePaymentCapabilities | null>(null);
   const [payments, setPayments] = useState<FinancePaymentView[]>([]);
+  const [reviewPaymentId, setReviewPaymentId] = useState<string | null>(null);
   const [sourceAccounts, setSourceAccounts] = useState<
     FinanceFinancialAccountView[]
   >([]);
@@ -883,6 +885,10 @@ export function PlatformFinancePayableDetailPage() {
                                 : ""}{" "}
                               · {payment.status}
                             </span>
+                            <br />
+                            <button type="button" className="pf-link-btn" onClick={() => setReviewPaymentId(payment.id)}>
+                              Review &amp; Post accounting
+                            </button>
                           </li>
                         ))}
                       </ul>
@@ -1005,6 +1011,10 @@ export function PlatformFinancePayableDetailPage() {
                         · recorded {formatDateTime(payment.createdAt)} ·{" "}
                         {payment.status}
                       </span>
+                      <br />
+                      <button type="button" className="pf-link-btn" onClick={() => setReviewPaymentId(payment.id)}>
+                        Review &amp; Post accounting
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -1466,6 +1476,12 @@ export function PlatformFinancePayableDetailPage() {
           </section>
         </aside>
       </div>
+      {reviewPaymentId ? (
+        <PlatformFinancePaymentReviewDrawer
+          paymentId={reviewPaymentId}
+          onClose={() => setReviewPaymentId(null)}
+        />
+      ) : null}
     </div>
   );
 }

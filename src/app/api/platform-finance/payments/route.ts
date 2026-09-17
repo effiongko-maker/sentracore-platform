@@ -14,13 +14,17 @@ import {
 } from "@/modules/platform-finance/server/requirePlatformFinanceAccess";
 import { PlatformFinancePaymentsServerService } from "@/modules/platform-finance/server/PlatformFinancePaymentsServerService";
 import { PlatformFinancePayablesServerService } from "@/modules/platform-finance/server/PlatformFinancePayablesServerService";
+import { PlatformFinancePaymentAccountingServerService } from "@/modules/platform-finance/server/PlatformFinancePaymentAccountingServerService";
 
 type PaymentApiAction =
   | "getMyPaymentCapabilities"
   | "listPaymentsForPayable"
   | "listPayableSourceFinancialAccounts"
   | "confirmPayment"
-  | "revealPayableDestination";
+  | "revealPayableDestination"
+  | "listPaymentAccountingWork"
+  | "getPaymentAccountingReview"
+  | "postPaymentAccounting";
 
 type RequestBody = {
   action?: PaymentApiAction;
@@ -245,6 +249,28 @@ export async function POST(request: Request) {
         actorFrom(access),
         payableId
       );
+      return NextResponse.json({ success: true, data });
+    }
+
+    if (action === "listPaymentAccountingWork") {
+      const access = await requirePlatformFinanceAccessAny({ capabilities: [
+        PLATFORM_FINANCE_CAPABILITIES.view,
+        PLATFORM_FINANCE_CAPABILITIES.create_transaction,
+        PLATFORM_FINANCE_CAPABILITIES.post,
+      ] });
+      const service = new PlatformFinancePaymentAccountingServerService(access.organisationId);
+      return NextResponse.json({ success: true, data: await service.listWork(actorFrom(access)) });
+    }
+
+    if (action === "getPaymentAccountingReview" || action === "postPaymentAccounting") {
+      const paymentId = requireUuid(body.input?.paymentId, "paymentId");
+      const preliminary = await requirePlatformFinanceAccessAny({ capabilities: [
+        action === "postPaymentAccounting" ? PLATFORM_FINANCE_CAPABILITIES.post : PLATFORM_FINANCE_CAPABILITIES.create_transaction,
+      ] });
+      const service = new PlatformFinancePaymentAccountingServerService(preliminary.organisationId);
+      const data = action === "postPaymentAccounting"
+        ? await service.post(actorFrom(preliminary), paymentId, requireUuid(body.input?.debitAccountId, "debitAccountId"))
+        : await service.getOrCreateReview(actorFrom(preliminary), paymentId);
       return NextResponse.json({ success: true, data });
     }
 

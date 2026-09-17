@@ -16,6 +16,9 @@ import {
 import type { FinanceJournalRegisterRow } from "@/modules/platform-finance/journalTypes";
 import type { FinanceCompany, FinancePeriod } from "@/modules/platform-finance/types";
 import { financePeriodLabel } from "@/modules/platform-finance/domain/periods";
+import { PlatformFinancePaymentsService } from "@/services/platform-finance/PlatformFinancePaymentsService";
+import type { PaymentAccountingWorkItem } from "@/modules/platform-finance/domain/paymentAccounting";
+import { PlatformFinancePaymentReviewDrawer } from "./PlatformFinancePaymentReviewDrawer";
 
 function formatNaira(amount: number): string {
   if (!Number.isFinite(amount)) return "—";
@@ -60,6 +63,8 @@ export function PlatformFinanceJournalPage() {
     journalEntryId: string;
     reference: string;
   } | null>(null);
+  const [paymentWork, setPaymentWork] = useState<PaymentAccountingWorkItem[]>([]);
+  const [reviewPaymentId, setReviewPaymentId] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [searchApplied, setSearchApplied] = useState("");
@@ -155,8 +160,19 @@ export function PlatformFinanceJournalPage() {
   ]);
 
   useEffect(() => {
-    void load();
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
   }, [load]);
+
+  const loadPaymentWork = useCallback(async () => {
+    try { setPaymentWork(await PlatformFinancePaymentsService.listPaymentAccountingWork()); }
+    catch { setPaymentWork([]); }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadPaymentWork(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadPaymentWork]);
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -243,6 +259,21 @@ export function PlatformFinanceJournalPage() {
             View entry
           </Link>
         </p>
+      ) : null}
+
+      {paymentWork.some((item) => item.accountingStatus !== "posted") ? (
+        <section className="pf-rev-card">
+          <h2>Payments awaiting accounting</h2>
+          <p className="pf-journal-desc">Confirmed corporate Payments ready for accounting review.</p>
+          <ul className="pf-payd-pay-history">
+            {paymentWork.filter((item) => item.accountingStatus !== "posted").map((item) => (
+              <li key={item.paymentId}>
+                <strong>{formatNaira(item.amount)}</strong> · {item.payeeName} · {formatDate(item.paymentDate)} · {item.accountingStatus === "draft" ? "Draft accounting" : "Accounting pending"}
+                <br /><button type="button" className="pf-link-btn" onClick={() => setReviewPaymentId(item.paymentId)}>{item.accountingStatus === "draft" ? "Continue Review" : "Review & Post"}</button>
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       <div className="pf-journal-toolbar">
@@ -515,6 +546,7 @@ export function PlatformFinanceJournalPage() {
         onPosted={handleJournalPosted}
         onBusyChange={setEntryBusy}
       />
+      {reviewPaymentId ? <PlatformFinancePaymentReviewDrawer paymentId={reviewPaymentId} onClose={() => setReviewPaymentId(null)} onPosted={() => { void load(); void loadPaymentWork(); }} /> : null}
     </div>
   );
 }

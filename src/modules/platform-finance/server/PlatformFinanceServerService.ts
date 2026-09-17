@@ -1058,8 +1058,21 @@ export class PlatformFinanceServerService {
     const transactions = selectedCompanyId
       ? await this.repo.listTransactions(selectedCompanyId)
       : await this.repo.listTransactions();
-    const unpostedItems = transactions.filter((t) => t.status === "draft")
-      .length;
+    const confirmedPaymentIds = await this.repo.listConfirmedPaymentIds(
+      selectedCompanyId ? [selectedCompanyId] : companies.map((c) => c.id)
+    );
+    const paymentFtBySource = new Map(
+      transactions
+        .filter((t) => t.sourceType === "payment" && t.sourceId)
+        .map((t) => [t.sourceId!, t])
+    );
+    const paymentAccountingPending = confirmedPaymentIds.filter(
+      (id) => paymentFtBySource.get(id)?.status !== "posted"
+    ).length;
+    const unrelatedDrafts = transactions.filter(
+      (t) => t.status === "draft" && t.sourceType !== "payment"
+    ).length;
+    const unpostedItems = paymentAccountingPending + unrelatedDrafts;
 
     const audits = await this.repo.listRecentAuditEvents(input.profileId, 10);
     const requestEvents = await this.requestsRepo.listRecentRequestEvents(10);

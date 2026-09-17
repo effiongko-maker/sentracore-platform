@@ -493,6 +493,18 @@ export class PlatformFinanceRepository {
     return (data as TransactionRow[] | null)?.map(mapTransaction) ?? [];
   }
 
+  async listConfirmedPaymentIds(companyIds: string[]): Promise<string[]> {
+    if (companyIds.length === 0) return [];
+    const { data, error } = await db()
+      .from("finance_payments")
+      .select("id")
+      .eq("organisation_id", this.organisationId)
+      .eq("status", "confirmed")
+      .in("company_id", companyIds);
+    if (error) throwDb(error, "Failed to list confirmed payments for accounting.");
+    return (data ?? []).map((row) => row.id as string);
+  }
+
   async getTransaction(
     transactionId: string
   ): Promise<FinanceTransaction | null> {
