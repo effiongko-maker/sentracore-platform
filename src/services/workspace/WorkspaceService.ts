@@ -23,6 +23,7 @@ import type {
   OrganisationalPulse,
   AttentionModel,
 } from "@/modules/workspace/types";
+import type { PaginatedResult } from "@/types";
 import { isSameDay, labelize } from "@/modules/workspace/utils";
 import { ApprovalService } from "@/services/approvals/ApprovalService";
 import { FacilityService } from "@/services/facilities/FacilityService";
@@ -333,6 +334,10 @@ function buildOperationalState(
 
 type DomainResult<T> = { ok: boolean; data: T[] };
 
+type OperationalMaintenanceWalkResult = DomainResult<Maintenance> & {
+  criticalWork: number | null;
+};
+
 /** Exact filtered register total — never treat !ok as total 0 for KPIs. */
 type DomainCountResult = { ok: boolean; total: number };
 
@@ -379,6 +384,33 @@ export function mapHomeMaintenancePageResult(page: {
   };
 }
 
+/**
+ * Complete active-Maintenance walk for authoritative Operational Picture data.
+ * Page 1 also carries the exact Critical Work KPI; later pages only contribute
+ * rows. The result is returned only after every advertised page succeeds.
+ *
+ * @internal Exported for Command Centre truthfulness verification.
+ */
+export async function loadOperationalMaintenancePages(
+  listPage: (
+    page: number,
+    pageSize: number,
+    includeCriticalWorkTotal: boolean
+  ) => Promise<PaginatedResult<Maintenance>>,
+  pageSize = WORKSPACE_HOME_POOL_SIZE
+): Promise<{ data: Maintenance[]; criticalWork: number | null }> {
+  let criticalWork: number | null = null;
+  const data = await loadAllPages(async (page, size) => {
+    const result = await listPage(page, size, page === 1);
+    if (page === 1) {
+      criticalWork = parseHomeCriticalWorkTotal(result.criticalWorkTotal);
+    }
+    return result;
+  }, pageSize);
+
+  return { data, criticalWork };
+}
+
 type NonCoreDomainLists = {
   approvals: DomainResult<Approval>;
   facilities: DomainResult<{ id: string; name: string }>;
@@ -393,22 +425,22 @@ type CurrentUserLite = {
 } | null;
 
 /**
- * Isolate a single domain fetch: reject OR timeout → ok:false + empty data.
+ * Isolate a single domain fetch: reject OR timeout → caller-supplied failure.
  * On timeout, abort the underlying browser fetch so lingering requests do not
  * keep holding same-origin HTTP connections (Finance Home starvation).
- * Matches existing catch behaviour so Home can still compose a snapshot
- * (degraded when a core domain is unavailable).
+ * Domain callers supply ok:false + empty data so Home can still compose a
+ * degraded snapshot when a core domain is unavailable.
  */
-function settleDomain<T>(
-  start: (signal: AbortSignal) => Promise<DomainResult<T>>,
-  empty: T[],
+function settleValue<T>(
+  start: (signal: AbortSignal) => Promise<T>,
+  failed: T,
   timeoutMs = WORKSPACE_HOME_DOMAIN_TIMEOUT_MS
-): Promise<DomainResult<T>> {
+): Promise<T> {
   return new Promise((resolve) => {
     let settled = false;
     const controller = new AbortController();
 
-    const finish = (value: DomainResult<T>) => {
+    const finish = (value: T) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -420,14 +452,22 @@ function settleDomain<T>(
       settled = true;
       // Cancel the in-flight fetch; late resolve/reject must not overwrite.
       controller.abort();
-      resolve({ ok: false, data: empty });
+      resolve(failed);
     }, timeoutMs);
 
     start(controller.signal).then(
       (value) => finish(value),
-      () => finish({ ok: false, data: empty })
+      () => finish(failed)
     );
   });
+}
+
+function settleDomain<T>(
+  start: (signal: AbortSignal) => Promise<DomainResult<T>>,
+  empty: T[],
+  timeoutMs = WORKSPACE_HOME_DOMAIN_TIMEOUT_MS
+): Promise<DomainResult<T>> {
+  return settleValue(start, { ok: false, data: empty }, timeoutMs);
 }
 
 /**
@@ -653,25 +693,38 @@ export async function loadOperationalPictureMetrics(
   asOf = new Date().toISOString()
 ) {
   const pageSize = WORKSPACE_HOME_POOL_SIZE;
-  const emptyMnt: Maintenance[] = [];
   const emptyWo: WorkOrder[] = [];
   const emptyApr: Approval[] = [];
 
-  const [maintenanceHome, maintenance, workOrders, approvals] = await Promise.all([
-    settleMaintenanceHome(pageSize),
-    settleDomain(
+  const [maintenance, workOrders, approvals] = await Promise.all([
+    settleValue<OperationalMaintenanceWalkResult>(
       (signal) =>
-        loadAllPages(
-          (page, size) =>
+        loadOperationalMaintenancePages(
+          (page, size, includeCriticalWorkTotal) =>
             MaintenanceService.listMaintenance(
-              { page, pageSize: size, status: "active" },
+              {
+                page,
+                pageSize: size,
+                status: "active",
+                ...(includeCriticalWorkTotal
+                  ? { includeCriticalWorkTotal: true }
+                  : {}),
+              },
               { signal }
             ),
           pageSize
         )
-          .then((data) => ({ ok: true as const, data }))
-          .catch(() => ({ ok: false as const, data: emptyMnt })),
-      emptyMnt
+          .then(({ data, criticalWork }) => ({
+            ok: true as const,
+            data,
+            criticalWork,
+          }))
+          .catch(() => ({
+            ok: false as const,
+            data: [] as Maintenance[],
+            criticalWork: null,
+          })),
+      { ok: false, data: [], criticalWork: null }
     ),
     settleDomain(
       (signal) =>
@@ -705,9 +758,7 @@ export async function loadOperationalPictureMetrics(
 
   return buildOperationalPictureMetrics({
     asOf,
-    criticalWork: maintenanceHome.criticalWork.ok
-      ? maintenanceHome.criticalWork.total
-      : null,
+    criticalWork: maintenance.ok ? maintenance.criticalWork : null,
     maintenance: maintenance.ok ? maintenance.data : null,
     workOrders: workOrders.ok ? workOrders.data : null,
     approvals: approvals.ok ? approvals.data : null,

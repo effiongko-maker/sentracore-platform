@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { buildOperationalPictureMetrics } from "../src/modules/workspace/operationalPicture";
+import { loadOperationalMaintenancePages } from "../src/services/workspace/WorkspaceService";
 import { composeFinanceDecisionQueue } from "../src/modules/command-centre/server/composeFinanceDecisionQueue";
 import type { Maintenance } from "../src/modules/maintenance/types";
 import type { WorkOrder } from "../src/modules/work-orders/types";
@@ -24,6 +25,101 @@ const maintenance = Array.from({ length: 135 }, (_, index) => ({
   workOrderIds: [],
 })) as unknown as Maintenance[];
 maintenance.push({ id: "MNT-DONE", status: "completed", dueAt: "2026-09-01T00:00:00.000Z" } as Maintenance);
+
+const maintenancePageCalls: Array<{
+  page: number;
+  includeCriticalWorkTotal: boolean;
+}> = [];
+const walkedMaintenance = await loadOperationalMaintenancePages(
+  async (page, pageSize, includeCriticalWorkTotal) => {
+    maintenancePageCalls.push({ page, includeCriticalWorkTotal });
+    const start = (page - 1) * pageSize;
+    const data = maintenance.slice(start, start + pageSize);
+    return {
+      data,
+      page,
+      pageSize,
+      total: maintenance.length,
+      totalPages: Math.ceil(maintenance.length / pageSize),
+      ...(page === 1 ? { criticalWorkTotal: 17 } : {}),
+    };
+  },
+  100
+);
+assert(
+  maintenancePageCalls.length === 2 &&
+    maintenancePageCalls[0]?.includeCriticalWorkTotal === true &&
+    maintenancePageCalls[1]?.includeCriticalWorkTotal === false,
+  "Maintenance page 1 alone requests criticalWorkTotal"
+);
+assert(
+  walkedMaintenance.data.length === maintenance.length,
+  "Maintenance walk exhausts datasets larger than 100"
+);
+assert(
+  walkedMaintenance.criticalWork === 17,
+  "Maintenance walk preserves returned criticalWorkTotal"
+);
+assert(
+  walkedMaintenance.criticalWork !==
+    walkedMaintenance.data.filter(
+      (row) => row.priority === "critical" || row.priority === "high"
+    ).length,
+  "Critical is not derived from walked priority counts"
+);
+
+const missingCritical = await loadOperationalMaintenancePages(
+  async (page, pageSize) => ({
+    data: maintenance.slice((page - 1) * pageSize, page * pageSize),
+    page,
+    pageSize,
+    total: maintenance.length,
+    totalPages: Math.ceil(maintenance.length / pageSize),
+  }),
+  100
+);
+assert(
+  missingCritical.criticalWork === null,
+  "missing criticalWorkTotal remains unavailable"
+);
+const invalidCritical = await loadOperationalMaintenancePages(
+  async (page, pageSize) => ({
+    data: maintenance.slice((page - 1) * pageSize, page * pageSize),
+    page,
+    pageSize,
+    total: maintenance.length,
+    totalPages: Math.ceil(maintenance.length / pageSize),
+    ...(page === 1
+      ? { criticalWorkTotal: "17" as unknown as number }
+      : {}),
+  }),
+  100
+);
+assert(
+  invalidCritical.criticalWork === null,
+  "invalid criticalWorkTotal remains unavailable"
+);
+
+let failedWalkRejected = false;
+try {
+  await loadOperationalMaintenancePages(async (page, pageSize) => {
+    if (page === 2) throw new Error("simulated page failure");
+    return {
+      data: maintenance.slice(0, pageSize),
+      page,
+      pageSize,
+      total: maintenance.length,
+      totalPages: 2,
+      criticalWorkTotal: 17,
+    };
+  }, 100);
+} catch {
+  failedWalkRejected = true;
+}
+assert(
+  failedWalkRejected,
+  "Maintenance walk failure rejects the coupled rows and KPI result"
+);
 
 const workOrders = Array.from({ length: 130 }, (_, index) => ({
   id: `WO-${index}`,
@@ -90,6 +186,19 @@ const service = readFileSync(resolve("src/modules/command-centre/server/CommandC
 const finance = readFileSync(resolve("src/modules/platform-finance/server/PlatformFinanceServerService.ts"), "utf8");
 const workspace = readFileSync(resolve("src/services/workspace/WorkspaceService.ts"), "utf8");
 assert(workspace.includes("loadAllPages("), "Operations exact path walks pagination instead of enlarging one page");
+const operationsLoader = workspace.slice(
+  workspace.indexOf("export async function loadOperationalPictureMetrics"),
+  workspace.indexOf("export async function loadAssignedWorkSummary")
+);
+assert(
+  !operationsLoader.includes("settleMaintenanceHome") &&
+    (operationsLoader.match(/MaintenanceService\.listMaintenance/g) ?? []).length === 1,
+  "Operations has no separate Maintenance-home KPI request"
+);
+assert(
+  operationsLoader.includes("includeCriticalWorkTotal: true"),
+  "Operations page-1 walk requests criticalWorkTotal"
+);
 assert(finance.includes("organisationWide") && finance.includes("PlatformFinanceVendorBillsRepository"), "Finance Pulse projection is organisation-wide and includes Vendor Bills");
 assert(service.includes("listApprovalQueue(actor)"), "Your Decisions remains actor/company scoped");
 assert(service.includes("overview.pendingCeoDecisions.count"), "Pulse and Decisions use intentionally different scopes");
