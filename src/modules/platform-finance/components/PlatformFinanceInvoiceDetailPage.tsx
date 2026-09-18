@@ -16,6 +16,9 @@ function money(amount: number, currency = "NGN") {
     return `₦${amount.toLocaleString("en-NG")}`;
   }
 }
+function date(value: string) { return new Date(`${value}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); }
+const statusLabel = { draft: "Draft", under_review: "Under Review", issued: "Issued" } as const;
+const statusTone = { draft: "is-muted", under_review: "is-info", issued: "is-success" } as const;
 
 export function PlatformFinanceInvoiceDetailPage() {
   const params = useParams<{ id: string }>();
@@ -85,14 +88,14 @@ export function PlatformFinanceInvoiceDetailPage() {
   }
 
   return (
-    <div className="pf-page">
-      <header className="pf-page-header">
+    <div className="pf-requests">
+      <header className="pf-ov-header">
         <div>
           <Link className="pf-back" href="/platform-finance/invoices">
             <ArrowLeft size={16} /> Invoices
           </Link>
-          <h1>{detail?.reference ?? "Invoice"}</h1>
-          <p>
+          <h1 className="pf-ov-title">{detail?.reference ?? "Invoice"}</h1>
+          <p className="pf-ov-desc">
             {detail
               ? `${detail.counterpartyName} · ${detail.companyName}`
               : "Sales invoice detail"}
@@ -100,22 +103,22 @@ export function PlatformFinanceInvoiceDetailPage() {
         </div>
         <div className="pf-page-actions">
           {detail?.status === "draft" && (caps?.create || caps?.review) ? (
-            <button type="button" className="pf-btn is-primary" disabled={busy} onClick={() => void submit()}>
+            <button type="button" className="pf-btn-primary" disabled={busy} onClick={() => void submit()}>
               Submit for review
             </button>
           ) : null}
           {detail?.status === "under_review" && (caps?.create || caps?.review) ? (
-            <button type="button" className="pf-btn is-ghost" disabled={busy} onClick={() => void returnDraft()}>
+            <button type="button" className="pf-btn-secondary" disabled={busy} onClick={() => void returnDraft()}>
               Return to draft
             </button>
           ) : null}
           {detail?.status === "under_review" && caps?.issue ? (
-            <button type="button" className="pf-btn is-primary" disabled={busy} onClick={() => setReviewOpen(true)}>
+            <button type="button" className="pf-btn-primary" disabled={busy} onClick={() => setReviewOpen(true)}>
               Review &amp; Issue
             </button>
           ) : null}
           {detail?.status === "issued" && detail.journalEntryId ? (
-            <Link className="pf-btn is-primary" href={`/platform-finance/accounting/journal/${detail.journalEntryId}`}>
+            <Link className="pf-btn-primary" href={`/platform-finance/accounting/journal/${detail.journalEntryId}`}>
               View Journal
             </Link>
           ) : null}
@@ -134,16 +137,16 @@ export function PlatformFinanceInvoiceDetailPage() {
           <section className="pf-rev-card">
             <h3>Summary</h3>
             <p>
-              <strong>Status:</strong> {detail.status.replace("_", " ")}
+              <strong>Status:</strong> <span className={`pf-req-status ${statusTone[detail.status]}`}>{statusLabel[detail.status]}</span>
             </p>
             <p>
               <strong>Amount:</strong> {money(detail.totalAmount, detail.currency)}
             </p>
             <p>
-              <strong>Invoice date:</strong> {detail.invoiceDate}
+              <strong>Invoice date:</strong> {date(detail.invoiceDate)}
             </p>
             <p>
-              <strong>Due date:</strong> {detail.dueDate}
+              <strong>Due date:</strong> {date(detail.dueDate)}
             </p>
             {detail.description ? <p>{detail.description}</p> : null}
             {detail.status === "issued" ? (
@@ -158,8 +161,8 @@ export function PlatformFinanceInvoiceDetailPage() {
 
           <section className="pf-rev-card">
             <h3>Lines</h3>
-            <div className="pf-table-wrap">
-              <table className="pf-table">
+            <div className="pf-req-table-wrap">
+              <table className="pf-req-table">
                 <thead>
                   <tr>
                     <th>#</th>
@@ -176,8 +179,8 @@ export function PlatformFinanceInvoiceDetailPage() {
                       <td>{line.lineNo}</td>
                       <td>{line.description}</td>
                       <td>{line.quantity}</td>
-                      <td>{money(line.unitPrice, detail.currency)}</td>
-                      <td>{money(line.lineAmount, detail.currency)}</td>
+                      <td className="pf-req-amount-cell">{money(line.unitPrice, detail.currency)}</td>
+                      <td className="pf-req-amount-cell">{money(line.lineAmount, detail.currency)}</td>
                       <td>
                         {line.revenueGlAccountCode
                           ? `${line.revenueGlAccountCode} — ${line.revenueGlAccountName}`

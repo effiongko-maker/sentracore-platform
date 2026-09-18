@@ -1,41 +1,15 @@
 "use client";
-
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { Search, X } from "lucide-react";
-import type { FinanceReceivable } from "@/modules/platform-finance/domain/receivables";
-import { PlatformFinanceReceivablesService } from "@/services/platform-finance/PlatformFinanceReceivablesService";
-
-function money(amount: number, currency: string) {
-  return new Intl.NumberFormat("en-NG", { style: "currency", currency }).format(amount);
-}
-function date(value: string) {
-  return new Date(`${value}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-}
-
-export function PlatformFinanceReceivablesPage() {
-  const [rows, setRows] = useState<FinanceReceivable[]>([]);
-  const [selected, setSelected] = useState<FinanceReceivable | null>(null);
-  const [query, setQuery] = useState("");
-  const [busy, setBusy] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    PlatformFinanceReceivablesService.list().then((data) => { if (!cancelled) { setRows(data); setBusy(false); } }).catch((reason: unknown) => { if (!cancelled) { setError(reason instanceof Error ? reason.message : "Unable to load receivables."); setBusy(false); } });
-    return () => { cancelled = true; };
-  }, []);
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return rows.filter((row) => !q || row.invoiceReference.toLowerCase().includes(q) || row.counterpartyDisplayName.toLowerCase().includes(q));
-  }, [query, rows]);
-  return <div className="pf-page">
-    <header className="pf-page-header"><div><h1>Receivables</h1><p>Authoritative obligations arising from issued sales invoices.</p></div></header>
-    <div className="pf-toolbar"><label className="pf-search"><Search size={16}/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search invoice or customer…"/></label></div>
-    {busy ? <p className="pf-state-message">Loading receivables…</p> : null}
-    {error ? <p className="pf-form-error" role="alert">{error}</p> : null}
-    {!busy && !error ? <div className="pf-table-wrap"><table className="pf-table"><thead><tr><th>Invoice</th><th>Customer</th><th>Invoice Date</th><th>Due Date</th><th>Original Amount</th><th>Outstanding</th><th>Status</th></tr></thead><tbody>
-      {filtered.length === 0 ? <tr><td colSpan={7} className="pf-empty">No receivables.</td></tr> : filtered.map((row) => <tr key={row.id} onClick={() => setSelected(row)} style={{ cursor: "pointer" }}><td>{row.invoiceReference}</td><td>{row.counterpartyDisplayName}</td><td>{date(row.invoiceDate)}</td><td>{date(row.dueDate)}</td><td>{money(row.originalAmount, row.currency)}</td><td>{money(row.outstandingAmount, row.currency)}</td><td><span className={`pf-pill ${row.status === "overdue" ? "is-danger" : row.status === "settled" ? "is-success" : "is-info"}`}>{row.status.replaceAll("_", " ")}</span></td></tr>)}
-    </tbody></table></div> : null}
-    {selected ? <div className="pf-drawer-backdrop" role="presentation" onMouseDown={() => setSelected(null)}><aside className="pf-drawer" role="dialog" aria-modal="true" aria-label="Receivable detail" onMouseDown={(e) => e.stopPropagation()}><header className="pf-drawer-header"><div><p className="pf-ov-eyebrow">Receivable</p><h2>{selected.invoiceReference}</h2></div><button className="pf-btn is-ghost" onClick={() => setSelected(null)} aria-label="Close"><X size={18}/></button></header><div className="pf-drawer-body"><section className="pf-rev-card"><h3>{selected.counterpartyDisplayName}</h3><p>{selected.companyName}</p><p>Original: {money(selected.originalAmount, selected.currency)}</p><p>Outstanding: {money(selected.outstandingAmount, selected.currency)}</p><p>Available to allocate: {money(selected.availableToAllocate, selected.currency)}</p><p>Due: {date(selected.dueDate)}</p></section><section className="pf-rev-card"><h3>Source &amp; accounting</h3><p><Link href={`/platform-finance/invoices/${selected.invoiceId}`}>Invoice {selected.invoiceReference}</Link></p><p>→ Recognition transaction</p><p>→ <Link href={`/platform-finance/accounting/journal/${selected.journalEntryId}`}>Posted journal</Link></p></section></div></aside></div> : null}
-  </div>;
-}
+import Link from "next/link"; import { Search, X } from "lucide-react"; import { useEffect,useMemo,useState } from "react";
+import type { FinanceReceivable } from "@/modules/platform-finance/domain/receivables"; import { PlatformFinanceReceivablesService as Service } from "@/services/platform-finance/PlatformFinanceReceivablesService";
+type FinanceReceivableStatus = FinanceReceivable["status"];
+const money=(n:number,c:string)=>new Intl.NumberFormat("en-NG",{style:"currency",currency:c}).format(n); const date=(v:string)=>new Date(`${v}T00:00:00`).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+const labels:Record<FinanceReceivableStatus,string>={open:"Open",overdue:"Overdue",partially_settled:"Partially Settled",settled:"Settled"}; const tones:Record<FinanceReceivableStatus,string>={open:"is-info",overdue:"is-danger",partially_settled:"is-amber",settled:"is-success"};
+export function PlatformFinanceReceivablesPage(){const[rows,setRows]=useState<FinanceReceivable[]>([]);const[selected,setSelected]=useState<FinanceReceivable|null>(null);const[query,setQuery]=useState("");const[status,setStatus]=useState<"all"|FinanceReceivableStatus>("all");const[busy,setBusy]=useState(true);const[error,setError]=useState<string|null>(null);
+useEffect(()=>{let cancelled=false;void Service.list().then((data)=>{if(!cancelled){setRows(data);setBusy(false)}}).catch((cause)=>{if(!cancelled){setError(cause instanceof Error?cause.message:"Unable to load receivables.");setBusy(false)}});return()=>{cancelled=true}},[]);
+const filtered=useMemo(()=>{const q=query.trim().toLowerCase();return rows.filter((row)=>(status==="all"||row.status===status)&&(!q||row.invoiceReference.toLowerCase().includes(q)||row.counterpartyDisplayName.toLowerCase().includes(q)))},[query,rows,status]);
+const counts=Object.fromEntries((["open","overdue","partially_settled","settled"] as const).map((value)=>[value,rows.filter((row)=>row.status===value).length])) as Record<FinanceReceivableStatus,number>;const open=rows.filter((row)=>row.outstandingAmount>0).reduce((sum,row)=>sum+row.outstandingAmount,0);const overdue=rows.filter((row)=>row.status==="overdue").reduce((sum,row)=>sum+row.outstandingAmount,0);
+return <div className="pf-requests"><header className="pf-ov-header"><div><h1 className="pf-ov-title">Receivables</h1><p className="pf-ov-desc">Authoritative obligations arising from issued customer invoices.</p></div></header>
+<section className="pf-req-summary">{[["Open AR",money(open,"NGN")],["Overdue AR",money(overdue,"NGN")],["Partially Settled",counts.partially_settled],["Settled",counts.settled]].map(([label,value])=><article className="pf-req-summary-card" key={label}><p className="pf-req-summary-label">{label}</p><p className="pf-req-summary-value">{value}</p></article>)}</section>
+<nav className="pf-req-tabs">{(["all","open","overdue","partially_settled","settled"] as const).map((value)=><button key={value} className={`pf-req-tab ${status===value?"is-active":""}`} onClick={()=>setStatus(value)}>{value==="all"?"All":labels[value]} <span>{value==="all"?rows.length:counts[value]}</span></button>)}</nav>
+<div className="pf-req-table-card"><div className="pf-req-toolbar"><label className="pf-req-search"><Search size={16}/><input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Search invoice or customer…"/></label></div>{busy?<div className="pf-req-empty">Loading receivables…</div>:null}{error?<p className="pf-form-error">{error}</p>:null}{!busy&&!error?<div className="pf-req-table-wrap"><table className="pf-req-table"><thead><tr><th>Invoice</th><th>Customer</th><th>Due Date</th><th>Original</th><th>Outstanding</th><th>Status</th></tr></thead><tbody>{filtered.length?filtered.map((row)=><tr key={row.id} onClick={()=>setSelected(row)}><td className="pf-req-primary">{row.invoiceReference}</td><td>{row.counterpartyDisplayName}</td><td>{date(row.dueDate)}</td><td className="pf-req-amount-cell">{money(row.originalAmount,row.currency)}</td><td className="pf-req-amount-cell">{money(row.outstandingAmount,row.currency)}</td><td><span className={`pf-req-status ${tones[row.status]}`}>{labels[row.status]}</span></td></tr>):<tr><td colSpan={6}><div className="pf-req-empty">{rows.length?"No records match the current filters.":"Issued invoice obligations will appear here."}</div></td></tr>}</tbody></table></div>:null}</div>
+{selected?<div className="pf-drawer-backdrop" onMouseDown={()=>setSelected(null)}><aside className="pf-req-drawer" onMouseDown={(e)=>e.stopPropagation()}><header className="pf-req-drawer-head"><div><p className="pf-req-drawer-ref">RECEIVABLE</p><h2 className="pf-req-drawer-title">{selected.invoiceReference}</h2><p className="pf-req-drawer-cat">{selected.counterpartyDisplayName}</p></div><button className="pf-link-btn" onClick={()=>setSelected(null)} aria-label="Close"><X size={18}/></button></header><div className="pf-req-drawer-body"><div className="pf-req-drawer-metrics"><div><span>Original</span><strong>{money(selected.originalAmount,selected.currency)}</strong></div><div><span>Outstanding</span><strong>{money(selected.outstandingAmount,selected.currency)}</strong></div><div><span>Available</span><strong>{money(selected.availableToAllocate,selected.currency)}</strong></div></div>{selected.availableToAllocate<selected.outstandingAmount?<section className="pf-req-drawer-section"><p className="pf-req-description">A confirmed receipt is holding {money(selected.outstandingAmount-selected.availableToAllocate,selected.currency)} pending posting.</p></section>:null}<section className="pf-req-drawer-section"><h3>Source &amp; accounting</h3><dl className="pf-req-dl"><div><dt>Invoice</dt><dd><Link href={`/platform-finance/invoices/${selected.invoiceId}`}>{selected.invoiceReference}</Link></dd></div><div><dt>Journal</dt><dd><Link href={`/platform-finance/accounting/journal/${selected.journalEntryId}`}>View posted journal</Link></dd></div><div><dt>Receipts</dt><dd><Link href="/platform-finance/receipts">Open receipts</Link></dd></div></dl></section></div></aside></div>:null}</div>}

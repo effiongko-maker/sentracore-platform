@@ -116,14 +116,14 @@ export function PlatformFinanceNewInvoicePage() {
   }
 
   return (
-    <div className="pf-page">
-      <header className="pf-page-header">
+    <div className="pf-requests">
+      <header className="pf-ov-header">
         <div>
           <Link className="pf-back" href="/platform-finance/invoices">
             <ArrowLeft size={16} /> Invoices
           </Link>
-          <h1>New Invoice</h1>
-          <p>Draft a sales invoice with one or more revenue lines.</p>
+          <h1 className="pf-ov-title">New Invoice</h1>
+          <p className="pf-ov-desc">Draft a customer invoice with one or more revenue lines.</p>
         </div>
       </header>
 

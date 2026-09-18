@@ -75,41 +75,47 @@ export function PlatformFinanceInvoicesPage() {
       );
     });
   }, [rows, query, status]);
+  const counts = useMemo(() => ({
+    draft: rows.filter((row) => row.status === "draft").length,
+    under_review: rows.filter((row) => row.status === "under_review").length,
+    issued: rows.filter((row) => row.status === "issued").length,
+    issuedValue: rows.filter((row) => row.status === "issued").reduce((sum, row) => sum + row.totalAmount, 0),
+  }), [rows]);
 
   return (
-    <div className="pf-page">
-      <header className="pf-page-header">
+    <div className="pf-requests">
+      <header className="pf-ov-header">
         <div>
-          <h1>Invoices</h1>
-          <p>Prepare, review, and issue sales invoices with compound journal recognition.</p>
+          <h1 className="pf-ov-title">Invoices</h1>
+          <p className="pf-ov-desc">Prepare, review, and issue customer invoices.</p>
         </div>
         <div className="pf-page-actions">
-          <Link className="pf-btn is-ghost" href="/platform-finance/counterparties">
+          <Link className="pf-btn-secondary" href="/platform-finance/counterparties">
             Counterparties
           </Link>
           {caps?.create ? (
-            <Link className="pf-btn is-primary" href="/platform-finance/invoices/new">
+            <Link className="pf-btn-primary" href="/platform-finance/invoices/new">
               <Plus size={16} /> New Invoice
             </Link>
           ) : null}
         </div>
       </header>
 
-      <div className="pf-toolbar">
-        <label className="pf-search">
+      <section className="pf-req-summary">
+        {[["Draft", counts.draft], ["Under Review", counts.under_review], ["Issued", counts.issued], ["Issued Value", money(counts.issuedValue)]].map(([label, value]) => <article className="pf-req-summary-card" key={label}><p className="pf-req-summary-label">{label}</p><p className="pf-req-summary-value">{value}</p></article>)}
+      </section>
+      <nav className="pf-req-tabs" aria-label="Invoice status">
+        {(["all", "draft", "under_review", "issued"] as const).map((value) => <button type="button" key={value} className={`pf-req-tab ${status === value ? "is-active" : ""}`} onClick={() => setStatus(value)}>{value === "all" ? "All" : STATUS_LABELS[value]} <span>{value === "all" ? rows.length : counts[value]}</span></button>)}
+      </nav>
+      <div className="pf-req-table-card"><div className="pf-req-toolbar">
+        <label className="pf-req-search">
           <Search size={16} />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search reference or notes…"
+            placeholder="Search reference, customer, or notes…"
           />
         </label>
-        <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
-          <option value="all">All statuses</option>
-          <option value="draft">Draft</option>
-          <option value="under_review">Under Review</option>
-          <option value="issued">Issued</option>
-        </select>
       </div>
 
       {busy ? <p className="pf-state-message">Loading invoices…</p> : null}
@@ -120,13 +126,13 @@ export function PlatformFinanceInvoicesPage() {
       ) : null}
 
       {!busy && !error ? (
-        <div className="pf-table-wrap">
-          <table className="pf-table">
+        <div className="pf-req-table-wrap">
+          <table className="pf-req-table">
             <thead>
               <tr>
                 <th>Reference</th>
+                <th>Customer</th>
                 <th>Status</th>
-                <th>Counterparty</th>
                 <th>Invoice date</th>
                 <th>Due date</th>
                 <th>Amount</th>
@@ -135,25 +141,24 @@ export function PlatformFinanceInvoicesPage() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="pf-empty">
-                    No invoices yet.
+                  <td colSpan={6}><div className="pf-req-empty">
+                    {rows.length ? "No records match the current filters." : "Issued and draft customer invoices will appear here."}
+                  </div>
                   </td>
                 </tr>
               ) : (
                 filtered.map((row) => (
                   <tr key={row.id}>
+                    <td><Link className="pf-req-primary" href={`/platform-finance/invoices/${row.id}`}>{row.reference}</Link></td>
+                    <td>{row.counterpartyDisplayName ?? "—"}</td>
                     <td>
-                      <Link href={`/platform-finance/invoices/${row.id}`}>{row.reference}</Link>
-                    </td>
-                    <td>
-                      <span className={`pf-pill ${STATUS_TONE[row.status]}`}>
+                      <span className={`pf-req-status ${STATUS_TONE[row.status]}`}>
                         {STATUS_LABELS[row.status]}
                       </span>
                     </td>
-                    <td>{row.counterpartyDisplayName ?? "—"}</td>
                     <td>{formatDate(row.invoiceDate)}</td>
                     <td>{formatDate(row.dueDate)}</td>
-                    <td>{money(row.totalAmount, row.currency)}</td>
+                    <td className="pf-req-amount-cell">{money(row.totalAmount, row.currency)}</td>
                   </tr>
                 ))
               )}
@@ -161,6 +166,7 @@ export function PlatformFinanceInvoicesPage() {
           </table>
         </div>
       ) : null}
+      </div>
     </div>
   );
 }

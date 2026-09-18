@@ -998,15 +998,33 @@ export class PlatformFinanceServerService {
     if (receivableGrant && companyIdsForRequests.length) {
       const { data: receivableRows, error: receivableError } = await admin
         .from("finance_receivables")
-        .select("due_date,original_amount")
+        .select("id,due_date,original_amount")
         .eq("organisation_id", this.organisationId)
         .in("company_id", companyIdsForRequests);
       if (receivableError) throw new ActionError("INTERNAL_ERROR", receivableError.message);
+      const ids = (receivableRows ?? []).map((row) => String(row.id));
+      const posted = new Map<string, number>();
+      if (ids.length) {
+        const { data: allocations, error: allocationError } = await admin
+          .from("finance_receipt_allocations")
+          .select("receivable_id,amount,finance_receipts!inner(status)")
+          .in("receivable_id", ids)
+          .eq("finance_receipts.status", "posted");
+        if (allocationError) throw new ActionError("INTERNAL_ERROR", allocationError.message);
+        for (const allocation of allocations ?? []) {
+          const id = String(allocation.receivable_id);
+          posted.set(id, (posted.get(id) ?? 0) + Number(allocation.amount));
+        }
+      }
       const today = asOf.slice(0, 10);
-      const overdueRows = (receivableRows ?? []).filter((row) => row.due_date < today);
+      const outstandingRows = (receivableRows ?? []).map((row) => ({
+        dueDate: row.due_date,
+        amount: Math.max(0, Number(row.original_amount) - (posted.get(String(row.id)) ?? 0)),
+      })).filter((row) => row.amount > 0);
+      const overdueRows = outstandingRows.filter((row) => row.dueDate < today);
       receivables = {
-        open: sumBucket((receivableRows ?? []).map((row) => Number(row.original_amount))),
-        overdue: sumBucket(overdueRows.map((row) => Number(row.original_amount))),
+        open: sumBucket(outstandingRows.map((row) => row.amount)),
+        overdue: sumBucket(overdueRows.map((row) => row.amount)),
       };
     }
     const requests =

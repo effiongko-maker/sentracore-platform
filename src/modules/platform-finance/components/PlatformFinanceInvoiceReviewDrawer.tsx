@@ -8,6 +8,7 @@ import type { InvoiceAccountingPreview } from "@/modules/platform-finance/domain
 function money(amount: number, currency: string) {
   return new Intl.NumberFormat("en-NG", { style: "currency", currency }).format(amount);
 }
+function date(value: string) { return new Date(`${value}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); }
 
 export function PlatformFinanceInvoiceReviewDrawer(props: {
   invoiceId: string;
@@ -65,17 +66,17 @@ export function PlatformFinanceInvoiceReviewDrawer(props: {
       }}
     >
       <section
-        className="pf-drawer"
+        className="pf-req-drawer"
         role="dialog"
         aria-modal="true"
         aria-label="Review and issue invoice accounting"
       >
-        <header className="pf-drawer-header">
+        <header className="pf-req-drawer-head">
           <div>
             <h2>Review &amp; Issue</h2>
             <p>System-derived compound journal. Revenue classification comes from invoice lines.</p>
           </div>
-          <button type="button" className="pf-btn is-ghost" onClick={props.onClose}>
+          <button type="button" className="pf-btn-secondary" onClick={props.onClose}>
             Close
           </button>
         </header>
@@ -86,11 +87,11 @@ export function PlatformFinanceInvoiceReviewDrawer(props: {
           </p>
         ) : null}
         {preview ? (
-          <div className="pf-drawer-body">
+          <div className="pf-req-drawer-body">
             <section className="pf-rev-card">
               <h3>Invoice</h3>
               <p className="pf-payd-strong">
-                {money(preview.totalAmount, preview.currency)} · {preview.invoiceDate}
+                {money(preview.totalAmount, preview.currency)} · {date(preview.invoiceDate)}
               </p>
               <p className="pf-payd-muted">Status: {preview.status.replace("_", " ")}</p>
               <p className="pf-payd-muted">
@@ -101,8 +102,8 @@ export function PlatformFinanceInvoiceReviewDrawer(props: {
             <section className="pf-rev-card">
               <h3>Accounting consequence</h3>
               <p className="pf-payd-muted">AR control is system-derived. Journal lines are not editable here.</p>
-              <div className="pf-table-wrap">
-                <table className="pf-table">
+              <div className="pf-req-table-wrap">
+                <table className="pf-req-table">
                   <thead>
                     <tr>
                       <th>Account</th>
@@ -125,13 +126,13 @@ export function PlatformFinanceInvoiceReviewDrawer(props: {
               </div>
             </section>
             {preview.status === "issued" ? (
-              <Link className="pf-btn is-primary" href="/platform-finance/invoices">
+              <Link className="pf-btn-primary" href="/platform-finance/invoices">
                 Done
               </Link>
             ) : (
               <button
                 type="button"
-                className="pf-btn is-primary"
+                className="pf-btn-primary"
                 disabled={!preview.periodId || busy || preview.status !== "under_review"}
                 onClick={() => void issue()}
               >

@@ -431,7 +431,8 @@ export function PlatformFinanceOverviewPage() {
           <h2 className="pf-panel-title">Expected inflows</h2>
           <div className="pf-empty-box">
             <ChartNoAxesCombined className="h-5 w-5 opacity-45" aria-hidden />
-            <p>Expected inflows will appear here once Receivables is live.</p>
+            <p>Open invoice obligations are tracked in the Receivables register.</p>
+            <Link href="/platform-finance/receivables">Open Receivables</Link>
           </div>
         </article>
 

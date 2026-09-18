@@ -102,12 +102,6 @@ export const PLATFORM_FINANCE_NAV_ITEMS: readonly PlatformFinanceNavItem[] = [
         match: "prefix",
         icon: CalendarRange,
       },
-      {
-        href: "/platform-finance/receipts",
-        label: "Receipts",
-        match: "prefix",
-        icon: Receipt,
-      },
     ],
   },
   {
@@ -133,6 +127,12 @@ export const PLATFORM_FINANCE_NAV_ITEMS: readonly PlatformFinanceNavItem[] = [
         label: "Receivables",
         match: "prefix",
         icon: ArrowDownLeft,
+      },
+      {
+        href: "/platform-finance/receipts",
+        label: "Receipts",
+        match: "prefix",
+        icon: Receipt,
       },
     ],
   },
