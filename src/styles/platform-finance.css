@@ -1133,7 +1133,7 @@ a.pf-btn-primary:active:not(:disabled) {
 }
 
 .pf-req-drawer.pf-cp-drawer {
-  width: min(40rem, 94vw);
+  width: min(34rem, 94vw);
 }
 
 .pf-cp-form-grid {
