@@ -24,6 +24,14 @@ function main() {
   assert(
     existsSync(
       resolve(
+        "src/app/(app)/platform-finance/accounting/general-ledger/page.tsx"
+      )
+    ),
+    "general ledger route"
+  );
+  assert(
+    existsSync(
+      resolve(
         "src/app/(app)/platform-finance/accounting/journal/[id]/page.tsx"
       )
     ),
@@ -37,6 +45,20 @@ function main() {
     ),
     "no fake TB route"
   );
+  assert(
+    !existsSync(
+      resolve("src/app/(app)/platform-finance/accounting/pnl/page.tsx")
+    ) &&
+      !existsSync(
+        resolve(
+          "src/app/(app)/platform-finance/accounting/balance-sheet/page.tsx"
+        )
+      ) &&
+      !existsSync(
+        resolve("src/app/(app)/platform-finance/accounting/cash-flow/page.tsx")
+      ),
+    "statement routes remain dark"
+  );
 
   const nav = readSrc("src/modules/platform-finance/nav.ts");
   assert(
@@ -44,13 +66,50 @@ function main() {
     "Journal subnav is live"
   );
   assert(
+    nav.includes('href: "/platform-finance/accounting/general-ledger"'),
+    "General Ledger subnav is live"
+  );
+  assert(
     !nav.includes('label: "Journal",\n      icon: BookOpen,\n      comingSoon: true'),
     "Journal is not comingSoon"
+  );
+  assert(
+    !nav.includes("comingSoon: true") ||
+      (nav.includes('label: "Trial Balance"') &&
+        nav.includes('label: "P&L"') &&
+        nav.includes('label: "Balance Sheet"') &&
+        nav.includes('label: "Cash Flow"')),
+    "statement labels remain"
+  );
+  assert(
+    nav.includes('href: null,\n        label: "Trial Balance"'),
+    "Trial Balance remains dark"
+  );
+  assert(
+    nav.includes('href: null,\n        label: "P&L"') ||
+      nav.includes('{ href: null, label: "P&L"'),
+    "P&L remains dark"
+  );
+  assert(
+    nav.includes('href: null,\n        label: "Balance Sheet"'),
+    "Balance Sheet remains dark"
+  );
+  assert(
+    nav.includes('{ href: null, label: "Cash Flow"') ||
+      nav.includes('href: null,\n        label: "Cash Flow"'),
+    "Cash Flow remains dark"
   );
 
   const route = readSrc("src/app/api/platform-finance/route.ts");
   assert(route.includes('"listJournals"'), "listJournals action");
+  assert(route.includes('"listGeneralLedger"'), "listGeneralLedger action");
   assert(route.includes('"getJournalDetail"'), "getJournalDetail action");
+  assert(
+    !route.includes("platform_finance.ledger") &&
+      !route.includes("counterparty.ledger") &&
+      !route.includes("general_ledger.view"),
+    "no invented GL capability"
+  );
 
   const register = readSrc(
     "src/modules/platform-finance/components/PlatformFinanceJournalPage.tsx"
@@ -114,6 +173,8 @@ function main() {
     "src/modules/platform-finance/server/PlatformFinanceRepository.ts"
   );
   assert(repo.includes("queryJournalRegister"), "register query");
+  assert(repo.includes("queryGeneralLedger"), "dedicated GL query");
+  assert(repo.includes("finance_general_ledger_v"), "GL reads posted-line view");
   assert(repo.includes("enrichJournalRegisterLines"), "line-level enrichment");
   assert(repo.includes("listJournalLinesWithAccounts"), "lines+accounts");
   assert(
@@ -135,12 +196,53 @@ function main() {
     "src/modules/platform-finance/server/PlatformFinanceServerService.ts"
   );
   assert(service.includes("listJournals"), "server listJournals");
+  assert(service.includes("listGeneralLedger"), "server listGeneralLedger");
   assert(service.includes("getJournalDetail"), "server getJournalDetail");
   assert(
     service.includes("listAccessibleCompanyIds"),
     "company access enforced"
   );
   assert(service.includes("preparedByName"), "service maps preparedByName");
+  assert(
+    service.includes("Date range must fall within the selected period."),
+    "GL rejects dates outside period"
+  );
+
+  const glPage = readSrc(
+    "src/modules/platform-finance/components/PlatformFinanceGeneralLedgerPage.tsx"
+  );
+  assert(glPage.includes(">Journal Ref</th>"), "GL Journal Ref column");
+  assert(glPage.includes(">GL Code</th>"), "GL Code column");
+  assert(glPage.includes("Total Debit"), "filtered debit total");
+  assert(glPage.includes("Total Credit"), "filtered credit total");
+  assert(!/running balance|opening balance/i.test(glPage), "no running/opening balance");
+  assert(
+    !/last4|institution|account_number|Restricted corporate financial account/i.test(
+      glPage
+    ),
+    "no restricted financial-account identity"
+  );
+  assert(!glPage.includes("source_id"), "no source_id in GL UI");
+  assert(
+    glPage.includes("/platform-finance/accounting/journal/"),
+    "Journal Ref routes to journal detail"
+  );
+  assert(
+    !glPage.includes("queryJournalRegister"),
+    "GL page does not reuse journal register query"
+  );
+
+  const glTypes = readSrc(
+    "src/modules/platform-finance/domain/generalLedger.ts"
+  );
+  assert(glTypes.includes("totalDebit"), "filtered-set debit total type");
+  assert(glTypes.includes("journalEntryId"), "GL row keeps journalEntryId");
+  assert(!glTypes.includes("source_id"), "GL types omit source_id");
+
+  const client = readSrc(
+    "src/services/platform-finance/PlatformFinanceService.ts"
+  );
+  assert(client.includes("listGeneralLedger"), "client listGeneralLedger");
 
   // Ops domains still not posting
   assert(
@@ -162,7 +264,7 @@ function main() {
   assert(!route.includes("createJournal"), "no createJournal");
 
   console.log("PASS verify-platform-finance-accounting-slice2");
-  console.log("  Journal register + detail (read-only) over existing SoT");
+  console.log("  Journal register + detail + General Ledger (posted lines)");
 }
 
 main();

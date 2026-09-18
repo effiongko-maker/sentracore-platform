@@ -5,6 +5,7 @@ export { PlatformFinanceChartOfAccountsPage } from "./components/PlatformFinance
 export { PlatformFinancePeriodsPage } from "./components/PlatformFinancePeriodsPage";
 export { PlatformFinanceJournalPage } from "./components/PlatformFinanceJournalPage";
 export { PlatformFinanceJournalDetailPage } from "./components/PlatformFinanceJournalDetailPage";
+export { PlatformFinanceGeneralLedgerPage } from "./components/PlatformFinanceGeneralLedgerPage";
 export { PlatformFinanceRequestsPage } from "./components/PlatformFinanceRequestsPage";
 export { PlatformFinanceNewRequestPage } from "./components/PlatformFinanceNewRequestPage";
 export { PlatformFinanceRequestReviewPage } from "./components/PlatformFinanceRequestReviewPage";

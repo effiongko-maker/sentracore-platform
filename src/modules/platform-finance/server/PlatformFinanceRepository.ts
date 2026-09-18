@@ -993,6 +993,132 @@ export class PlatformFinanceRepository {
     }));
   }
 
+  /**
+   * Posted GL activity from finance_general_ledger_v.
+   * Totals cover the full filtered set; rows are server-paginated.
+   */
+  async queryGeneralLedger(input: {
+    companyId: string;
+    periodId: string;
+    dateFrom: string;
+    dateTo: string;
+    accountId?: string | null;
+    search?: string | null;
+    page: number;
+    pageSize: number;
+  }): Promise<{
+    rows: Array<{
+      journalLineId: string;
+      journalEntryId: string;
+      entryDate: string;
+      reference: string;
+      entryDescription: string;
+      lineDescription: string | null;
+      accountCode: string;
+      accountName: string;
+      debit: number;
+      credit: number;
+    }>;
+    total: number;
+    totalDebit: number;
+    totalCredit: number;
+  }> {
+    const page = Math.max(1, input.page);
+    const pageSize = input.pageSize === 50 ? 50 : 20;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    const search = input.search?.trim()
+      ? input.search.trim().replace(/[%_,]/g, "\\$&")
+      : "";
+    const searchOr = search
+      ? [
+          `entry_reference.ilike.%${search}%`,
+          `entry_description.ilike.%${search}%`,
+          `line_description.ilike.%${search}%`,
+          `account_code.ilike.%${search}%`,
+          `account_name.ilike.%${search}%`,
+        ].join(",")
+      : "";
+
+    let pageQuery = db()
+      .from("finance_general_ledger_v")
+      .select(
+        "journal_line_id,journal_entry_id,entry_date,entry_reference,entry_description,line_description,account_code,account_name,debit,credit,line_no",
+        { count: "exact" }
+      )
+      .eq("organisation_id", this.organisationId)
+      .eq("company_id", input.companyId)
+      .eq("period_id", input.periodId)
+      .gte("entry_date", input.dateFrom)
+      .lte("entry_date", input.dateTo);
+    if (input.accountId) pageQuery = pageQuery.eq("account_id", input.accountId);
+    if (searchOr) pageQuery = pageQuery.or(searchOr);
+
+    let totalsQuery = db()
+      .from("finance_general_ledger_v")
+      .select("total_debit:debit.sum(), total_credit:credit.sum()")
+      .eq("organisation_id", this.organisationId)
+      .eq("company_id", input.companyId)
+      .eq("period_id", input.periodId)
+      .gte("entry_date", input.dateFrom)
+      .lte("entry_date", input.dateTo);
+    if (input.accountId) totalsQuery = totalsQuery.eq("account_id", input.accountId);
+    if (searchOr) totalsQuery = totalsQuery.or(searchOr);
+
+    const [pageResult, totalsResult] = await Promise.all([
+      pageQuery
+        .order("entry_date", { ascending: true })
+        .order("entry_reference", { ascending: true })
+        .order("line_no", { ascending: true })
+        .order("journal_line_id", { ascending: true })
+        .range(from, to),
+      totalsQuery,
+    ]);
+
+    if (pageResult.error) throwDb(pageResult.error, "Failed to load general ledger.");
+    if (totalsResult.error) throwDb(totalsResult.error, "Failed to load general ledger totals.");
+
+    const totalsRow = Array.isArray(totalsResult.data)
+      ? (totalsResult.data[0] as
+          | { total_debit?: number | string | null; total_credit?: number | string | null }
+          | undefined)
+      : (totalsResult.data as {
+          total_debit?: number | string | null;
+          total_credit?: number | string | null;
+        } | null);
+
+    type LedgerRow = {
+      journal_line_id: string;
+      journal_entry_id: string;
+      entry_date: string;
+      entry_reference: string;
+      entry_description: string | null;
+      line_description: string | null;
+      account_code: string;
+      account_name: string;
+      debit: number | string | null;
+      credit: number | string | null;
+    };
+
+    return {
+      rows: ((pageResult.data ?? []) as LedgerRow[]).map((row) => ({
+        journalLineId: row.journal_line_id,
+        journalEntryId: row.journal_entry_id,
+        entryDate: row.entry_date,
+        reference: row.entry_reference,
+        entryDescription: row.entry_description ?? "",
+        lineDescription: row.line_description ?? null,
+        accountCode: row.account_code,
+        accountName: row.account_name,
+        debit: Number(row.debit ?? 0),
+        credit: Number(row.credit ?? 0),
+      })),
+      total: pageResult.count ?? 0,
+      totalDebit: Number(totalsRow?.total_debit ?? 0),
+      totalCredit: Number(totalsRow?.total_credit ?? 0),
+    };
+  }
+
   async listRecentAuditEvents(profileId: string, limit = 12): Promise<
     Array<{
       id: string;

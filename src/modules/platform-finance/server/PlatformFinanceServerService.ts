@@ -38,6 +38,11 @@ import type {
   FinanceJournalRegisterResult,
   FinanceJournalRegisterRow,
 } from "@/modules/platform-finance/journalTypes";
+import type {
+  FinanceGeneralLedgerFilters,
+  FinanceGeneralLedgerResult,
+  FinanceGeneralLedgerRow,
+} from "@/modules/platform-finance/domain/generalLedger";
 import { PlatformFinanceRequestsRepository } from "@/modules/platform-finance/server/PlatformFinanceRequestsRepository";
 import { PlatformFinanceVendorBillsRepository } from "@/modules/platform-finance/server/PlatformFinanceVendorBillsRepository";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -816,6 +821,89 @@ export class PlatformFinanceServerService {
       pageSize,
       pageDebitTotal,
       pageCreditTotal,
+    };
+  }
+
+  async listGeneralLedger(
+    profileId: string,
+    filters: FinanceGeneralLedgerFilters
+  ): Promise<FinanceGeneralLedgerResult> {
+    const companyId = filters.companyId?.trim() ?? "";
+    const periodId = filters.periodId?.trim() ?? "";
+    const dateFrom = filters.dateFrom?.trim() ?? "";
+    const dateTo = filters.dateTo?.trim() ?? "";
+    if (!companyId) {
+      throw new ActionError("VALIDATION_ERROR", "Company is required.");
+    }
+    if (!periodId) {
+      throw new ActionError("VALIDATION_ERROR", "Period is required.");
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) {
+      throw new ActionError("VALIDATION_ERROR", "Date from and date to must be YYYY-MM-DD.");
+    }
+    if (dateFrom > dateTo) {
+      throw new ActionError("VALIDATION_ERROR", "Date from must be on or before date to.");
+    }
+
+    const accessibleIds = await this.repo.listAccessibleCompanyIds(profileId);
+    if (!accessibleIds.includes(companyId)) {
+      throw new ActionError(
+        "FORBIDDEN",
+        "You do not have access to this finance company."
+      );
+    }
+
+    const period = await this.repo.getPeriod(periodId);
+    if (!period || period.companyId !== companyId) {
+      throw new ActionError("VALIDATION_ERROR", "Period not found for this company.");
+    }
+    if (dateFrom < period.startDate || dateTo > period.endDate) {
+      throw new ActionError(
+        "VALIDATION_ERROR",
+        "Date range must fall within the selected period."
+      );
+    }
+
+    const accountId = filters.accountId?.trim() || null;
+    if (accountId) {
+      const account = await this.repo.getAccount(accountId);
+      if (!account) {
+        throw new ActionError("VALIDATION_ERROR", "GL account not found.");
+      }
+    }
+
+    const page = Math.max(1, filters.page ?? 1);
+    const pageSize = filters.pageSize === 50 ? 50 : 20;
+    const { rows, total, totalDebit, totalCredit } = await this.repo.queryGeneralLedger({
+      companyId,
+      periodId,
+      dateFrom,
+      dateTo,
+      accountId,
+      search: filters.search ?? null,
+      page,
+      pageSize,
+    });
+
+    const mapped: FinanceGeneralLedgerRow[] = rows.map((row) => ({
+      id: row.journalLineId,
+      journalEntryId: row.journalEntryId,
+      entryDate: row.entryDate,
+      reference: row.reference,
+      description: row.lineDescription?.trim() || row.entryDescription,
+      accountCode: row.accountCode,
+      accountName: row.accountName,
+      debit: row.debit,
+      credit: row.credit,
+    }));
+
+    return {
+      rows: mapped,
+      total,
+      page,
+      pageSize,
+      totalDebit,
+      totalCredit,
     };
   }
 

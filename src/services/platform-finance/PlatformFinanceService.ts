@@ -12,6 +12,7 @@ import type {
 } from "@/modules/platform-finance/types";
 import type { FinanceOverviewSnapshot } from "@/modules/platform-finance/overviewTypes";
 import type { FinanceJournalRegisterResult } from "@/modules/platform-finance/journalTypes";
+import type { FinanceGeneralLedgerResult } from "@/modules/platform-finance/domain/generalLedger";
 import type {
   OpeningPositionListItem,
   OpeningPositionReview,
@@ -353,6 +354,19 @@ export const PlatformFinanceService = {
     pageSize?: number;
   }): Promise<FinanceJournalRegisterResult> {
     return postAction("listJournals", { input: input ?? {} });
+  },
+
+  listGeneralLedger(input: {
+    companyId: string;
+    periodId: string;
+    dateFrom: string;
+    dateTo: string;
+    accountId?: string | null;
+    search?: string | null;
+    page?: number;
+    pageSize?: number;
+  }): Promise<FinanceGeneralLedgerResult> {
+    return postAction("listGeneralLedger", { input });
   },
 
   getJournalDetail(journalEntryId: string): Promise<{

@@ -56,11 +56,10 @@ export const PLATFORM_FINANCE_NAV_ITEMS: readonly PlatformFinanceNavItem[] = [
         icon: BookOpen,
       },
       {
-        href: null,
+        href: "/platform-finance/accounting/general-ledger",
         label: "General Ledger",
         match: "prefix",
         icon: BookOpen,
-        comingSoon: true,
       },
       {
         href: null,
@@ -200,10 +199,9 @@ export const PLATFORM_FINANCE_ACCOUNTING_SUBNAV: readonly AccountingSubnavItem[]
       icon: BookOpen,
     },
     {
-      href: null,
+      href: "/platform-finance/accounting/general-ledger",
       label: "General Ledger",
       icon: BookOpen,
-      comingSoon: true,
     },
     {
       href: null,

@@ -29,6 +29,7 @@ type PlatformFinanceAction =
   | "closePeriod"
   | "getJournal"
   | "listJournals"
+  | "listGeneralLedger"
   | "getJournalDetail";
 
 type RequestBody = {
@@ -96,6 +97,7 @@ function capabilityForAction(
     case "listAccounts":
     case "getAccount":
     case "listJournals":
+    case "listGeneralLedger":
     case "getJournalDetail":
     case "findOpenPeriodForDate":
     default:
@@ -119,6 +121,7 @@ function companyIdForAction(
     action === "getOverview" ||
     action === "getMyAccountingCapabilities" ||
     action === "listJournals" ||
+    action === "listGeneralLedger" ||
     action === "getJournalDetail"
   ) {
     return undefined;
@@ -508,6 +511,26 @@ export async function POST(request: Request) {
               typeof input.pageSize === "number"
                 ? input.pageSize
                 : Number(input.pageSize ?? 25),
+          }),
+        });
+      }
+      case "listGeneralLedger": {
+        const input = body.input ?? {};
+        return NextResponse.json({
+          success: true,
+          data: await service.listGeneralLedger(access.profileId, {
+            companyId: String(input.companyId ?? ""),
+            periodId: String(input.periodId ?? ""),
+            dateFrom: String(input.dateFrom ?? ""),
+            dateTo: String(input.dateTo ?? ""),
+            accountId:
+              typeof input.accountId === "string" ? input.accountId : null,
+            search: typeof input.search === "string" ? input.search : null,
+            page: typeof input.page === "number" ? input.page : Number(input.page ?? 1),
+            pageSize:
+              typeof input.pageSize === "number"
+                ? input.pageSize
+                : Number(input.pageSize ?? 20),
           }),
         });
       }
