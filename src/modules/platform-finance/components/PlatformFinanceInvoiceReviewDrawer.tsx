@@ -1,55 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useState } from "react";
 import { PlatformFinanceInvoicesService } from "@/services/platform-finance/PlatformFinanceInvoicesService";
-import type { InvoiceAccountingPreview } from "@/modules/platform-finance/domain/invoices";
-
-function money(amount: number, currency: string) {
-  return new Intl.NumberFormat("en-NG", { style: "currency", currency }).format(amount);
-}
-function date(value: string) { return new Date(`${value}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); }
+import type { FinanceInvoiceDetail } from "@/modules/platform-finance/domain/invoices";
+import {
+  formatInvoiceDate,
+  formatInvoiceMoney,
+  invoiceCustomerName,
+} from "@/modules/platform-finance/invoicePresentation";
 
 export function PlatformFinanceInvoiceReviewDrawer(props: {
-  invoiceId: string;
+  invoice: FinanceInvoiceDetail;
   onClose: () => void;
   onIssued?: () => void;
 }) {
-  const [preview, setPreview] = useState<InvoiceAccountingPreview | null>(null);
-  const [busy, setBusy] = useState(true);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    PlatformFinanceInvoicesService.getAccountingPreview(props.invoiceId)
-      .then((next) => {
-        if (cancelled) return;
-        setPreview(next);
-        setBusy(false);
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Unable to load accounting preview.");
-        setBusy(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [props.invoiceId]);
+  const invoice = props.invoice;
+  const customer = invoiceCustomerName(invoice);
+  const notes = invoice.description?.trim() || null;
 
   async function issue() {
-    if (!preview) return;
-    if (
-      !window.confirm(
-        `Issue and post ${money(preview.totalAmount, preview.currency)}? This creates one journal entry and cannot be undone.`
-      )
-    ) {
-      return;
-    }
+    if (invoice.status !== "under_review") return;
     setBusy(true);
     setError(null);
     try {
-      await PlatformFinanceInvoicesService.issueAndPost(props.invoiceId);
+      await PlatformFinanceInvoicesService.issueAndPost(invoice.id);
       props.onIssued?.();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Unable to issue invoice.");
@@ -69,78 +45,101 @@ export function PlatformFinanceInvoiceReviewDrawer(props: {
         className="pf-req-drawer"
         role="dialog"
         aria-modal="true"
-        aria-label="Review and issue invoice accounting"
+        aria-label="Review invoice"
       >
         <header className="pf-req-drawer-head">
           <div>
-            <h2>Review &amp; Issue</h2>
-            <p>System-derived compound journal. Revenue classification comes from invoice lines.</p>
+            <h2 className="pf-req-drawer-title">Review Invoice</h2>
+            <p className="pf-req-drawer-cat">
+              Confirm the invoice details before issuing it.
+            </p>
           </div>
           <button type="button" className="pf-btn-secondary" onClick={props.onClose}>
             Close
           </button>
         </header>
-        {busy && !preview ? <p className="pf-state-message">Loading accounting preview…</p> : null}
-        {error ? (
-          <p className="pf-form-error" role="alert">
-            {error}
-          </p>
-        ) : null}
-        {preview ? (
-          <div className="pf-req-drawer-body">
-            <section className="pf-rev-card">
-              <h3>Invoice</h3>
-              <p className="pf-payd-strong">
-                {money(preview.totalAmount, preview.currency)} · {date(preview.invoiceDate)}
-              </p>
-              <p className="pf-payd-muted">Status: {preview.status.replace("_", " ")}</p>
-              <p className="pf-payd-muted">
-                Accounting period:{" "}
-                {preview.periodLabel ? `${preview.periodLabel} · Open` : "No open period covers the invoice date"}
-              </p>
-            </section>
-            <section className="pf-rev-card">
-              <h3>Accounting consequence</h3>
-              <p className="pf-payd-muted">AR control is system-derived. Journal lines are not editable here.</p>
-              <div className="pf-req-table-wrap">
-                <table className="pf-req-table">
-                  <thead>
-                    <tr>
-                      <th>Account</th>
-                      <th>Debit</th>
-                      <th>Credit</th>
+        <div className="pf-req-drawer-body">
+          {error ? (
+            <div className="pf-vb-alert is-danger" role="alert">
+              {error}
+            </div>
+          ) : null}
+          <dl className="pf-req-dl">
+            <div>
+              <dt>Customer</dt>
+              <dd>{customer}</dd>
+            </div>
+            <div>
+              <dt>Invoice date</dt>
+              <dd>{formatInvoiceDate(invoice.invoiceDate)}</dd>
+            </div>
+            <div>
+              <dt>Due date</dt>
+              <dd>{formatInvoiceDate(invoice.dueDate)}</dd>
+            </div>
+          </dl>
+          <section className="pf-req-drawer-section">
+            <h3>Invoice lines</h3>
+            <div className="pf-req-table-wrap">
+              <table className="pf-req-table">
+                <thead>
+                  <tr>
+                    <th>Description</th>
+                    <th>Qty</th>
+                    <th>Unit price</th>
+                    <th>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoice.lines.map((line) => (
+                    <tr key={line.id}>
+                      <td>{line.description}</td>
+                      <td>{line.quantity}</td>
+                      <td className="pf-req-amount-cell">
+                        {formatInvoiceMoney(line.unitPrice, invoice.currency)}
+                      </td>
+                      <td className="pf-req-amount-cell">
+                        {formatInvoiceMoney(line.lineAmount, invoice.currency)}
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {preview.lines.map((line) => (
-                      <tr key={`${line.accountId}-${line.debit}-${line.credit}`}>
-                        <td>
-                          {line.accountCode} — {line.accountName}
-                        </td>
-                        <td>{line.debit ? money(line.debit, preview.currency) : "—"}</td>
-                        <td>{line.credit ? money(line.credit, preview.currency) : "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="pf-invoice-lines-invoice-total">
+              Total
+              <strong>{formatInvoiceMoney(invoice.totalAmount, invoice.currency)}</strong>
+            </p>
+          </section>
+          {notes ? (
+            <section className="pf-req-drawer-section">
+              <h3>Notes</h3>
+              <p className="pf-req-description">{notes}</p>
             </section>
-            {preview.status === "issued" ? (
-              <Link className="pf-btn-primary" href="/platform-finance/invoices">
-                Done
-              </Link>
-            ) : (
-              <button
-                type="button"
-                className="pf-btn-primary"
-                disabled={!preview.periodId || busy || preview.status !== "under_review"}
-                onClick={() => void issue()}
-              >
-                {busy ? "Issuing…" : "Issue & post to ledger"}
-              </button>
-            )}
+          ) : null}
+          <section className="pf-req-drawer-section">
+            <h3>On issue</h3>
+            <p className="pf-req-description">
+              A receivable of {formatInvoiceMoney(invoice.totalAmount, invoice.currency)} will
+              be recognised for {customer}.
+            </p>
+          </section>
+        </div>
+        <footer className="pf-req-drawer-footer">
+          <div className="pf-req-action-row">
+            <button type="button" className="pf-btn-secondary" onClick={props.onClose}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="pf-btn-primary"
+              disabled={busy || invoice.status !== "under_review"}
+              onClick={() => void issue()}
+            >
+              {busy ? "Issuing…" : "Issue Invoice"}
+            </button>
           </div>
-        ) : null}
+        </footer>
       </section>
     </div>
   );

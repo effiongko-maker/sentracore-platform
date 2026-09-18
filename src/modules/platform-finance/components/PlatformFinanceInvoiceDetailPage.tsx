@@ -8,15 +8,11 @@ import { PlatformFinanceInvoicesService } from "@/services/platform-finance/Plat
 import type { FinanceInvoiceDetail } from "@/modules/platform-finance/domain/invoices";
 import type { InvoiceCapabilities } from "@/modules/platform-finance/server/PlatformFinanceInvoicesServerService";
 import { PlatformFinanceInvoiceReviewDrawer } from "@/modules/platform-finance/components/PlatformFinanceInvoiceReviewDrawer";
+import {
+  formatInvoiceDate,
+  formatInvoiceMoney,
+} from "@/modules/platform-finance/invoicePresentation";
 
-function money(amount: number, currency = "NGN") {
-  try {
-    return new Intl.NumberFormat("en-NG", { style: "currency", currency }).format(amount);
-  } catch {
-    return `₦${amount.toLocaleString("en-NG")}`;
-  }
-}
-function date(value: string) { return new Date(`${value}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); }
 const statusLabel = { draft: "Draft", under_review: "Under Review", issued: "Issued" } as const;
 const statusTone = { draft: "is-muted", under_review: "is-info", issued: "is-success" } as const;
 
@@ -87,11 +83,13 @@ export function PlatformFinanceInvoiceDetailPage() {
     }
   }
 
+  const documentHref = `/platform-finance/invoices/${invoiceId}/document`;
+
   return (
     <div className="pf-requests">
       <header className="pf-ov-header">
         <div>
-          <Link className="pf-back" href="/platform-finance/invoices">
+          <Link className="pf-link-btn" href="/platform-finance/invoices">
             <ArrowLeft size={16} /> Invoices
           </Link>
           <h1 className="pf-ov-title">{detail?.reference ?? "Invoice"}</h1>
@@ -101,7 +99,7 @@ export function PlatformFinanceInvoiceDetailPage() {
               : "Sales invoice detail"}
           </p>
         </div>
-        <div className="pf-page-actions">
+        <div className="pf-req-controls">
           {detail?.status === "draft" && (caps?.create || caps?.review) ? (
             <button type="button" className="pf-btn-primary" disabled={busy} onClick={() => void submit()}>
               Submit for review
@@ -114,22 +112,43 @@ export function PlatformFinanceInvoiceDetailPage() {
           ) : null}
           {detail?.status === "under_review" && caps?.issue ? (
             <button type="button" className="pf-btn-primary" disabled={busy} onClick={() => setReviewOpen(true)}>
-              Review &amp; Issue
+              Review Invoice
             </button>
           ) : null}
-          {detail?.status === "issued" && detail.journalEntryId ? (
-            <Link className="pf-btn-primary" href={`/platform-finance/accounting/journal/${detail.journalEntryId}`}>
-              View Journal
+          {detail && detail.status !== "issued" ? (
+            <Link className="pf-btn-secondary" href={documentHref}>
+              Preview Invoice
             </Link>
+          ) : null}
+          {detail?.status === "issued" ? (
+            <>
+              <Link className="pf-btn-primary" href={documentHref}>
+                View Invoice
+              </Link>
+              <Link className="pf-btn-secondary" href={`${documentHref}?print=1`}>
+                Print
+              </Link>
+              <Link className="pf-btn-secondary" href={`${documentHref}?download=1`}>
+                Download PDF
+              </Link>
+              {detail.journalEntryId ? (
+                <Link
+                  className="pf-link-btn"
+                  href={`/platform-finance/accounting/journal/${detail.journalEntryId}`}
+                >
+                  View Journal
+                </Link>
+              ) : null}
+            </>
           ) : null}
         </div>
       </header>
 
       {busy && !detail ? <p className="pf-state-message">Loading…</p> : null}
       {error ? (
-        <p className="pf-form-error" role="alert">
+        <div className="pf-vb-alert is-danger" role="alert">
           {error}
-        </p>
+        </div>
       ) : null}
 
       {detail ? (
@@ -137,16 +156,19 @@ export function PlatformFinanceInvoiceDetailPage() {
           <section className="pf-rev-card">
             <h3>Summary</h3>
             <p>
-              <strong>Status:</strong> <span className={`pf-req-status ${statusTone[detail.status]}`}>{statusLabel[detail.status]}</span>
+              <strong>Status:</strong>{" "}
+              <span className={`pf-req-status ${statusTone[detail.status]}`}>
+                {statusLabel[detail.status]}
+              </span>
             </p>
             <p>
-              <strong>Amount:</strong> {money(detail.totalAmount, detail.currency)}
+              <strong>Amount:</strong> {formatInvoiceMoney(detail.totalAmount, detail.currency)}
             </p>
             <p>
-              <strong>Invoice date:</strong> {date(detail.invoiceDate)}
+              <strong>Invoice date:</strong> {formatInvoiceDate(detail.invoiceDate)}
             </p>
             <p>
-              <strong>Due date:</strong> {date(detail.dueDate)}
+              <strong>Due date:</strong> {formatInvoiceDate(detail.dueDate)}
             </p>
             {detail.description ? <p>{detail.description}</p> : null}
             {detail.status === "issued" ? (
@@ -179,8 +201,12 @@ export function PlatformFinanceInvoiceDetailPage() {
                       <td>{line.lineNo}</td>
                       <td>{line.description}</td>
                       <td>{line.quantity}</td>
-                      <td className="pf-req-amount-cell">{money(line.unitPrice, detail.currency)}</td>
-                      <td className="pf-req-amount-cell">{money(line.lineAmount, detail.currency)}</td>
+                      <td className="pf-req-amount-cell">
+                        {formatInvoiceMoney(line.unitPrice, detail.currency)}
+                      </td>
+                      <td className="pf-req-amount-cell">
+                        {formatInvoiceMoney(line.lineAmount, detail.currency)}
+                      </td>
                       <td>
                         {line.revenueGlAccountCode
                           ? `${line.revenueGlAccountCode} — ${line.revenueGlAccountName}`
@@ -197,7 +223,7 @@ export function PlatformFinanceInvoiceDetailPage() {
 
       {reviewOpen && detail ? (
         <PlatformFinanceInvoiceReviewDrawer
-          invoiceId={detail.id}
+          invoice={detail}
           onClose={() => setReviewOpen(false)}
           onIssued={() => {
             setReviewOpen(false);

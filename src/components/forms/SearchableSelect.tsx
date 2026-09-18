@@ -39,6 +39,22 @@ type SearchableSelectProps = {
   "aria-label"?: string;
 };
 
+type MenuPlacement = "below" | "above";
+
+type MenuPosition = {
+  left: number;
+  width: number;
+  placement: MenuPlacement;
+  offset: number;
+  listMaxHeight: number;
+  menuMaxHeight: number;
+};
+
+const VIEWPORT_MARGIN = 8;
+const MENU_GAP = 6;
+const DEFAULT_LIST_MAX = 224;
+const SEARCH_CHROME_ESTIMATE = 53;
+
 function optionMatches(option: SearchableSelectOption, query: string) {
   const q = query.trim().toLowerCase();
   if (!q) return true;
@@ -46,6 +62,43 @@ function optionMatches(option: SearchableSelectOption, query: string) {
     .toLowerCase()
     .trim();
   return haystack.includes(q);
+}
+
+function computeMenuPosition(
+  trigger: HTMLElement | null,
+  hideSearch: boolean
+): MenuPosition | null {
+  const rect = trigger?.getBoundingClientRect();
+  if (!rect) return null;
+  const width = Math.max(rect.width, 220);
+  const left = Math.min(
+    Math.max(VIEWPORT_MARGIN, rect.left),
+    Math.max(VIEWPORT_MARGIN, window.innerWidth - width - VIEWPORT_MARGIN)
+  );
+  const chrome = hideSearch ? 8 : SEARCH_CHROME_ESTIMATE;
+  const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_MARGIN - MENU_GAP;
+  const spaceAbove = rect.top - VIEWPORT_MARGIN - MENU_GAP;
+  const desired = chrome + DEFAULT_LIST_MAX;
+  const placement: MenuPlacement =
+    spaceBelow >= desired || spaceBelow >= spaceAbove ? "below" : "above";
+  const available = Math.max(0, placement === "below" ? spaceBelow : spaceAbove);
+  const listMaxHeight = Math.min(
+    DEFAULT_LIST_MAX,
+    Math.max(0, available - chrome)
+  );
+  const menuMaxHeight = Math.max(0, Math.min(available, chrome + listMaxHeight));
+  const offset =
+    placement === "below"
+      ? rect.bottom + MENU_GAP
+      : window.innerHeight - rect.top + MENU_GAP;
+  return {
+    left,
+    width,
+    placement,
+    offset,
+    listMaxHeight,
+    menuMaxHeight,
+  };
 }
 
 /**
@@ -74,15 +127,11 @@ export function SearchableSelect({
   const listboxId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [menuPos, setMenuPos] = useState<{
-    top: number;
-    left: number;
-    width: number;
-  } | null>(null);
-  const [portalReady, setPortalReady] = useState(false);
+  const [menuPos, setMenuPos] = useState<MenuPosition | null>(null);
 
   const flatOptions = useMemo(() => {
     if (optionGroups?.length) {
@@ -113,34 +162,27 @@ export function SearchableSelect({
       .filter((group) => group.options.length > 0);
   }, [optionGroups, query]);
 
-  useEffect(() => {
-    setPortalReady(true);
-  }, []);
-
   useLayoutEffect(() => {
-    if (!open) {
-      setMenuPos(null);
-      return;
+    if (!open) return;
+    function updatePosition(event?: Event) {
+      if (
+        event &&
+        menuRef.current &&
+        event.target instanceof Node &&
+        menuRef.current.contains(event.target)
+      ) {
+        return;
+      }
+      const next = computeMenuPosition(rootRef.current, hideSearch);
+      if (next) setMenuPos(next);
     }
-    function updatePosition() {
-      const rect = rootRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const width = Math.max(rect.width, 220);
-      const left = Math.min(
-        rect.left,
-        Math.max(8, window.innerWidth - width - 8)
-      );
-      const top = Math.min(rect.bottom + 6, window.innerHeight - 16);
-      setMenuPos({ top, left, width });
-    }
-    updatePosition();
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
     return () => {
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [open]);
+  }, [open, hideSearch]);
 
   useEffect(() => {
     if (!open) return;
@@ -169,6 +211,35 @@ export function SearchableSelect({
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const menu = menuRef.current;
+    if (!menu) return;
+    function onWheel(event: WheelEvent) {
+      event.stopPropagation();
+      const list = listRef.current;
+      if (!list) {
+        event.preventDefault();
+        return;
+      }
+      const delta = event.deltaY;
+      const atTop = list.scrollTop <= 0;
+      const atBottom = list.scrollTop + list.clientHeight >= list.scrollHeight - 1;
+      const overList = list.contains(event.target as Node);
+      if (!overList) {
+        event.preventDefault();
+        return;
+      }
+      if ((delta < 0 && atTop) || (delta > 0 && atBottom) || list.scrollHeight <= list.clientHeight) {
+        event.preventDefault();
+      }
+    }
+    menu.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      menu.removeEventListener("wheel", onWheel);
+    };
+  }, [open, menuPos]);
 
   useEffect(() => {
     if (!open || hideSearch) return;
@@ -217,25 +288,28 @@ export function SearchableSelect({
   }
 
   const menu =
-    open && portalReady && menuPos
+    open && menuPos && typeof document !== "undefined"
       ? createPortal(
           <div
             ref={menuRef}
             className={cn(
-              "overflow-hidden rounded-[12px] border border-border bg-card shadow-lg",
+              "flex flex-col overflow-hidden rounded-[12px] border border-border bg-card shadow-lg",
               menuClassName
             )}
             style={{
               position: "fixed",
-              top: menuPos.top,
               left: menuPos.left,
               width: menuPos.width,
               zIndex: 80,
+              maxHeight: menuPos.menuMaxHeight,
+              ...(menuPos.placement === "below"
+                ? { top: menuPos.offset }
+                : { bottom: menuPos.offset }),
             }}
             onMouseDown={(event) => event.stopPropagation()}
           >
             {hideSearch ? null : (
-              <div className="border-b border-border/70 p-2">
+              <div className="shrink-0 border-b border-border/70 p-2">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
                   <input
@@ -252,9 +326,11 @@ export function SearchableSelect({
             )}
 
             <ul
+              ref={listRef}
               id={listboxId}
               role="listbox"
-              className="max-h-56 overflow-y-auto py-1"
+              className="min-h-0 flex-1 overflow-y-auto py-1 overscroll-contain"
+              style={{ maxHeight: menuPos.listMaxHeight }}
             >
               {allowEmpty ? (
                 <li role="option" aria-selected={!value}>
@@ -320,7 +396,14 @@ export function SearchableSelect({
         )}
         onClick={() => {
           if (disabled || loading) return;
-          setOpen((current) => !current);
+          if (open) {
+            setOpen(false);
+            setQuery("");
+            return;
+          }
+          const next = computeMenuPosition(rootRef.current, hideSearch);
+          if (next) setMenuPos(next);
+          setOpen(true);
         }}
       >
         <span className="min-w-0 flex-1 truncate">{triggerLabel}</span>

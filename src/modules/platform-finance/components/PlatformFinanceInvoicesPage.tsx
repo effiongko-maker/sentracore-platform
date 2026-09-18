@@ -89,7 +89,7 @@ export function PlatformFinanceInvoicesPage() {
           <h1 className="pf-ov-title">Invoices</h1>
           <p className="pf-ov-desc">Prepare, review, and issue customer invoices.</p>
         </div>
-        <div className="pf-page-actions">
+        <div className="pf-req-controls">
           <Link className="pf-btn-secondary" href="/platform-finance/counterparties">
             Counterparties
           </Link>

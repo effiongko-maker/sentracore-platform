@@ -4594,3 +4594,219 @@ ul.pf-payd-pay-history {
     grid-template-columns: 1fr;
   }
 }
+
+/* —— Customer-facing invoice document —— */
+
+.pf-invoice-document-page {
+  display: grid;
+  gap: 1rem;
+  color: #142033;
+}
+
+.pf-invoice-doc-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.pf-invoice-doc-toolbar a.pf-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  text-decoration: none;
+}
+
+.pf-invoice-print-root {
+  background: #e8eaed;
+  margin: 0 -1rem;
+  padding: 1.25rem 1rem 2rem;
+}
+
+.pf-invoice-doc {
+  max-width: 794px;
+  min-height: 1020px;
+  margin: 0 auto;
+  background: #fff;
+  color: #142033;
+  padding: 2.5rem 2.75rem 2.75rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.pf-invoice-doc-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding-bottom: 1.35rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.pf-invoice-doc-kicker {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.pf-invoice-doc-issuer {
+  margin: 0.4rem 0 0;
+  font-size: 1.5rem;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  color: #0f1c2e;
+}
+
+.pf-invoice-doc-mark {
+  margin: 0.55rem 0 0;
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.pf-invoice-doc-meta {
+  margin: 0;
+  display: grid;
+  gap: 0.4rem;
+  min-width: 14rem;
+}
+
+.pf-invoice-doc-meta div {
+  display: grid;
+  grid-template-columns: 7.75rem 1fr;
+  gap: 0.65rem;
+  font-size: 0.8125rem;
+}
+
+.pf-invoice-doc-meta dt {
+  color: #64748b;
+}
+
+.pf-invoice-doc-meta dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+}
+
+.pf-invoice-doc-party {
+  margin: 1.5rem 0 1.75rem;
+}
+
+.pf-invoice-doc-party h2,
+.pf-invoice-doc-notes h2 {
+  margin: 0 0 0.4rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.pf-invoice-doc-customer {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
+  color: #0f1c2e;
+}
+
+.pf-invoice-doc-muted {
+  margin: 0.2rem 0 0;
+  font-size: 0.8125rem;
+  color: #475569;
+}
+
+.pf-invoice-doc-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.pf-invoice-doc-table th,
+.pf-invoice-doc-table td {
+  padding: 0.65rem 0;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.875rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.pf-invoice-doc-table th {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.pf-invoice-doc-table .is-num,
+.pf-invoice-doc-table th:nth-child(n + 2),
+.pf-invoice-doc-table td:nth-child(n + 2) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-invoice-doc-total {
+  margin: 1.25rem 0 0;
+  text-align: right;
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.pf-invoice-doc-total strong {
+  margin-left: 0.85rem;
+  font-size: 1.125rem;
+  color: #0f1c2e;
+}
+
+.pf-invoice-doc-notes {
+  margin-top: 2rem;
+  padding-top: 1.15rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.pf-invoice-doc-notes p {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: #334155;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 720px) {
+  .pf-invoice-doc {
+    padding: 1.5rem 1.25rem 1.75rem;
+  }
+
+  .pf-invoice-doc-header {
+    flex-direction: column;
+  }
+
+  .pf-invoice-doc-meta,
+  .pf-invoice-doc-meta dd {
+    text-align: left;
+  }
+}
+
+@media print {
+  .pf-invoice-doc-toolbar {
+    display: none !important;
+  }
+
+  .pf-invoice-print-root {
+    background: #fff !important;
+    margin: 0;
+    padding: 0;
+  }
+
+  .pf-invoice-doc {
+    max-width: none;
+    min-height: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+}

@@ -85,7 +85,10 @@ assert.match(nav, /href: "\/platform-finance\/invoices"/);
 assert.match(nav, /href: "\/platform-finance\/counterparties"/);
 assert.match(nav, /Receivables[\s\S]*comingSoon: true/);
 assert.match(invoicesPage, /New Invoice/);
-assert.match(reviewDrawer, /Issue & post to ledger/);
+assert.match(reviewDrawer, /Issue Invoice/);
+assert.match(reviewDrawer, /issueAndPost/);
+assert.doesNotMatch(reviewDrawer, /Issue & post to ledger/);
+assert.doesNotMatch(reviewDrawer, /System-derived compound journal/);
 assert.doesNotMatch(reviewDrawer, /debitAccountId|Select debit/);
 
 // Regression: payment and opening keep their own two-line workflows
