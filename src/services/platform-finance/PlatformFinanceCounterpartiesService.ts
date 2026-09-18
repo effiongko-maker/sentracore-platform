@@ -35,6 +35,7 @@ export const PlatformFinanceCounterpartiesService = {
     legalName?: string | null;
     partyKind?: "organisation" | "person";
     taxRegistrationId?: string | null;
+    contactPerson?: string|null; email?: string|null; phone?: string|null; addressLine1?: string|null; addressLine2?: string|null; city?: string|null; stateRegion?: string|null; country?: string|null;
     roles: CounterpartyRole[];
     status?: CounterpartyStatus;
   }): Promise<OrganisationCounterparty> {
@@ -47,6 +48,7 @@ export const PlatformFinanceCounterpartiesService = {
       legalName?: string | null;
       partyKind?: "organisation" | "person";
       taxRegistrationId?: string | null;
+      contactPerson?: string|null; email?: string|null; phone?: string|null; addressLine1?: string|null; addressLine2?: string|null; city?: string|null; stateRegion?: string|null; country?: string|null;
       status?: CounterpartyStatus;
       roles?: CounterpartyRole[];
     }

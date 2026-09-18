@@ -13,6 +13,14 @@ export type OrganisationCounterparty = {
   legalName: string | null;
   partyKind: CounterpartyPartyKind;
   taxRegistrationId: string | null;
+  contactPerson: string | null;
+  email: string | null;
+  phone: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  stateRegion: string | null;
+  country: string | null;
   status: CounterpartyStatus;
   roles: CounterpartyRole[];
   createdByProfileId: string;

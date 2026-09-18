@@ -31,7 +31,7 @@ export class PlatformFinanceCounterpartiesServerService {
     const admin = createAdminClient();
     let q = admin
       .from("organisation_counterparties")
-      .select("id,organisation_id,display_name,legal_name,party_kind,tax_registration_id,status,created_by_profile_id,created_at,updated_at")
+      .select("id,organisation_id,display_name,legal_name,party_kind,tax_registration_id,contact_person,email,phone,address_line_1,address_line_2,city,state_region,country,status,created_by_profile_id,created_at,updated_at")
       .eq("organisation_id", this.organisationId)
       .order("display_name", { ascending: true });
     if (opts?.status) q = q.eq("status", opts.status);
@@ -49,7 +49,7 @@ export class PlatformFinanceCounterpartiesServerService {
     const admin = createAdminClient();
     const { data, error } = await admin
       .from("organisation_counterparties")
-      .select("id,organisation_id,display_name,legal_name,party_kind,tax_registration_id,status,created_by_profile_id,created_at,updated_at")
+      .select("id,organisation_id,display_name,legal_name,party_kind,tax_registration_id,contact_person,email,phone,address_line_1,address_line_2,city,state_region,country,status,created_by_profile_id,created_at,updated_at")
       .eq("organisation_id", this.organisationId)
       .eq("id", id)
       .maybeSingle();
@@ -66,6 +66,9 @@ export class PlatformFinanceCounterpartiesServerService {
       legalName?: string | null;
       partyKind?: CounterpartyPartyKind;
       taxRegistrationId?: string | null;
+      contactPerson?: string | null; email?: string | null; phone?: string | null;
+      addressLine1?: string | null; addressLine2?: string | null; city?: string | null;
+      stateRegion?: string | null; country?: string | null;
       roles: CounterpartyRole[];
       status?: CounterpartyStatus;
     }
@@ -75,6 +78,8 @@ export class PlatformFinanceCounterpartiesServerService {
     if (!displayName) throw new ActionError("VALIDATION_ERROR", "Display name is required.");
     const roles = this.normalizeRoles(input.roles);
     if (!roles.length) throw new ActionError("VALIDATION_ERROR", "At least one role is required.");
+    const email = input.email?.trim() || null;
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ActionError("VALIDATION_ERROR", "Enter a valid email address.");
     const admin = createAdminClient();
     const { data, error } = await admin.rpc("organisation_counterparty_create", {
       p_actor_profile_id: actor.profileId,
@@ -83,6 +88,9 @@ export class PlatformFinanceCounterpartiesServerService {
       p_legal_name: input.legalName?.trim() || "",
       p_party_kind: input.partyKind ?? "organisation",
       p_tax_registration_id: input.taxRegistrationId?.trim() || "",
+      p_contact_person: input.contactPerson?.trim() || "", p_email: email ?? "", p_phone: input.phone?.trim() || "",
+      p_address_line_1: input.addressLine1?.trim() || "", p_address_line_2: input.addressLine2?.trim() || "",
+      p_city: input.city?.trim() || "", p_state_region: input.stateRegion?.trim() || "", p_country: input.country?.trim() || "",
       p_status: input.status ?? "active",
       p_roles: roles,
     });
@@ -105,6 +113,9 @@ export class PlatformFinanceCounterpartiesServerService {
       legalName?: string | null;
       partyKind?: CounterpartyPartyKind;
       taxRegistrationId?: string | null;
+      contactPerson?: string | null; email?: string | null; phone?: string | null;
+      addressLine1?: string | null; addressLine2?: string | null; city?: string | null;
+      stateRegion?: string | null; country?: string | null;
       status?: CounterpartyStatus;
       roles?: CounterpartyRole[];
     }
@@ -115,6 +126,7 @@ export class PlatformFinanceCounterpartiesServerService {
     let legalName = existing.legalName;
     let partyKind = existing.partyKind;
     let taxRegistrationId = existing.taxRegistrationId;
+    let contactPerson=existing.contactPerson,email=existing.email,phone=existing.phone,addressLine1=existing.addressLine1,addressLine2=existing.addressLine2,city=existing.city,stateRegion=existing.stateRegion,country=existing.country;
     let status = existing.status;
     if (input.displayName !== undefined) {
       const nextDisplayName = input.displayName.trim();
@@ -127,6 +139,9 @@ export class PlatformFinanceCounterpartiesServerService {
       taxRegistrationId = input.taxRegistrationId?.trim() || null;
     }
     if (input.status !== undefined) status = input.status;
+    if(input.contactPerson!==undefined)contactPerson=input.contactPerson?.trim()||null;if(input.email!==undefined)email=input.email?.trim()||null;if(input.phone!==undefined)phone=input.phone?.trim()||null;
+    if(input.addressLine1!==undefined)addressLine1=input.addressLine1?.trim()||null;if(input.addressLine2!==undefined)addressLine2=input.addressLine2?.trim()||null;if(input.city!==undefined)city=input.city?.trim()||null;if(input.stateRegion!==undefined)stateRegion=input.stateRegion?.trim()||null;if(input.country!==undefined)country=input.country?.trim()||null;
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ActionError("VALIDATION_ERROR", "Enter a valid email address.");
 
     const roles = input.roles ? this.normalizeRoles(input.roles) : existing.roles;
     if (!roles.length) throw new ActionError("VALIDATION_ERROR", "At least one role is required.");
@@ -140,6 +155,7 @@ export class PlatformFinanceCounterpartiesServerService {
       p_legal_name: legalName ?? "",
       p_party_kind: partyKind,
       p_tax_registration_id: taxRegistrationId ?? "",
+      p_contact_person:contactPerson??"",p_email:email??"",p_phone:phone??"",p_address_line_1:addressLine1??"",p_address_line_2:addressLine2??"",p_city:city??"",p_state_region:stateRegion??"",p_country:country??"",
       p_status: status,
       p_roles: roles,
     });
@@ -233,6 +249,8 @@ export class PlatformFinanceCounterpartiesServerService {
       legalName: (row.legal_name as string | null) ?? null,
       partyKind: row.party_kind as CounterpartyPartyKind,
       taxRegistrationId: (row.tax_registration_id as string | null) ?? null,
+      contactPerson:(row.contact_person as string|null)??null,email:(row.email as string|null)??null,phone:(row.phone as string|null)??null,
+      addressLine1:(row.address_line_1 as string|null)??null,addressLine2:(row.address_line_2 as string|null)??null,city:(row.city as string|null)??null,stateRegion:(row.state_region as string|null)??null,country:(row.country as string|null)??null,
       status: row.status as CounterpartyStatus,
       roles,
       createdByProfileId: row.created_by_profile_id as string,

@@ -96,6 +96,8 @@ export async function POST(request: Request) {
             legalName: (input.legalName as string | null | undefined) ?? null,
             partyKind: isPartyKind(input.partyKind) ? input.partyKind : "organisation",
             taxRegistrationId: (input.taxRegistrationId as string | null | undefined) ?? null,
+            contactPerson:(input.contactPerson as string|null|undefined)??null,email:(input.email as string|null|undefined)??null,phone:(input.phone as string|null|undefined)??null,
+            addressLine1:(input.addressLine1 as string|null|undefined)??null,addressLine2:(input.addressLine2 as string|null|undefined)??null,city:(input.city as string|null|undefined)??null,stateRegion:(input.stateRegion as string|null|undefined)??null,country:(input.country as string|null|undefined)??null,
             roles,
             status: isStatus(input.status) ? input.status : "active",
           }),
@@ -119,6 +121,7 @@ export async function POST(request: Request) {
             input.taxRegistrationId === undefined
               ? undefined
               : ((input.taxRegistrationId as string | null) ?? null),
+          contactPerson:input.contactPerson===undefined?undefined:((input.contactPerson as string|null)??null),email:input.email===undefined?undefined:((input.email as string|null)??null),phone:input.phone===undefined?undefined:((input.phone as string|null)??null),addressLine1:input.addressLine1===undefined?undefined:((input.addressLine1 as string|null)??null),addressLine2:input.addressLine2===undefined?undefined:((input.addressLine2 as string|null)??null),city:input.city===undefined?undefined:((input.city as string|null)??null),stateRegion:input.stateRegion===undefined?undefined:((input.stateRegion as string|null)??null),country:input.country===undefined?undefined:((input.country as string|null)??null),
           status: isStatus(input.status) ? input.status : undefined,
           roles,
         }),
