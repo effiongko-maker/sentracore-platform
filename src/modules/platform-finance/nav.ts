@@ -12,6 +12,7 @@ import {
   BookOpen,
   CalendarRange,
   Receipt,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -110,11 +111,16 @@ export const PLATFORM_FINANCE_NAV_ITEMS: readonly PlatformFinanceNavItem[] = [
     icon: Receipt,
     children: [
       {
-        href: null,
+        href: "/platform-finance/invoices",
         label: "Invoices",
         match: "prefix",
         icon: FileText,
-        comingSoon: true,
+      },
+      {
+        href: "/platform-finance/counterparties",
+        label: "Counterparties",
+        match: "prefix",
+        icon: Building2,
       },
       {
         href: null,

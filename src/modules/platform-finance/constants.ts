@@ -37,6 +37,12 @@ export const PLATFORM_FINANCE_CAPABILITY_LABELS: Record<
   [PLATFORM_FINANCE_CAPABILITIES.vendor_bill_review]: "Review vendor bills",
   [PLATFORM_FINANCE_CAPABILITIES.payment_view]: "View payments",
   [PLATFORM_FINANCE_CAPABILITIES.payment_execute]: "Confirm payments",
+  [PLATFORM_FINANCE_CAPABILITIES.counterparty_view]: "View counterparties",
+  [PLATFORM_FINANCE_CAPABILITIES.counterparty_manage]: "Manage counterparties",
+  [PLATFORM_FINANCE_CAPABILITIES.invoice_view]: "View invoices",
+  [PLATFORM_FINANCE_CAPABILITIES.invoice_create]: "Create invoices",
+  [PLATFORM_FINANCE_CAPABILITIES.invoice_review]: "Review invoices",
+  [PLATFORM_FINANCE_CAPABILITIES.invoice_issue]: "Issue invoices",
 };
 
 export const PLATFORM_FINANCE_ENTITY_STATUS_LABELS: Record<

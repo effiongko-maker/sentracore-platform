@@ -48,6 +48,12 @@ export const PLATFORM_FINANCE_CAPABILITIES = {
   vendor_bill_review: "platform_finance.vendor_bill.review",
   payment_view: "platform_finance.payment.view",
   payment_execute: "platform_finance.payment.execute",
+  counterparty_view: "platform_finance.counterparty.view",
+  counterparty_manage: "platform_finance.counterparty.manage",
+  invoice_view: "platform_finance.invoice.view",
+  invoice_create: "platform_finance.invoice.create",
+  invoice_review: "platform_finance.invoice.review",
+  invoice_issue: "platform_finance.invoice.issue",
 } as const;
 
 export {
