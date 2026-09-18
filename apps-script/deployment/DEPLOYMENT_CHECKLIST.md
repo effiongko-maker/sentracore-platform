@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Release: **v0.8.6.20** — Command Centre versioned FM aggregate contracts
+Release: **v0.8.6.21** — FM reliability contract, observability, and Apps Script shared-secret gate
 
 Use this checklist with `DEPLOYMENT_PACK.md` open. Someone unfamiliar
 with the project should be able to deploy from these steps alone.
@@ -289,6 +289,12 @@ With `npm run dev` running:
 
 ```bash
 npm run typecheck
+```
+
+### Phase 0A FM reliability contract
+
+```bash
+npx tsx --tsconfig tsconfig.json scripts/verify-fm-phase-0a.mts
 ```
 
 ### Command Centre FM aggregate golden contract

@@ -229,12 +229,28 @@ var MaintenanceService = (function () {
     }
     var rows = loadCanonicalRows_(payload, null);
     var filtered = applyFilters_(rows, payload);
+    var includePicture = !!payload.includeOperationalPictureTotals;
+    var asOf = String(payload.asOf || "").trim();
     var criticalWorkTotal = includeCriticalWorkTotal
       ? countCriticalWorkTotal_(filtered)
       : null;
     var sorted = sortNewestFirst_(filtered);
     var page = paginate_(sorted, payload);
-    if (includeCriticalWorkTotal) {
+    if (includePicture && typeof CommandCentreFmSummaryService !== "undefined") {
+      CommandCentreFmSummaryService.attachListTotals(
+        page,
+        "maintenance",
+        filtered,
+        asOf
+      );
+      if (
+        page.operationalPictureMaintenance &&
+        page.operationalPictureMaintenance.state === "healthy"
+      ) {
+        criticalWorkTotal = page.operationalPictureMaintenance.critical;
+      }
+    }
+    if (includeCriticalWorkTotal || includePicture) {
       page.criticalWorkTotal = criticalWorkTotal;
     }
     return page;

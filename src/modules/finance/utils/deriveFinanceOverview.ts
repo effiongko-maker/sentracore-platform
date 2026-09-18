@@ -166,6 +166,7 @@ function buildSubmissionSnapshot(
     });
 
   return {
+    available: true,
     total,
     truncated,
     draftCount: truncated ? null : counts.draft,
@@ -402,6 +403,9 @@ function buildPosition(options: {
   submissions: FinanceSubmissionSnapshot;
   approvals: Approval[];
   payments: FinancePaymentSnapshot;
+  costRecordsAvailable: boolean;
+  submissionsAvailable: boolean;
+  approvalsAvailable: boolean;
 }): FinancePositionMetric[] {
   const unknownCount = options.costRecords.filter(
     (r) => r.reimbursability === "unknown"
@@ -422,42 +426,58 @@ function buildPosition(options: {
       id: "cost_recorded",
       group: "cost",
       label: "Operational costs",
-      value:
-        options.costTotal > 0
+      value: !options.costRecordsAvailable
+        ? null
+        : options.costTotal > 0
           ? String(options.costTotal)
           : "None yet",
-      detail: options.costTruncated
+      detail: !options.costRecordsAvailable
+        ? "Temporarily unavailable"
+        : options.costTruncated
         ? `${options.costRecords.length} newest in view · sample ${formatFinancialAmount(options.sampleAmount, options.currency)}`
         : options.costTotal > 0
           ? formatFinancialAmount(options.sampleAmount, options.currency)
           : "Record costs as they are incurred",
       emphasis: "primary",
-      available: true,
+      available: options.costRecordsAvailable,
     },
     {
       id: "cost_classification",
       group: "cost",
       label: "Needs classification",
-      value: String(unknownCount),
-      detail:
-        unknownCount > 0
+      value: options.costRecordsAvailable ? String(unknownCount) : null,
+      detail: !options.costRecordsAvailable
+        ? "Temporarily unavailable"
+        : unknownCount > 0
           ? "Unknown reimbursability in the cost sample"
           : "No unknown classifications in view",
       emphasis: unknownCount > 0 ? "primary" : "muted",
-      available: true,
+      available: options.costRecordsAvailable,
     },
     {
       id: "cost_reimbursable",
       group: "cost",
       label: "Reimbursable in view",
-      value: String(reimbursableCount),
-      detail: "From the bounded cost sample",
+      value: options.costRecordsAvailable ? String(reimbursableCount) : null,
+      detail: !options.costRecordsAvailable
+        ? "Temporarily unavailable"
+        : "From the bounded cost sample",
       emphasis: "secondary",
-      available: true,
+      available: options.costRecordsAvailable,
     },
   ];
 
-  if (options.submissions.truncated) {
+  if (!options.submissionsAvailable) {
+    metrics.push({
+      id: "submissions_total",
+      group: "submission",
+      label: "Reimbursement submissions",
+      value: null,
+      detail: "Temporarily unavailable",
+      emphasis: "muted",
+      available: false,
+    });
+  } else if (options.submissions.truncated) {
     metrics.push({
       id: "submissions_total",
       group: "submission",
@@ -508,15 +528,18 @@ function buildPosition(options: {
       id: "client_auth_awaiting",
       group: "client_authorisation",
       label: "Client authorisation awaiting decision",
-      value:
-        awaitingDecision.length > 0
+      value: options.approvalsAvailable
+        ? awaitingDecision.length > 0
           ? formatFinancialAmount(awaitingAuthTotal)
-          : "None",
-      detail: `${awaitingDecision.length} Work Order client authorisation${
-        awaitingDecision.length === 1 ? "" : "s"
-      }`,
+          : "None"
+        : null,
+      detail: !options.approvalsAvailable
+        ? "Temporarily unavailable"
+        : `${awaitingDecision.length} Work Order client authorisation${
+            awaitingDecision.length === 1 ? "" : "s"
+          }`,
       emphasis: awaitingDecision.length > 0 ? "primary" : "muted",
-      available: true,
+      available: options.approvalsAvailable,
     },
     {
       id: "payment",
@@ -543,37 +566,64 @@ export type DeriveFinanceOverviewInput = {
   payments?: ReimbursementPayment[];
   totalPayments?: number;
   authorizations?: ReimbursementAuthorization[];
+  approvalsAvailable?: boolean;
+  costRecordsAvailable?: boolean;
+  submissionsAvailable?: boolean;
+  paymentsAvailable?: boolean;
+  authorizationsAvailable?: boolean;
 };
 
 export function deriveFinanceOverview(
   input: DeriveFinanceOverviewInput
 ): FinanceOverview {
-  const {
-    approvals,
-    totalApprovals,
-    costRecords,
-    totalCostRecords,
-    submissions,
-    totalSubmissions,
-  } = input;
-  const payments = input.payments ?? [];
-  const totalPayments = input.totalPayments ?? payments.length;
-  const authorizations = input.authorizations ?? [];
+  const approvalsAvailable = input.approvalsAvailable !== false;
+  const costRecordsAvailable = input.costRecordsAvailable !== false;
+  const submissionsAvailable = input.submissionsAvailable !== false;
+  const paymentsAvailable = input.paymentsAvailable !== false;
+  const authorizationsAvailable = input.authorizationsAvailable !== false;
 
-  const costTruncated = totalCostRecords > costRecords.length;
-  const submissionsTruncated = totalSubmissions > submissions.length;
-  const paymentsTruncated = totalPayments > payments.length;
+  const approvals = approvalsAvailable ? input.approvals : [];
+  const totalApprovals = approvalsAvailable ? input.totalApprovals : 0;
+  const costRecords = costRecordsAvailable ? input.costRecords : [];
+  const totalCostRecords = costRecordsAvailable ? input.totalCostRecords : 0;
+  const submissions = submissionsAvailable ? input.submissions : [];
+  const totalSubmissions = submissionsAvailable ? input.totalSubmissions : 0;
+  const payments = paymentsAvailable ? input.payments ?? [] : [];
+  const totalPayments = paymentsAvailable
+    ? (input.totalPayments ?? payments.length)
+    : 0;
+  const authorizations = authorizationsAvailable
+    ? input.authorizations ?? []
+    : [];
+
+  const costTruncated =
+    costRecordsAvailable && totalCostRecords > costRecords.length;
+  const submissionsTruncated =
+    submissionsAvailable && totalSubmissions > submissions.length;
+  const paymentsTruncated =
+    paymentsAvailable && totalPayments > payments.length;
   const sampleAmount = sumAmounts(
     costRecords.map((row) => ({ amount: row.actualAmount }))
   );
   const currency =
     costRecords[0]?.currency ?? payments[0]?.currency ?? "NGN";
-  const submissionSnapshot = buildSubmissionSnapshot(
-    submissions,
-    totalSubmissions,
-    payments,
-    authorizations
-  );
+  const submissionSnapshot = submissionsAvailable
+    ? buildSubmissionSnapshot(
+        submissions,
+        totalSubmissions,
+        payments,
+        authorizations
+      )
+    : {
+        available: false,
+        total: 0,
+        truncated: false,
+        draftCount: null,
+        submittedCount: null,
+        queriedCount: null,
+        cancelledCount: null,
+        preview: [],
+      };
   const paymentSnapshot = buildFinancePaymentOverviewState({
     submissions,
     submissionsTruncated,
@@ -582,6 +632,11 @@ export function deriveFinanceOverview(
     authorizations,
     currency,
   });
+  if (!paymentsAvailable || !submissionsAvailable) {
+    paymentSnapshot.available = false;
+    paymentSnapshot.positionValue = null;
+    paymentSnapshot.positionDetail = "Temporarily unavailable";
+  }
 
   const unknownCount = costRecords.filter(
     (r) => r.reimbursability === "unknown"
@@ -590,26 +645,40 @@ export function deriveFinanceOverview(
     (r) => r.reimbursability === "reimbursable"
   ).length;
 
+  const pendingIncomplete =
+    !costRecordsAvailable ||
+    !submissionsAvailable ||
+    !approvalsAvailable ||
+    !paymentsAvailable ||
+    !authorizationsAvailable;
+
   return {
     availability: {
-      costRecords: true,
-      costSubmissions: true,
+      costRecords: costRecordsAvailable,
+      costSubmissions: submissionsAvailable,
       contractPayments: false,
-      reimbursementPayments: true,
-      clientAuthorisation: true,
+      reimbursementPayments: paymentsAvailable,
+      clientAuthorisation: approvalsAvailable,
     },
     meta: {
-      totalApprovals,
+      totalApprovals: approvalsAvailable ? totalApprovals : null,
       approvalsInView: approvals.length,
-      approvalsTruncated: totalApprovals > approvals.length,
-      costRecordsTotal: totalCostRecords,
+      approvalsTruncated: approvalsAvailable && totalApprovals > approvals.length,
+      costRecordsTotal: costRecordsAvailable ? totalCostRecords : null,
       costRecordsTruncated: costTruncated,
-      submissionsTotal: totalSubmissions,
+      submissionsTotal: submissionsAvailable ? totalSubmissions : null,
       submissionsTruncated,
-      paymentsTotal: totalPayments,
+      paymentsTotal: paymentsAvailable ? totalPayments : null,
       paymentsTruncated,
       derivedAt: new Date().toISOString(),
-      reimbursableAwaitingSubmissionSafe: !submissionsTruncated,
+      reimbursableAwaitingSubmissionSafe:
+        submissionsAvailable && !submissionsTruncated,
+      costRecordsAvailable,
+      submissionsAvailable,
+      paymentsAvailable,
+      authorizationsAvailable,
+      approvalsAvailable,
+      pendingIncomplete,
     },
     position: buildPosition({
       costRecords,
@@ -620,8 +689,16 @@ export function deriveFinanceOverview(
       submissions: submissionSnapshot,
       approvals,
       payments: paymentSnapshot,
+      costRecordsAvailable,
+      submissionsAvailable,
+      approvalsAvailable,
     }),
-    clientAuthorisationStages: buildClientAuthorisationStages(approvals),
+    clientAuthorisationStages: buildClientAuthorisationStages(approvals).map(
+      (stage) =>
+        approvalsAvailable
+          ? stage
+          : { ...stage, count: null, amountLabel: null, available: false }
+    ),
     pendingActions: buildPendingActions({
       approvals,
       costRecords,
@@ -630,12 +707,16 @@ export function deriveFinanceOverview(
       payments,
       authorizations,
     }),
-    operationalCostLenses: buildOperationalCostLenses(
-      costRecords,
-      totalCostRecords
-    ),
+    operationalCostLenses: costRecordsAvailable
+      ? buildOperationalCostLenses(costRecords, totalCostRecords)
+      : OPERATIONAL_COST_LENSES.map((lens) => ({
+          id: lens.id,
+          label: lens.label,
+          available: false,
+          detail: "Temporarily unavailable",
+        })),
     operationalCostSummary:
-      totalCostRecords > 0
+      costRecordsAvailable && totalCostRecords > 0
         ? {
             totalCount: totalCostRecords,
             truncated: costTruncated,
@@ -646,7 +727,7 @@ export function deriveFinanceOverview(
             reimbursableCount,
           }
         : null,
-    recentCosts: buildRecentCostRows(costRecords),
+    recentCosts: costRecordsAvailable ? buildRecentCostRows(costRecords) : [],
     submissions: submissionSnapshot,
     payments: paymentSnapshot,
     sourceApprovals: approvals,

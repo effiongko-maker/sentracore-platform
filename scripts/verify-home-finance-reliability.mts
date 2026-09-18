@@ -225,14 +225,16 @@ function main() {
   );
   assert(
     overviewHook.includes("Promise.all") &&
-      overviewHook.includes("ApprovalService"),
-    "Finance overview path unchanged (still Promise.all + Approvals)"
+      overviewHook.includes("ApprovalService") &&
+      overviewHook.includes("settleSource") &&
+      overviewHook.includes("available: false"),
+    "Finance overview settles each source independently"
   );
   assert(
     !overviewHook.includes("signalHomeFinanceSettled"),
     "Finance overview must not signal Home finance gate"
   );
-  results.push("PASS /finance remains unchanged");
+  results.push("PASS /finance overview is partial-failure safe");
 
   for (const line of results) console.log(line);
   console.log("verify-home-finance-reliability: PASS");

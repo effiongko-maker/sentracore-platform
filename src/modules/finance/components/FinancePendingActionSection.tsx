@@ -73,14 +73,21 @@ function viewAllHref(items: FinancePendingActionItem[]): string {
 export function FinancePendingActionSection({
   items,
   loading,
+  incomplete = false,
 }: {
   items: FinancePendingActionItem[];
   loading: boolean;
+  incomplete?: boolean;
 }) {
   const visible = items.slice(0, FINANCE_UI_LIST_LIMIT);
   const hasMore = items.length > FINANCE_UI_LIST_LIMIT;
-  const countLabel =
-    items.length === 1
+  const countLabel = incomplete
+    ? items.length === 0
+      ? "Attention list is incomplete — some finance data is temporarily unavailable."
+      : items.length === 1
+        ? "1 known item requires action · picture is incomplete."
+        : `${items.length} known items require action · picture is incomplete.`
+    : items.length === 1
       ? "1 item requires your action."
       : `${items.length} items require your action.`;
 

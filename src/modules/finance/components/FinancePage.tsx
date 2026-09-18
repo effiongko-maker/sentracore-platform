@@ -37,18 +37,25 @@ export function FinancePage() {
     );
   }
 
-  const costTotal = overview?.meta.costRecordsTotal ?? 0;
-  const submissionTotal = overview?.meta.submissionsTotal ?? 0;
+  const costAvailable = overview?.meta.costRecordsAvailable !== false;
+  const submissionsAvailable = overview?.meta.submissionsAvailable !== false;
+  const approvalsAvailable = overview?.meta.approvalsAvailable !== false;
+  const costTotal = costAvailable ? (overview?.meta.costRecordsTotal ?? 0) : null;
+  const submissionTotal = submissionsAvailable
+    ? (overview?.meta.submissionsTotal ?? 0)
+    : null;
   const summary = overview?.operationalCostSummary ?? null;
-  const spendLabel =
-    summary && summary.totalCount > 0
+  const spendLabel = !costAvailable
+    ? "Unavailable"
+    : summary && summary.totalCount > 0
       ? formatFinancialAmount(summary.sampleAmount, summary.currency)
       : "—";
   const draftCount = overview?.submissions.draftCount;
-  const reimbursementsInPreparation =
-    draftCount != null
+  const reimbursementsInPreparation = !submissionsAvailable
+    ? "Unavailable"
+    : draftCount != null
       ? String(draftCount)
-      : submissionTotal > 0
+      : submissionTotal && submissionTotal > 0
         ? `${submissionTotal} total`
         : "0";
 
@@ -66,11 +73,19 @@ export function FinancePage() {
         <FinanceSummaryRow
           operationalSpendLabel={loading ? "—" : spendLabel}
           spendIsSample={Boolean(summary?.truncated)}
-          costRecordsTotal={costTotal}
+          costRecordsTotal={
+            loading ? "—" : costTotal == null ? "Unavailable" : costTotal
+          }
           reimbursementsInPreparation={
             loading ? "—" : reimbursementsInPreparation
           }
-          clientAuthorisationsTotal={overview?.meta.totalApprovals ?? 0}
+          clientAuthorisationsTotal={
+            loading
+              ? "—"
+              : !approvalsAvailable
+                ? "Unavailable"
+                : (overview?.meta.totalApprovals ?? 0)
+          }
           loading={loading}
         />
 
@@ -94,10 +109,16 @@ export function FinancePage() {
               summary={overview?.operationalCostSummary ?? null}
               recentCosts={overview?.recentCosts ?? []}
               loading={loading}
+              available={overview?.meta.costRecordsAvailable !== false}
             />
             <FinanceSubmissionsSection
               snapshot={overview?.submissions ?? null}
               loading={loading}
+              error={
+                overview && overview.submissions.available === false
+                  ? "Reimbursement claims are temporarily unavailable."
+                  : null
+              }
             />
           </div>
         </section>
@@ -106,11 +127,13 @@ export function FinancePage() {
           approvals={overview?.sourceApprovals ?? []}
           loading={loading}
           totalAuthorisations={overview?.meta.totalApprovals ?? 0}
+          available={overview?.meta.approvalsAvailable !== false}
         />
 
         <FinancePendingActionSection
           items={overview?.pendingActions ?? []}
           loading={loading}
+          incomplete={Boolean(overview?.meta.pendingIncomplete)}
         />
 
         <div className="fin-v13-footer">

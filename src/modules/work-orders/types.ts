@@ -163,6 +163,8 @@ export interface WorkOrderListParams {
   maintenanceId?: string | "all";
   dueDate?: WorkOrderDueDateFilter;
   sort?: WorkOrderSort;
+  includeOperationalPictureTotals?: boolean;
+  asOf?: string;
 }
 
 /** Minimal rows for WO filter dropdowns (consolidated getFilterCatalog). */

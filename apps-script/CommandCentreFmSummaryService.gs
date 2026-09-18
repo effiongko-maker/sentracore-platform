@@ -182,6 +182,33 @@ var CommandCentreFmSummaryService = (function () {
     };
   }
 
+  /**
+   * Piggyback complete-population picture totals onto an existing getAll page.
+   * Uses the same already-loaded filtered rows — no extra sheet read.
+   */
+  function attachListTotals(page, domain, rows, asOf) {
+    page = page || {};
+    if (!asOf) asOf = new Date().toISOString();
+    try {
+      if (domain === "maintenance") {
+        page.operationalPictureMaintenance = summarizeMaintenance_(rows, asOf);
+      } else if (domain === "workOrders") {
+        page.operationalPictureWorkOrders = summarizeWorkOrders_(rows, asOf);
+      } else if (domain === "approvals") {
+        page.operationalPictureApprovals = summarizeApprovals_(rows);
+      }
+    } catch (error) {
+      if (domain === "maintenance") {
+        page.operationalPictureMaintenance = unavailable_();
+      } else if (domain === "workOrders") {
+        page.operationalPictureWorkOrders = unavailable_();
+      } else if (domain === "approvals") {
+        page.operationalPictureApprovals = unavailable_();
+      }
+    }
+    return page;
+  }
+
   return {
     OPERATIONAL_PICTURE_VERSION: OPERATIONAL_PICTURE_VERSION,
     ASSIGNMENT_SUMMARY_VERSION: ASSIGNMENT_SUMMARY_VERSION,
@@ -191,5 +218,6 @@ var CommandCentreFmSummaryService = (function () {
     summarizeWorkOrdersForRows: summarizeWorkOrders_,
     summarizeApprovalsForRows: summarizeApprovals_,
     countAssignmentsForRows: countAssignments_,
+    attachListTotals: attachListTotals,
   };
 })();

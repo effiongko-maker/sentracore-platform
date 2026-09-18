@@ -135,6 +135,13 @@ export interface MaintenanceListParams {
    * same getAll pass (criticalWorkTotal), counted before pagination.
    */
   includeCriticalWorkTotal?: boolean;
+  /**
+   * Home-only: complete-population Operational Picture totals from the same
+   * getAll pass (no extra sheet read).
+   */
+  includeOperationalPictureTotals?: boolean;
+  /** ISO-8601 UTC timestamp for overdue day comparison. */
+  asOf?: string;
 }
 
 /** Lightweight reference row for filter dropdowns — id + title only. */

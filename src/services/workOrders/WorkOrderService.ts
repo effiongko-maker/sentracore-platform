@@ -282,6 +282,9 @@ function toPaginatedWorkOrders(
       pageSize: Number(page.pageSize ?? params.pageSize ?? rows.length),
       total: Number(page.total ?? rows.length),
       totalPages: Number(page.totalPages ?? 1),
+      ...(page.operationalPictureWorkOrders !== undefined
+        ? { operationalPictureWorkOrders: page.operationalPictureWorkOrders }
+        : {}),
     };
   }
 
@@ -315,6 +318,8 @@ export const WorkOrderService = {
       maintenanceId: params.maintenanceId ?? "all",
       sort: params.sort ?? "",
       dueDate: params.dueDate ?? "",
+      includeOperationalPictureTotals: !!params.includeOperationalPictureTotals,
+      asOf: params.asOf ?? "",
     });
     return sharedRequest(key, async () => {
       if (typeof window === "undefined") {

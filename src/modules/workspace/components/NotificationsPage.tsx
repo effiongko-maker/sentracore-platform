@@ -42,7 +42,7 @@ export function NotificationsPage() {
       setFeed(next);
       setReadIds(loadReadNotificationIds());
     } catch (err) {
-      setFeed(EMPTY_FEED);
+      setFeed({ ...EMPTY_FEED, incomplete: true });
       setError(
         err instanceof Error ? err.message : "Unable to load notifications."
       );
@@ -88,7 +88,11 @@ export function NotificationsPage() {
         <p className="os-notify-page-meta">
           {loading
             ? "Loading…"
-            : `${feed.total} item${feed.total === 1 ? "" : "s"} · ${unreadCount} unread`}
+            : feed.incomplete
+              ? feed.total > 0
+                ? `${feed.total} known item${feed.total === 1 ? "" : "s"} · picture incomplete`
+                : "Notification picture is incomplete"
+              : `${feed.total} item${feed.total === 1 ? "" : "s"} · ${unreadCount} unread`}
         </p>
         <button
           type="button"
@@ -101,11 +105,20 @@ export function NotificationsPage() {
       </div>
 
       <StreamSurface className="mt-4">
-        {error ? (
+        {error && feed.items.length === 0 ? (
           <EmptyState
             icon={Bell}
-            title="Unable to load notifications"
-            description={error}
+            title="Notifications temporarily unavailable"
+            description={
+              error ??
+              "Some operational data could not be loaded. This is not a confirmed empty inbox."
+            }
+          />
+        ) : feed.incomplete && feed.items.length === 0 ? (
+          <EmptyState
+            icon={Bell}
+            title="Notifications temporarily unavailable"
+            description="Some operational data could not be loaded. This is not a confirmed empty inbox."
           />
         ) : loading && feed.items.length === 0 ? (
           <p className="os-notify-empty">Loading…</p>

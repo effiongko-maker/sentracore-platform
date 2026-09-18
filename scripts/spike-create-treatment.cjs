@@ -15,11 +15,9 @@
  */
 
 const fs = require("fs");
+const { resolveUrl } = require("./lib/apps-script-client.cjs");
 
-const url =
-  process.env.APPS_SCRIPT_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  "https://script.google.com/macros/s/AKfycbz8DUM4MS2NTlEAeHsMVw9sGY0CyCdJwu_24mYJCpUwJWQb9FKEGABO2TEZhzKO-5Xm/exec";
+const url = resolveUrl();
 
 const OUT_PATH =
   process.env.SPIKE_OUT || "/tmp/phase25-treatment-mutation-spike.json";
@@ -44,7 +42,12 @@ async function postRaw(resource, action, payload = {}) {
       "Content-Type": "application/json",
       Accept: "application/json",
     },
-    body: JSON.stringify({ resource, action, payload }),
+    body: JSON.stringify({
+      resource,
+      action,
+      payload,
+      sharedSecret: process.env.APPS_SCRIPT_SHARED_SECRET || undefined,
+    }),
   });
   const text = await res.text();
   const wallMs = Date.now() - t0;

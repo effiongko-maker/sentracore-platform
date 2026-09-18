@@ -23,12 +23,14 @@ export function FinanceOperationalCostSection({
   summary,
   recentCosts,
   loading,
+  available = true,
 }: {
   /** Kept for call-site compatibility; not rendered on the overview. */
   lenses: FinanceOperationalCostLens[];
   summary: FinanceOperationalCostSummary | null;
   recentCosts: FinanceRecentCostRow[];
   loading: boolean;
+  available?: boolean;
 }) {
   const hasCosts = (summary?.totalCount ?? 0) > 0;
   const visible = recentCosts.slice(0, FINANCE_UI_LIST_LIMIT);
@@ -47,6 +49,8 @@ export function FinanceOperationalCostSection({
 
       {loading ? (
         <div className="fin-v13-skel-block" />
+      ) : !available ? (
+        <p className="fin-v13-empty">Operational costs are temporarily unavailable.</p>
       ) : hasCosts && summary ? (
         visible.length > 0 ? (
           <table className="fin-v13-table fin-v13-table--compact">

@@ -13,6 +13,23 @@ import {
 import type { FinanceOverview } from "../types";
 import { deriveFinanceOverview } from "../utils/deriveFinanceOverview";
 
+const SOURCE_TIMEOUT_MS = 25_000;
+
+async function settleSource<T>(
+  loader: (signal: AbortSignal) => Promise<{ data: T[]; total: number }>
+): Promise<{ available: true; data: T[]; total: number } | { available: false }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SOURCE_TIMEOUT_MS);
+  try {
+    const result = await loader(controller.signal);
+    return { available: true, data: result.data, total: result.total };
+  } catch {
+    return { available: false };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function useFinanceOverview() {
   const [overview, setOverview] = useState<FinanceOverview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -24,68 +41,89 @@ export function useFinanceOverview() {
     setLoading(true);
     setError(null);
 
-    try {
-      const [
-        approvalResult,
-        costResult,
-        submissionResult,
-        paymentResult,
-        authorizationResult,
-      ] = await Promise.all([
-        ApprovalService.listApprovals({
-          page: 1,
-          pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
-          status: "all",
-          sort: "newest",
-        }),
-        CostRecordService.listCostRecords({
-          page: 1,
-          pageSize: FINANCE_COST_POOL_FETCH_SIZE,
-        }),
-        CostSubmissionService.listCostSubmissions({
-          page: 1,
-          pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
-        }),
-        ReimbursementPaymentService.listPayments({
-          page: 1,
-          pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
-        }),
-        ReimbursementAuthorizationService.listAuthorizations({
-          page: 1,
-          pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
-        }),
-      ]);
+    const [
+      approvalResult,
+      costResult,
+      submissionResult,
+      paymentResult,
+      authorizationResult,
+    ] = await Promise.all([
+      settleSource((signal) =>
+        ApprovalService.listApprovals(
+          {
+            page: 1,
+            pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
+            status: "all",
+            sort: "newest",
+          },
+          { signal }
+        )
+      ),
+      settleSource((signal) =>
+        CostRecordService.listCostRecords(
+          { page: 1, pageSize: FINANCE_COST_POOL_FETCH_SIZE },
+          { signal }
+        )
+      ),
+      settleSource((signal) =>
+        CostSubmissionService.listCostSubmissions(
+          { page: 1, pageSize: FINANCE_OVERVIEW_FETCH_SIZE },
+          { signal }
+        )
+      ),
+      settleSource((signal) =>
+        ReimbursementPaymentService.listPayments(
+          { page: 1, pageSize: FINANCE_OVERVIEW_FETCH_SIZE },
+          { signal }
+        )
+      ),
+      settleSource((signal) =>
+        ReimbursementAuthorizationService.listAuthorizations(
+          { page: 1, pageSize: FINANCE_OVERVIEW_FETCH_SIZE },
+          { signal }
+        )
+      ),
+    ]);
 
-      if (id !== requestId.current) return;
+    if (id !== requestId.current) return;
 
-      setOverview(
-        deriveFinanceOverview({
-          approvals: approvalResult.data,
-          totalApprovals: approvalResult.total,
-          costRecords: costResult.data,
-          totalCostRecords: costResult.total,
-          submissions: submissionResult.data,
-          totalSubmissions: submissionResult.total,
-          payments: paymentResult.data,
-          totalPayments: paymentResult.total,
-          authorizations: authorizationResult.data,
-        })
-      );
-    } catch (err) {
-      if (id !== requestId.current) return;
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load finance overview right now."
-      );
+    const allFailed =
+      !approvalResult.available &&
+      !costResult.available &&
+      !submissionResult.available &&
+      !paymentResult.available &&
+      !authorizationResult.available;
+
+    if (allFailed) {
+      setError("Unable to load finance overview right now.");
       setOverview(null);
-    } finally {
-      if (id !== requestId.current) {
-        /* ignore */
-      } else {
-        setLoading(false);
-      }
+      setLoading(false);
+      return;
     }
+
+    setOverview(
+      deriveFinanceOverview({
+        approvals: approvalResult.available ? approvalResult.data : [],
+        totalApprovals: approvalResult.available ? approvalResult.total : 0,
+        approvalsAvailable: approvalResult.available,
+        costRecords: costResult.available ? costResult.data : [],
+        totalCostRecords: costResult.available ? costResult.total : 0,
+        costRecordsAvailable: costResult.available,
+        submissions: submissionResult.available ? submissionResult.data : [],
+        totalSubmissions: submissionResult.available
+          ? submissionResult.total
+          : 0,
+        submissionsAvailable: submissionResult.available,
+        payments: paymentResult.available ? paymentResult.data : [],
+        totalPayments: paymentResult.available ? paymentResult.total : 0,
+        paymentsAvailable: paymentResult.available,
+        authorizations: authorizationResult.available
+          ? authorizationResult.data
+          : [],
+        authorizationsAvailable: authorizationResult.available,
+      })
+    );
+    setLoading(false);
   }, []);
 
   useEffect(() => {

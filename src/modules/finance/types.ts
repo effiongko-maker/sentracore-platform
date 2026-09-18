@@ -110,6 +110,7 @@ export type FinanceSubmissionPreviewRow = {
 };
 
 export type FinanceSubmissionSnapshot = {
+  available: boolean;
   total: number;
   truncated: boolean;
   /** Status counts from the loaded pool only — null when truncated (not globally safe). */
@@ -136,14 +137,14 @@ export type FinancePaymentSnapshot = {
 };
 
 export type FinanceOverviewMeta = {
-  totalApprovals: number;
+  totalApprovals: number | null;
   approvalsInView: number;
   approvalsTruncated: boolean;
-  costRecordsTotal: number;
+  costRecordsTotal: number | null;
   costRecordsTruncated: boolean;
-  submissionsTotal: number;
+  submissionsTotal: number | null;
   submissionsTruncated: boolean;
-  paymentsTotal: number;
+  paymentsTotal: number | null;
   paymentsTruncated: boolean;
   derivedAt: string;
   /**
@@ -152,6 +153,13 @@ export type FinanceOverviewMeta = {
    * CostRecord in multiple submissions.
    */
   reimbursableAwaitingSubmissionSafe: boolean;
+  costRecordsAvailable: boolean;
+  submissionsAvailable: boolean;
+  paymentsAvailable: boolean;
+  authorizationsAvailable: boolean;
+  approvalsAvailable: boolean;
+  /** True when a required source for pending actions failed. */
+  pendingIncomplete: boolean;
 };
 
 export type FinanceOverview = {

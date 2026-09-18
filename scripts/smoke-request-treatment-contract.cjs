@@ -10,32 +10,7 @@
  *   node scripts/smoke-request-treatment-contract.cjs
  */
 
-const url =
-  process.env.APPS_SCRIPT_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  "https://script.google.com/macros/s/AKfycbz8DUM4MS2NTlEAeHsMVw9sGY0CyCdJwu_24mYJCpUwJWQb9FKEGABO2TEZhzKO-5Xm/exec";
-
-async function post(resource, action, payload = {}) {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({ resource, action, payload }),
-  });
-  const text = await res.text();
-  let json;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    throw new Error(`Non-JSON (${res.status}): ${text.slice(0, 200)}`);
-  }
-  if (!json.success) {
-    throw new Error(`${resource}/${action}: ${json.message || res.status}`);
-  }
-  return json.data;
-}
+const { postToAppsScript: post } = require("./lib/apps-script-client.cjs");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);

@@ -41,7 +41,8 @@ export interface WorkspaceQuickAction {
 export interface WorkspaceWorkSummary {
   id: string;
   label: string;
-  count: number;
+  /** null when the authoritative assignment source could not be loaded. */
+  count: number | null;
   href: string;
   emptyLabel: string;
 }

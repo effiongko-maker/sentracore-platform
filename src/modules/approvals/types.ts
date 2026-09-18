@@ -165,6 +165,8 @@ export interface ApprovalListParams {
   facilityId?: string | "all";
   workOrderId?: string | "all";
   sort?: ApprovalSort;
+  includeOperationalPictureTotals?: boolean;
+  asOf?: string;
 }
 
 export type ApprovalModalState =

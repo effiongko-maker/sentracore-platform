@@ -65,6 +65,11 @@ export type OperationalNotificationFeed = {
   visible: OperationalNotification[];
   viewAllHref?: string;
   viewAllLabel?: string;
+  /**
+   * True when a required source domain failed. Never present a definitive
+   * empty / “nothing needs attention” state while this is set.
+   */
+  incomplete?: boolean;
 };
 
 /** Module / area label for a notification action href (presentation only). */

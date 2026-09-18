@@ -165,6 +165,10 @@ export interface PaginatedResult<T> {
    * before pagination. Absent on normal list responses.
    */
   criticalWorkTotal?: number;
+  /** Complete-population Operational Picture fragment; absent on undeployed Apps Script. */
+  operationalPictureMaintenance?: unknown;
+  operationalPictureWorkOrders?: unknown;
+  operationalPictureApprovals?: unknown;
 }
 
 /** @deprecated Prefer module-specific params (e.g. UserListParams). */

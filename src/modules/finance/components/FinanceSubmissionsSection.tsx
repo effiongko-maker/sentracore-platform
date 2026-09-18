@@ -40,8 +40,10 @@ export function FinanceSubmissionsSection({
         </Link>
       </div>
 
-      {error ? (
-        <p className="fin-v13-empty">{error}</p>
+      {error || snapshot?.available === false ? (
+        <p className="fin-v13-empty">
+          {error ?? "Reimbursement claims are temporarily unavailable."}
+        </p>
       ) : loading ? (
         <div className="fin-v13-skel-block" />
       ) : total === 0 ? (

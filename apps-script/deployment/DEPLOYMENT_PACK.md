@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — do not edit by hand. -->
 <!-- Regenerate with: npm run apps-script:pack -->
 
-Generated: 2026-09-17T10:07:26.170Z
+Generated: 2026-09-18T13:48:44.687Z
 
 This document is the **single source of truth** for copying Apps Script
 source into the Google Apps Script project.
@@ -117,20 +117,29 @@ ROUTER.gs
  *             "cost-records" | "cost-submissions" | "reimbursement-payments" |
  *             "diesel-usage" | "consumables-update" | "waste-log" | "fumigation-log" | "deep-cleaning-log",
  *   action: string,
- *   payload: object
+ *   payload: object,
+ *   requestId: string,
+ *   sharedSecret: string  // Script Property APPS_SCRIPT_SHARED_SECRET; never logged
  * }
  *
  * `module` is accepted as an alias for `resource` for backwards compatibility.
+ * Anonymous possession of the /exec URL is not authorization.
  */
 
+var currentRequestId_ = "";
+
 function jsonResponse_(success, message, data, meta) {
+  var mergedMeta = meta && typeof meta === "object" ? meta : {};
+  if (currentRequestId_ && mergedMeta.requestId == null) {
+    mergedMeta.requestId = currentRequestId_;
+  }
   var payload = {
     success: !!success,
     message: message == null ? "" : String(message),
     data: data === undefined ? null : data,
   };
-  if (meta && typeof meta === "object") {
-    payload.meta = meta;
+  if (Object.keys(mergedMeta).length) {
+    payload.meta = mergedMeta;
   }
   var text;
   try {
@@ -140,7 +149,10 @@ function jsonResponse_(success, message, data, meta) {
       success: false,
       message: "Failed to serialise Apps Script response.",
       data: null,
-      meta: { errorClass: "serialization" },
+      meta: {
+        errorClass: "serialization",
+        requestId: currentRequestId_ || undefined,
+      },
     });
   }
   // ContentService accepts Unicode strings; do not pass through ByteString APIs.
@@ -166,11 +178,50 @@ function classifyAppsScriptError_(error) {
   if (/temporarily unavailable|rate limit|quota|backend error|internal error/.test(lower)) {
     return { errorClass: "transient", retryable: true };
   }
+  if (/apps_script_auth/.test(lower)) {
+    return { errorClass: "auth", retryable: false };
+  }
   return { errorClass: "exception", retryable: false };
+}
+
+function secretsEqual_(left, right) {
+  var a = String(left == null ? "" : left);
+  var b = String(right == null ? "" : right);
+  var max = Math.max(a.length, b.length);
+  var mismatch = a.length === b.length ? 0 : 1;
+  for (var i = 0; i < max; i++) {
+    var ca = i < a.length ? a.charCodeAt(i) : 0;
+    var cb = i < b.length ? b.charCodeAt(i) : 0;
+    mismatch = mismatch | (ca ^ cb);
+  }
+  return mismatch === 0;
+}
+
+function authorizeAppsScriptRequest_(body) {
+  var expected = "";
+  try {
+    expected = String(
+      PropertiesService.getScriptProperties().getProperty(
+        "APPS_SCRIPT_SHARED_SECRET"
+      ) || ""
+    ).trim();
+  } catch (err) {
+    expected = "";
+  }
+  if (!expected) {
+    throw new Error("APPS_SCRIPT_AUTH_NOT_CONFIGURED");
+  }
+  var provided = String(
+    (body && (body.sharedSecret || body.authToken)) || ""
+  ).trim();
+  if (!secretsEqual_(expected, provided)) {
+    throw new Error("APPS_SCRIPT_AUTH_FAILED");
+  }
 }
 
 function doPost(e) {
   var body = {};
+  currentRequestId_ = "";
 
   try {
     var raw =
@@ -180,6 +231,7 @@ function doPost(e) {
     body = {};
   }
 
+  currentRequestId_ = String(body.requestId || "").trim();
   var resource = String(body.resource || body.module || "").trim();
   var action = body.action || "getAll";
   var payload = body.payload || {};
@@ -187,6 +239,15 @@ function doPost(e) {
   var result;
 
   try {
+    authorizeAppsScriptRequest_(body);
+    Logger.log(
+      "[apps-script] request " +
+        JSON.stringify({
+          requestId: currentRequestId_ || null,
+          resource: resource,
+          action: action,
+        })
+    );
     if (resource === "users") {
       result = UsersController.handle(action, payload);
     } else if (resource === "facilities") {
@@ -245,12 +306,24 @@ function doPost(e) {
     }
   } catch (error) {
     var classified = classifyAppsScriptError_(error);
-    result = jsonResponse_(
-      false,
-      (error && error.message) || "Unhandled Apps Script error.",
-      null,
-      classified
+    var errorMessage = (error && error.message) || "Unhandled Apps Script error.";
+    if (
+      errorMessage === "APPS_SCRIPT_AUTH_NOT_CONFIGURED" ||
+      errorMessage === "APPS_SCRIPT_AUTH_FAILED"
+    ) {
+      errorMessage = "Unauthorized.";
+      classified = { errorClass: "auth", retryable: false };
+    }
+    Logger.log(
+      "[apps-script] error " +
+        JSON.stringify({
+          requestId: currentRequestId_ || null,
+          resource: resource,
+          action: action,
+          errorClass: classified.errorClass,
+        })
     );
+    result = jsonResponse_(false, errorMessage, null, classified);
   }
 
   return result;
@@ -258,7 +331,8 @@ function doPost(e) {
 
 /**
  * Optional health check for the Web App deployment URL.
- * GET returns a small JSON payload confirming the script is reachable.
+ * GET is liveness only — it does not return operational data and does not
+ * authenticate. All operational reads/writes go through doPost.
  */
 function doGet() {
   var builds = {};
@@ -8500,7 +8574,19 @@ var ApprovalService = (function () {
     var rows = loadCanonicalRows_(payload, null);
     var filtered = applyFilters_(rows, payload);
     var sorted = sortNewestFirst_(filtered);
-    return paginate_(sorted, payload);
+    var page = paginate_(sorted, payload);
+    if (
+      payload.includeOperationalPictureTotals &&
+      typeof CommandCentreFmSummaryService !== "undefined"
+    ) {
+      CommandCentreFmSummaryService.attachListTotals(
+        page,
+        "approvals",
+        filtered,
+        String(payload.asOf || "").trim()
+      );
+    }
+    return page;
   }
 
   function getById(payload) {
@@ -9123,6 +9209,33 @@ var CommandCentreFmSummaryService = (function () {
     };
   }
 
+  /**
+   * Piggyback complete-population picture totals onto an existing getAll page.
+   * Uses the same already-loaded filtered rows — no extra sheet read.
+   */
+  function attachListTotals(page, domain, rows, asOf) {
+    page = page || {};
+    if (!asOf) asOf = new Date().toISOString();
+    try {
+      if (domain === "maintenance") {
+        page.operationalPictureMaintenance = summarizeMaintenance_(rows, asOf);
+      } else if (domain === "workOrders") {
+        page.operationalPictureWorkOrders = summarizeWorkOrders_(rows, asOf);
+      } else if (domain === "approvals") {
+        page.operationalPictureApprovals = summarizeApprovals_(rows);
+      }
+    } catch (error) {
+      if (domain === "maintenance") {
+        page.operationalPictureMaintenance = unavailable_();
+      } else if (domain === "workOrders") {
+        page.operationalPictureWorkOrders = unavailable_();
+      } else if (domain === "approvals") {
+        page.operationalPictureApprovals = unavailable_();
+      }
+    }
+    return page;
+  }
+
   return {
     OPERATIONAL_PICTURE_VERSION: OPERATIONAL_PICTURE_VERSION,
     ASSIGNMENT_SUMMARY_VERSION: ASSIGNMENT_SUMMARY_VERSION,
@@ -9132,6 +9245,7 @@ var CommandCentreFmSummaryService = (function () {
     summarizeWorkOrdersForRows: summarizeWorkOrders_,
     summarizeApprovalsForRows: summarizeApprovals_,
     countAssignmentsForRows: countAssignments_,
+    attachListTotals: attachListTotals,
   };
 })();
 ```
@@ -12106,12 +12220,28 @@ var MaintenanceService = (function () {
     }
     var rows = loadCanonicalRows_(payload, null);
     var filtered = applyFilters_(rows, payload);
+    var includePicture = !!payload.includeOperationalPictureTotals;
+    var asOf = String(payload.asOf || "").trim();
     var criticalWorkTotal = includeCriticalWorkTotal
       ? countCriticalWorkTotal_(filtered)
       : null;
     var sorted = sortNewestFirst_(filtered);
     var page = paginate_(sorted, payload);
-    if (includeCriticalWorkTotal) {
+    if (includePicture && typeof CommandCentreFmSummaryService !== "undefined") {
+      CommandCentreFmSummaryService.attachListTotals(
+        page,
+        "maintenance",
+        filtered,
+        asOf
+      );
+      if (
+        page.operationalPictureMaintenance &&
+        page.operationalPictureMaintenance.state === "healthy"
+      ) {
+        criticalWorkTotal = page.operationalPictureMaintenance.critical;
+      }
+    }
+    if (includeCriticalWorkTotal || includePicture) {
       page.criticalWorkTotal = criticalWorkTotal;
     }
     return page;
@@ -16601,7 +16731,19 @@ var WorkOrderService = (function () {
     var rows = loadCanonicalRows_(payload, null);
     var filtered = applyFilters_(rows, payload);
     var sorted = sortNewestFirst_(filtered);
-    return paginate_(sorted, payload);
+    var page = paginate_(sorted, payload);
+    if (
+      payload.includeOperationalPictureTotals &&
+      typeof CommandCentreFmSummaryService !== "undefined"
+    ) {
+      CommandCentreFmSummaryService.attachListTotals(
+        page,
+        "workOrders",
+        filtered,
+        String(payload.asOf || "").trim()
+      );
+    }
+    return page;
   }
 
   function getById(payload) {

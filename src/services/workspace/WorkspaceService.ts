@@ -13,7 +13,11 @@ import {
   buildAttentionModel,
   countLegacyCriticalIncidents,
 } from "@/modules/workspace/attention";
-import { buildOperationalPictureMetrics } from "@/modules/workspace/operationalPicture";
+import {
+  buildOperationalPictureMetrics,
+  buildOperationalPictureMetricsFromAggregate,
+  type OperationalPictureAggregate,
+} from "@/modules/workspace/operationalPicture";
 import type {
   WorkspaceActivityItem,
   WorkspaceScheduleItem,
@@ -51,28 +55,34 @@ function sortByDateDesc<T>(
   });
 }
 
+function unavailableAssignedWork(
+  id: WorkspaceWorkSummary["id"],
+  label: string,
+  href: string
+): WorkspaceWorkSummary {
+  return {
+    id,
+    label,
+    count: null,
+    href,
+    emptyLabel: "Temporarily unavailable",
+  };
+}
+
 export function buildMyWork(
   userId: string | undefined,
-  workOrders: WorkOrder[],
-  incidents: Incident[],
-  maintenance: Maintenance[]
+  workOrders: WorkOrder[] | null,
+  incidents: Incident[] | null,
+  maintenance: Maintenance[] | null
 ): WorkspaceWorkSummary[] {
   if (!userId) {
     return [
-      {
-        id: "assigned-work",
-        label: "Assigned Work",
-        count: 0,
-        href: "/work",
-        emptyLabel: "You're all caught up.",
-      },
-      {
-        id: "assigned-work-orders",
-        label: "Assigned Work Orders",
-        count: 0,
-        href: "/work-orders",
-        emptyLabel: "You're all caught up.",
-      },
+      unavailableAssignedWork("assigned-work", "Assigned Work", "/work"),
+      unavailableAssignedWork(
+        "assigned-work-orders",
+        "Assigned Work Orders",
+        "/work-orders"
+      ),
     ];
   }
   const domains = buildAssignedWorkDomains(userId, {
@@ -83,9 +93,15 @@ export function buildMyWork(
   return domains
     .filter(
       (item) =>
-        item.id !== "assigned-legacy-incidents" || (item.count ?? 0) > 0
+        item.id !== "assigned-legacy-incidents" ||
+        item.count == null ||
+        item.count > 0
     )
-    .map((item) => ({ ...item, count: item.count ?? 0 }));
+    .map((item) => ({
+      ...item,
+      emptyLabel:
+        item.count == null ? "Temporarily unavailable" : item.emptyLabel,
+    }));
 }
 
 export type AssignedWorkDomainSummary = {
@@ -379,12 +395,108 @@ type DomainResult<T> = { ok: boolean; data: T[] };
 /** Exact filtered register total — never treat !ok as total 0 for KPIs. */
 type DomainCountResult = { ok: boolean; total: number };
 
+type PictureFragment<T> =
+  | { present: true; healthy: true; value: T }
+  | { present: true; healthy: false }
+  | { present: false };
+
+function parseCount(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0
+    ? value
+    : null;
+}
+
+function parseMaintenancePicture(
+  value: unknown
+): PictureFragment<
+  Extract<OperationalPictureAggregate["maintenance"], { state: "healthy" }>
+> {
+  if (value == null) return { present: false };
+  if (typeof value !== "object" || Array.isArray(value)) {
+    return { present: true, healthy: false };
+  }
+  const row = value as Record<string, unknown>;
+  if (row.state === "unavailable") return { present: true, healthy: false };
+  const critical = parseCount(row.critical);
+  const inProgress = parseCount(row.inProgress);
+  const awaitingAction = parseCount(row.awaitingAction);
+  const overdue = parseCount(row.overdue);
+  if (
+    critical == null ||
+    inProgress == null ||
+    awaitingAction == null ||
+    overdue == null
+  ) {
+    return { present: true, healthy: false };
+  }
+  return {
+    present: true,
+    healthy: true,
+    value: {
+      state: "healthy",
+      critical,
+      inProgress,
+      awaitingAction,
+      overdue,
+    },
+  };
+}
+
+function parseWorkOrderPicture(
+  value: unknown
+): PictureFragment<
+  Extract<OperationalPictureAggregate["workOrders"], { state: "healthy" }>
+> {
+  if (value == null) return { present: false };
+  if (typeof value !== "object" || Array.isArray(value)) {
+    return { present: true, healthy: false };
+  }
+  const row = value as Record<string, unknown>;
+  if (row.state === "unavailable") return { present: true, healthy: false };
+  const awaitingAction = parseCount(row.awaitingAction);
+  const overdue = parseCount(row.overdue);
+  if (awaitingAction == null || overdue == null) {
+    return { present: true, healthy: false };
+  }
+  return {
+    present: true,
+    healthy: true,
+    value: { state: "healthy", awaitingAction, overdue },
+  };
+}
+
+function parseApprovalPicture(
+  value: unknown
+): PictureFragment<
+  Extract<OperationalPictureAggregate["approvals"], { state: "healthy" }>
+> {
+  if (value == null) return { present: false };
+  if (typeof value !== "object" || Array.isArray(value)) {
+    return { present: true, healthy: false };
+  }
+  const row = value as Record<string, unknown>;
+  if (row.state === "unavailable") return { present: true, healthy: false };
+  const awaitingAction = parseCount(row.awaitingAction);
+  if (awaitingAction == null) return { present: true, healthy: false };
+  return {
+    present: true,
+    healthy: true,
+    value: { state: "healthy", awaitingAction },
+  };
+}
+
 type CoreDomainLists = {
   workOrders: DomainResult<WorkOrder>;
   incidents: DomainResult<Incident>;
   maintenance: DomainResult<Maintenance>;
   /** Exact Critical Work register total (status=active, priority high|critical). */
   criticalWork: DomainCountResult;
+  pictureMaintenance?: PictureFragment<
+    Extract<OperationalPictureAggregate["maintenance"], { state: "healthy" }>
+  >;
+  pictureWorkOrders?: PictureFragment<
+    Extract<OperationalPictureAggregate["workOrders"], { state: "healthy" }>
+  >;
 };
 
 /**
@@ -407,11 +519,18 @@ export function parseHomeCriticalWorkTotal(raw: unknown): number | null {
 export function mapHomeMaintenancePageResult(page: {
   data?: Maintenance[] | null;
   criticalWorkTotal?: unknown;
+  operationalPictureMaintenance?: unknown;
 }): {
   maintenance: DomainResult<Maintenance>;
   criticalWork: DomainCountResult;
+  pictureMaintenance: PictureFragment<
+    Extract<OperationalPictureAggregate["maintenance"], { state: "healthy" }>
+  >;
 } {
   const data = page.data ?? [];
+  const pictureMaintenance = parseMaintenancePicture(
+    page.operationalPictureMaintenance
+  );
   const total = parseHomeCriticalWorkTotal(page.criticalWorkTotal);
   return {
     maintenance: { ok: true, data },
@@ -419,12 +538,16 @@ export function mapHomeMaintenancePageResult(page: {
       total === null
         ? { ok: false, total: 0 }
         : { ok: true, total },
+    pictureMaintenance,
   };
 }
 
 type NonCoreDomainLists = {
   approvals: DomainResult<Approval>;
   facilities: DomainResult<{ id: string; name: string }>;
+  pictureApprovals?: PictureFragment<
+    Extract<OperationalPictureAggregate["approvals"], { state: "healthy" }>
+  >;
 };
 
 type DomainLists = CoreDomainLists & NonCoreDomainLists;
@@ -492,15 +615,20 @@ function settleDomain<T>(
  */
 function settleMaintenanceHome(
   poolSize: number,
+  asOf: string,
   timeoutMs = WORKSPACE_HOME_DOMAIN_TIMEOUT_MS
 ): Promise<{
   maintenance: DomainResult<Maintenance>;
   criticalWork: DomainCountResult;
+  pictureMaintenance: PictureFragment<
+    Extract<OperationalPictureAggregate["maintenance"], { state: "healthy" }>
+  >;
 }> {
   const emptyMnt: Maintenance[] = [];
   const failed = {
     maintenance: { ok: false as const, data: emptyMnt },
     criticalWork: { ok: false as const, total: 0 },
+    pictureMaintenance: { present: true, healthy: false } as const,
   };
 
   return new Promise((resolve) => {
@@ -510,6 +638,9 @@ function settleMaintenanceHome(
     const finish = (value: {
       maintenance: DomainResult<Maintenance>;
       criticalWork: DomainCountResult;
+      pictureMaintenance: PictureFragment<
+        Extract<OperationalPictureAggregate["maintenance"], { state: "healthy" }>
+      >;
     }) => {
       if (settled) return;
       settled = true;
@@ -530,6 +661,8 @@ function settleMaintenanceHome(
         pageSize: poolSize,
         status: "active",
         includeCriticalWorkTotal: true,
+        includeOperationalPictureTotals: true,
+        asOf,
       },
       { signal: controller.signal }
     )
@@ -547,18 +680,34 @@ function settleMaintenanceHome(
  * started only after core settles (see beginWorkspaceLoad).
  * Each arm already uses ok:false on failure; settleDomain adds the same for hangs.
  */
-function startCoreDomainLists(): Promise<CoreDomainLists> {
+function startCoreDomainLists(asOf: string): Promise<CoreDomainLists> {
   const pool = WORKSPACE_HOME_POOL_SIZE;
   const emptyWo: WorkOrder[] = [];
   const emptyInc: Incident[] = [];
 
   return Promise.all([
-    settleDomain(
+    settleValue(
       (signal) =>
-        WorkOrderService.listWorkOrders({ page: 1, pageSize: pool }, { signal })
-          .then((page) => ({ ok: true as const, data: page.data ?? emptyWo }))
-          .catch(() => ({ ok: false as const, data: emptyWo })),
-      emptyWo
+        WorkOrderService.listWorkOrders(
+          {
+            page: 1,
+            pageSize: pool,
+            includeOperationalPictureTotals: true,
+            asOf,
+          },
+          { signal }
+        ).then((page) => ({
+          ok: true as const,
+          data: page.data ?? emptyWo,
+          pictureWorkOrders: parseWorkOrderPicture(
+            page.operationalPictureWorkOrders
+          ),
+        })),
+      {
+        ok: false as const,
+        data: emptyWo,
+        pictureWorkOrders: { present: true, healthy: false } as const,
+      }
     ),
     settleDomain(
       (signal) =>
@@ -567,28 +716,45 @@ function startCoreDomainLists(): Promise<CoreDomainLists> {
           .catch(() => ({ ok: false as const, data: emptyInc })),
       emptyInc
     ),
-    // One Maintenance getAll: active pool rows + exact Critical Work total.
-    settleMaintenanceHome(pool),
+    settleMaintenanceHome(pool, asOf),
   ]).then(([workOrders, incidents, maintenanceHome]) => ({
-    workOrders,
+    workOrders: { ok: workOrders.ok, data: workOrders.data },
     incidents,
     maintenance: maintenanceHome.maintenance,
     criticalWork: maintenanceHome.criticalWork,
+    pictureMaintenance: maintenanceHome.pictureMaintenance,
+    pictureWorkOrders: workOrders.pictureWorkOrders,
   }));
 }
 
-function startNonCoreDomainLists(): Promise<NonCoreDomainLists> {
+function startNonCoreDomainLists(asOf: string): Promise<NonCoreDomainLists> {
   const pool = WORKSPACE_HOME_POOL_SIZE;
   const emptyApr: Approval[] = [];
   const emptyFac: Array<{ id: string; name: string }> = [];
 
   return Promise.all([
-    settleDomain(
+    settleValue(
       (signal) =>
-        ApprovalService.listApprovals({ page: 1, pageSize: pool }, { signal })
-          .then((page) => ({ ok: true as const, data: page.data ?? emptyApr }))
-          .catch(() => ({ ok: false as const, data: emptyApr })),
-      emptyApr
+        ApprovalService.listApprovals(
+          {
+            page: 1,
+            pageSize: pool,
+            includeOperationalPictureTotals: true,
+            asOf,
+          },
+          { signal }
+        ).then((page) => ({
+          ok: true as const,
+          data: page.data ?? emptyApr,
+          pictureApprovals: parseApprovalPicture(
+            page.operationalPictureApprovals
+          ),
+        })),
+      {
+        ok: false as const,
+        data: emptyApr,
+        pictureApprovals: { present: true, healthy: false } as const,
+      }
     ),
     settleDomain(
       (signal) =>
@@ -600,13 +766,50 @@ function startNonCoreDomainLists(): Promise<NonCoreDomainLists> {
           .catch(() => ({ ok: false as const, data: emptyFac })),
       emptyFac
     ),
-  ]).then(([approvals, facilities]) => ({ approvals, facilities }));
+  ]).then(([approvals, facilities]) => ({
+    approvals: { ok: approvals.ok, data: approvals.data },
+    facilities,
+    pictureApprovals: approvals.pictureApprovals,
+  }));
 }
 
 function emptyNonCoreDomainLists(): NonCoreDomainLists {
   return {
     approvals: { ok: true, data: [] },
     facilities: { ok: true, data: [] },
+    pictureApprovals: { present: false },
+  };
+}
+
+function composeHomeOperationalPicture(
+  asOf: string,
+  lists: DomainLists,
+  criticalWorkCount: number | null,
+  poolFallback: ReturnType<typeof buildOperationalPictureMetrics>
+): ReturnType<typeof buildOperationalPictureMetrics> {
+  const mntFrag = lists.maintenance.ok
+    ? (lists.pictureMaintenance ?? { present: false as const })
+    : ({ present: true as const, healthy: false as const });
+  const woFrag = lists.workOrders.ok
+    ? (lists.pictureWorkOrders ?? { present: false as const })
+    : ({ present: true as const, healthy: false as const });
+  const aprFrag = lists.approvals.ok
+    ? (lists.pictureApprovals ?? { present: false as const })
+    : ({ present: true as const, healthy: false as const });
+
+  if (mntFrag.present && woFrag.present && aprFrag.present) {
+    return buildOperationalPictureMetricsFromAggregate({
+      maintenance: mntFrag.healthy
+        ? mntFrag.value
+        : { state: "unavailable" },
+      workOrders: woFrag.healthy ? woFrag.value : { state: "unavailable" },
+      approvals: aprFrag.healthy ? aprFrag.value : { state: "unavailable" },
+    });
+  }
+
+  return {
+    ...poolFallback,
+    critical: criticalWorkCount,
   };
 }
 
@@ -636,7 +839,7 @@ export function composeWorkspaceSnapshot(
   const criticalWorkCount = lists.criticalWork.ok
     ? lists.criticalWork.total
     : null;
-  const pulse = buildPulse(
+  const pulseBase = buildPulse(
     domains.incidents ? incidents : null,
     domains.maintenance ? maintenance : null,
     domains.workOrders ? workOrders : null,
@@ -645,6 +848,15 @@ export function composeWorkspaceSnapshot(
     asOf,
     criticalWorkCount
   );
+  const pulse = {
+    ...pulseBase,
+    picture: composeHomeOperationalPicture(
+      asOf,
+      lists,
+      criticalWorkCount,
+      pulseBase.picture
+    ),
+  };
   const attentionBase = buildAttentionModel({
     asOf,
     currentUserId: userId,
@@ -681,7 +893,12 @@ export function composeWorkspaceSnapshot(
     pulse,
     domains,
     quickActions: WORKSPACE_QUICK_ACTIONS,
-    myWork: buildMyWork(userId, workOrders, incidents, maintenance),
+    myWork: buildMyWork(
+      userId,
+      domains.workOrders ? workOrders : null,
+      domains.incidents ? incidents : null,
+      domains.maintenance ? maintenance : null
+    ),
     schedule: buildSchedule(asOf, workOrders, incidents, maintenance),
     activity,
   };
@@ -699,7 +916,7 @@ export async function loadAssignedWorkSummary(
   assigneeUserId: string
 ): Promise<WorkspaceWorkSummary[]> {
   const pool = WORKSPACE_HOME_POOL_SIZE;
-  const [workOrders, incidents, maintenance] = await Promise.all([
+  const [workOrders, incidents, maintenance] = await Promise.allSettled([
     WorkOrderService.listWorkOrders({
       page: 1,
       pageSize: pool,
@@ -718,9 +935,9 @@ export async function loadAssignedWorkSummary(
   ]);
   return buildMyWork(
     assigneeUserId,
-    workOrders.data ?? [],
-    incidents.data ?? [],
-    maintenance.data ?? []
+    workOrders.status === "fulfilled" ? workOrders.value.data ?? [] : null,
+    incidents.status === "fulfilled" ? incidents.value.data ?? [] : null,
+    maintenance.status === "fulfilled" ? maintenance.value.data ?? [] : null
   );
 }
 
@@ -743,9 +960,11 @@ export const WorkspaceService = {
   beginWorkspaceLoad(): WorkspaceProgressiveLoad {
     const asOf = new Date().toISOString();
 
-    const corePromise = startCoreDomainLists();
+    const corePromise = startCoreDomainLists(asOf);
     // Defer register reads until after core settle / Home paint path.
-    const nonCorePromise = corePromise.then(() => startNonCoreDomainLists());
+    const nonCorePromise = corePromise.then(() =>
+      startNonCoreDomainLists(asOf)
+    );
     let latestUser: CurrentUserLite = null;
     const userPromise = UserService.getCurrentUser()
       .then((user) => {

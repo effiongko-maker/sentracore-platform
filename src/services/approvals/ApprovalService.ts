@@ -267,6 +267,7 @@ function toPaginated(
       pageSize?: number;
       total?: number;
       totalPages?: number;
+      operationalPictureApprovals?: unknown;
     };
     const rows = Array.isArray(envelope.data) ? envelope.data : [];
     return {
@@ -275,6 +276,9 @@ function toPaginated(
       pageSize: envelope.pageSize ?? params.pageSize ?? 8,
       total: envelope.total ?? rows.length,
       totalPages: envelope.totalPages ?? 1,
+      ...(envelope.operationalPictureApprovals !== undefined
+        ? { operationalPictureApprovals: envelope.operationalPictureApprovals }
+        : {}),
     };
   }
 
@@ -301,6 +305,8 @@ export const ApprovalService = {
       facilityId: params.facilityId ?? "all",
       workOrderId: params.workOrderId ?? "all",
       sort: params.sort ?? "",
+      includeOperationalPictureTotals: !!params.includeOperationalPictureTotals,
+      asOf: params.asOf ?? "",
     });
     return sharedRequest(key, async () => {
       if (typeof window === "undefined") {

@@ -68,13 +68,13 @@ const ws = read("src/services/workspace/WorkspaceService.ts");
 
 // 1) Non-core register loads are deferred until after corePromise settles.
 assert(
-  /const nonCorePromise\s*=\s*corePromise\.then\(\s*\(\)\s*=>\s*startNonCoreDomainLists\(\)/.test(
+  /const nonCorePromise\s*=\s*corePromise\.then\(\s*\(\)\s*=>\s*startNonCoreDomainLists\(asOf\)/.test(
     ws
   ),
   "nonCorePromise must chain startNonCoreDomainLists after corePromise"
 );
 assert(
-  !/const nonCorePromise\s*=\s*startNonCoreDomainLists\(\)/.test(ws),
+  !/const nonCorePromise\s*=\s*startNonCoreDomainLists\(/.test(ws),
   "nonCore must not start eagerly beside core"
 );
 assert(

@@ -88,9 +88,9 @@ export function FinanceSummaryRow({
 }: {
   operationalSpendLabel: string;
   spendIsSample: boolean;
-  costRecordsTotal: number;
+  costRecordsTotal: number | string;
   reimbursementsInPreparation: string;
-  clientAuthorisationsTotal: number;
+  clientAuthorisationsTotal: number | string;
   loading: boolean;
 }) {
   const supportCopy = spendIsSample

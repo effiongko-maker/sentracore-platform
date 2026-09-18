@@ -1,19 +1,20 @@
 Release:
-v0.8.6.20
+v0.8.6.21
 
 Title:
-Command Centre versioned FM aggregate contracts
+FM reliability contract, observability, and Apps Script shared-secret gate
 
 Generated:
-2026-09-17T10:07:26.188Z
+2026-09-18T13:48:44.705Z
 
 Features
-- Add operational-picture.v1 organisational FM summary
-- Add assignment-summary.v1 operational-user assignment summary
-- Preserve per-domain unavailable state and caller-controlled asOf
+- Correlate every Apps Script call with a request ID and structured fm.apps_script logs
+- Stop converting notification, Assigned Work, and FM Finance overview failures into legitimate zeros
+- Piggyback complete-population Operational Picture totals onto existing getAll reads
+- Require APPS_SCRIPT_SHARED_SECRET on doPost; remove hardcoded /exec fallback
 
 Performance
-- Replace Command Centre full-register and paginated reads with two count-only Apps Script requests
+- Operational Picture totals reuse the same filtered getAll rows — no extra sheet read
 
 Files Changed
 - ROUTER.gs
@@ -112,6 +113,12 @@ Typecheck:
 npm run typecheck
 ```
 
+Phase 0A FM reliability contract:
+
+```bash
+npx tsx --tsconfig tsconfig.json scripts/verify-fm-phase-0a.mts
+```
+
 Command Centre FM aggregate golden contract:
 
 ```bash
@@ -119,17 +126,18 @@ npx tsx --tsconfig tsconfig.json scripts/verify-command-centre-fm-aggregate-cont
 ```
 
 Notes
-- The Apps Script addition is backward-compatible; existing getAll resources remain unchanged.
-- TypeScript remains the canonical predicate reference and the golden verifier controls mirror drift.
+- Next.js production refuses a missing Apps Script URL or shared secret. Do not promote until both env vars and this Apps Script release are live.
+- Home Operational Picture uses the same CommandCentreFmSummaryService predicates as Command Centre, computed on the already-loaded getAll row set.
 
 Deployment semantics
 - `deploymentRequired`: Pack intent: a new Web App deploy is required to apply this source release when cutting from the repo. Not a live deployment status flag.
-- `appsScriptRedeploy`: Required — deploy the additive command-centre-fm resource before enabling the dependent Next.js build.
+- `appsScriptRedeploy`: Required — deploy ROUTER shared-secret validation and Operational Picture list totals before enabling production Next.js fail-closed secret enforcement.
 
 Live verification (read-only audit)
 - resourceLive: no
 - Notes:
-  - Deploy Apps Script first to avoid a Next.js contract-order outage.
-  - After deployment, validate one Operational Picture and one Assignment Summary request before warm-load observation.
+  - Set Script Property APPS_SCRIPT_SHARED_SECRET to the same value as the Next.js server env var before deploying this Apps Script release.
+  - Set Next.js APPS_SCRIPT_URL and APPS_SCRIPT_SHARED_SECRET (never NEXT_PUBLIC_*) before promoting the Next.js build.
+  - Anonymous /exec POSTs must fail after deploy. GET liveness remains unauthenticated.
 
 <!-- GENERATED FILE — do not edit by hand. npm run apps-script:pack -->

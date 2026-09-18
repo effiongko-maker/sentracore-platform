@@ -56,7 +56,7 @@ export function GlobalNotificationBell() {
       setFeed(next);
       setReadIds(loadReadNotificationIds());
     } catch {
-      setFeed(EMPTY_FEED);
+      setFeed({ ...EMPTY_FEED, incomplete: true });
     } finally {
       setLoading(false);
     }
@@ -199,8 +199,13 @@ export function GlobalNotificationBell() {
             </div>
           </div>
 
-          {loading && feed.visible.length === 0 ? (
+          {loading && feed.visible.length === 0 && !feed.incomplete ? (
             <p className="os-notify-empty">Loading…</p>
+          ) : feed.incomplete && feed.visible.length === 0 ? (
+            <p className="os-notify-empty">
+              Notification information is temporarily incomplete. Some operational
+              data could not be loaded.
+            </p>
           ) : feed.visible.length === 0 ? (
             <p className="os-notify-empty">Nothing needs your attention right now.</p>
           ) : (

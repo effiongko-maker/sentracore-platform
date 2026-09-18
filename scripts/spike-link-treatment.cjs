@@ -13,11 +13,7 @@
  */
 
 const fs = require("fs");
-
-const url =
-  process.env.APPS_SCRIPT_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  "https://script.google.com/macros/s/AKfycbz8DUM4MS2NTlEAeHsMVw9sGY0CyCdJwu_24mYJCpUwJWQb9FKEGABO2TEZhzKO-5Xm/exec";
+const { resolveUrl } = require("./lib/apps-script-client.cjs");
 
 const OUT =
   process.env.SPIKE_OUT || "/tmp/phase27-link-treatment-spike.json";
@@ -51,13 +47,17 @@ function loadEnv() {
 }
 
 async function postRaw(resource, action, payload = {}) {
-  const endpoint =
-    process.env.APPS_SCRIPT_URL || process.env.NEXT_PUBLIC_API_URL || url;
+  const endpoint = resolveUrl();
   const t0 = Date.now();
   const res = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ resource, action, payload }),
+    body: JSON.stringify({
+      resource,
+      action,
+      payload,
+      sharedSecret: process.env.APPS_SCRIPT_SHARED_SECRET || undefined,
+    }),
   });
   const text = await res.text();
   let json;

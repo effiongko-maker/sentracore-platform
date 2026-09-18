@@ -501,9 +501,8 @@ function main() {
     workspace.includes("beginWorkspaceLoad") &&
       workspace.includes("startCoreDomainLists") &&
       workspace.includes("startNonCoreDomainLists") &&
-      workspace.includes(
-        "corePromise.then(() => startNonCoreDomainLists())"
-      ),
+      workspace.includes("corePromise.then(() =>") &&
+      workspace.includes("startNonCoreDomainLists(asOf)"),
     "Home progressive load: non-core Approvals/Facilities defer until after core"
   );
   assert(

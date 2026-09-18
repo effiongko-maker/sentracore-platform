@@ -25,10 +25,12 @@ export function FinancePositionSection({
   approvals,
   loading,
   totalAuthorisations,
+  available = true,
 }: {
   approvals: Approval[];
   loading: boolean;
   totalAuthorisations: number;
+  available?: boolean;
 }) {
   const visible = [...approvals]
     .sort((a, b) => (b.updatedAt || b.createdAt).localeCompare(a.updatedAt || a.createdAt))
@@ -44,7 +46,9 @@ export function FinancePositionSection({
           <p className="fin-v13-section-lede">
             {loading
               ? "Loading authorisations…"
-              : totalAuthorisations > 0
+              : !available
+                ? "Client authorisations are temporarily unavailable."
+                : totalAuthorisations > 0
                 ? "Latest client authorisations in view."
                 : "Work Order client authorisation — not reimbursement approval."}
           </p>
@@ -56,6 +60,8 @@ export function FinancePositionSection({
 
       {loading ? (
         <div className="fin-v13-skel-block" />
+      ) : !available ? (
+        <p className="fin-v13-empty">Temporarily unavailable.</p>
       ) : visible.length === 0 ? (
         <p className="fin-v13-empty">No client authorisations recorded yet.</p>
       ) : (

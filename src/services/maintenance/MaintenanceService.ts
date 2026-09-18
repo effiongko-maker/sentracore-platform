@@ -285,6 +285,9 @@ function toPaginatedMaintenance(
       total: Number(page.total ?? rows.length),
       totalPages: Number(page.totalPages ?? 1),
       ...(criticalWorkTotal !== undefined ? { criticalWorkTotal } : {}),
+      ...(page.operationalPictureMaintenance !== undefined
+        ? { operationalPictureMaintenance: page.operationalPictureMaintenance }
+        : {}),
     };
   }
 
@@ -406,6 +409,8 @@ export const MaintenanceService = {
       requiresWorkOrder: params.requiresWorkOrder ?? "all",
       sort: params.sort ?? "",
       includeCriticalWorkTotal: !!params.includeCriticalWorkTotal,
+      includeOperationalPictureTotals: !!params.includeOperationalPictureTotals,
+      asOf: params.asOf ?? "",
     });
     return sharedRequest(key, async () => {
       if (typeof window === "undefined") {

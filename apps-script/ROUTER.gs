@@ -13,20 +13,29 @@
  *             "cost-records" | "cost-submissions" | "reimbursement-payments" |
  *             "diesel-usage" | "consumables-update" | "waste-log" | "fumigation-log" | "deep-cleaning-log",
  *   action: string,
- *   payload: object
+ *   payload: object,
+ *   requestId: string,
+ *   sharedSecret: string  // Script Property APPS_SCRIPT_SHARED_SECRET; never logged
  * }
  *
  * `module` is accepted as an alias for `resource` for backwards compatibility.
+ * Anonymous possession of the /exec URL is not authorization.
  */
 
+var currentRequestId_ = "";
+
 function jsonResponse_(success, message, data, meta) {
+  var mergedMeta = meta && typeof meta === "object" ? meta : {};
+  if (currentRequestId_ && mergedMeta.requestId == null) {
+    mergedMeta.requestId = currentRequestId_;
+  }
   var payload = {
     success: !!success,
     message: message == null ? "" : String(message),
     data: data === undefined ? null : data,
   };
-  if (meta && typeof meta === "object") {
-    payload.meta = meta;
+  if (Object.keys(mergedMeta).length) {
+    payload.meta = mergedMeta;
   }
   var text;
   try {
@@ -36,7 +45,10 @@ function jsonResponse_(success, message, data, meta) {
       success: false,
       message: "Failed to serialise Apps Script response.",
       data: null,
-      meta: { errorClass: "serialization" },
+      meta: {
+        errorClass: "serialization",
+        requestId: currentRequestId_ || undefined,
+      },
     });
   }
   // ContentService accepts Unicode strings; do not pass through ByteString APIs.
@@ -62,11 +74,50 @@ function classifyAppsScriptError_(error) {
   if (/temporarily unavailable|rate limit|quota|backend error|internal error/.test(lower)) {
     return { errorClass: "transient", retryable: true };
   }
+  if (/apps_script_auth/.test(lower)) {
+    return { errorClass: "auth", retryable: false };
+  }
   return { errorClass: "exception", retryable: false };
+}
+
+function secretsEqual_(left, right) {
+  var a = String(left == null ? "" : left);
+  var b = String(right == null ? "" : right);
+  var max = Math.max(a.length, b.length);
+  var mismatch = a.length === b.length ? 0 : 1;
+  for (var i = 0; i < max; i++) {
+    var ca = i < a.length ? a.charCodeAt(i) : 0;
+    var cb = i < b.length ? b.charCodeAt(i) : 0;
+    mismatch = mismatch | (ca ^ cb);
+  }
+  return mismatch === 0;
+}
+
+function authorizeAppsScriptRequest_(body) {
+  var expected = "";
+  try {
+    expected = String(
+      PropertiesService.getScriptProperties().getProperty(
+        "APPS_SCRIPT_SHARED_SECRET"
+      ) || ""
+    ).trim();
+  } catch (err) {
+    expected = "";
+  }
+  if (!expected) {
+    throw new Error("APPS_SCRIPT_AUTH_NOT_CONFIGURED");
+  }
+  var provided = String(
+    (body && (body.sharedSecret || body.authToken)) || ""
+  ).trim();
+  if (!secretsEqual_(expected, provided)) {
+    throw new Error("APPS_SCRIPT_AUTH_FAILED");
+  }
 }
 
 function doPost(e) {
   var body = {};
+  currentRequestId_ = "";
 
   try {
     var raw =
@@ -76,6 +127,7 @@ function doPost(e) {
     body = {};
   }
 
+  currentRequestId_ = String(body.requestId || "").trim();
   var resource = String(body.resource || body.module || "").trim();
   var action = body.action || "getAll";
   var payload = body.payload || {};
@@ -83,6 +135,15 @@ function doPost(e) {
   var result;
 
   try {
+    authorizeAppsScriptRequest_(body);
+    Logger.log(
+      "[apps-script] request " +
+        JSON.stringify({
+          requestId: currentRequestId_ || null,
+          resource: resource,
+          action: action,
+        })
+    );
     if (resource === "users") {
       result = UsersController.handle(action, payload);
     } else if (resource === "facilities") {
@@ -141,12 +202,24 @@ function doPost(e) {
     }
   } catch (error) {
     var classified = classifyAppsScriptError_(error);
-    result = jsonResponse_(
-      false,
-      (error && error.message) || "Unhandled Apps Script error.",
-      null,
-      classified
+    var errorMessage = (error && error.message) || "Unhandled Apps Script error.";
+    if (
+      errorMessage === "APPS_SCRIPT_AUTH_NOT_CONFIGURED" ||
+      errorMessage === "APPS_SCRIPT_AUTH_FAILED"
+    ) {
+      errorMessage = "Unauthorized.";
+      classified = { errorClass: "auth", retryable: false };
+    }
+    Logger.log(
+      "[apps-script] error " +
+        JSON.stringify({
+          requestId: currentRequestId_ || null,
+          resource: resource,
+          action: action,
+          errorClass: classified.errorClass,
+        })
     );
+    result = jsonResponse_(false, errorMessage, null, classified);
   }
 
   return result;
@@ -154,7 +227,8 @@ function doPost(e) {
 
 /**
  * Optional health check for the Web App deployment URL.
- * GET returns a small JSON payload confirming the script is reachable.
+ * GET is liveness only — it does not return operational data and does not
+ * authenticate. All operational reads/writes go through doPost.
  */
 function doGet() {
   var builds = {};

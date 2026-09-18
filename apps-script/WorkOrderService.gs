@@ -195,7 +195,19 @@ var WorkOrderService = (function () {
     var rows = loadCanonicalRows_(payload, null);
     var filtered = applyFilters_(rows, payload);
     var sorted = sortNewestFirst_(filtered);
-    return paginate_(sorted, payload);
+    var page = paginate_(sorted, payload);
+    if (
+      payload.includeOperationalPictureTotals &&
+      typeof CommandCentreFmSummaryService !== "undefined"
+    ) {
+      CommandCentreFmSummaryService.attachListTotals(
+        page,
+        "workOrders",
+        filtered,
+        String(payload.asOf || "").trim()
+      );
+    }
+    return page;
   }
 
   function getById(payload) {
