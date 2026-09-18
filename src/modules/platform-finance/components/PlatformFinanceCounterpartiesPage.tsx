@@ -1,30 +1,286 @@
 "use client";
+
 import { Plus, Search, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { FormField, inputClassName } from "@/components/forms/FormField";
 import type { OrganisationCounterparty } from "@/modules/platform-finance/domain/counterparties";
 import type { CounterpartyCapabilities } from "@/modules/platform-finance/server/PlatformFinanceCounterpartiesServerService";
 import { PlatformFinanceCounterpartiesService as Service } from "@/services/platform-finance/PlatformFinanceCounterpartiesService";
 
-const roleLabel = (role: string) => role.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+const roleLabel = (role: string) =>
+  role.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 export function PlatformFinanceCounterpartiesPage() {
-  const [rows, setRows] = useState<OrganisationCounterparty[]>([]); const [caps, setCaps] = useState<CounterpartyCapabilities|null>(null);
-  const [busy, setBusy] = useState(true); const [error, setError] = useState<string|null>(null); const [creating, setCreating] = useState(false);
-  const [query, setQuery] = useState(""); const [status, setStatus] = useState<"all"|"active"|"inactive">("all");
-  const [displayName, setDisplayName] = useState(""); const [legalName, setLegalName] = useState(""); const [taxId, setTaxId] = useState(""); const [saving, setSaving] = useState(false);
-  const reload = async () => { const [list, nextCaps] = await Promise.all([Service.list(), Service.getMyCapabilities()]); setRows(list); setCaps(nextCaps); };
-  useEffect(() => { let cancelled=false; void Promise.resolve().then(reload).then(()=>{if(!cancelled)setBusy(false)}).catch((cause)=>{if(!cancelled){setError(cause instanceof Error?cause.message:"Unable to load counterparties.");setBusy(false)}}); return()=>{cancelled=true}; }, []);
-  const filtered = useMemo(() => { const q=query.trim().toLowerCase(); return rows.filter((row)=>(status==="all"||row.status===status)&&(!q||row.displayName.toLowerCase().includes(q)||(row.legalName??"").toLowerCase().includes(q)||(row.taxRegistrationId??"").toLowerCase().includes(q))); }, [query, rows, status]);
-  const create = async () => { setSaving(true); try { await Service.create({displayName,legalName:legalName.trim()||null,taxRegistrationId:taxId.trim()||null,roles:["customer"],status:"active"}); setDisplayName("");setLegalName("");setTaxId("");setCreating(false);setError(null);await reload(); } catch(cause){setError(cause instanceof Error?cause.message:"Unable to create counterparty.")} finally{setSaving(false)} };
-  const toggle = async (row:OrganisationCounterparty) => { try { await Service.update(row.id,{status:row.status==="active"?"inactive":"active"});await reload(); } catch(cause){setError(cause instanceof Error?cause.message:"Unable to update counterparty.")} };
-  const active=rows.filter((row)=>row.status==="active").length;
-  return <div className="pf-requests"><header className="pf-ov-header"><div><h1 className="pf-ov-title">Counterparties</h1><p className="pf-ov-desc">Finance identities for customers, vendors, and related parties.</p></div>{caps?.manage?<button className="pf-btn-primary" onClick={()=>setCreating(true)}><Plus size={16}/>New Counterparty</button>:null}</header>
-    <section className="pf-req-summary"><article className="pf-req-summary-card"><p className="pf-req-summary-label">Active</p><p className="pf-req-summary-value">{active}</p></article><article className="pf-req-summary-card"><p className="pf-req-summary-label">Inactive</p><p className="pf-req-summary-value">{rows.length-active}</p></article></section>
-    <nav className="pf-req-tabs">{(["all","active","inactive"] as const).map((value)=><button key={value} className={`pf-req-tab ${status===value?"is-active":""}`} onClick={()=>setStatus(value)}>{value[0].toUpperCase()+value.slice(1)}</button>)}</nav>
-    <div className="pf-req-table-card"><div className="pf-req-toolbar"><label className="pf-req-search"><Search size={16}/><input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Search name or tax ID…"/></label></div>
-      {busy?<div className="pf-req-empty">Loading counterparties…</div>:null}{error?<p className="pf-form-error">{error}</p>:null}
-      {!busy&&!error?<div className="pf-req-table-wrap"><table className="pf-req-table"><thead><tr><th>Display Name</th><th>Roles</th><th>Tax ID</th><th>Status</th><th>Action</th></tr></thead><tbody>{filtered.length?filtered.map((row)=><tr key={row.id}><td><span className="pf-req-primary">{row.displayName}</span>{row.legalName?<div className="pf-req-meta">{row.legalName}</div>:null}</td><td>{row.roles.map((role)=><span className="pf-req-status is-info" key={role}>{roleLabel(role)}</span>)}</td><td>{row.taxRegistrationId??"—"}</td><td><span className={`pf-req-status ${row.status==="active"?"is-success":"is-muted"}`}>{row.status==="active"?"Active":"Inactive"}</span></td><td>{caps?.manage?<button className="pf-link-btn" onClick={()=>void toggle(row)}>{row.status==="active"?"Deactivate":"Activate"}</button>:null}</td></tr>):<tr><td colSpan={5}><div className="pf-req-empty">{rows.length?"No records match the current filters.":"Customer and other finance counterparties will appear here."}</div></td></tr>}</tbody></table></div>:null}
+  const [rows, setRows] = useState<OrganisationCounterparty[]>([]);
+  const [caps, setCaps] = useState<CounterpartyCapabilities | null>(null);
+  const [busy, setBusy] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<"all" | "active" | "inactive">("all");
+  const [displayName, setDisplayName] = useState("");
+  const [legalName, setLegalName] = useState("");
+  const [taxId, setTaxId] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const reload = async () => {
+    const [list, nextCaps] = await Promise.all([Service.list(), Service.getMyCapabilities()]);
+    setRows(list);
+    setCaps(nextCaps);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.resolve()
+      .then(reload)
+      .then(() => {
+        if (!cancelled) setBusy(false);
+      })
+      .catch((cause) => {
+        if (!cancelled) {
+          setError(cause instanceof Error ? cause.message : "Unable to load counterparties.");
+          setBusy(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return rows.filter(
+      (row) =>
+        (status === "all" || row.status === status) &&
+        (!q ||
+          row.displayName.toLowerCase().includes(q) ||
+          (row.legalName ?? "").toLowerCase().includes(q) ||
+          (row.taxRegistrationId ?? "").toLowerCase().includes(q)),
+    );
+  }, [query, rows, status]);
+
+  const openCreate = () => {
+    setCreateError(null);
+    setCreating(true);
+  };
+
+  const create = async () => {
+    setSaving(true);
+    try {
+      await Service.create({
+        displayName,
+        legalName: legalName.trim() || null,
+        taxRegistrationId: taxId.trim() || null,
+        roles: ["customer"],
+        status: "active",
+      });
+      setDisplayName("");
+      setLegalName("");
+      setTaxId("");
+      setCreating(false);
+      setCreateError(null);
+      await reload();
+    } catch (cause) {
+      setCreateError(cause instanceof Error ? cause.message : "Unable to create counterparty.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggle = async (row: OrganisationCounterparty) => {
+    try {
+      await Service.update(row.id, { status: row.status === "active" ? "inactive" : "active" });
+      await reload();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to update counterparty.");
+    }
+  };
+
+  const active = rows.filter((row) => row.status === "active").length;
+
+  return (
+    <div className="pf-requests">
+      <header className="pf-ov-header">
+        <div>
+          <h1 className="pf-ov-title">Counterparties</h1>
+          <p className="pf-ov-desc">Finance identities for customers, vendors, and related parties.</p>
+        </div>
+        {caps?.manage ? (
+          <button className="pf-btn-primary" onClick={openCreate}>
+            <Plus size={16} />
+            New Counterparty
+          </button>
+        ) : null}
+      </header>
+      <section className="pf-req-summary">
+        <article className="pf-req-summary-card">
+          <p className="pf-req-summary-label">Active</p>
+          <p className="pf-req-summary-value">{active}</p>
+        </article>
+        <article className="pf-req-summary-card">
+          <p className="pf-req-summary-label">Inactive</p>
+          <p className="pf-req-summary-value">{rows.length - active}</p>
+        </article>
+      </section>
+      <nav className="pf-req-tabs">
+        {(["all", "active", "inactive"] as const).map((value) => (
+          <button
+            key={value}
+            className={`pf-req-tab ${status === value ? "is-active" : ""}`}
+            onClick={() => setStatus(value)}
+          >
+            {value[0].toUpperCase() + value.slice(1)}
+          </button>
+        ))}
+      </nav>
+      <div className="pf-req-table-card">
+        <div className="pf-req-toolbar">
+          <label className="pf-req-search">
+            <Search size={16} />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search name or tax ID…"
+            />
+          </label>
+        </div>
+        {busy ? <div className="pf-req-empty">Loading counterparties…</div> : null}
+        {error ? (
+          <div className="pf-vb-alert is-danger" role="alert">
+            {error}
+          </div>
+        ) : null}
+        {!busy ? (
+          <div className="pf-req-table-wrap">
+            <table className="pf-req-table">
+              <thead>
+                <tr>
+                  <th>Display Name</th>
+                  <th>Roles</th>
+                  <th>Tax ID</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length ? (
+                  filtered.map((row) => (
+                    <tr key={row.id}>
+                      <td>
+                        <span className="pf-req-primary">{row.displayName}</span>
+                        {row.legalName ? <div className="pf-req-meta">{row.legalName}</div> : null}
+                      </td>
+                      <td>
+                        {row.roles.map((role) => (
+                          <span className="pf-req-status is-info" key={role}>
+                            {roleLabel(role)}
+                          </span>
+                        ))}
+                      </td>
+                      <td>{row.taxRegistrationId ?? "—"}</td>
+                      <td>
+                        <span className={`pf-req-status ${row.status === "active" ? "is-success" : "is-muted"}`}>
+                          {row.status === "active" ? "Active" : "Inactive"}
+                        </span>
+                      </td>
+                      <td>
+                        {caps?.manage ? (
+                          <button className="pf-link-btn" onClick={() => void toggle(row)}>
+                            {row.status === "active" ? "Deactivate" : "Activate"}
+                          </button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={5}>
+                      <div className="pf-req-empty">
+                        {rows.length
+                          ? "No records match the current filters."
+                          : "Customer and other finance counterparties will appear here."}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </div>
+      {creating ? (
+        <div className="pf-drawer-backdrop" onMouseDown={() => setCreating(false)}>
+          <aside className="pf-req-drawer" onMouseDown={(e) => e.stopPropagation()}>
+            <header className="pf-req-drawer-head">
+              <div>
+                <p className="pf-req-drawer-ref">COUNTERPARTY</p>
+                <h2 className="pf-req-drawer-title">New counterparty</h2>
+              </div>
+              <button className="pf-icon-btn" onClick={() => setCreating(false)} aria-label="Close">
+                <X size={18} />
+              </button>
+            </header>
+            <div className="pf-req-drawer-body">
+              {createError ? (
+                <div className="pf-vb-alert is-danger" role="alert">
+                  {createError}
+                </div>
+              ) : null}
+              <section className="pf-req-drawer-section">
+                <div className="pf-coa-drawer-fields">
+                  <FormField label="Display name" htmlFor="cp-display-name" required>
+                    <input
+                      id="cp-display-name"
+                      className={inputClassName}
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                    />
+                  </FormField>
+                  <FormField
+                    label="Legal name"
+                    htmlFor="cp-legal-name"
+                    hint="Optional."
+                  >
+                    <input
+                      id="cp-legal-name"
+                      className={inputClassName}
+                      value={legalName}
+                      onChange={(e) => setLegalName(e.target.value)}
+                    />
+                  </FormField>
+                  <FormField
+                    label="Tax registration ID"
+                    htmlFor="cp-tax-id"
+                    hint="Optional."
+                  >
+                    <input
+                      id="cp-tax-id"
+                      className={inputClassName}
+                      value={taxId}
+                      onChange={(e) => setTaxId(e.target.value)}
+                    />
+                  </FormField>
+                </div>
+              </section>
+            </div>
+            <footer className="pf-req-drawer-footer">
+              <div className="pf-req-action-row">
+                <button className="pf-btn-secondary" onClick={() => setCreating(false)}>
+                  Cancel
+                </button>
+                <button
+                  className="pf-btn-primary"
+                  disabled={saving || !displayName.trim()}
+                  onClick={() => void create()}
+                >
+                  {saving ? "Saving…" : "Create"}
+                </button>
+              </div>
+            </footer>
+          </aside>
+        </div>
+      ) : null}
     </div>
-    {creating?<div className="pf-drawer-backdrop" onMouseDown={()=>setCreating(false)}><aside className="pf-req-drawer" onMouseDown={(e)=>e.stopPropagation()}><header className="pf-req-drawer-head"><div><p className="pf-req-drawer-ref">COUNTERPARTY</p><h2 className="pf-req-drawer-title">New counterparty</h2></div><button className="pf-link-btn" onClick={()=>setCreating(false)} aria-label="Close"><X size={18}/></button></header><div className="pf-req-drawer-body"><label className="pf-field"><span>Display name</span><input value={displayName} onChange={(e)=>setDisplayName(e.target.value)}/></label><label className="pf-field"><span>Legal name</span><input value={legalName} onChange={(e)=>setLegalName(e.target.value)}/></label><label className="pf-field"><span>Tax registration ID</span><input value={taxId} onChange={(e)=>setTaxId(e.target.value)}/></label></div><footer className="pf-req-drawer-footer"><div className="pf-req-action-row"><button className="pf-btn-secondary" onClick={()=>setCreating(false)}>Cancel</button><button className="pf-btn-primary" disabled={saving||!displayName.trim()} onClick={()=>void create()}>{saving?"Saving…":"Create"}</button></div></footer></aside></div>:null}
-  </div>;
+  );
 }
