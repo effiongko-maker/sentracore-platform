@@ -55,6 +55,9 @@ export const PLATFORM_FINANCE_CAPABILITIES = {
   invoice_review: "platform_finance.invoice.review",
   invoice_issue: "platform_finance.invoice.issue",
   receivable_view: "platform_finance.receivable.view",
+  receipt_view: "platform_finance.receipt.view",
+  receipt_record: "platform_finance.receipt.record",
+  receipt_post: "platform_finance.receipt.post",
 } as const;
 
 export {

@@ -11,13 +11,14 @@ export type FinanceReceivable = {
   currency: string;
   originalAmount: number;
   outstandingAmount: number;
+  availableToAllocate: number;
   counterpartyDisplayName: string;
   counterpartyLegalName: string | null;
   counterpartyTaxRegistrationId: string | null;
   financeTransactionId: string;
   journalEntryId: string;
   createdAt: string;
-  status: "open" | "overdue";
+  status: "open" | "overdue" | "partially_settled" | "settled";
 };
 
 export function receivableStatus(dueDate: string, today = new Date()): "open" | "overdue" {

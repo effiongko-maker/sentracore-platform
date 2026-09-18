@@ -23,7 +23,29 @@ export class PlatformFinanceReceivablesServerService {
       .in("company_id", companyIds)
       .order("due_date", { ascending: true });
     if (error) throw new ActionError("INTERNAL_ERROR", error.message);
-    return (data ?? []).map((row) => this.mapRow(row as Record<string, unknown>));
+    const ids = (data ?? []).map((row) => String(row.id));
+    const postedByReceivable = new Map<string, number>();
+    const committedByReceivable = new Map<string, number>();
+    if (ids.length) {
+      const { data: allocations, error: allocationError } = await admin
+        .from("finance_receipt_allocations")
+        .select("receivable_id,amount,finance_receipts!inner(status)")
+        .in("receivable_id", ids)
+        .in("finance_receipts.status", ["confirmed", "posted"]);
+      if (allocationError) throw new ActionError("INTERNAL_ERROR", allocationError.message);
+      for (const allocation of allocations ?? []) {
+        const id = String(allocation.receivable_id);
+        const amount = Number(allocation.amount);
+        const receipt = allocation.finance_receipts as unknown as { status: string };
+        committedByReceivable.set(id, (committedByReceivable.get(id) ?? 0) + amount);
+        if (receipt.status === "posted") postedByReceivable.set(id, (postedByReceivable.get(id) ?? 0) + amount);
+      }
+    }
+    return (data ?? []).map((row) => this.mapRow(
+      row as Record<string, unknown>,
+      postedByReceivable.get(String(row.id)) ?? 0,
+      committedByReceivable.get(String(row.id)) ?? 0
+    ));
   }
 
   async get(actor: Actor, id: string): Promise<FinanceReceivable> {
@@ -46,11 +68,13 @@ export class PlatformFinanceReceivablesServerService {
     if (!data) throw new ActionError("FORBIDDEN", "Missing receivable view authority.");
   }
 
-  private mapRow(row: Record<string, unknown>): FinanceReceivable {
+  private mapRow(row: Record<string, unknown>, posted: number, committed: number): FinanceReceivable {
     const invoice = row.finance_invoices as Record<string, unknown>;
     const transaction = invoice.finance_transactions as Record<string, unknown>;
     const company = row.finance_companies as Record<string, unknown>;
     const originalAmount = Number(row.original_amount);
+    const outstandingAmount = Math.max(0, originalAmount - posted);
+    const availableToAllocate = Math.max(0, originalAmount - committed);
     return {
       id: row.id as string,
       organisationId: row.organisation_id as string,
@@ -63,14 +87,15 @@ export class PlatformFinanceReceivablesServerService {
       dueDate: row.due_date as string,
       currency: row.currency as string,
       originalAmount,
-      outstandingAmount: originalAmount,
+      outstandingAmount,
+      availableToAllocate,
       counterpartyDisplayName: row.counterparty_display_name as string,
       counterpartyLegalName: (row.counterparty_legal_name as string | null) ?? null,
       counterpartyTaxRegistrationId: (row.counterparty_tax_registration_id as string | null) ?? null,
       financeTransactionId: invoice.finance_transaction_id as string,
       journalEntryId: transaction.journal_entry_id as string,
       createdAt: row.created_at as string,
-      status: receivableStatus(row.due_date as string),
+      status: outstandingAmount === 0 ? "settled" : posted > 0 ? "partially_settled" : receivableStatus(row.due_date as string),
     };
   }
 }

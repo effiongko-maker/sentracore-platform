@@ -298,7 +298,10 @@ cross join (
     ('platform_finance.invoice.create'),
     ('platform_finance.invoice.review'),
     ('platform_finance.invoice.issue'),
-    ('platform_finance.receivable.view')
+    ('platform_finance.receivable.view'),
+    ('platform_finance.receipt.view'),
+    ('platform_finance.receipt.record'),
+    ('platform_finance.receipt.post')
 ) as c(capability)
 where o.slug = 'paychex'
   and r.slug = 'organisation_owner'

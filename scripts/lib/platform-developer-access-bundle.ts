@@ -61,6 +61,9 @@ export const PLATFORM_DEVELOPER_FINANCE_CAPABILITIES = [
   PLATFORM_FINANCE_CAPABILITIES.invoice_review,
   PLATFORM_FINANCE_CAPABILITIES.invoice_issue,
   PLATFORM_FINANCE_CAPABILITIES.receivable_view,
+  PLATFORM_FINANCE_CAPABILITIES.receipt_view,
+  PLATFORM_FINANCE_CAPABILITIES.receipt_record,
+  PLATFORM_FINANCE_CAPABILITIES.receipt_post,
 ] as const;
 
 /** Command Centre capabilities (platform_capability_grants). */
