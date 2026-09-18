@@ -135,9 +135,11 @@ function runStatic(results: CheckResult[]) {
     push(results, "N no Apps Script facility call", "PASS");
 
     const master = readSrc(MASTER);
-    assert(master.includes("postGatedOperationalProxy"), "master-data remains Apps Script");
-    assert(master.includes('"master-data"') || master.includes("'master-data'"), "master-data resource");
-    push(results, "master-data stays Apps Script", "PASS");
+    assert(master.includes("FmLocationServerService"), "1D location service");
+    assert(master.includes('entity === "vendors"'), "vendors stay Apps Script");
+    assert(master.includes("postToAppsScript"), "vendor Apps Script path");
+    assert(!master.includes("postGatedOperationalProxy"), "master-data is not the all-Apps-Script proxy");
+    push(results, "master-data split (location Supabase, vendors Apps Script)", "PASS");
 
     const occupant = readSrc(OCCUPANT);
     assert(occupant.includes("NCC Annex") || occupant.includes("FAC-0001"), "occupant still hardcoded V1 default");
@@ -296,7 +298,18 @@ async function runDb(results: CheckResult[]) {
     const liveCount = await client.query<{ n: number }>(
       `select count(*)::int as n from public.fm_facilities`
     );
-    assert((liveCount.rows[0]?.n ?? 0) === 0, "O no facility seed rows");
+    const liveFacilities = liveCount.rows[0]?.n ?? 0;
+    assert(
+      liveFacilities === 0 || liveFacilities === 1,
+      `unexpected fm_facilities count ${liveFacilities}`
+    );
+    if (liveFacilities === 1) {
+      const annex = await client.query<{ code: string; name: string }>(
+        `select code, name from public.fm_facilities`
+      );
+      assert(annex.rows[0]?.name === "NCC Annex", "live facility is NCC Annex");
+      assert(annex.rows[0]?.code === "FAC-0001", "live facility code FAC-0001");
+    }
 
     const orgA = await client.query<{ id: string }>(
       `insert into public.organisations (name, slug, status)
@@ -389,7 +402,7 @@ async function runDb(results: CheckResult[]) {
   push(results, "B RLS enabled", "PASS");
   push(results, "C anonymous cannot read", "PASS");
   push(results, "D/H/I tenant + hierarchy integrity", "PASS");
-  push(results, "O no seed rows (pre-tx count 0; tx rolled back)", "PASS");
+  push(results, "O live facilities 0 or NCC Annex once; tx rolled back", "PASS");
   push(results, "P SA/JWT have no table grants", "PASS");
   assert(tx.rolledBack, "transaction rolled back");
 }

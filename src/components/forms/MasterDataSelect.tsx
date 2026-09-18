@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils";
 type ValueMode = "id" | "name";
 
 /**
- * Single-select backed by Master Data sheets via MasterDataService.
+ * Single-select backed by MasterDataService
+ * (location entities → Supabase; vendors → Apps Script).
  */
 export function MasterDataSelect({
   entity,
@@ -46,7 +47,7 @@ export function MasterDataSelect({
   className?: string;
   "aria-label"?: string;
 }) {
-  const { items, loading } = useMasterDataOptions(entity, {
+  const { items, loading, error } = useMasterDataOptions(entity, {
     enabled,
     facilityId,
     buildingId,
@@ -71,7 +72,7 @@ export function MasterDataSelect({
       id={id}
       className={cn(selectClassName, className)}
       value={value}
-      disabled={disabled || loading || !enabled}
+      disabled={disabled || loading || !enabled || Boolean(error)}
       aria-label={ariaLabel}
       onChange={(event) => onChange(event.target.value)}
     >
@@ -79,7 +80,9 @@ export function MasterDataSelect({
         <option value="">
           {loading
             ? loadingPlaceholder ?? "Loading…"
-            : emptyOptionLabel ?? defaultPlaceholder}
+            : error
+              ? "Unable to load options."
+              : emptyOptionLabel ?? defaultPlaceholder}
         </option>
       ) : null}
       {orphan ? <option value={orphan}>{orphan}</option> : null}

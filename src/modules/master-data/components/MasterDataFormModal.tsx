@@ -42,7 +42,7 @@ function nameLabel(entity: MasterDataEntity) {
 function createDescription(entity: MasterDataEntity) {
   switch (entity) {
     case "departments":
-      return "Add a department to the Master Data register.";
+      return "Add a department and link it to a facility.";
     case "buildings":
       return "Add a building and link it to a facility.";
     case "floors":
@@ -99,7 +99,12 @@ export function MasterDataFormModal({
     const next: Partial<Record<keyof CreateMasterDataInput, string>> = {};
     if (!form.name.trim()) next.name = `${nameLabel(entity)} is required`;
 
-    if (entity === "buildings" || entity === "floors" || entity === "rooms") {
+    if (
+      entity === "departments" ||
+      entity === "buildings" ||
+      entity === "floors" ||
+      entity === "rooms"
+    ) {
       if (!form.facilityId?.trim()) next.facilityId = "Facility is required";
     }
     if (entity === "floors" || entity === "rooms") {
@@ -180,7 +185,10 @@ export function MasterDataFormModal({
   const singular = entitySingular(entity);
   const isEdit = mode === "edit";
   const showFacility =
-    entity === "buildings" || entity === "floors" || entity === "rooms";
+    entity === "departments" ||
+    entity === "buildings" ||
+    entity === "floors" ||
+    entity === "rooms";
   const showBuilding = entity === "floors" || entity === "rooms";
   const showFloor = entity === "rooms";
   const showLevel = entity === "floors";

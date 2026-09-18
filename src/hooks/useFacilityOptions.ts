@@ -5,7 +5,7 @@ import type { Facility } from "@/modules/facilities/types";
 import { FacilityService } from "@/services/facilities/FacilityService";
 
 /**
- * Shared facility lookup — always from Facilities sheet via FacilityService.
+ * Shared facility lookup — Facilities SoT is Supabase via FacilityService.
  */
 export function useFacilityOptions(enabled = true) {
   const [facilities, setFacilities] = useState<Facility[]>([]);

@@ -263,6 +263,33 @@ function main() {
       );
       continue;
     }
+    if (resource === "master-data") {
+      assert(
+        src.includes("gateApiCapability"),
+        "master-data route uses gateApiCapability"
+      );
+      assert(
+        src.includes("capabilityForOperationalProxyAction"),
+        "master-data maps action → capability"
+      );
+      assert(
+        !src.includes("postGatedOperationalProxy"),
+        "master-data is not the all-Apps-Script gated proxy"
+      );
+      assert(
+        src.includes("FmLocationServerService"),
+        "master-data location entities use Supabase server service"
+      );
+      assert(
+        src.includes("postToAppsScript"),
+        "master-data vendors still call Apps Script"
+      );
+      assert(
+        src.includes('entity === "vendors"') || src.includes("vendors"),
+        "vendor entity is routed separately"
+      );
+      continue;
+    }
     if (resource === "facilities") {
       assert(
         src.includes("gateApiCapability"),

@@ -10,8 +10,9 @@ import {
  * Transport layer for all SentraCore HTTP calls.
  *
  * Domain services must call only this client.
- * Module CRUD uses live POST proxies to Next.js (facilities → Supabase;
- * other FM registers → Apps Script). Platform identity uses /api/auth/me.
+ * Module CRUD uses live POST proxies to Next.js (facilities + location
+ * master-data → Supabase; vendors and other FM registers → Apps Script).
+ * Platform identity uses /api/auth/me.
  *
  * The frontend never references Spreadsheets or other storage backends.
  *

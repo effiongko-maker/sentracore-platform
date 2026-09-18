@@ -63,7 +63,8 @@ function countActiveFilters(args: {
   let count = 0;
   if (args.status !== "all") count += 1;
   if (
-    (args.entity === "buildings" ||
+    (args.entity === "departments" ||
+      args.entity === "buildings" ||
       args.entity === "floors" ||
       args.entity === "rooms") &&
     args.facilityId !== "all"
@@ -107,7 +108,10 @@ export function MasterDataToolbar({
   const { facilities } = useFacilityOptions();
   const [filterOpen, setFilterOpen] = useState(false);
   const showFacility =
-    entity === "buildings" || entity === "floors" || entity === "rooms";
+    entity === "departments" ||
+    entity === "buildings" ||
+    entity === "floors" ||
+    entity === "rooms";
   const showBuilding = entity === "floors" || entity === "rooms";
   const showFloor = entity === "rooms";
   const showCategory = entity === "vendors";

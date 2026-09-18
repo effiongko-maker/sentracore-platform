@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { DataTable, type Column } from "@/components/tables/DataTable";
-import { MASTER_DATA_STATUS_VARIANT } from "../constants";
+import { MASTER_DATA_STATUS_VARIANT, entityNoun } from "../constants";
 import {
   resolveRelationName,
   useMasterDataRelationMaps,
@@ -156,6 +156,8 @@ export function MasterDataTable({
     canMutate,
   ]);
 
+  const nouns = entityNoun(entity);
+
   return (
     <DataTable
       columns={columns}
@@ -166,6 +168,8 @@ export function MasterDataTable({
       total={total}
       onPageChange={onPageChange}
       rowKey={(item) => item.id}
+      emptyTitle={`No ${nouns.plural} configured`}
+      emptyDescription="This collection is empty until configuration is added."
     />
   );
 }

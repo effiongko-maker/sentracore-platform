@@ -17,10 +17,12 @@ export type MasterDataOptionFilters = {
 
 /**
  * Lookup hook for master-data selectors across the app.
- * Always reads from Google Sheets via MasterDataService.
+ * Location entities (buildings/floors/rooms/departments) are Supabase-backed.
+ * Vendors remain Apps Script-backed.
  *
  * Cascade filters (facility → building → floor) are applied in
  * MasterDataService against the normalized facilityId/buildingId/floorId model.
+ * A failed source is reported as error — never disguised as a healthy empty list.
  */
 export function useMasterDataOptions(
   entity: MasterDataEntity,
@@ -29,12 +31,14 @@ export function useMasterDataOptions(
   const { facilityId, buildingId, floorId, enabled = true } = filters;
   const [items, setItems] = useState<MasterDataItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
 
     let cancelled = false;
     setLoading(true);
+    setError(null);
 
     MasterDataService.list({
       entity,
@@ -49,9 +53,14 @@ export function useMasterDataOptions(
         if (cancelled) return;
         setItems(page.data);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (cancelled) return;
         setItems([]);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load master data."
+        );
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -62,5 +71,5 @@ export function useMasterDataOptions(
     };
   }, [entity, facilityId, buildingId, floorId, enabled]);
 
-  return { items, loading };
+  return { items, loading, error };
 }

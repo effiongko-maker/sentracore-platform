@@ -51,7 +51,7 @@ function filterByFloor(
 
 /**
  * Cascading Facility → Building → Floor → Room from one location catalog load.
- * Each level filters in memory — no per-level Apps Script requests.
+ * Each level filters in memory — no per-level persistence requests.
  */
 export function MasterLocationFields({
   facilityId,

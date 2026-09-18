@@ -247,16 +247,19 @@ function mapLocationCatalog(payload: unknown): LocationCatalog {
 /**
  * Master Data domain service.
  *
- * Live Apps Script envelope: { resource: "master-data", action, payload }.
- * Payload always includes entity: departments|buildings|floors|rooms|vendors.
+ * Envelope: { resource: "master-data", action, payload }.
+ * Payload includes entity: departments|buildings|floors|rooms|vendors.
+ *
+ * Persistence (server split; this client still uses one /api/master-data):
+ *   buildings/floors/rooms/departments + getLocationCatalog → Supabase
+ *   vendors → Apps Script
  *
  * Relationship cascade (Facility → Building → Floor → Room) is applied on the
- * normalized client model so live aliases (facility/building/floor) work even
- * when the deployed Apps Script still filters only on *Id fields.
+ * normalized client model so live aliases (facility/building/floor) still work.
  */
 export const MasterDataService = {
   /**
-   * One Apps Script invocation for the full Facility → Room hierarchy.
+   * One /api/master-data invocation for the full Facility → Room hierarchy.
    * Prefer this for cascading location selectors.
    */
   async getLocationCatalog(): Promise<LocationCatalog> {
