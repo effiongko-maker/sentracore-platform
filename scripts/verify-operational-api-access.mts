@@ -263,6 +263,29 @@ function main() {
       );
       continue;
     }
+    if (resource === "facilities") {
+      assert(
+        src.includes("gateApiCapability"),
+        "facilities route uses gateApiCapability"
+      );
+      assert(
+        src.includes("capabilityForOperationalProxyAction"),
+        "facilities maps action → capability"
+      );
+      assert(
+        !src.includes("postGatedOperationalProxy"),
+        "facilities is not the Apps Script gated proxy"
+      );
+      assert(
+        !src.includes("postToAppsScript"),
+        "facilities does not call Apps Script after cutover"
+      );
+      assert(
+        src.includes("FmFacilitiesServerService"),
+        "facilities uses Supabase server service"
+      );
+      continue;
+    }
     assert(
       src.includes("postGatedOperationalProxy"),
       `${resource} route uses gated proxy`
