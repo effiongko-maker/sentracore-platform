@@ -25,7 +25,8 @@ type Action =
   | "submitInvoiceForReview"
   | "returnInvoiceToDraft"
   | "getInvoiceAccountingPreview"
-  | "issueAndPostInvoice";
+  | "issueAndPostInvoice"
+  | "deleteDraftInvoice";
 
 const READ_CAPS = [
   PLATFORM_FINANCE_CAPABILITIES.invoice_view,
@@ -105,13 +106,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, data: await svc.getDetail(actor, body.id) });
     }
 
-    if (action === "createInvoice" || action === "updateDraftInvoice") {
+    if (
+      action === "createInvoice" ||
+      action === "updateDraftInvoice" ||
+      action === "deleteDraftInvoice"
+    ) {
       const access = await requirePlatformFinanceAccess({
         capability: PLATFORM_FINANCE_CAPABILITIES.invoice_create,
       });
       const svc = new PlatformFinanceInvoicesServerService(access.organisationId);
       const actor = { organisationId: access.organisationId, profileId: access.profileId };
       const input = body.input ?? {};
+      if (action === "deleteDraftInvoice") {
+        if (!body.id) {
+          return NextResponse.json({ success: false, message: "id required" }, { status: 400 });
+        }
+        return NextResponse.json({
+          success: true,
+          data: await svc.deleteDraft(actor, body.id),
+        });
+      }
       if (action === "createInvoice") {
         return NextResponse.json({
           success: true,

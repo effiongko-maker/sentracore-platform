@@ -77,4 +77,7 @@ export const PlatformFinanceInvoicesService = {
   issueAndPost(id: string): Promise<FinanceInvoiceDetail> {
     return postAction("issueAndPostInvoice", { id });
   },
+  deleteDraft(id: string): Promise<{ deletedInvoiceId: string }> {
+    return postAction("deleteDraftInvoice", { id });
+  },
 };

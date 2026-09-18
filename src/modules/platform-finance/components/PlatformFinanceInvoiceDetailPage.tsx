@@ -7,6 +7,7 @@ import { ArrowLeft } from "lucide-react";
 import { PlatformFinanceInvoicesService } from "@/services/platform-finance/PlatformFinanceInvoicesService";
 import type { FinanceInvoiceDetail } from "@/modules/platform-finance/domain/invoices";
 import type { InvoiceCapabilities } from "@/modules/platform-finance/server/PlatformFinanceInvoicesServerService";
+import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
 import { PlatformFinanceInvoiceReviewDrawer } from "@/modules/platform-finance/components/PlatformFinanceInvoiceReviewDrawer";
 import {
   formatInvoiceDate,
@@ -25,6 +26,8 @@ export function PlatformFinanceInvoiceDetailPage() {
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const reload = useCallback(async () => {
     const [next, nextCaps] = await Promise.all([
@@ -83,6 +86,22 @@ export function PlatformFinanceInvoiceDetailPage() {
     }
   }
 
+  async function deleteDraft() {
+    if (!detail || detail.status !== "draft") return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await PlatformFinanceInvoicesService.deleteDraft(detail.id);
+      setDeleteOpen(false);
+      setDetail(null);
+      router.push("/platform-finance/invoices");
+      router.refresh();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Unable to delete invoice.");
+      setDeleting(false);
+    }
+  }
+
   const documentHref = `/platform-finance/invoices/${invoiceId}/document`;
 
   return (
@@ -119,6 +138,16 @@ export function PlatformFinanceInvoiceDetailPage() {
             <Link className="pf-btn-secondary" href={documentHref}>
               Preview Invoice
             </Link>
+          ) : null}
+          {detail?.status === "draft" && caps?.create ? (
+            <button
+              type="button"
+              className="pf-btn-danger-outline"
+              disabled={busy || deleting}
+              onClick={() => setDeleteOpen(true)}
+            >
+              Delete Invoice
+            </button>
           ) : null}
           {detail?.status === "issued" ? (
             <>
@@ -231,6 +260,20 @@ export function PlatformFinanceInvoiceDetailPage() {
           }}
         />
       ) : null}
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onClose={() => {
+          if (!deleting) setDeleteOpen(false);
+        }}
+        title="Delete invoice?"
+        description="This draft invoice will be permanently deleted. This action cannot be undone."
+        confirmLabel="Delete Invoice"
+        cancelLabel="Cancel"
+        danger
+        loading={deleting}
+        onConfirm={() => void deleteDraft()}
+      />
     </div>
   );
 }

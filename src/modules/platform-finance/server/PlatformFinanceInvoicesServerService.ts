@@ -299,6 +299,21 @@ export class PlatformFinanceInvoicesServerService {
     return this.getDetail(actor, invoiceId);
   }
 
+  async deleteDraft(actor: Actor, invoiceId: string): Promise<{ deletedInvoiceId: string }> {
+    await this.assertCreate(actor);
+    const invoice = await this.loadInvoice(invoiceId);
+    await this.assertCompanyAccess(actor, invoice.companyId);
+    if (invoice.status !== "draft") {
+      throw new ActionError("VALIDATION_ERROR", "Only draft invoices can be deleted.");
+    }
+    const { error } = await createAdminClient().rpc("finance_invoice_delete_draft", {
+      p_actor_profile_id: actor.profileId,
+      p_invoice_id: invoiceId,
+    });
+    if (error) throw new ActionError("VALIDATION_ERROR", error.message);
+    return { deletedInvoiceId: invoiceId };
+  }
+
   async getAccountingPreview(actor: Actor, invoiceId: string): Promise<InvoiceAccountingPreview> {
     await this.assertAnyInvoiceCap(actor);
     const detail = await this.getDetail(actor, invoiceId);

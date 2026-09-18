@@ -19,6 +19,8 @@ const [
   nav,
   invoicesPage,
   reviewDrawer,
+  invoiceDetailPage,
+  deleteMigration,
   paymentAccounting,
   openingService,
 ] = await Promise.all([
@@ -33,6 +35,8 @@ const [
   read("src/modules/platform-finance/nav.ts"),
   read("src/modules/platform-finance/components/PlatformFinanceInvoicesPage.tsx"),
   read("src/modules/platform-finance/components/PlatformFinanceInvoiceReviewDrawer.tsx"),
+  read("src/modules/platform-finance/components/PlatformFinanceInvoiceDetailPage.tsx"),
+  read("supabase/migrations/20260918150000_finance_invoice_delete_draft.sql"),
   read("src/modules/platform-finance/server/PlatformFinancePaymentAccountingServerService.ts"),
   read("src/modules/platform-finance/server/PlatformFinanceOpeningPositionsServerService.ts"),
 ]);
@@ -77,10 +81,14 @@ assert.match(invDomain, /code <= 4040/);
 assert.match(invService, /finance_invoice_issue_and_post/);
 assert.match(invService, /finance_invoice_create_draft/);
 assert.match(invService, /finance_invoice_update_draft/);
+assert.match(invService, /finance_invoice_delete_draft/);
+assert.match(invService, /Only draft invoices can be deleted/);
 assert.match(invService, /getAccountingPreview/);
 assert.match(cpService, /organisation_counterparties/);
 assert.match(cpRoute, /createCounterparty/);
 assert.match(invRoute, /issueAndPostInvoice/);
+assert.match(invRoute, /deleteDraftInvoice/);
+assert.match(invRoute, /invoice_create/);
 assert.match(nav, /href: "\/platform-finance\/invoices"/);
 assert.match(nav, /href: "\/platform-finance\/counterparties"/);
 assert.match(nav, /Receivables[\s\S]*comingSoon: true/);
@@ -90,6 +98,14 @@ assert.match(reviewDrawer, /issueAndPost/);
 assert.doesNotMatch(reviewDrawer, /Issue & post to ledger/);
 assert.doesNotMatch(reviewDrawer, /System-derived compound journal/);
 assert.doesNotMatch(reviewDrawer, /debitAccountId|Select debit/);
+assert.match(deleteMigration, /finance_invoice_delete_draft/);
+assert.match(deleteMigration, /only draft invoices can be deleted/);
+assert.match(deleteMigration, /issued invoices cannot be deleted/);
+assert.match(deleteMigration, /draft with accounting records cannot be deleted/);
+assert.doesNotMatch(stripSql(deleteMigration), /finance_post_transaction|finance_invoice_issue_and_post/);
+assert.doesNotMatch(deleteMigration, /is_platform_super_admin/);
+assert.match(invoiceDetailPage, /Delete Invoice/);
+assert.match(invoiceDetailPage, /status === "draft" && caps\?\.create/);
 
 // Regression: payment and opening keep their own two-line workflows
 assert.match(paymentAccounting, /source_type", "payment"/);
