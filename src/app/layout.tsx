@@ -10,8 +10,8 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "SentraCore",
-    template: "%s · SentraCore",
+    default: "SentraCore™",
+    template: "%s · SentraCore™",
   },
   description:
     "SentraCore™ — Enterprise Operating Platform by Beacon Africa Limited.",

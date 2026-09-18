@@ -68,7 +68,7 @@ export function PageLoadingState({
                 : "text-muted"
             )}
           >
-            SentraCore
+            SentraCore™
           </p>
           <p
             className={cn(

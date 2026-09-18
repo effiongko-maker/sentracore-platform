@@ -14,7 +14,7 @@ export function submissionUserFacingError(error: unknown): string {
       return message.replace(/^Invalid CostSubmission on \w+:\s*/i, "");
     }
     if (/network|fetch|timeout/i.test(message)) {
-      return "Unable to reach SentraCore right now. Please try again.";
+      return "Unable to reach SentraCore™ right now. Please try again.";
     }
     if (message.length < 200 && !/stack|undefined/i.test(message)) {
       return message;

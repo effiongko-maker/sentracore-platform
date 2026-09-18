@@ -570,7 +570,7 @@ export function ReportIncidentModal({
                 id="report-description"
                 className={`${inputClassName} h-auto min-h-[88px] py-2.5`}
                 rows={3}
-                placeholder="Anything else SentraCore should know?"
+                placeholder="Anything else SentraCore™ should know?"
                 value={form.description}
                 onChange={(event) =>
                   updateField("description", event.target.value)

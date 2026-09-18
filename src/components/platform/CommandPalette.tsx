@@ -83,7 +83,7 @@ export function CommandPalette() {
     const nav: PaletteAction[] = [
       {
         id: "nav-platform",
-        label: "SentraCore Platform Home",
+        label: "SentraCore™ Platform Home",
         description: "Platform",
         href: "/",
         group: "Navigate",

@@ -788,8 +788,8 @@ export function PlatformFinancePayableDetailPage() {
                     </div>
                   </div>
                   <p className="pf-payd-muted">
-                    Confirm a disbursement already made outside SentraCore
-                    through the company&apos;s bank or payment channel. SentraCore
+                    Confirm a disbursement already made outside SentraCore™
+                    through the company&apos;s bank or payment channel. SentraCore™
                     does not send money.
                   </p>
                   {canConfirmPayment ? (

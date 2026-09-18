@@ -13,7 +13,7 @@ export default async function ResetPasswordPage() {
       title="Set a new password"
       subtitle={
         hasRecoveryCookie
-          ? "Choose a new password for your SentraCore account."
+          ? "Choose a new password for your SentraCore™ account."
           : undefined
       }
       footer={

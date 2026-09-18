@@ -66,7 +66,7 @@ export function buildCoverLetter(input: {
       "We remain available to discuss any items requiring further attention.",
     ].join("\n\n"),
     closing: "Yours sincerely,",
-    signatory: input.context.generatedBy ?? "SentraCore Facilities Team",
+    signatory: input.context.generatedBy ?? "SentraCore™ Facilities Team",
   };
 }
 

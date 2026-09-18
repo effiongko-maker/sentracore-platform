@@ -74,7 +74,7 @@ export function BriefingDetailPanel({
             <p className="ix-detail-evidence-value ix-detail-evidence-value-text">
               {finding.investigation.whatItSaw}
             </p>
-            <p className="ix-detail-evidence-label">What SentraCore observed</p>
+            <p className="ix-detail-evidence-label">What SentraCore™ observed</p>
           </div>
         ) : null}
         {finding.investigation?.storyStatus ? (

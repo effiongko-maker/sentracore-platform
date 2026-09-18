@@ -326,7 +326,7 @@ export function buildEccReportDocument(
     cover: {
       preparedFor: snapshot.centre.name,
       preparedBy: config.preparedBy.trim() || "ECC Operations",
-      confidentiality: "Internal operational report — SentraCore ECC Operations",
+      confidentiality: "Internal operational report — SentraCore™ ECC Operations",
     },
     executiveSummary: {
       overview: intelligence.summary,

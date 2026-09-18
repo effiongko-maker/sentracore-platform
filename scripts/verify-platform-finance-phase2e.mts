@@ -120,7 +120,7 @@ assert.doesNotMatch(domain, /platform_super_admin/i);
 assert.doesNotMatch(stripCode(service), /platform_super_admin/i);
 
 assert.match(drawer, /Opening position/);
-assert.match(drawer, /begins[\s\S]*operating in SentraCore/);
+assert.match(drawer, /begins[\s\S]*operating in SentraCore™/);
 assert.match(drawer, /Opening Balance Clearing|creditAccount/);
 assert.doesNotMatch(drawer, /Current Balance|Available Balance|Bank Balance/);
 assert.doesNotMatch(drawer, /source_type|control_gl_account_id|RPC/);

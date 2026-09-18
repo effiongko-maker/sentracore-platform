@@ -12,7 +12,7 @@ export default async function ForgotPasswordPage({
   return (
     <AuthPageShell
       title="Forgot your password?"
-      subtitle="Enter the email associated with your SentraCore account and we’ll send a reset link if it exists."
+      subtitle="Enter the email associated with your SentraCore™ account and we’ll send a reset link if it exists."
       footer={
         <p>Access is by invitation. Public registration is not available.</p>
       }

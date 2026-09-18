@@ -17,7 +17,7 @@ const COPY: Partial<
   processing: {
     title: "Still processing",
     description:
-      "SentraCore is still processing recent operational activity.",
+      "SentraCore™ is still processing recent operational activity.",
     variant: "info",
   },
 };

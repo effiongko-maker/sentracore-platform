@@ -19,7 +19,7 @@ export type ProductMode =
 export type ShellNavState = "compass" | "focus" | "cognitive" | "platform";
 
 export const MODE_LABEL: Record<ProductMode, string> = {
-  platform: "SentraCore",
+  platform: "SentraCore™",
   command: "Facility Management",
   understand: "Understand",
   organise: "Organisation",

@@ -57,7 +57,7 @@ function resolveContext(
       templateVersion:
         request.templateVersion ?? request.branding?.templateVersion ?? "v1",
     },
-    generatedBy: request.generatedBy ?? "SentraCore",
+    generatedBy: request.generatedBy ?? "SentraCore™",
     generatedAt: new Date().toISOString(),
   };
 }

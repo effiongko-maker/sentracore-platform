@@ -18,7 +18,7 @@ type PanelState =
   | { phase: "error"; message: string };
 
 const UNAVAILABLE_MESSAGE =
-  "SentraCore Intelligence is still preparing analysis for this incident.";
+  "SentraCore™ Intelligence is still preparing analysis for this incident.";
 
 function messageForFailure(code: string, message: string): {
   phase: "unavailable" | "error";
@@ -121,14 +121,14 @@ export function IncidentIntelligencePanel({
   return (
     <section
       className="mt-6 space-y-5 border-t border-border/70 pt-6"
-      aria-label="SentraCore Intelligence"
+      aria-label="SentraCore™ Intelligence"
     >
       <div>
         <h2 className="text-sm font-semibold tracking-tight text-primary">
-          SentraCore Intelligence
+          SentraCore™ Intelligence
         </h2>
         <p className="mt-1 text-xs text-muted">
-          What SentraCore Intelligence currently knows about this incident.
+          What SentraCore™ Intelligence currently knows about this incident.
         </p>
       </div>
 

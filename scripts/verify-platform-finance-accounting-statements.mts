@@ -165,7 +165,7 @@ function main() {
   );
   assert(
     readSrc("src/modules/platform-finance/domain/accountingReadModels.ts").includes(
-      "Opening balances are still being established. This statement reflects accounting activity currently posted in SentraCore."
+      "Opening balances are still being established. This statement reflects accounting activity currently posted in SentraCore™."
     ),
     "standing opening-balance copy"
   );

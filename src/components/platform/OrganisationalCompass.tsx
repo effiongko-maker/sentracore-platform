@@ -272,7 +272,7 @@ export function OrganisationalCompass() {
               <SentraCoreLogo size={32} alt="" />
             </span>
             <div className="min-w-0">
-              <p className="os-compass-brand-name truncate">SentraCore</p>
+              <p className="os-compass-brand-name truncate">SentraCore™</p>
             </div>
           </Link>
 

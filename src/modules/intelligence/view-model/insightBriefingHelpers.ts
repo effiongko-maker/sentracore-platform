@@ -173,36 +173,36 @@ export function heroStatement(primary: ClassifiedFinding | null): {
 } {
   if (!primary) {
     return {
-      headline: "Here's what SentraCore has learned",
+      headline: "Here's what SentraCore™ has learned",
       support:
-        "SentraCore is watching operational activity. When evidence supports a conclusion, it will appear here.",
+        "SentraCore™ is watching operational activity. When evidence supports a conclusion, it will appear here.",
     };
   }
   if (primary.priority === "attention") {
     return {
       headline: "The operation needs attention",
       support:
-        "SentraCore has analysed recent activity and identified what matters most right now.",
+        "SentraCore™ has analysed recent activity and identified what matters most right now.",
     };
   }
   if (primary.priority === "emerging") {
     return {
       headline: "Early signals are forming",
       support:
-        "SentraCore has detected emerging patterns that may need closer watching.",
+        "SentraCore™ has detected emerging patterns that may need closer watching.",
     };
   }
   if (primary.priority === "positive") {
     return {
       headline: "Some conditions are improving",
       support:
-        "SentraCore has identified grounded positive signals in the recent analysis window.",
+        "SentraCore™ has identified grounded positive signals in the recent analysis window.",
     };
   }
   return {
-    headline: "Here's what SentraCore has learned",
+    headline: "Here's what SentraCore™ has learned",
     support:
-      "SentraCore has reviewed recent operational activity and summarised the clearest findings.",
+      "SentraCore™ has reviewed recent operational activity and summarised the clearest findings.",
   };
 }
 

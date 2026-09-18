@@ -670,7 +670,7 @@ export function synthesizeInsightReasoning(
             (signals.relatedActivities ?? 0) >= 2 ||
               (signals.findingCount ?? 0) >= 2
             ? "Related operational signals are present, but the evidence is not yet strong enough to support a firmer interpretation beyond continued monitoring of the connected activities."
-            : "Evidence is limited; SentraCore is not drawing a stronger interpretation yet.";
+            : "Evidence is limited; SentraCore™ is not drawing a stronger interpretation yet.";
 
   // If inference still collapses to fact, force a relationship-aware rewrite or soft fallback
   let finalInference = inference;
@@ -680,7 +680,7 @@ export function synthesizeInsightReasoning(
       finalInference = retry;
     } else {
       finalInference =
-        "The available facts are clear, but converging relationships are limited. SentraCore treats this as an early signal rather than a firm operational conclusion.";
+        "The available facts are clear, but converging relationships are limited. SentraCore™ treats this as an early signal rather than a firm operational conclusion.";
     }
   }
 

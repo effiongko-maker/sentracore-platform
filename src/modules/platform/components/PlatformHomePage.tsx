@@ -208,12 +208,12 @@ export function PlatformHomePage() {
     <div className="sc-ph">
       <header className="sc-ph-hero">
         <div className="sc-ph-hero-copy">
-          <p className="sc-ph-eyebrow">SentraCore Platform</p>
+          <p className="sc-ph-eyebrow">SentraCore™ Platform</p>
           <h1 className="sc-ph-title">
             One platform. Multiple operating environments.
           </h1>
           <p className="sc-ph-lede">
-            SentraCore brings specialised operating environments together to
+            SentraCore™ brings specialised operating environments together to
             help the organisation manage activity, information and decisions
             across the business.
           </p>
@@ -274,7 +274,7 @@ export function PlatformHomePage() {
           <div>
             <h2 className="sc-ph-next-title">Built for what&apos;s next.</h2>
             <p className="sc-ph-next-body">
-              SentraCore is evolving. More specialised operating environments
+              SentraCore™ is evolving. More specialised operating environments
               will be added as the organisation grows.
             </p>
           </div>

@@ -86,7 +86,7 @@ export function IntelligenceBriefingLayout({
         <BriefingSectionHeading
           eyebrow="Now"
           title="What needs your attention?"
-          support="The clearest issues SentraCore wants you to look at first."
+          support="The clearest issues SentraCore™ wants you to look at first."
         />
         <div className="ix-brief-now-grid">
           <div className="ix-brief-now-primary">
@@ -102,7 +102,7 @@ export function IntelligenceBriefingLayout({
                   Nothing needs immediate attention
                 </h3>
                 <p className="ix-ref-lead">
-                  SentraCore has not found an urgent priority in this period.
+                  SentraCore™ has not found an urgent priority in this period.
                 </p>
               </section>
             )}
@@ -170,7 +170,7 @@ export function IntelligenceBriefingLayout({
         <BriefingSectionHeading
           eyebrow="Recommendations"
           title="How recommendations are being handled"
-          support="How the organisation is responding to SentraCore’s suggestions."
+          support="How the organisation is responding to SentraCore™’s suggestions."
         />
         <ReferenceRecommendationSection vm={vm} />
       </section>

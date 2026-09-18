@@ -83,7 +83,7 @@ export function GlobalCommandBar() {
           aria-label="Open command palette"
         >
           <Search className="h-4 w-4 shrink-0 opacity-50" aria-hidden />
-          <span>Search anything across SentraCore…</span>
+          <span>Search anything across SentraCore™…</span>
           <kbd className="os-command-kbd">⌘K</kbd>
         </button>
       ) : (

@@ -37,7 +37,7 @@ export function ReferenceHero({
   return (
     <section className="ix-ref-hero" aria-label="Intelligence overview">
       <div className="ix-ref-hero-copy">
-        <p className="ix-ref-mark">SentraCore Intelligence</p>
+        <p className="ix-ref-mark">SentraCore™ Intelligence</p>
         <h1 className="ix-ref-headline">{vm.statement}</h1>
         <p className="ix-ref-lead">{vm.statementSupport}</p>
       </div>

@@ -125,7 +125,7 @@ export function buildExploreResponse(
     return {
       answer:
         changes.length > 0
-          ? `SentraCore found ${changes.length} meaningful shift${changes.length === 1 ? "" : "s"}. The main one: ${changes[0]?.title}.`
+          ? `SentraCore™ found ${changes.length} meaningful shift${changes.length === 1 ? "" : "s"}. The main one: ${changes[0]?.title}.`
           : "No meaningful organisation-wide shifts showed up in this review period.",
       found: changes[0]?.title ?? "A steady period",
       evidence: changes.map((f) => f.summary),
@@ -137,7 +137,7 @@ export function buildExploreResponse(
   return {
     answer:
       fallback?.summary ??
-      "SentraCore is reviewing activity across issues, work, work orders, and facilities to surface what matters.",
+      "SentraCore™ is reviewing activity across issues, work, work orders, and facilities to surface what matters.",
     found: fallback?.title ?? "Organisation-wide view",
     evidence: vm.statementSupport ? [vm.statementSupport] : [],
     modules: ["Issues", "Work", "Work Orders", "Facilities"],

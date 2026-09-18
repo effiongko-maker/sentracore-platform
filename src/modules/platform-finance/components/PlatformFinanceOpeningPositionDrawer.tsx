@@ -169,7 +169,7 @@ export function PlatformFinanceOpeningPositionDrawer(props: {
         <div className="pf-coa-drawer-fields">
           <p className="pf-periods-hint">
             Records the balance of this financial account when it begins
-            operating in SentraCore. The corresponding accounting entry will be
+            operating in SentraCore™. The corresponding accounting entry will be
             created through the Journal.
           </p>
 

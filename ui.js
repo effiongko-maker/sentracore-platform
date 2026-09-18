@@ -2,13 +2,13 @@ function showSentraCore() {
 
   const html = HtmlService
       .createHtmlOutputFromFile("SentraCore")
-      .setTitle("SentraCore")
+      .setTitle("SentraCore™")
       .setWidth(1500)
       .setHeight(900);
 
   SpreadsheetApp
-      .getUi()
-      .showModalDialog(html,"SentraCore");
+    .getUi()
+      .showModalDialog(html,"SentraCore™");
 
 }
 
@@ -17,7 +17,7 @@ function onOpen(){
 
 SpreadsheetApp.getUi()
 
-.createMenu("SentraCore")
+.createMenu("SentraCore™")
 
 .addItem("Open Platform","showSentraCore")
 

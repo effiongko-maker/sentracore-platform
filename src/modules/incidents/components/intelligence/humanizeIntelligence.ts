@@ -364,26 +364,26 @@ function buildPriorityAction(
 export function humanizeRiskConclusion(risk: IntelligenceRiskView): string {
   const level = (risk.riskLevel ?? "").toLowerCase();
   if (level === "critical") {
-    return "SentraCore Intelligence assesses this as a critical-risk incident.";
+    return "SentraCore™ Intelligence assesses this as a critical-risk incident.";
   }
   if (level === "high") {
-    return "SentraCore Intelligence assesses this as a high-risk incident.";
+    return "SentraCore™ Intelligence assesses this as a high-risk incident.";
   }
   if (level === "moderate" || level === "medium") {
-    return "SentraCore Intelligence assesses this as a moderate-risk incident.";
+    return "SentraCore™ Intelligence assesses this as a moderate-risk incident.";
   }
   if (level === "low") {
-    return "SentraCore Intelligence assesses this as a low-risk incident.";
+    return "SentraCore™ Intelligence assesses this as a low-risk incident.";
   }
 
   if (risk.summary?.trim()) {
     return cleanupEnginePhrasing(risk.summary).replace(
       /^Incident assessed as\s+/i,
-      "SentraCore Intelligence assesses this as "
+      "SentraCore™ Intelligence assesses this as "
     );
   }
 
-  return "SentraCore Intelligence has assessed the operational risk for this incident.";
+  return "SentraCore™ Intelligence has assessed the operational risk for this incident.";
 }
 
 /**

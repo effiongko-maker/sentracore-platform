@@ -10,7 +10,7 @@ export function IntelligenceThread({ steps }: { steps: IntelligenceThreadStep[] 
       <header className="ix-thread-head">
         <h3 className="ix-thread-title">How this finding formed</h3>
         <p className="ix-thread-sub">
-          From recent activity to what SentraCore is highlighting
+          From recent activity to what SentraCore™ is highlighting
         </p>
       </header>
 

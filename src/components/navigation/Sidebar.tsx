@@ -66,7 +66,7 @@ export function Sidebar() {
               "group flex min-w-0 items-center rounded-lg outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-white/20",
               collapsed ? "justify-center" : "flex-1 gap-2 px-1 py-1"
             )}
-            aria-label="SentraCore home"
+            aria-label="SentraCore™ home"
           >
             <span className="sc-sidebar-brand-mark" aria-hidden>
               <SentraCoreLogo size={collapsed ? 28 : 32} alt="" />
@@ -74,7 +74,7 @@ export function Sidebar() {
             {!collapsed ? (
               <div className="min-w-0 leading-tight">
                 <p className="truncate text-xs font-semibold tracking-tight text-white/90">
-                  SentraCore
+                  SentraCore™
                 </p>
                 {!isIntelligence ? (
                   <p className="truncate text-[9px] font-medium uppercase tracking-[0.14em] text-white/35">

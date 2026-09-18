@@ -19,7 +19,7 @@ type SentraCoreLogoProps = {
 export function SentraCoreLogo({
   size = 32,
   className,
-  alt = "SentraCore",
+  alt = "SentraCore™",
   priority = false,
 }: SentraCoreLogoProps) {
   return (

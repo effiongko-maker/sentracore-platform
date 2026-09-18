@@ -28,10 +28,7 @@ export function AuthPageShell({
             <SentraCoreLogo size={56} priority alt="" />
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-primary">
-            SentraCore
-            <span className="align-super text-[10px] font-medium text-primary/40">
-              ™
-            </span>
+            SentraCore™
           </h1>
           <p className="mt-3 text-lg font-semibold tracking-tight text-foreground">
             {title}

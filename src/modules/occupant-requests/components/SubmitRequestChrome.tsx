@@ -31,7 +31,7 @@ export function SubmitRequestChrome({
       {children}
       <footer className="sr-footer">
         <p>
-          <strong>PayChex</strong> | SentraCore Powered by Beacon Africa
+          <strong>PayChex</strong> | SentraCore™ Powered by Beacon Africa
         </p>
         <p>© {new Date().getFullYear()} PayChex. All rights reserved.</p>
       </footer>

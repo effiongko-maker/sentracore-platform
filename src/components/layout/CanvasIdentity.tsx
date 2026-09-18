@@ -19,12 +19,12 @@ export function CanvasIdentity() {
   const inCommandCentre = isCommandCentrePath(pathname);
 
   const line = inCommandCentre
-    ? "SentraCore · Command Centre"
+    ? "SentraCore™ · Command Centre"
     : onPlatform
-      ? "SentraCore · Enterprise Operating Platform"
+      ? "SentraCore™ · Enterprise Operating Platform"
       : inFacilityManagement
-        ? "SentraCore · Facility Management Platform"
-        : "SentraCore · Enterprise Operating Platform";
+        ? "SentraCore™ · Facility Management Platform"
+        : "SentraCore™ · Enterprise Operating Platform";
 
   return (
     <footer className="os-canvas-identity print:hidden">

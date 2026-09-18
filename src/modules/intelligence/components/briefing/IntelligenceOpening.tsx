@@ -74,7 +74,7 @@ export function IntelligenceOpening({
 
       <div className="sc-intel-opening-meta">
         {processing ? (
-          <span>SentraCore is still processing recent activity.</span>
+          <span>SentraCore™ is still processing recent activity.</span>
         ) : urgentCount > 0 ? (
           <>
             <span>

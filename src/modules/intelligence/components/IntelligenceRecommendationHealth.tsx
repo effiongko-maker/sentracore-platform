@@ -10,7 +10,7 @@ export function IntelligenceRecommendationHealth({
     <BriefingSection
       emphasis="supporting"
       title="How the organisation responds"
-      description="How guidance from SentraCore is being handled."
+      description="How guidance from SentraCore™ is being handled."
     >
       {health.totalDecisions === 0 ? (
         <p className="sc-text-supporting">

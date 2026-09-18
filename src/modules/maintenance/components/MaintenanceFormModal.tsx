@@ -795,7 +795,7 @@ export function MaintenanceFormModal({
         <FormField
           label="External reference"
           htmlFor="mnt-event"
-          hint="Optional. Not a SentraCore system identifier."
+          hint="Optional. Not a SentraCore™ system identifier."
         >
           <input
             id="mnt-event"

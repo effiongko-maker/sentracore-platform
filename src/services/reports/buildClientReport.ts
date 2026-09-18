@@ -383,7 +383,7 @@ export function buildClientReport(input: {
     title: typeDef.title,
     subtitle: `${facilityLabelText} · ${wizard.period.label}`,
     generatedAt: new Date().toISOString(),
-    generatedBy: "SentraCore Facilities Team",
+    generatedBy: "SentraCore™ Facilities Team",
     periodLabel: wizard.period.label,
     facilityLabel: facilityLabelText,
     facilityNames,
@@ -393,7 +393,7 @@ export function buildClientReport(input: {
     sections,
     cover: {
       preparedFor: facilityLabelText,
-      preparedBy: "SentraCore Facilities Team",
+      preparedBy: "SentraCore™ Facilities Team",
       confidentiality: "Confidential — for client use only",
     },
     executiveSummary: {

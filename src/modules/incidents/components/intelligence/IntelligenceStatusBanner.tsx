@@ -28,7 +28,7 @@ const STATUS_COPY: Record<
   unavailable: {
     title: "Still analysing",
     description:
-      "SentraCore Intelligence has not finished assessing this incident yet.",
+      "SentraCore™ Intelligence has not finished assessing this incident yet.",
     variant: "neutral",
   },
 };

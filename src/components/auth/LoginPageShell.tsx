@@ -20,7 +20,7 @@ const LOGIN_HERO_SRC = "/auth/sentracore-operations-hero.jpg";
 export function LoginPageShell({ children }: { children: ReactNode }) {
   return (
     <div className="login-page">
-      <aside className="login-brand" aria-label="SentraCore">
+      <aside className="login-brand" aria-label="SentraCore™">
         <Image
           src={LOGIN_HERO_SRC}
           alt=""
@@ -34,7 +34,7 @@ export function LoginPageShell({ children }: { children: ReactNode }) {
           <div className="login-brand-top">
             <SentraCoreLogo size={40} priority alt="" />
             <div>
-              <p className="login-brand-wordmark">SentraCore</p>
+              <p className="login-brand-wordmark">SentraCore™</p>
               <p className="login-brand-tagline">Operations, connected.</p>
             </div>
           </div>
@@ -44,7 +44,7 @@ export function LoginPageShell({ children }: { children: ReactNode }) {
               Bring your operations into focus.
             </h1>
             <p className="login-brand-lede">
-              SentraCore connects people, systems and workflows so organisations
+              SentraCore™ connects people, systems and workflows so organisations
               can operate with greater clarity.
             </p>
           </div>
@@ -99,14 +99,14 @@ export function LoginPageShell({ children }: { children: ReactNode }) {
           <div className="login-mobile-brand">
             <SentraCoreLogo size={36} priority alt="" />
             <div>
-              <p className="login-mobile-wordmark">SentraCore</p>
+              <p className="login-mobile-wordmark">SentraCore™</p>
               <p className="login-mobile-tagline">Operations, connected.</p>
             </div>
           </div>
 
-          <h1 className="login-panel-title">Welcome to SentraCore</h1>
+          <h1 className="login-panel-title">Welcome to SentraCore™</h1>
           <p className="login-panel-lede">
-            Sign in to access the SentraCore platform.
+            Sign in to access the SentraCore™ platform.
           </p>
 
           <section className="login-staff-card" aria-labelledby="login-staff-heading">
@@ -114,7 +114,7 @@ export function LoginPageShell({ children }: { children: ReactNode }) {
               Staff access
             </h2>
             <p className="login-staff-copy">
-              For authorised SentraCore users.
+              For authorised SentraCore™ users.
             </p>
             {children}
           </section>
@@ -148,7 +148,7 @@ export function LoginPageShell({ children }: { children: ReactNode }) {
               <span>Terms</span>
               <span>Support</span>
             </div>
-            <p>© {new Date().getFullYear()} SentraCore. All rights reserved.</p>
+            <p>© {new Date().getFullYear()} SentraCore™. All rights reserved.</p>
           </footer>
         </div>
       </main>

@@ -129,7 +129,7 @@ export function FacilityFormModal({
       description={
         isEdit
           ? "Update site details, assignment, and operational status."
-          : "Register a new site within the SentraCore portfolio."
+          : "Register a new site within the SentraCore™ portfolio."
       }
       size="lg"
       footer={

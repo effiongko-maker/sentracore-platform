@@ -9,7 +9,7 @@ import { periodOrdinal } from "@/modules/platform-finance/domain/periods";
 export const OPENING_BALANCE_CLEARING_CODE = "3020";
 
 export const OPENING_BALANCE_DISCLOSURE =
-  "Opening balances are still being established. This statement reflects accounting activity currently posted in SentraCore.";
+  "Opening balances are still being established. This statement reflects accounting activity currently posted in SentraCore™.";
 
 export type PostedAccountMovement = {
   periodId: string;

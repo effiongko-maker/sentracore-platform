@@ -131,7 +131,7 @@ function deriveBasedOn(p: IntelligencePriority, evidence: number | null): string
     return `${count} related activit${count === 1 ? "y" : "ies"}`;
   }
   if (count > 0) return `${count} related activit${count === 1 ? "y" : "ies"}`;
-  return "Recent activity across SentraCore";
+  return "Recent activity across SentraCore™";
 }
 
 function toPriorityFinding(p: IntelligencePriority): BriefingFinding {
@@ -225,13 +225,13 @@ function deriveStatement(posture: BriefingPosture): {
       return {
         statement: "The picture is still forming",
         support:
-          "SentraCore is still analysing recent activity. Findings will sharpen as more comes in.",
+          "SentraCore™ is still analysing recent activity. Findings will sharpen as more comes in.",
       };
     case "waiting":
       return {
         statement: "Not enough to go on yet",
         support:
-          "There isn't enough recent activity for SentraCore to say much about the operation.",
+          "There isn't enough recent activity for SentraCore™ to say much about the operation.",
       };
     case "needs_attention":
       return {

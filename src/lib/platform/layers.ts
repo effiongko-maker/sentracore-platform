@@ -302,7 +302,7 @@ export const LAYER_LABEL: Record<
   OperatingLayerId | "command" | "platform",
   string
 > = {
-  platform: "SentraCore",
+  platform: "SentraCore™",
   command: "Operations",
   understand: "Understand",
   organise: "Organisation",

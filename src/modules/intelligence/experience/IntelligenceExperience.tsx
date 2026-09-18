@@ -254,7 +254,7 @@ export function IntelligenceExperience({
                 What needs your attention?
               </h2>
               <p className="ix-brief-section-support">
-                The clearest issues SentraCore wants you to look at first.
+                The clearest issues SentraCore™ wants you to look at first.
               </p>
             </header>
 
@@ -273,7 +273,7 @@ export function IntelligenceExperience({
                       Nothing needs immediate attention
                     </h3>
                     <p className="ix-ref-lead">
-                      SentraCore has not found an urgent priority in this
+                      SentraCore™ has not found an urgent priority in this
                       period.
                     </p>
                   </section>

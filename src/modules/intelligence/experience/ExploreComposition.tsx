@@ -28,7 +28,7 @@ export function ExploreComposition({ vm }: { vm: BriefingViewModel }) {
       <header className="ix-investigate-intro">
         <h2 className="ix-investigate-intro-title">Ask about the organisation</h2>
         <p className="ix-investigate-intro-copy">
-          Ask a question. SentraCore will answer from connected activity across
+          Ask a question. SentraCore™ will answer from connected activity across
           incidents, maintenance, facilities, and work orders.
         </p>
       </header>
@@ -79,7 +79,7 @@ export function ExploreComposition({ vm }: { vm: BriefingViewModel }) {
           </section>
 
           <section className="ix-investigate-response-block">
-            <h3>What SentraCore found</h3>
+            <h3>What SentraCore™ found</h3>
             <p>{response.found}</p>
           </section>
 

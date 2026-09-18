@@ -52,14 +52,14 @@ export function InsightHero({
   const { headline, support } = heroStatement(primary);
   const lead =
     primary?.priority === "attention"
-      ? `SentraCore has analysed the last ${windowDays} days of activity and identified what matters most right now.`
+      ? `SentraCore™ has analysed the last ${windowDays} days of activity and identified what matters most right now.`
       : support;
 
   return (
     <div className="ix-ref-hero-wrap">
       <section className="ix-ref-hero" aria-label="Intelligence overview">
         <div className="ix-ref-hero-copy">
-          <p className="ix-ref-mark">SentraCore Intelligence</p>
+          <p className="ix-ref-mark">SentraCore™ Intelligence</p>
           <h1 className="ix-ref-headline">{headline}</h1>
           <p className="ix-ref-lead">{lead}</p>
         </div>

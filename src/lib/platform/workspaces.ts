@@ -98,7 +98,7 @@ export const PLATFORM_WORKSPACES: PlatformWorkspace[] = [
     title: "Construction",
     status: "planned",
     statusLabel: "Planned",
-    statusDetail: "Coming to SentraCore",
+    statusDetail: "Coming to SentraCore™",
     description:
       "Project delivery, contractors and site management.",
     previewHref: "/workspaces/construction",
@@ -110,7 +110,7 @@ export const PLATFORM_WORKSPACES: PlatformWorkspace[] = [
     title: "Projects & Events",
     status: "planned",
     statusLabel: "Planned",
-    statusDetail: "Coming to SentraCore",
+    statusDetail: "Coming to SentraCore™",
     description:
       "Plan and execute projects, events and strategic initiatives.",
     previewHref: "/workspaces/projects-events",

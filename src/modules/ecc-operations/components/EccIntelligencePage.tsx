@@ -61,27 +61,27 @@ function heroStatement(primary: EccIntelligenceInsight | null): {
     return {
       headline: "Nothing needs immediate attention",
       support:
-        "SentraCore has reviewed ECC Daily Ops, Issues, and Requests and found no urgent priority in this period.",
+        "SentraCore™ has reviewed ECC Daily Ops, Issues, and Requests and found no urgent priority in this period.",
     };
   }
   if (primary.severity === "attention") {
     return {
       headline: "The ECC operation needs attention",
       support:
-        "SentraCore has analysed recent ECC activity and identified what matters most right now.",
+        "SentraCore™ has analysed recent ECC activity and identified what matters most right now.",
     };
   }
   if (primary.severity === "watch") {
     return {
       headline: "Early signals are forming",
       support:
-        "SentraCore has detected emerging ECC patterns that may need closer watching.",
+        "SentraCore™ has detected emerging ECC patterns that may need closer watching.",
     };
   }
   return {
-    headline: "Here's what SentraCore has learned",
+    headline: "Here's what SentraCore™ has learned",
     support:
-      "SentraCore has reviewed recent ECC operational activity and summarised the clearest findings.",
+      "SentraCore™ has reviewed recent ECC operational activity and summarised the clearest findings.",
   };
 }
 
@@ -683,7 +683,7 @@ export function EccIntelligencePage() {
     return (
       <ModeFrame mode="cognitive">
         <div className="ix-ref-page" style={{ padding: "3rem 1.5rem" }}>
-          <p className="ix-ref-mark">SentraCore Intelligence</p>
+          <p className="ix-ref-mark">SentraCore™ Intelligence</p>
           <h1 className="ix-ref-headline ix-ref-headline-sm">
             Not available right now
           </h1>
@@ -720,7 +720,7 @@ export function EccIntelligencePage() {
   const { headline, support } = heroStatement(primary);
   const lead =
     primary?.severity === "attention"
-      ? `SentraCore has analysed ECC Daily Ops, Issues, and Requests for ${intelligence.periodLabel} and identified what matters most right now.`
+      ? `SentraCore™ has analysed ECC Daily Ops, Issues, and Requests for ${intelligence.periodLabel} and identified what matters most right now.`
       : support;
   const submissionCmp = intelligence.comparisons.find(
     (row) => row.id === "daily-ops-submissions"
@@ -741,7 +741,7 @@ export function EccIntelligencePage() {
           <div className="ix-ref-hero-wrap">
             <section className="ix-ref-hero" aria-label="Intelligence overview">
               <div className="ix-ref-hero-copy">
-                <p className="ix-ref-mark">SentraCore Intelligence</p>
+                <p className="ix-ref-mark">SentraCore™ Intelligence</p>
                 <h1 className="ix-ref-headline">{headline}</h1>
                 <p className="ix-ref-lead">{lead}</p>
                 <div
@@ -821,7 +821,7 @@ export function EccIntelligencePage() {
                 What needs your attention?
               </h2>
               <p className="ix-brief-section-support">
-                The clearest issues SentraCore wants you to look at first.
+                The clearest issues SentraCore™ wants you to look at first.
               </p>
             </header>
 
@@ -840,7 +840,7 @@ export function EccIntelligencePage() {
                       Nothing needs immediate attention
                     </h3>
                     <p className="ix-ref-lead">
-                      SentraCore has not found an urgent priority in this
+                      SentraCore™ has not found an urgent priority in this
                       period.
                     </p>
                   </section>

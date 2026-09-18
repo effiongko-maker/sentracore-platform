@@ -448,7 +448,7 @@ export function CommandCentrePage({
             <div className="scc-ask-glow" aria-hidden />
             <div className="scc-panel-head">
               <h2 id="scc-ask" className="scc-panel-title">
-                Ask SentraCore
+                Ask SentraCore™
               </h2>
               <span className="scc-ask-badge">Beta</span>
             </div>
@@ -479,7 +479,7 @@ export function CommandCentrePage({
             <DecisionsBlock decisions={decisions} />
           </article>
 
-          <aside className="scc-editorial" aria-label="SentraCore brand">
+          <aside className="scc-editorial" aria-label="SentraCore™ brand">
             <div className="scc-editorial-media" aria-hidden>
               <Image
                 src="/command-centre/editorial-mountain-sunset.png"
@@ -495,7 +495,7 @@ export function CommandCentrePage({
               <br />
               They&apos;re built.
             </p>
-            <p className="scc-editorial-mark">SentraCore</p>
+            <p className="scc-editorial-mark">SentraCore™</p>
           </aside>
         </div>
       </section>

@@ -13,10 +13,10 @@ export function WorkspacePreviewPage({
     <div className="sc-workspace-preview">
       <Link href="/" className="sc-workspace-preview-back">
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-        Back to SentraCore
+        Back to SentraCore™
       </Link>
 
-      <p className="sc-ph-eyebrow">SentraCore Platform</p>
+      <p className="sc-ph-eyebrow">SentraCore™ Platform</p>
       <p className="sc-workspace-preview-status">{workspace.statusLabel}</p>
       <h1 className="sc-workspace-preview-title">{workspace.title}</h1>
       <p className="sc-workspace-preview-lede">

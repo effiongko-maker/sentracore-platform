@@ -16,7 +16,7 @@ export function IntelligenceBrief({
   if (processing) {
     return (
       <BriefingLead>
-        SentraCore is still processing recent operational activity.
+        SentraCore™ is still processing recent operational activity.
       </BriefingLead>
     );
   }
@@ -24,7 +24,7 @@ export function IntelligenceBrief({
   if (!hasOperationalActivity && urgentCount === 0) {
     return (
       <BriefingLead>
-        SentraCore needs more operational activity before it can identify
+        SentraCore™ needs more operational activity before it can identify
         meaningful patterns.
       </BriefingLead>
     );
@@ -55,7 +55,7 @@ export function IntelligenceBrief({
   return (
     <div className="space-y-1.5">
       <BriefingLead>
-        SentraCore has identified {findingLabel}.
+        SentraCore™ has identified {findingLabel}.
       </BriefingLead>
       <p className="sc-text-supporting">
         Based on activity from the last {windowDays} days.

@@ -44,7 +44,7 @@ export function ChangedComposition({
         <h2 className="ix-shift-intro-title">What has changed across the operation</h2>
         <p className="ix-shift-intro-copy">
           Changes worth noticing across the organisation — not every fluctuation,
-          only what SentraCore considers meaningful.
+          only what SentraCore™ considers meaningful.
         </p>
       </header>
 

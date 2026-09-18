@@ -11,10 +11,10 @@ export function IntelligenceLoadError() {
       <div className="ix-experience-main">
         <header className="ix-header">
           <div className="ix-header-copy">
-            <p className="ix-header-mark">SentraCore Intelligence</p>
+            <p className="ix-header-mark">SentraCore™ Intelligence</p>
             <h1 className="ix-header-headline">Briefing unavailable</h1>
             <p className="ix-header-support">
-              SentraCore couldn&apos;t load the latest intelligence for this
+              SentraCore™ couldn&apos;t load the latest intelligence for this
               workspace.
             </p>
           </div>
