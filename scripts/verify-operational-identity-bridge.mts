@@ -30,7 +30,7 @@ async function main() {
     explicit.user
   );
   assert.equal(explicitAccess.sheetUserId, "USR-0002");
-  assert.equal(accessCan(explicitAccess, "ops.view"), true);
+  assert.equal(accessCan(explicitAccess, "ops.view"), false);
 
   const unavailable = await resolveFmOperationalIdentity({
     explicitLink: { externalIdentityId: "USR-0002", status: "active" },
@@ -107,19 +107,13 @@ async function main() {
   assert.match(migration, /unique \(organisation_id, profile_id, identity_domain\)/);
   assert.match(migration, /unique \(organisation_id, identity_domain, external_identity_id\)/);
   assert.match(migration, /revoke all on function public\.provision_operational_identity_link[\s\S]*authenticated/);
-  assert.match(access, /resolveFmOperationalIdentity/);
-  assert.match(access, /action: "getAll"/);
-  assert.doesNotMatch(access, /action: "getById"/);
-  assert.match(access, /candidate\.id\.trim\(\)\.toUpperCase\(\) === target/);
-  assert.match(access, /capabilities: \[\]/);
-  assert.match(access, /lookupFailed = true/);
-  assert.match(access, /sheetUserId: operationalUserId/);
+  assert.doesNotMatch(access, /resolveFmOperationalIdentity/);
+  assert.doesNotMatch(access, /action: "getAll"/);
+  assert.match(access, /platform_capability_grants/);
   assert.match(api, /operationalUserId: operatingAccess\.sheetUserId/);
   assert.match(workspace, /currentUser\?\.operationalUserId/);
-  assert.match(
-    commandCentre,
-    /loadAssignmentSummary\(operatingAccess\.sheetUserId\)/
-  );
+  assert.match(commandCentre, /loadTransitionalSheetAssigneeId/);
+  assert.doesNotMatch(commandCentre, /loadAssignmentSummary\(operatingAccess\.sheetUserId\)/);
   assert.doesNotMatch(maintenance, /reportedByUserId:\s*validated\.reportedByUserId \|\| context\.userId/);
   assert.doesNotMatch(issue, /reportedByUserId:\s*context\.userId/);
   assert.match(incident, /createdByUserId: actorUserId/);

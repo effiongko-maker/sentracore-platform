@@ -4,6 +4,7 @@ export { useUsers } from "./hooks/useUsers";
 export type {
   CreateUserInput,
   CurrentUser,
+  EligibleProfile,
   UpdateUserInput,
   User,
   UserListParams,

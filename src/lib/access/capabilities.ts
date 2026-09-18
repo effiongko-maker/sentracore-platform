@@ -98,33 +98,33 @@ const ROLE_CAPABILITIES: Record<V1OperatingRole, readonly AccessCapability[]> = 
 };
 
 /**
- * Operational capabilities granted under Super Admin override.
- * Includes admin areas; never implies the Facility Manager role identity.
+ * Platform Super Admin override is limited to platform administration of people.
+ * It does NOT grant FM business-data capabilities (ops.*, finance.*,
+ * approvals.manage, requests.view, fm.authorize_protected).
  */
 export const SUPER_ADMIN_OVERRIDE_CAPABILITIES: readonly AccessCapability[] = [
   "users.view",
   "users.manage",
-  "ops.view",
-  "ops.create",
-  "ops.edit",
-  "ops.submit",
-  "finance.view",
-  "finance.create",
-  "finance.submit",
-  "finance.authorize",
-  "finance.pay",
-  "approvals.manage",
-  "requests.view",
   "platform.admin_override",
-  // Explicitly omit fm.authorize_protected — override is not FM authorization.
 ];
 
+/**
+ * FM AccessCapability strings that may be stored on platform_capability_grants.
+ * platform.admin_override is derived from Super Admin, not granted here.
+ */
+export const FM_EXPLICIT_GRANT_CAPABILITIES = ACCESS_CAPABILITIES.filter(
+  (capability) => capability !== "platform.admin_override"
+);
+
+/**
+ * Historical role → capability catalog. NOT runtime authorization.
+ * Runtime authority is explicit platform_capability_grants only.
+ */
 export function capabilitiesForRole(
   role: V1OperatingRole | null,
   options?: { inactive?: boolean; unassigned?: boolean }
 ): AccessCapability[] {
   if (options?.inactive) return [];
-  // Unresolved / unrecognised People identity fails closed — no implicit FM role.
   if (options?.unassigned || role == null) {
     return [];
   }
@@ -139,18 +139,11 @@ export function hasCapability(
 }
 
 /**
- * True when the actor may satisfy a normal capability via platform override.
- * Does not rewrite role identity to Facility Manager.
+ * Exact capability match only. platform.admin_override does not satisfy ops.*.
  */
 export function capabilitySatisfied(
   capabilities: readonly AccessCapability[],
   capability: AccessCapability
 ): boolean {
-  if (hasCapability(capabilities, capability)) return true;
-  if (capability === "platform.admin_override") return false;
-  if (capability === "fm.authorize_protected") {
-    // Platform override is not FM facility authorization.
-    return false;
-  }
-  return hasCapability(capabilities, "platform.admin_override");
+  return hasCapability(capabilities, capability);
 }

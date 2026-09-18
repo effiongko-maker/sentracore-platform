@@ -46,14 +46,14 @@ export function ViewUserModal({
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
-          {onEdit ? (
+            {onEdit ? (
             <Button
               onClick={() => {
                 onClose();
                 onEdit(user);
               }}
             >
-              Edit user
+              Edit assignment
             </Button>
           ) : null}
         </>
@@ -71,23 +71,24 @@ export function ViewUserModal({
             </Badge>
           </div>
           <p className="mt-1 text-sm text-muted">
-            {user.role || "—"} · {user.specialization || "—"}
+            {user.role || "—"} · Assignment {user.status ? labelize(user.status) : "Unset"}
           </p>
         </div>
       </div>
 
       <div className="mt-5 grid gap-5 sm:grid-cols-2">
         <Detail label="Email" value={user.email} />
-        <Detail label="Phone" value={user.phone} />
-        <Detail label="Role" value={user.role} />
-        <Detail label="Specialization" value={user.specialization} />
+        <Detail label="Operating role" value={user.role} />
         <Detail label="Facility" value={formatFacilityDisplay(user.facility)} />
         <Detail
           label="Current Workload"
-          value={formatWorkload(user.activeWorkOrders)}
+          value={formatWorkload(
+            user.activeWorkOrders,
+            user.workloadAvailable !== false
+          )}
         />
         <Detail
-          label="Status"
+          label="Assignment status"
           value={
             <Badge variant={user.status ? USER_STATUS_VARIANT[user.status] : "neutral"}>
               {user.status ? labelize(user.status) : "Unset"}
@@ -95,10 +96,14 @@ export function ViewUserModal({
           }
         />
         <Detail
+          label="Platform profile"
+          value={user.profileStatus ? labelize(user.profileStatus) : "Active"}
+        />
+        <Detail
           label="Last active"
           value={formatRelativeTime(user.lastActive)}
         />
-        <Detail label="Joined" value={formatDate(user.createdAt)} />
+        <Detail label="Assigned" value={formatDate(user.createdAt)} />
       </div>
     </Modal>
   );

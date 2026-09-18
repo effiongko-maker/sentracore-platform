@@ -1,20 +1,52 @@
 import { NextResponse } from "next/server";
 import { gateApiCapability } from "@/lib/access/gateApi";
 import { isWriteAction } from "@/lib/access/server";
+import { isActionError } from "@/lib/actions/errors";
 import {
-  postToAppsScript,
-  type AppsScriptProxyBody,
-} from "@/services/api/appsScriptProxy";
+  FmPeopleNotFoundError,
+  FmPeopleUnavailableError,
+  FmPeopleValidationError,
+} from "@/modules/users/server/fmPeopleDomain";
+import {
+  FmPeopleServerService,
+  resolveFmPeopleOrganisation,
+} from "@/modules/users/server/FmPeopleServerService";
+import type { AppsScriptProxyBody } from "@/services/api/appsScriptProxy";
 
 /**
- * Server-only proxy: browser → /api/users → Apps Script.
- * Reads require users.view; mutations require users.manage.
+ * FM People directory is profiles + fm_facility_assignments (Supabase).
+ * No Apps Script USERS call. No dual-write. No Auth invitation.
+ * Reads: users.view. Mutations: users.manage.
  */
+
+function fail(
+  status: number,
+  message: string,
+  extra?: { errorClass?: string }
+) {
+  return NextResponse.json(
+    {
+      success: false,
+      message,
+      data: null,
+      ...(extra?.errorClass
+        ? { meta: { errorClass: extra.errorClass } }
+        : {}),
+    },
+    { status, headers: { "Cache-Control": "no-store" } }
+  );
+}
+
+function ok(data: unknown) {
+  return NextResponse.json(
+    { success: true, message: "", data },
+    { status: 200, headers: { "Cache-Control": "no-store" } }
+  );
+}
 
 export async function POST(request: Request) {
   try {
     let body: AppsScriptProxyBody = {};
-
     try {
       body = (await request.json()) as AppsScriptProxyBody;
     } catch {
@@ -26,29 +58,44 @@ export async function POST(request: Request) {
     const gate = await gateApiCapability(capability);
     if (!gate.ok) return gate.response;
 
-    const data = await postToAppsScript(
-      body,
-      { resource: "users", action: "getAll" },
-      "api/users"
+    const { organisationId, profileId } = resolveFmPeopleOrganisation(
+      gate.session
     );
-
-    return NextResponse.json(data, {
-      status: 200,
-      headers: { "Cache-Control": "no-store" },
+    const service = new FmPeopleServerService({
+      session: gate.session,
+      access: gate.access,
+      organisationId,
+      profileId,
     });
-  } catch (error) {
-    console.error("[api/users] proxy error:", error);
 
-    return NextResponse.json(
-      {
-        success: false,
-        message:
-          error instanceof Error
-            ? error.message
-            : "Unable to reach Apps Script.",
-        data: null,
-      },
-      { status: 502 }
+    const data = await service.dispatch(action, body.payload);
+    return ok(data);
+  } catch (error) {
+    if (error instanceof FmPeopleValidationError) {
+      return fail(400, error.message, { errorClass: "validation" });
+    }
+    if (error instanceof FmPeopleNotFoundError) {
+      return fail(404, error.message, { errorClass: "validation" });
+    }
+    if (error instanceof FmPeopleUnavailableError) {
+      console.error("[api/users] storage unavailable:", error);
+      return fail(503, error.message);
+    }
+    if (isActionError(error)) {
+      const status =
+        error.code === "UNAUTHENTICATED"
+          ? 401
+          : error.code === "VALIDATION_ERROR"
+            ? 400
+            : 403;
+      return fail(status, error.message);
+    }
+    console.error("[api/users] error:", error);
+    return fail(
+      502,
+      error instanceof Error
+        ? error.message
+        : "People directory is unavailable."
     );
   }
 }

@@ -8,7 +8,11 @@ export function getUserInitials(name: string) {
     .join("");
 }
 
-export function formatWorkload(activeWorkOrders: number) {
+export function formatWorkload(
+  activeWorkOrders: number,
+  available = true
+) {
+  if (!available) return "Unavailable";
   const count = activeWorkOrders;
   return `${count} Active Work Order${count === 1 ? "" : "s"}`;
 }
@@ -38,6 +42,7 @@ export function resolveFacilityDisplayName(
 
 export function toCreateFormValues(user?: User | null) {
   return {
+    profileId: user?.id ?? "",
     name: user?.name ?? "",
     email: user?.email ?? "",
     phone: user?.phone ?? "",
@@ -47,6 +52,8 @@ export function toCreateFormValues(user?: User | null) {
       user?.facility && user.facility !== "-"
         ? user.facility
         : "",
+    facilityId: user?.facilityId ?? "",
+    assignmentId: user?.assignmentId,
     status: (user?.status || "active") as UserStatus,
   };
 }

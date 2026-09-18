@@ -5,7 +5,6 @@
 import { isActionError } from "@/lib/actions/errors";
 import { isPlatformSuperAdminFromSlugs } from "@/lib/access/platformRoles";
 import { resolveOperatingAccess } from "@/lib/access/server";
-import type { OperatingAccess } from "@/lib/access/resolveAccess";
 import {
   resolveWorkspaceAccessChrome,
   type WorkspaceAccessChrome,
@@ -131,6 +130,30 @@ function financeModuleEnabled(session: PlatformSession): boolean {
   );
 }
 
+/**
+ * Transitional Sheet WO/MNT/INC assignee lookup only.
+ * NOT FM authorization. Retained until Work cuts over to profile UUID.
+ */
+async function loadTransitionalSheetAssigneeId(
+  session: PlatformSession
+): Promise<string | null> {
+  const organisationId =
+    session.organisation?.id ?? session.profile.organisationId;
+  if (!organisationId) return null;
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("operational_identity_links")
+    .select("external_identity_id, status")
+    .eq("organisation_id", organisationId)
+    .eq("profile_id", session.userId)
+    .eq("identity_domain", "facility_management")
+    .maybeSingle();
+  if (error || !data) return null;
+  if (String(data.status) !== "active") return null;
+  const id = String(data.external_identity_id ?? "").trim();
+  return id || null;
+}
+
 export class CommandCentreServerService {
   /**
    * Compose Command Centre snapshot for an authorised CEO/orchestrator actor.
@@ -169,7 +192,7 @@ export class CommandCentreServerService {
         this.composeDecisions(access),
         this.composeFinanceAttention(access),
         this.composeEccPulse(access, workspaceEntry),
-        this.composeAssignments(access, operatingAccess),
+        this.composeAssignments(access),
         this.composeLastVisit(access, asOf, workspaceEntry),
       ]);
 
@@ -609,8 +632,7 @@ export class CommandCentreServerService {
   }
 
   private async composeAssignments(
-    access: CommandCentreAccessContext,
-    operatingAccess: OperatingAccess
+    access: CommandCentreAccessContext
   ): Promise<CommandCentreSnapshot["assignments"]> {
     if (!hasModule(access.session.enabledModules, "facility_management")) {
       return {
@@ -621,15 +643,19 @@ export class CommandCentreServerService {
       };
     }
     try {
-      if (!operatingAccess.sheetUserId) {
+      const sheetAssigneeId = await loadTransitionalSheetAssigneeId(
+        access.session
+      );
+      if (!sheetAssigneeId) {
         return {
           state: "unavailable",
-          message: "No operational identity is linked to your account.",
-          detail: "Assignments require a matching People-register identity.",
+          message: "Assigned work cannot be derived yet.",
+          detail:
+            "Work still uses Sheet assignee IDs. Workload mapping is unavailable until Work cuts over.",
           items: [],
         };
       }
-      const summary = await loadAssignmentSummary(operatingAccess.sheetUserId);
+      const summary = await loadAssignmentSummary(sheetAssigneeId);
       const domains = [
         {
           id: "assigned-work",

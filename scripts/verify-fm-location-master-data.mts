@@ -12,6 +12,7 @@ import {
   accessCan,
   applyPlatformSuperAdmin,
   resolveOperatingAccessFromSheetUser,
+  type AccessCapability,
 } from "../src/lib/access";
 import {
   filterLocationItems,
@@ -256,7 +257,7 @@ function runStatic(results: CheckResult[]) {
 
     const unassigned = resolveOperatingAccessFromSheetUser("sa@x.com", "SA", null);
     const saOnly = applyPlatformSuperAdmin(unassigned, true);
-    assert(accessCan(saOnly, "ops.view"), "existing SA override still grants ops.view");
+    assert(!accessCan(saOnly, "ops.view"), "SA override does not grant ops.view");
     const ncc = resolveOperatingAccessFromSheetUser("c@x.com", "Client", {
       id: "USR-0009",
       name: "Client",
@@ -266,17 +267,20 @@ function runStatic(results: CheckResult[]) {
       facility: "NCC Annex",
     });
     assert(!accessCan(ncc, "ops.view"), "ncc_client cannot read master-data");
-    const staff = resolveOperatingAccessFromSheetUser("s@x.com", "Staff", {
-      id: "USR-0003",
-      name: "Staff",
-      email: "s@x.com",
-      role: "FM Staff",
-      status: "active",
-      facility: "NCC Annex",
-    });
-    assert(accessCan(staff, "ops.view"), "FM staff can read");
-    assert(accessCan(staff, "ops.create") && accessCan(staff, "ops.edit"), "staff can mutate");
-    push(results, "existing ops.* capability gates (SA override unchanged)", "PASS");
+    const staff = {
+      ...resolveOperatingAccessFromSheetUser("s@x.com", "Staff", {
+        id: "USR-0003",
+        name: "Staff",
+        email: "s@x.com",
+        role: "FM Staff",
+        status: "active",
+        facility: "NCC Annex",
+      }),
+      capabilities: ["ops.view", "ops.create", "ops.edit"] as AccessCapability[],
+    };
+    assert(accessCan(staff, "ops.view"), "explicit grant can read");
+    assert(accessCan(staff, "ops.create") && accessCan(staff, "ops.edit"), "explicit grant can mutate");
+    push(results, "existing ops.* capability gates (explicit grants; SA override narrowed)", "PASS");
   } catch (error) {
     push(
       results,

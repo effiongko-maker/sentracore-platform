@@ -74,6 +74,7 @@ export function UserWorkloadDisclosure({
   const panelRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
   const count = user.activeWorkOrders;
+  const workloadAvailable = user.workloadAvailable !== false;
   const snapshotIds = user.workloadWorkOrderIds;
   const snapshotKey = (snapshotIds ?? []).join(",");
 
@@ -90,7 +91,7 @@ export function UserWorkloadDisclosure({
     }
 
     let cancelled = false;
-    if (count === 0) {
+    if (count === 0 || !workloadAvailable) {
       setWorkOrders([]);
       setLoading(false);
       setError(null);
@@ -122,7 +123,7 @@ export function UserWorkloadDisclosure({
     return () => {
       cancelled = true;
     };
-  }, [open, user.id, snapshotKey, snapshotIds, count]);
+  }, [open, user.id, snapshotKey, snapshotIds, count, workloadAvailable]);
 
   useLayoutEffect(() => {
     if (!open || !anchorRef.current) {
@@ -201,7 +202,7 @@ export function UserWorkloadDisclosure({
                 Current Workload
               </p>
               <p className="mt-0.5 text-sm font-medium text-foreground">
-                {formatWorkload(count)}
+                {formatWorkload(count, workloadAvailable)}
               </p>
             </div>
             <div className="max-h-[min(20rem,calc(100%-3rem))] overflow-y-auto">
@@ -209,6 +210,10 @@ export function UserWorkloadDisclosure({
                 <p className="px-3.5 py-4 text-sm text-muted">Loading…</p>
               ) : error ? (
                 <p className="px-3.5 py-4 text-sm text-danger">{error}</p>
+              ) : !workloadAvailable ? (
+                <p className="px-3.5 py-4 text-sm text-muted">
+                  Workload cannot be derived until Work uses platform profile identity.
+                </p>
               ) : workOrders.length === 0 ? (
                 <p className="px-3.5 py-4 text-sm text-muted">
                   No active work orders currently assigned to {user.name}.
@@ -269,9 +274,9 @@ export function UserWorkloadDisclosure({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        aria-label={`${formatWorkload(count)} for ${user.name}. Show contributing work orders.`}
+        aria-label={`${formatWorkload(count, workloadAvailable)} for ${user.name}. Show contributing work orders.`}
       >
-        <span className="whitespace-nowrap">{formatWorkload(count)}</span>
+        <span className="whitespace-nowrap">{formatWorkload(count, workloadAvailable)}</span>
         <ChevronDown
           className={cn(
             "h-3 w-3 shrink-0 text-muted opacity-0 transition-all duration-150 group-hover:opacity-70 group-focus-visible:opacity-70",

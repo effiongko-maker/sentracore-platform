@@ -2,7 +2,6 @@ import type { User, UserStatus } from "@/modules/users/types";
 import {
   SUPER_ADMIN_OVERRIDE_CAPABILITIES,
   capabilitySatisfied,
-  capabilitiesForRole,
   hasCapability,
   type AccessCapability,
 } from "./capabilities";
@@ -16,7 +15,7 @@ import {
   type V1OperatingRole,
 } from "./roles";
 
-export type OperatingAccessSource = "sheet" | "unassigned";
+export type OperatingAccessSource = "platform" | "assignment" | "unassigned";
 
 /**
  * How administrative / protected authority is exercised.
@@ -40,8 +39,8 @@ export type OperatingAccess = {
   email: string;
   name: string;
   /**
-   * V1 facility operating role from People register (or null).
-   * Never set to facility_manager solely because the user is Super Admin.
+   * V1 facility operating role from assignment context (or null).
+   * Descriptive only — never a capability grant.
    */
   role: V1OperatingRole | null;
   roleLabel: string;
@@ -59,14 +58,15 @@ export type OperatingAccess = {
   facility: string;
   source: OperatingAccessSource;
   /**
-   * True when no valid V1 People-register role resolved.
+   * True when no valid V1 operating assignment resolved.
    * Unassigned is diagnostic only — it grants zero FM operating capabilities.
    */
   unassigned: boolean;
   inactive: boolean;
   capabilities: AccessCapability[];
+  /** Canonical actor identity: platform profile UUID when known. */
   sheetUserId?: string;
-  /** How the FM People identity was selected; never an authorization grant. */
+  /** Transitional Sheet WO mapping is never an authorization grant. */
   operationalIdentitySource?: "explicit_link" | "email_fallback";
 };
 
@@ -82,9 +82,45 @@ function baseAuthorityKind(role: V1OperatingRole | null): AuthorityKind {
   return role === "facility_manager" ? "facility_manager" : "operating";
 }
 
+export function resolveOperatingAccessFromGrants(input: {
+  email: string;
+  name: string;
+  role?: V1OperatingRole | null;
+  roleLabel?: string;
+  status?: UserStatus | "" | "unknown";
+  facility?: string;
+  inactive?: boolean;
+  unassigned?: boolean;
+  capabilities: readonly AccessCapability[];
+  profileId?: string;
+}): OperatingAccess {
+  const role = input.role ?? null;
+  const unassigned = input.unassigned ?? role == null;
+  return {
+    email: input.email,
+    name: input.name,
+    role,
+    roleLabel:
+      input.roleLabel ??
+      (role ? v1OperatingRoleLabel(role) : "Unassigned"),
+    platformRole: null,
+    platformRoleLabel: null,
+    isSuperAdmin: false,
+    hasAdminOverride: false,
+    authorityKind: baseAuthorityKind(role),
+    status: input.status ?? "unknown",
+    facility: input.facility ?? "",
+    source: "platform",
+    unassigned,
+    inactive: Boolean(input.inactive),
+    capabilities: [...input.capabilities],
+    ...(input.profileId ? { sheetUserId: input.profileId } : {}),
+  };
+}
+
 /**
- * Resolve operating access from a People-register row (sheet User).
- * Does not apply Super Admin — call applyPlatformSuperAdmin after.
+ * @deprecated Sheet USERS is not FM runtime authority. Kept for static tests
+ * of descriptive role parsing. Does NOT map job title to capabilities.
  */
 export function resolveOperatingAccessFromSheetUser(
   email: string,
@@ -92,55 +128,37 @@ export function resolveOperatingAccessFromSheetUser(
   sheetUser: Pick<User, "id" | "role" | "status" | "facility" | "name" | "email"> | null
 ): OperatingAccess {
   if (!sheetUser) {
-    const capabilities = capabilitiesForRole(null, { unassigned: true });
-    return {
+    return resolveOperatingAccessFromGrants({
       email,
       name,
       role: null,
-      roleLabel: "Unassigned",
-      platformRole: null,
-      platformRoleLabel: null,
-      isSuperAdmin: false,
-      hasAdminOverride: false,
-      authorityKind: "operating",
-      status: "unknown",
-      facility: "",
-      source: "unassigned",
       unassigned: true,
       inactive: false,
-      capabilities,
-    };
+      capabilities: [],
+    });
   }
 
   const role = parseV1OperatingRole(sheetUser.role);
   const inactive = isInactiveUserStatus(sheetUser.status);
   const unassigned = role == null;
-  const capabilities = capabilitiesForRole(role, { inactive, unassigned });
-
-  return {
+  return resolveOperatingAccessFromGrants({
     email: sheetUser.email || email,
     name: sheetUser.name || name,
     role,
     roleLabel: role ? v1OperatingRoleLabel(role) : sheetUser.role || "Unassigned",
-    platformRole: null,
-    platformRoleLabel: null,
-    isSuperAdmin: false,
-    hasAdminOverride: false,
-    authorityKind: baseAuthorityKind(role),
     status: sheetUser.status || "",
     facility: sheetUser.facility || "",
-    source: "sheet",
-    unassigned,
     inactive,
-    capabilities,
-    sheetUserId: sheetUser.id,
-  };
+    unassigned,
+    capabilities: [],
+    profileId: sheetUser.id,
+  });
 }
 
 /**
  * Apply System Administrator / Super Admin platform override.
  * Preserves any facility operating role identity — never rewrites it to FM.
- * Sheet inactive does not block platform override (production administration).
+ * Does not grant FM business-data capabilities.
  */
 export function applyPlatformSuperAdmin(
   access: OperatingAccess,
@@ -149,21 +167,17 @@ export function applyPlatformSuperAdmin(
   if (!isSuperAdmin) return access;
 
   const merged = new Set<AccessCapability>([
-    ...access.capabilities.filter(
-      (c) => c !== "fm.authorize_protected"
-    ),
+    ...access.capabilities.filter((c) => c !== "fm.authorize_protected"),
     ...SUPER_ADMIN_OVERRIDE_CAPABILITIES,
   ]);
 
   return {
     ...access,
-    // Keep access.role / roleLabel unchanged — Super Admin ≠ Facility Manager.
     platformRole: "system_administrator",
     platformRoleLabel: PLATFORM_ROLE_LABELS.system_administrator,
     isSuperAdmin: true,
     hasAdminOverride: true,
     authorityKind: "platform_override",
-    inactive: false,
     capabilities: [...merged],
   };
 }

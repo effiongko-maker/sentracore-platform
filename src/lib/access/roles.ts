@@ -1,6 +1,6 @@
 /**
- * V1 operating roles — single vocabulary for access control.
- * Sheet USERS.Role stores the display label; auth resolution maps to these slugs.
+ * V1 operating roles — descriptive facility operating context.
+ * Not permission. Runtime authorization is platform_capability_grants.
  */
 
 export const V1_OPERATING_ROLES = [

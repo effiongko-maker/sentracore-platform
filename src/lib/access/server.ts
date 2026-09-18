@@ -3,222 +3,128 @@ import {
   toSessionIdentity,
 } from "@/lib/auth/session";
 import type { PlatformSession } from "@/lib/auth/types";
-import { postToAppsScriptData } from "@/services/api/appsScriptProxy";
-import { CacheNamespaces } from "@/services/cache/domainCache";
+import { createAdminClient } from "@/utils/supabase/admin";
 import {
-  ACCESS_SHEET_USER_TTL_MS,
-  sharedRequest,
-  stableRequestKey,
-} from "@/services/cache/sharedRequest";
-import type { User, UserStatus } from "@/modules/users/types";
-import {
-  findSheetUserByEmail,
-  resolveOperatingAccessFromSheetUser,
   applyPlatformSuperAdmin,
   accessCan,
+  isInactiveUserStatus,
+  resolveOperatingAccessFromGrants,
   type OperatingAccess,
 } from "./resolveAccess";
-import type { AccessCapability } from "./capabilities";
-import { isPlatformSuperAdminFromSlugs } from "./platformRoles";
-import { createClient } from "@/utils/supabase/server";
-import { cookies } from "next/headers";
 import {
-  resolveFmOperationalIdentity,
-  type FmIdentityLink,
-} from "./operationalIdentity";
+  FM_EXPLICIT_GRANT_CAPABILITIES,
+  type AccessCapability,
+} from "./capabilities";
+import { isPlatformSuperAdminFromSlugs } from "./platformRoles";
+import {
+  isV1OperatingRole,
+  parseV1OperatingRole,
+  v1OperatingRoleLabel,
+  type V1OperatingRole,
+} from "./roles";
 
-type RemoteUser = Record<string, unknown>;
+function isFmGrantCapability(value: string): value is AccessCapability {
+  return (FM_EXPLICIT_GRANT_CAPABILITIES as readonly string[]).includes(value);
+}
 
-function pickField(raw: RemoteUser, ...keys: string[]): unknown {
-  for (const key of keys) {
-    const value = raw[key];
-    if (value != null && String(value).trim() !== "") return value;
+async function loadExplicitFmGrants(
+  organisationId: string,
+  profileId: string
+): Promise<AccessCapability[]> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("platform_capability_grants")
+    .select("capability")
+    .eq("organisation_id", organisationId)
+    .eq("profile_id", profileId);
+  if (error) {
+    throw error;
   }
-  return undefined;
-}
-
-function normalizeUserStatus(raw: unknown): UserStatus | "" {
-  const token = String(raw ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "_");
-  if (!token) return "";
-  if (token === "active") return "active";
-  if (token === "inactive" || token === "deactivated") return "inactive";
-  if (token === "suspended") return "suspended";
-  if (token === "pending") return "pending";
-  return token as UserStatus;
-}
-
-function mapSheetUserLite(raw: RemoteUser): Pick<
-  User,
-  "id" | "role" | "status" | "facility" | "name" | "email"
-> {
-  return {
-    id: String(pickField(raw, "id", "User ID") ?? ""),
-    name: String(pickField(raw, "name", "Full Name") ?? ""),
-    email: String(pickField(raw, "email", "Email") ?? ""),
-    role: String(pickField(raw, "role", "Role") ?? ""),
-    facility: String(pickField(raw, "facility", "Facility Assigned") ?? ""),
-    status: normalizeUserStatus(pickField(raw, "status", "Status")),
-  };
-}
-
-function extractUserRows(payload: unknown): RemoteUser[] {
-  if (Array.isArray(payload)) return payload as RemoteUser[];
-  if (payload && typeof payload === "object") {
-    const page = payload as Record<string, unknown>;
-    if (Array.isArray(page.data)) return page.data as RemoteUser[];
-    if (page.data && typeof page.data === "object") {
-      const inner = page.data as Record<string, unknown>;
-      if (Array.isArray(inner.data)) return inner.data as RemoteUser[];
+  const granted: AccessCapability[] = [];
+  for (const row of data ?? []) {
+    const capability = String(
+      (row as { capability?: string }).capability ?? ""
+    );
+    if (isFmGrantCapability(capability)) {
+      granted.push(capability);
     }
   }
-  return [];
+  return granted;
+}
+
+async function loadActiveAssignmentContext(
+  organisationId: string,
+  profileId: string
+): Promise<{
+  role: V1OperatingRole | null;
+  facility: string;
+  status: OperatingAccess["status"];
+}> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("fm_facility_assignments")
+    .select("operational_role, status, facility_id, updated_at")
+    .eq("organisation_id", organisationId)
+    .eq("profile_id", profileId)
+    .eq("status", "active")
+    .order("updated_at", { ascending: false })
+    .limit(1);
+  if (error) {
+    throw error;
+  }
+  const row = (data ?? [])[0] as
+    | { operational_role?: string; facility_id?: string }
+    | undefined;
+  if (!row) {
+    return { role: null, facility: "", status: "unknown" };
+  }
+  const rawRole = String(row.operational_role ?? "");
+  const role = isV1OperatingRole(rawRole)
+    ? rawRole
+    : parseV1OperatingRole(rawRole);
+  let facility = "";
+  const facilityId = String(row.facility_id ?? "");
+  if (facilityId) {
+    const { data: facilityRow, error: facilityError } = await admin
+      .from("fm_facilities")
+      .select("name")
+      .eq("organisation_id", organisationId)
+      .eq("id", facilityId)
+      .maybeSingle();
+    if (facilityError) throw facilityError;
+    facility = String(
+      (facilityRow as { name?: string } | null)?.name ?? ""
+    );
+  }
+  return {
+    role,
+    facility,
+    status: "active",
+  };
 }
 
 /**
- * Load the People-register row for access resolution by email.
- * Uses Apps Script search so pagination cannot silently miss the actor.
- * Lookup failure and unresolved identity fail closed (zero FM capabilities).
- *
- * Concurrent gates (Home WO/INC/MNT/…) coalesce on one in-flight lookup;
- * successful rows are TTL-cached briefly so each operational API request does
- * not pay a fresh users/getAll. Capability decisions still run through
- * requireCapability → resolveOperatingAccess → accessCan on every request.
- * Lookup transport failures are not cached (fail-closed on retry).
+ * Resolve FM operating access from platform identity + explicit IAM grants.
+ * Does not query Apps Script USERS. Does not use email fallback.
+ * operational_identity_links is not an authorization source.
  */
-export async function loadSheetUserForAccessByEmail(
-  email: string
-): Promise<Pick<
-  User,
-  "id" | "role" | "status" | "facility" | "name" | "email"
-> | null> {
-  const target = email.trim();
-  if (!target) return null;
-
-  const key = stableRequestKey(CacheNamespaces.accessSheetUserByEmail, {
-    email: target.toLowerCase(),
-  });
-
-  return sharedRequest(
-    key,
-    async () => {
-      const payload = await postToAppsScriptData(
-        {
-          resource: "users",
-          action: "getAll",
-          payload: {
-            page: 1,
-            pageSize: 50,
-            search: target,
-            status: "all",
-          },
-        },
-        { resource: "users", action: "getAll" },
-        "access/sheet-user-by-email"
-      );
-
-      return findSheetUserByEmail(
-        extractUserRows(payload).map(mapSheetUserLite),
-        target
-      );
-    },
-    { ttlMs: ACCESS_SHEET_USER_TTL_MS }
-  );
-}
-
-export async function loadSheetUserForAccessById(
-  id: string
-): Promise<
-  Pick<User, "id" | "role" | "status" | "facility" | "name" | "email"> | null
-> {
-  const target = id.trim().toUpperCase();
-  if (!/^USR-\d{4,}$/.test(target)) return null;
-  const key = stableRequestKey(`${CacheNamespaces.accessSheetUserByEmail}:id`, {
-    id: target,
-  });
-  return sharedRequest(
-    key,
-    async () => {
-      const payload = await postToAppsScriptData(
-        {
-          resource: "users",
-          action: "getAll",
-          payload: {
-            page: 1,
-            pageSize: 500,
-            search: target,
-            status: "all",
-          },
-        },
-        { resource: "users", action: "getAll" },
-        "access/sheet-user-by-id"
-      );
-      const user = extractUserRows(payload)
-        .map(mapSheetUserLite)
-        .find((candidate) => candidate.id.trim().toUpperCase() === target);
-      return user?.id.trim().toUpperCase() === target ? user : null;
-    },
-    { ttlMs: ACCESS_SHEET_USER_TTL_MS }
-  );
-}
-
-async function loadExplicitFmIdentityLink(
-  session: PlatformSession
-): Promise<FmIdentityLink | null> {
-  const organisationId = session.organisation?.id ?? session.profile.organisationId;
-  if (!organisationId) return null;
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
-  const { data, error } = await supabase
-    .from("operational_identity_links")
-    .select("external_identity_id, status")
-    .eq("organisation_id", organisationId)
-    .eq("profile_id", session.userId)
-    .eq("identity_domain", "facility_management")
-    .maybeSingle();
-  if (error) {
-    // A missing table during rollout behaves as no link, preserving the legacy path.
-    if (error.code === "42P01" || error.code === "PGRST205") return null;
-    throw error;
-  }
-  if (!data) return null;
-  return {
-    externalIdentityId: String(data.external_identity_id),
-    status: String(data.status) as FmIdentityLink["status"],
-  };
-}
-
-/** @deprecated Prefer loadSheetUserForAccessByEmail — kept for diagnostics. */
-export async function loadSheetUsersForAccess(): Promise<
-  Array<Pick<User, "id" | "role" | "status" | "facility" | "name" | "email">>
-> {
-  const payload = await postToAppsScriptData(
-    {
-      resource: "users",
-      action: "getAll",
-      payload: { page: 1, pageSize: 500, search: "", status: "all" },
-    },
-    { resource: "users", action: "getAll" },
-    "access/sheet-users"
-  );
-  return extractUserRows(payload).map(mapSheetUserLite);
-}
-
 export async function resolveOperatingAccess(
   session: PlatformSession
 ): Promise<OperatingAccess> {
   const identity = toSessionIdentity(session);
+  const organisationId =
+    session.organisation?.id ?? session.profile.organisationId ?? null;
+  const profileId = session.profile.id;
+  const isSuperAdmin = isPlatformSuperAdminFromSlugs(session.roleSlugs);
+
   if (session.profile.status !== "active") {
     const inactive =
       session.profile.status === "inactive" ||
       session.profile.status === "suspended";
-    return {
-      ...resolveOperatingAccessFromSheetUser(identity.email, identity.name, null),
-      unassigned: true,
-      inactive,
-      capabilities: [],
+    return resolveOperatingAccessFromGrants({
+      email: identity.email,
+      name: identity.name,
+      role: null,
       roleLabel:
         session.profile.status === "suspended"
           ? "Suspended"
@@ -230,72 +136,68 @@ export async function resolveOperatingAccess(
         session.profile.status === "suspended"
           ? session.profile.status
           : "unknown",
-    };
+      unassigned: true,
+      inactive,
+      capabilities: [],
+      profileId,
+    });
   }
 
-  let sheetUser: ReturnType<typeof findSheetUserByEmail> = null;
-  let identitySource: OperatingAccess["operationalIdentitySource"];
-  let operationalUserId: string | null = null;
-  let lookupFailed = false;
-  try {
-    const explicitLink = await loadExplicitFmIdentityLink(session);
-    const resolution = await resolveFmOperationalIdentity({
-      explicitLink,
+  if (!organisationId || !profileId) {
+    const base = resolveOperatingAccessFromGrants({
       email: identity.email,
-      loadById: loadSheetUserForAccessById,
-      loadByEmail: loadSheetUserForAccessByEmail,
+      name: identity.name,
+      role: null,
+      unassigned: true,
+      capabilities: [],
+      profileId,
     });
-    sheetUser = resolution.user;
-    operationalUserId = resolution.operationalUserId;
-    if (resolution.source !== "none") identitySource = resolution.source;
-    if (
-      resolution.source === "explicit_link" &&
-      (resolution.enrichment === "unavailable" ||
-        resolution.enrichment === "not_found")
-    ) {
-      lookupFailed = true;
-    }
+    return applyPlatformSuperAdmin(base, isSuperAdmin);
+  }
+
+  let capabilities: AccessCapability[] = [];
+  let role: V1OperatingRole | null = null;
+  let facility = "";
+  let assignmentStatus: OperatingAccess["status"] = "unknown";
+  try {
+    capabilities = await loadExplicitFmGrants(organisationId, profileId);
   } catch (error) {
-    lookupFailed = true;
     console.warn(
-      "[access] sheet user lookup failed; denying operating capabilities until register is reachable",
+      "[access] platform capability grants unavailable; denying FM business capabilities",
+      error
+    );
+    capabilities = [];
+  }
+
+  try {
+    const context = await loadActiveAssignmentContext(
+      organisationId,
+      profileId
+    );
+    role = context.role;
+    facility = context.facility;
+    assignmentStatus = context.status;
+  } catch (error) {
+    console.warn(
+      "[access] facility assignment context unavailable; continuing with grants only",
       error
     );
   }
 
-  // Fail closed on lookup failure — do not elevate to legacy full powers.
-  // Super Admin override is still applied below when session slugs qualify.
-  const base = lookupFailed
-    ? {
-        ...resolveOperatingAccessFromSheetUser(
-          identity.email,
-          identity.name,
-          null
-        ),
-        unassigned: false,
-        inactive: false,
-        capabilities: [] as ReturnType<
-          typeof resolveOperatingAccessFromSheetUser
-        >["capabilities"],
-        roleLabel: "Unavailable",
-        status: "unknown" as const,
-      }
-    : resolveOperatingAccessFromSheetUser(
-        identity.email,
-        identity.name,
-        sheetUser
-      );
+  const base = resolveOperatingAccessFromGrants({
+    email: identity.email,
+    name: identity.name,
+    role,
+    roleLabel: role ? v1OperatingRoleLabel(role) : "Unassigned",
+    status: assignmentStatus,
+    facility,
+    inactive: isInactiveUserStatus(session.profile.status),
+    unassigned: role == null,
+    capabilities,
+    profileId,
+  });
 
-  const isSuperAdmin = isPlatformSuperAdminFromSlugs(session.roleSlugs);
-  const resolved = {
-    ...base,
-    ...(operationalUserId ? { sheetUserId: operationalUserId } : {}),
-    ...(identitySource ? { operationalIdentitySource: identitySource } : {}),
-  };
-  return applyPlatformSuperAdmin(
-    resolved,
-    isSuperAdmin
-  );
+  return applyPlatformSuperAdmin(base, isSuperAdmin);
 }
 
 export async function getOperatingAccess(): Promise<OperatingAccess | null> {

@@ -39,8 +39,6 @@ export type AccessVisibility = {
   isExecutiveOversight: boolean;
 };
 
-const ALL_SURFACES: readonly VisibilitySurface[] = VISIBILITY_SURFACES;
-
 /** Href prefix → surface for nav filtering. */
 const HREF_SURFACE_RULES: Array<{ prefix: string; surface: VisibilitySurface }> =
   [
@@ -85,39 +83,17 @@ export function surfaceForHref(href: string): VisibilitySurface | null {
 function surfacesFromCapabilities(
   access: Pick<OperatingAccess, "capabilities" | "role" | "unassigned" | "hasAdminOverride">
 ): Set<VisibilitySurface> {
-  // Super Admin override / Facility Manager: full FM surfaces.
-  // Unresolved People identity must not inherit FM chrome.
-  if (access.hasAdminOverride || access.role === "facility_manager") {
-    return new Set(ALL_SURFACES);
-  }
-
-  if (access.role === "executive") {
-    // Broad VIEW / DRILL-DOWN — no People admin, no Intelligence product required
-    return new Set<VisibilitySurface>([
-      "home",
-      "operations",
-      "approvals",
-      "finance",
-      "requests",
-      "organise",
-      "reports",
-    ]);
-  }
-
-  if (access.role === "ncc_client") {
-    // Requests portal only — isolate from internal FM / Finance surfaces
-    return new Set<VisibilitySurface>(["requests"]);
-  }
-
   const surfaces = new Set<VisibilitySurface>(["home"]);
 
   if (accessCan(access, "ops.view")) {
     surfaces.add("operations");
     surfaces.add("approvals");
     surfaces.add("organise");
+    surfaces.add("reports");
   }
   if (accessCan(access, "finance.view")) {
     surfaces.add("finance");
+    surfaces.add("reports");
   }
   if (accessCan(access, "users.view")) {
     surfaces.add("users");
@@ -125,17 +101,7 @@ function surfacesFromCapabilities(
   if (accessCan(access, "requests.view")) {
     surfaces.add("requests");
   }
-
-  // FM Staff / Finance / Liaison with ops.view also get reports drill-down
-  if (accessCan(access, "ops.view") || accessCan(access, "finance.view")) {
-    surfaces.add("reports");
-  }
-
-  // Intelligence remains FM/SA-oriented (full surfaces); staff with ops can open if linked
-  if (
-    access.role === "fm_staff" ||
-    accessCan(access, "ops.create")
-  ) {
+  if (accessCan(access, "ops.create") || accessCan(access, "ops.edit")) {
     surfaces.add("intelligence");
   }
 

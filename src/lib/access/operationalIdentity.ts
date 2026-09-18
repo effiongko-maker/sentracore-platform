@@ -1,5 +1,11 @@
 import type { User } from "@/modules/users/types";
 
+/**
+ * FM identity-link helper. Not used for FM runtime authorization after Phase 2A.
+ * Transitional consumers may still map profile → historical Sheet assignee IDs
+ * for Work lookup until that domain cuts over.
+ */
+
 export type FmIdentityLink = {
   externalIdentityId: string;
   status: "active" | "inactive";

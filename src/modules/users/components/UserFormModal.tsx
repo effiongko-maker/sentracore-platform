@@ -5,7 +5,6 @@ import { Modal } from "@/components/modals/Modal";
 import { Button } from "@/components/ui/Button";
 import {
   FormField,
-  inputClassName,
   selectClassName,
 } from "@/components/forms/FormField";
 import { useToast } from "@/components/ui/Toast";
@@ -16,18 +15,19 @@ import {
   parseV1OperatingRole,
   v1OperatingRoleLabel,
 } from "@/lib/access";
-import {
-  DEFAULT_USER_SPECIALIZATION,
-  USER_MANAGE_STATUSES,
-} from "../constants";
+import { USER_MANAGE_STATUSES } from "../constants";
 import { UserService } from "../services/UserService";
 import {
   formatWorkload,
   labelize,
-  resolveFacilityDisplayName,
   toCreateFormValues,
 } from "../utils";
-import type { CreateUserInput, User, UserStatus } from "../types";
+import type {
+  CreateUserInput,
+  EligibleProfile,
+  User,
+  UserStatus,
+} from "../types";
 
 interface UserFormModalProps {
   open: boolean;
@@ -45,8 +45,15 @@ export function UserFormModal({
   onSaved,
 }: UserFormModalProps) {
   const { toast } = useToast();
-  const { facilities, loading: facilitiesLoading } = useFacilityOptions(open);
+  const {
+    facilities,
+    loading: facilitiesLoading,
+    error: facilitiesError,
+  } = useFacilityOptions(open);
   const [form, setForm] = useState<CreateUserInput>(toCreateFormValues());
+  const [eligible, setEligible] = useState<EligibleProfile[]>([]);
+  const [eligibleError, setEligibleError] = useState<string | null>(null);
+  const [eligibleLoading, setEligibleLoading] = useState(false);
   const [errors, setErrors] = useState<
     Partial<Record<keyof CreateUserInput, string>>
   >({});
@@ -60,22 +67,57 @@ export function UserFormModal({
   }, [open, mode, user]);
 
   useEffect(() => {
+    if (!open || mode !== "create") return;
+    let cancelled = false;
+    setEligibleLoading(true);
+    setEligibleError(null);
+    void UserService.listEligibleProfiles()
+      .then((rows) => {
+        if (cancelled) return;
+        setEligible(rows);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setEligible([]);
+        setEligibleError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load eligible people."
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setEligibleLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, mode]);
+
+  useEffect(() => {
     if (!open || facilities.length === 0) return;
     setForm((current) => {
+      if (current.facilityId) return current;
       if (current.facility.trim()) {
-        const resolved = resolveFacilityDisplayName(
-          current.facility,
-          facilities
+        const match = facilities.find(
+          (item) =>
+            item.id === current.facility || item.name === current.facility
         );
-        if (!resolved || resolved === current.facility) return current;
-        return { ...current, facility: resolved === "-" ? "" : resolved };
+        if (match) {
+          return { ...current, facility: match.name, facilityId: match.id };
+        }
+        return current;
       }
       if (mode === "create") {
         const preferred =
           facilities.find((item) => item.name === V1_DEPLOYED_FACILITY_NAME) ??
-          facilities.find((item) => item.id === "FAC-0001") ??
           facilities[0];
-        if (preferred) return { ...current, facility: preferred.name };
+        if (preferred) {
+          return {
+            ...current,
+            facility: preferred.name,
+            facilityId: preferred.id,
+          };
+        }
       }
       return current;
     });
@@ -91,16 +133,16 @@ export function UserFormModal({
 
   function validate() {
     const next: Partial<Record<keyof CreateUserInput, string>> = {};
-    if (!form.name.trim()) next.name = "Full name is required";
-    if (!form.email.trim()) next.email = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      next.email = "Enter a valid email address";
+    if (mode === "create" && !form.profileId?.trim()) {
+      next.profileId = "Select an existing platform person";
     }
-    if (!form.role.trim()) next.role = "Role is required";
+    if (!form.role.trim()) next.role = "Operating role is required";
     else if (!parseV1OperatingRole(form.role)) {
       next.role = "Select a V1 operating role";
     }
-    if (!form.facility.trim()) next.facility = "Facility is required";
+    if (!form.facilityId?.trim() && !form.facility.trim()) {
+      next.facility = "Facility is required";
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -108,26 +150,32 @@ export function UserFormModal({
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (submitLock.current || saving) return;
+    if (facilitiesError) {
+      toast({
+        type: "error",
+        title: "Facilities unavailable",
+        description: facilitiesError,
+      });
+      return;
+    }
     if (!validate()) return;
 
     submitLock.current = true;
     setSaving(true);
     try {
       const roleSlug = parseV1OperatingRole(form.role);
-      const facilityName = resolveFacilityDisplayName(
-        form.facility,
-        facilities
+      const selectedFacility = facilities.find(
+        (item) =>
+          item.id === form.facilityId || item.name === form.facility
       );
-
       const payload: CreateUserInput = {
         ...form,
-        name: form.name.trim(),
-        email: form.email.trim(),
-        phone: form.phone?.trim() || undefined,
+        profileId: form.profileId,
         role: roleSlug ? v1OperatingRoleLabel(roleSlug) : form.role.trim(),
-        specialization:
-          form.specialization.trim() || DEFAULT_USER_SPECIALIZATION,
-        facility: facilityName === "-" ? "" : facilityName,
+        facility: selectedFacility?.name ?? form.facility,
+        facilityId: selectedFacility?.id ?? form.facilityId ?? form.facility,
+        assignmentId: user?.assignmentId,
+        status: form.status,
       };
 
       if (mode === "edit" && user) {
@@ -135,41 +183,17 @@ export function UserFormModal({
         await onSaved?.();
         toast({
           type: "success",
-          title: "User updated",
-          description: `${payload.name}'s profile has been saved.`,
+          title: "Assignment updated",
+          description: `${user.name}'s facility assignment has been saved.`,
         });
       } else {
+        const selected = eligible.find((row) => row.id === payload.profileId);
         await UserService.createUser(payload);
-
-
-const inviteResponse = await fetch("/api/admin/invite-user", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    email: payload.email,
-    fullName: payload.name,
-    firstName: payload.name.split(/\s+/)[0] || undefined,
-    lastName: payload.name.split(/\s+/).slice(1).join(" ") || undefined,
-  }),
-});
-
-const inviteResult = (await inviteResponse.json()) as {
-  success?: boolean;
-  message?: string;
-};
-
-if (!inviteResponse.ok || !inviteResult.success) {
-  throw new Error(
-    inviteResult.message || "User was created, but the invitation could not be sent."
-  );
-}
         await onSaved?.();
         toast({
           type: "success",
-          title: "User created",
-          description: `${payload.name} has been added to the directory.`,
+          title: "Person assigned",
+          description: `${selected?.name ?? "Person"} is assigned to ${payload.facility}.`,
         });
       }
 
@@ -178,9 +202,9 @@ if (!inviteResponse.ok || !inviteResult.success) {
       toast({
         type: "error",
         title:
-  mode === "edit"
-    ? "Unable to update user"
-    : "Unable to create user",
+          mode === "edit"
+            ? "Unable to update assignment"
+            : "Unable to assign person",
         description:
           err instanceof Error ? err.message : "Please try again in a moment.",
       });
@@ -191,10 +215,11 @@ if (!inviteResponse.ok || !inviteResult.success) {
   }
 
   const isEdit = mode === "edit";
-  const facilitySelectValue = form.facility.trim();
+  const facilitySelectValue = form.facilityId || form.facility.trim();
   const roleSelectValue =
     parseV1OperatingRole(form.role) ??
     (form.role.trim() ? "__legacy__" : "");
+  const selectedPerson = eligible.find((row) => row.id === form.profileId);
 
   return (
     <Modal
@@ -202,11 +227,11 @@ if (!inviteResponse.ok || !inviteResult.success) {
       onClose={() => {
         if (!saving) onClose();
       }}
-      title={isEdit ? "Edit user" : "New user"}
+      title={isEdit ? "Edit assignment" : "Assign person"}
       description={
         isEdit
-          ? "Update name, role, status, and facility assignment."
-          : "Add a person with name, email, role, status, and facility."
+          ? "Update facility, operating role, and assignment status. This does not change their SentraCore account."
+          : "Assign an existing platform person to a facility. New accounts are invited from Admin Console."
       }
       size="lg"
       footer={
@@ -214,8 +239,13 @@ if (!inviteResponse.ok || !inviteResult.success) {
           <Button variant="outline" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button type="submit" form="user-form" loading={saving} disabled={saving}>
-            {isEdit ? "Save changes" : "Create user"}
+          <Button
+            type="submit"
+            form="user-form"
+            loading={saving}
+            disabled={saving || Boolean(facilitiesError) || Boolean(eligibleError)}
+          >
+            {isEdit ? "Save assignment" : "Assign person"}
           </Button>
         </>
       }
@@ -225,41 +255,54 @@ if (!inviteResponse.ok || !inviteResult.success) {
         onSubmit={handleSubmit}
         className="grid gap-4 sm:grid-cols-2"
       >
-        <FormField
-          label="Full name"
-          htmlFor="user-name"
-          required
-          error={errors.name}
-          className="sm:col-span-2"
-        >
-          <input
-            id="user-name"
-            className={inputClassName}
-            placeholder="e.g. Amara Okonkwo"
-            value={form.name}
-            onChange={(event) => updateField("name", event.target.value)}
-          />
-        </FormField>
+        {isEdit && user ? (
+          <div className="sm:col-span-2 rounded-xl border border-border/80 bg-slate-50/80 px-4 py-3">
+            <p className="text-sm font-medium text-foreground">{user.name}</p>
+            <p className="mt-0.5 text-sm text-muted">{user.email}</p>
+          </div>
+        ) : (
+          <FormField
+            label="Person"
+            htmlFor="user-profile"
+            required
+            error={errors.profileId || eligibleError || undefined}
+            className="sm:col-span-2"
+          >
+            <select
+              id="user-profile"
+              className={selectClassName}
+              value={form.profileId ?? ""}
+              onChange={(event) => {
+                const next = eligible.find((row) => row.id === event.target.value);
+                updateField("profileId", event.target.value);
+                updateField("name", next?.name ?? "");
+                updateField("email", next?.email ?? "");
+              }}
+              disabled={eligibleLoading}
+            >
+              <option value="">
+                {eligibleLoading
+                  ? "Loading people…"
+                  : eligibleError
+                    ? "People directory unavailable"
+                    : "Select an existing person…"}
+              </option>
+              {eligible.map((row) => (
+                <option key={row.id} value={row.id}>
+                  {row.name} ({row.email})
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-muted">
+              {selectedPerson
+                ? "This assigns an existing SentraCore person. It does not send an invitation."
+                : "Invite new people from Admin Console, then assign them here."}
+            </p>
+          </FormField>
+        )}
 
         <FormField
-          label="Email"
-          htmlFor="user-email"
-          required
-          error={errors.email}
-          className="sm:col-span-2"
-        >
-          <input
-            id="user-email"
-            type="email"
-            className={inputClassName}
-            placeholder="name@company.com"
-            value={form.email}
-            onChange={(event) => updateField("email", event.target.value)}
-          />
-        </FormField>
-
-        <FormField
-          label="Role"
+          label="Operating role"
           htmlFor="user-role"
           required
           error={errors.role}
@@ -276,7 +319,7 @@ if (!inviteResponse.ok || !inviteResult.success) {
               );
             }}
           >
-            <option value="">Select role…</option>
+            <option value="">Select operating role…</option>
             {roleSelectValue === "__legacy__" ? (
               <option value="" disabled>
                 Current: {form.role} (choose a V1 role)
@@ -288,18 +331,19 @@ if (!inviteResponse.ok || !inviteResult.success) {
               </option>
             ))}
           </select>
+          <p className="mt-1 text-xs text-muted">
+            Operating context only. Permissions come from platform capability grants.
+          </p>
         </FormField>
 
-        <FormField label="Status" htmlFor="user-status" required>
+        <FormField label="Assignment status" htmlFor="user-status" required>
           <select
             id="user-status"
             className={selectClassName}
             value={
               USER_MANAGE_STATUSES.includes(form.status)
                 ? form.status
-                : form.status === "suspended" || form.status === "pending"
-                  ? "inactive"
-                  : "active"
+                : "active"
             }
             onChange={(event) =>
               updateField("status", event.target.value as UserStatus)
@@ -317,27 +361,35 @@ if (!inviteResponse.ok || !inviteResult.success) {
           label="Facility"
           htmlFor="user-facility"
           required
-          error={errors.facility}
+          error={errors.facility || facilitiesError || undefined}
           className="sm:col-span-2"
         >
           <select
             id="user-facility"
             className={selectClassName}
             value={facilitySelectValue}
-            onChange={(event) =>
-              updateField("facility", event.target.value)
-            }
-            disabled={facilitiesLoading}
+            onChange={(event) => {
+              const match = facilities.find(
+                (item) =>
+                  item.id === event.target.value ||
+                  item.name === event.target.value
+              );
+              updateField("facility", match?.name ?? event.target.value);
+              updateField("facilityId", match?.id ?? event.target.value);
+            }}
+            disabled={facilitiesLoading || Boolean(facilitiesError)}
           >
             <option value="">
-              {facilitiesLoading ? "Loading facilities…" : "Select facility…"}
+              {facilitiesLoading
+                ? "Loading facilities…"
+                : facilitiesError
+                  ? "Facilities unavailable"
+                  : facilities.length === 0
+                    ? "No facilities configured"
+                    : "Select facility…"}
             </option>
-            {facilitySelectValue &&
-            !facilities.some((item) => item.name === facilitySelectValue) ? (
-              <option value={facilitySelectValue}>{facilitySelectValue}</option>
-            ) : null}
             {facilities.map((item) => (
-              <option key={item.id} value={item.name}>
+              <option key={item.id} value={item.id}>
                 {item.name}
               </option>
             ))}
@@ -350,11 +402,12 @@ if (!inviteResponse.ok || !inviteResult.success) {
               Current Workload
             </p>
             <p className="mt-1 text-sm text-foreground">
-              {formatWorkload(user.activeWorkOrders)}
+              {formatWorkload(user.activeWorkOrders, user.workloadAvailable !== false)}
             </p>
             <p className="mt-1 text-xs text-muted">
-              Derived live from active Work Orders assigned to this person
-              (USERS Current Workload). Not editable.
+              {user.workloadAvailable === false
+                ? "Workload cannot be derived until Work uses platform profile identity."
+                : "Derived from active Work Orders assigned to this person. Not editable."}
             </p>
           </div>
         ) : null}

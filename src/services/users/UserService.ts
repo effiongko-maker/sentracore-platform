@@ -2,6 +2,7 @@ import type { PaginatedResult } from "@/types";
 import type {
   CreateUserInput,
   CurrentUser,
+  EligibleProfile,
   UpdateUserInput,
   User,
   UserListParams,
@@ -26,7 +27,7 @@ import {
 } from "@/lib/operational/workload/loadBoundedWorkloadSummary";
 import { queryUsersPage } from "./queryUsers";
 
-export const USER_REPOSITORY_BUILD = "2026-08-25-users-header-v3";
+export const USER_REPOSITORY_BUILD = "2026-09-18-fm-people-supabase";
 
 /** Raw row shape from the Apps Script users API. */
 type RemoteUser = Record<string, unknown>;
@@ -60,6 +61,12 @@ function mapRemoteUser(raw: RemoteUser): User {
   const dateAdded = String(
     pickField(raw, "createdAt", "lastActive", "Date Added") ?? ""
   );
+  const workloadAvailable =
+    raw.workloadAvailable === false
+      ? false
+      : raw.workloadAvailable === true
+        ? true
+        : false;
 
   return {
     id,
@@ -76,10 +83,14 @@ function mapRemoteUser(raw: RemoteUser): User {
     facility: String(
       pickField(raw, "facility", "Facility Assigned") ?? ""
     ),
-    // Sheet "Current Workload" is not authoritative — derived in list/get via
-    // OperationalWorkloadService (active WOs by assignedToUserId).
+    facilityId: raw.facilityId != null ? String(raw.facilityId) : undefined,
+    assignmentId:
+      raw.assignmentId != null ? String(raw.assignmentId) : undefined,
     activeWorkOrders: 0,
+    workloadAvailable,
     status: normalizeUserStatus(pickField(raw, "status", "Status")),
+    profileStatus:
+      raw.profileStatus != null ? String(raw.profileStatus) : undefined,
     avatarUrl: raw.avatarUrl ? String(raw.avatarUrl) : undefined,
     lastActive: dateAdded,
     createdAt: dateAdded,
@@ -248,19 +259,22 @@ async function assertUserPersisted(
   intended: CreateUserInput | UpdateUserInput,
   actual: User
 ): Promise<void> {
-  const checks: Array<[keyof CreateUserInput, string | undefined]> = [
-    ["name", intended.name],
-    ["email", intended.email],
-    ["phone", intended.phone],
-    ["role", intended.role],
-    ["specialization", intended.specialization],
-    ["facility", intended.facility],
-    ["status", intended.status],
+  const checks: Array<[string, string | undefined, string]> = [
+    ["role", intended.role, String(actual.role ?? "")],
+    ["status", intended.status, String(actual.status ?? "")],
   ];
+  if (intended.facilityId && actual.facilityId) {
+    checks.push(["facilityId", intended.facilityId, actual.facilityId]);
+  } else if (intended.facility) {
+    const expected = intended.facility.toLowerCase();
+    const actualFacility = String(actual.facility ?? "").toLowerCase();
+    if (expected && !actualFacility.includes(expected) && actual.facilityId !== intended.facility) {
+      throw fieldMismatch("facility", intended.facility, actual.facility);
+    }
+  }
 
-  for (const [field, expected] of checks) {
+  for (const [field, expected, actualValue] of checks) {
     if (expected == null) continue;
-    const actualValue = String(actual[field as keyof User] ?? "");
     if (normalizeText(expected) !== normalizeText(actualValue)) {
       throw fieldMismatch(field, String(expected), actualValue);
     }
@@ -327,9 +341,17 @@ export const UserService = {
     return sharedRequest(key, () => fetchUsersPage(params));
   },
 
-  /** Bounded workload overlay for visible user rows (lazy — not on list critical path). */
+  /** Workload overlay — skipped when the directory cannot prove Sheet WO identity. */
   async enrichUsersWorkload(users: User[]): Promise<User[]> {
     if (users.length === 0) return users;
+    if (users.every((row) => row.workloadAvailable === false)) {
+      return users.map((row) => ({
+        ...row,
+        activeWorkOrders: 0,
+        workloadAvailable: false,
+        workloadWorkOrderIds: undefined,
+      }));
+    }
     const userIds = users.map((row) => row.id).filter(Boolean);
     const summary = await loadBoundedWorkloadSummary({ userIds });
     return applyUserWorkloadSummary(users, summary);
@@ -369,6 +391,19 @@ export const UserService = {
     return loadAllUsers();
   },
 
+  async listEligibleProfiles(): Promise<EligibleProfile[]> {
+    const response = await apiClient.post<unknown>("/users", {
+      resource: "users",
+      action: "listEligible",
+      payload: {},
+    });
+    const payload = response.data;
+    if (Array.isArray(payload)) {
+      return payload as EligibleProfile[];
+    }
+    return [];
+  },
+
   async getUser(id: string): Promise<User | null> {
     try {
       const response = await apiClient.post<unknown>("/users", {
@@ -387,54 +422,34 @@ export const UserService = {
   },
 
   async createUser(input: CreateUserInput): Promise<User> {
-    const clientRequestId = `usr-create-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    console.info("[UserService.createUser] dispatch", {
-      clientRequestId,
-      email: input.email,
-      name: input.name,
-    });
-
+    const profileId = input.profileId?.trim();
+    if (!profileId) {
+      throw new ApiError("Select an existing platform person to assign.", 400);
+    }
     const response = await apiClient.post<unknown>("/users", {
       resource: "users",
       action: "create",
-      payload: { ...input, _clientRequestId: clientRequestId },
+      payload: {
+        profileId,
+        facility: input.facilityId || input.facility,
+        facilityId: input.facilityId || input.facility,
+        role: input.role,
+        status: input.status,
+      },
     });
     if (response.data == null) {
-      throw new ApiError("User create returned no record.", 502);
+      throw new ApiError("Assignment create returned no record.", 502);
     }
 
-    const raw = response.data as RemoteUser;
-    const writeMeta = raw._write as
-      | {
-          buildMarker?: string;
-          clientRequestId?: string;
-          createInvocationCount?: number;
-          generatedId?: string;
-        }
-      | undefined;
-    if (!writeMeta || writeMeta.buildMarker !== USER_REPOSITORY_BUILD) {
-      throw new ApiError(
-        `User create used stale Apps Script (build ${writeMeta?.buildMarker ?? "missing"}; need ${USER_REPOSITORY_BUILD}). Redeploy UserRepository.gs before creating users.`,
-        502
-      );
-    }
-
-    console.info("[UserService.createUser] confirmed", {
-      clientRequestId,
-      responseClientRequestId: writeMeta.clientRequestId,
-      generatedId: writeMeta.generatedId,
-      createInvocationCount: writeMeta.createInvocationCount,
-    });
-
-    const created = mapRemoteUser(raw);
+    const created = mapRemoteUser(response.data as RemoteUser);
     if (!created.id) {
-      throw new ApiError("User create returned a record without an id.", 502);
+      throw new ApiError("Assignment create returned a record without an id.", 502);
     }
 
     const verified = await UserService.getUser(created.id);
     if (!verified) {
       throw new ApiError(
-        "User was created but could not be re-read from storage.",
+        "Assignment was created but could not be re-read from storage.",
         502
       );
     }
@@ -447,7 +462,14 @@ export const UserService = {
     const response = await apiClient.post<unknown>("/users", {
       resource: "users",
       action: "update",
-      payload: { id, ...input },
+      payload: {
+        id,
+        assignmentId: input.assignmentId,
+        facility: input.facilityId || input.facility,
+        facilityId: input.facilityId || input.facility,
+        role: input.role,
+        status: input.status,
+      },
     });
     if (response.data == null) {
       throw new ApiError("User update returned no record.", 502);
@@ -465,7 +487,7 @@ export const UserService = {
     return verified;
   },
 
-  /** Soft-deactivate only — users are never deleted. */
+  /** Deactivate FM facility assignment(s). Does not offboard the platform profile. */
   async deactivateUser(id: string): Promise<User> {
     await apiClient.post<unknown>("/users", {
       resource: "users",

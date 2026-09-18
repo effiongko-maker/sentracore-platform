@@ -80,15 +80,15 @@ export function UsersPage() {
       await deactivateUser(modal.user.id);
       toast({
         type: "success",
-        title: "User deactivated",
-        description: `${modal.user.name} is now inactive.`,
+        title: "Assignment deactivated",
+        description: `${modal.user.name} is no longer assigned at this facility. Their SentraCore account is unchanged.`,
       });
       setModal({ type: "closed" });
       reload();
     } catch (err) {
       toast({
         type: "error",
-        title: "Unable to deactivate user",
+        title: "Unable to deactivate assignment",
         description:
           err instanceof Error ? err.message : "Please try again in a moment.",
       });
@@ -102,12 +102,12 @@ export function UsersPage() {
       <ModeFrame mode="organise">
         <ExploreHeader
           title="People"
-          description="People across the operation — roles, access, and facility relationships."
+          description="Operating directory — platform people, facility assignments, and roles. Permissions are granted in Admin Console."
         />
         <EmptyState
           icon={Users}
           title="Access restricted"
-          description="Your role cannot view the People register."
+          description="Your role cannot view the People directory."
         />
       </ModeFrame>
     );
@@ -117,7 +117,7 @@ export function UsersPage() {
     <ModeFrame mode="organise">
       <ExploreHeader
         title="People"
-        description="People across the operation — roles, access, and facility relationships."
+        description="Operating directory — platform people, facility assignments, and roles. Permissions are granted in Admin Console."
         territoryNote={`${loading ? "—" : total} people in view`}
       />
 
@@ -203,13 +203,13 @@ export function UsersPage() {
         open={modal.type === "deactivate" && canManage}
         onClose={() => setModal({ type: "closed" })}
         onConfirm={handleDeactivate}
-        title="Deactivate user?"
+        title="Deactivate assignment?"
         description={
           modal.type === "deactivate"
-            ? `${modal.user.name} will lose access until reactivated. Users are never deleted.`
+            ? `${modal.user.name} will no longer operate at the assigned facility. This does not disable their SentraCore account.`
             : undefined
         }
-        confirmLabel="Deactivate"
+        confirmLabel="Deactivate assignment"
         danger
         loading={deactivating}
       />

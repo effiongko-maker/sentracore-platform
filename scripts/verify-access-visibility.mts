@@ -13,6 +13,7 @@ import {
   canSeeHref,
   canSeeSurface,
   capabilitiesForRole,
+  parseV1OperatingRole,
   resolveAccessVisibility,
   resolveOperatingAccessFromSheetUser,
   type OperatingAccess,
@@ -31,7 +32,8 @@ function sheetAccess(
   role: string,
   email = "user@example.com"
 ): OperatingAccess {
-  return resolveOperatingAccessFromSheetUser(email, "User", {
+  const parsed = parseV1OperatingRole(role);
+  const base = resolveOperatingAccessFromSheetUser(email, "User", {
     id: "USR-1",
     name: "User",
     email,
@@ -39,6 +41,10 @@ function sheetAccess(
     status: "active",
     facility: "NCC Annex",
   });
+  return {
+    ...base,
+    capabilities: parsed ? [...capabilitiesForRole(parsed)] : [],
+  };
 }
 
 function expectSurfaces(
@@ -58,7 +64,18 @@ function expectSurfaces(
 
 function main() {
   // —— Super Admin: full visibility; distinct from FM ——
-  const nccInactive = sheetAccess("NCC / Client", "sa@example.com");
+  const nccInactive = resolveOperatingAccessFromSheetUser(
+    "sa@example.com",
+    "User",
+    {
+      id: "USR-1",
+      name: "User",
+      email: "sa@example.com",
+      role: "NCC / Client",
+      status: "inactive",
+      facility: "NCC Annex",
+    }
+  );
   const sa = applyPlatformSuperAdmin(
     { ...nccInactive, inactive: true, capabilities: [] },
     true
@@ -68,10 +85,11 @@ function main() {
   expectSurfaces(
     "Super Admin",
     sa,
-    ["home", "operations", "finance", "users", "requests", "approvals"],
-    []
+    ["home", "users"],
+    ["operations", "finance", "approvals"]
   );
-  assert(accessCan(sa, "finance.pay"), "SA can mutate via override");
+  assert(!accessCan(sa, "finance.pay"), "SA does not mutate FM finance via override");
+  assert(!accessCan(sa, "ops.view"), "SA does not get ops.view via override");
   assert(!accessCan(sa, "fm.authorize_protected"), "SA ≠ FM protected");
 
   // —— Facility Manager ——
@@ -127,7 +145,7 @@ function main() {
     "NCC",
     ncc,
     ["requests"],
-    ["finance", "operations", "users", "approvals", "organise", "home"]
+    ["finance", "operations", "users", "approvals", "organise"]
   );
   assert(canSeeHref(nccVis, "/occupant-requests"), "NCC requests href");
   assert(!canSeeHref(nccVis, "/finance"), "NCC no finance href");

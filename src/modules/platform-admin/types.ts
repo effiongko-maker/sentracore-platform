@@ -19,12 +19,26 @@ export type PlatformIamAuditAction = (typeof PLATFORM_IAM_AUDIT_ACTIONS)[number]
 
 /**
  * Platform-domain capabilities administrable through the control plane.
- * Finance capabilities are intentionally absent.
+ * Includes FM AccessCapability strings. Platform-finance company grants stay separate.
  */
 export const PLATFORM_ADMINISTRABLE_CAPABILITIES = [
   ECC_CAPABILITIES.view,
   COMMAND_CENTRE_CAPABILITIES.view,
   COMMAND_CENTRE_CAPABILITIES.decide,
+  "ops.view",
+  "ops.create",
+  "ops.edit",
+  "ops.submit",
+  "users.view",
+  "users.manage",
+  "requests.view",
+  "finance.view",
+  "finance.create",
+  "finance.submit",
+  "finance.authorize",
+  "finance.pay",
+  "approvals.manage",
+  "fm.authorize_protected",
 ] as const;
 
 export type PlatformAdministrableCapability =
@@ -134,6 +148,7 @@ export type OffboardResult = {
     financeCompanyAccess: number;
     financeFinancialAccountAccess: number;
     operationalIdentityLinksInactivated: number;
+    fmFacilityAssignmentsInactivated: number;
   };
 };
 

@@ -12,6 +12,7 @@ import {
   accessCan,
   applyPlatformSuperAdmin,
   resolveOperatingAccessFromSheetUser,
+  type AccessCapability,
 } from "../src/lib/access";
 import {
   filterFacilityRows,
@@ -195,7 +196,7 @@ function runStatic(results: CheckResult[]) {
 
     const unassigned = resolveOperatingAccessFromSheetUser("sa@x.com", "SA", null);
     const saOnly = applyPlatformSuperAdmin(unassigned, true);
-    assert(accessCan(saOnly, "ops.view"), "existing SA override still grants ops.view at app gate");
+    assert(!accessCan(saOnly, "ops.view"), "SA override does not grant ops.view at app gate");
     const ncc = resolveOperatingAccessFromSheetUser("c@x.com", "Client", {
       id: "USR-0009",
       name: "Client",
@@ -205,16 +206,19 @@ function runStatic(results: CheckResult[]) {
       facility: "NCC Annex",
     });
     assert(!accessCan(ncc, "ops.view"), "F ncc_client cannot read facilities");
-    const staff = resolveOperatingAccessFromSheetUser("s@x.com", "Staff", {
-      id: "USR-0003",
-      name: "Staff",
-      email: "s@x.com",
-      role: "FM Staff",
-      status: "active",
-      facility: "NCC Annex",
-    });
-    assert(accessCan(staff, "ops.view"), "E FM staff can read");
-    assert(accessCan(staff, "ops.create") && accessCan(staff, "ops.edit"), "G staff can mutate");
+    const staff = {
+      ...resolveOperatingAccessFromSheetUser("s@x.com", "Staff", {
+        id: "USR-0003",
+        name: "Staff",
+        email: "s@x.com",
+        role: "FM Staff",
+        status: "active",
+        facility: "NCC Annex",
+      }),
+      capabilities: ["ops.view", "ops.create", "ops.edit"] as AccessCapability[],
+    };
+    assert(accessCan(staff, "ops.view"), "E explicit grant can read");
+    assert(accessCan(staff, "ops.create") && accessCan(staff, "ops.edit"), "G explicit grant can mutate");
     push(results, "E/F/G OperatingAccess mapping", "PASS");
 
     const failRoute = readSrc(ROUTE);

@@ -27,7 +27,7 @@ function readSrc(path: string): string {
 }
 
 function sheetAccess(role: V1OperatingRole, email = `${role}@example.com`) {
-  return resolveOperatingAccessFromSheetUser(email, role, {
+  const access = resolveOperatingAccessFromSheetUser(email, role, {
     id: `USR-${role}`,
     name: role,
     email,
@@ -44,6 +44,10 @@ function sheetAccess(role: V1OperatingRole, email = `${role}@example.com`) {
     status: "active",
     facility: "NCC Annex",
   });
+  return {
+    ...access,
+    capabilities: [...capabilitiesForRole(role)],
+  };
 }
 
 function expectAllowed(
@@ -199,12 +203,22 @@ function main() {
   // --- Super Admin override ≠ FM protected ---
   const ncc = sheetAccess("ncc_client", "sa@example.com");
   assert(!accessCan(ncc, "ops.create"), "NCC denied create before override");
-  const sa = applyPlatformSuperAdmin(ncc, true);
+  const sa = applyPlatformSuperAdmin(
+    resolveOperatingAccessFromSheetUser("sa@example.com", "ncc_client", {
+      id: "USR-ncc",
+      name: "ncc_client",
+      email: "sa@example.com",
+      role: "NCC / Client",
+      status: "active",
+      facility: "NCC Annex",
+    }),
+    true
+  );
   assert(sa.role === "ncc_client", "SA keeps non-FM operating role");
   assert(sa.authorityKind === "platform_override", "SA authority kind");
-  assert(accessCan(sa, "ops.create"), "SA override allows ops.create");
-  assert(accessCan(sa, "ops.edit"), "SA override allows ops.edit");
-  assert(accessCan(sa, "approvals.manage"), "SA override allows approvals.manage");
+  assert(!accessCan(sa, "ops.create"), "SA override does not allow ops.create");
+  assert(!accessCan(sa, "ops.edit"), "SA override does not allow ops.edit");
+  assert(!accessCan(sa, "approvals.manage"), "SA override does not allow approvals.manage");
   assert(accessCan(sa, "platform.admin_override"), "SA has platform override");
   assert(
     !accessCan(sa, "fm.authorize_protected"),

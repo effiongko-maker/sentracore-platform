@@ -1,6 +1,5 @@
 import { ActionError } from "@/lib/actions/errors";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { postToAppsScriptData } from "@/services/api/appsScriptProxy";
 import type { ProfileStatus } from "@/lib/auth/types";
 import {
   isAllowedProfileStatusTransition,
@@ -427,13 +426,13 @@ export class PlatformAdminServerService {
       followUpRequired.push("auth_sign_in_disable");
     }
 
-    const fm = await this.deactivateLinkedFmPerson(input.profileId);
-    if (fm.state === "failed") {
-      followUpRequired.push("fm_people_deactivate");
-    }
+    const fmState =
+      db.revoked.fmFacilityAssignmentsInactivated > 0 ||
+      db.revoked.operationalIdentityLinksInactivated > 0
+        ? "deactivated"
+        : "not_applicable";
 
-    const fullyOffboarded =
-      db.platformAccessRevoked && auth.ok && fm.state !== "failed";
+    const fullyOffboarded = db.platformAccessRevoked && auth.ok;
 
     return {
       profileId: db.profileId,
@@ -442,7 +441,7 @@ export class PlatformAdminServerService {
       status: "inactive",
       platformAccessRevoked: db.platformAccessRevoked,
       authSignInDisabled: auth.ok,
-      fmOperationalIdentityDeactivated: fm.state,
+      fmOperationalIdentityDeactivated: fmState,
       followUpRequired,
       fullyOffboarded,
       revoked: db.revoked,
@@ -480,43 +479,6 @@ export class PlatformAdminServerService {
           data.user as { banned_until?: string | null } | null
         );
     return { ok: confirmed, disabled: disabled ? true : false };
-  }
-
-  private async deactivateLinkedFmPerson(
-    profileId: string
-  ): Promise<{ state: "deactivated" | "not_applicable" | "failed"; message?: string }> {
-    const { data: link, error } = await this.admin
-      .from("operational_identity_links")
-      .select("external_identity_id, status")
-      .eq("profile_id", profileId)
-      .eq("identity_domain", "facility_management")
-      .maybeSingle();
-
-    if (error) {
-      return { state: "failed", message: error.message };
-    }
-    if (!link?.external_identity_id) {
-      return { state: "not_applicable" };
-    }
-
-    try {
-      await postToAppsScriptData(
-        {
-          resource: "users",
-          action: "deactivate",
-          payload: { id: String(link.external_identity_id) },
-        },
-        { resource: "users", action: "deactivate" },
-        "platform-admin/fm-people-deactivate"
-      );
-      return { state: "deactivated" };
-    } catch (caught) {
-      return {
-        state: "failed",
-        message:
-          caught instanceof Error ? caught.message : "People deactivate failed.",
-      };
-    }
   }
 }
 

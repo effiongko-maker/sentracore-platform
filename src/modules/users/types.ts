@@ -3,7 +3,16 @@ export type UserStatus = "active" | "inactive" | "pending" | "suspended";
 /** Sheet role labels — V1 uses Facility Manager / FM Staff / Liaison Officer / Finance / NCC / Client. */
 export type UserRole = string;
 
+/** Platform profile eligible for an FM facility assignment. */
+export type EligibleProfile = {
+  id: string;
+  name: string;
+  email: string;
+  status: string;
+};
+
 export interface User {
+  /** Canonical identity: platform profile UUID. */
   id: string;
   name: string;
   email: string;
@@ -11,31 +20,37 @@ export interface User {
   role: UserRole;
   specialization: string;
   facility: string;
+  facilityId?: string;
+  assignmentId?: string;
   /**
-   * Display value for USERS sheet "Current Workload".
-   * Derived live from active Work Orders assigned to this user id
-   * (not the stale sheet cell). Field name retained for API compatibility.
+   * Display value for current workload.
+   * Not stored. Sheet-era WO assignee IDs cannot be proven from profile UUID,
+   * so this is 0 with workloadAvailable=false until Work cuts over.
    */
   activeWorkOrders: number;
-  /**
-   * Work Order IDs that produced `activeWorkOrders` (same derive pass).
-   * Used so the People workload popover cannot disagree with the count.
-   */
   workloadWorkOrderIds?: string[];
-  /** Empty when the sheet Status cell is blank. */
+  /** False when workload cannot be derived without fabricating a zero. */
+  workloadAvailable?: boolean;
+  /** Assignment status for the People directory row. */
   status: UserStatus | "";
+  /** Platform profile status — distinct from assignment status. */
+  profileStatus?: string;
   avatarUrl?: string;
   lastActive: string;
   createdAt: string;
 }
 
 export interface CreateUserInput {
-  name: string;
-  email: string;
+  /** Existing platform profile to assign. Required on create. */
+  profileId?: string;
+  name?: string;
+  email?: string;
   phone?: string;
   role: UserRole;
-  specialization: string;
+  specialization?: string;
   facility: string;
+  facilityId?: string;
+  assignmentId?: string;
   status: UserStatus;
 }
 

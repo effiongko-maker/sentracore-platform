@@ -449,6 +449,7 @@ export class PlatformAdminRepository {
       financeCompanyAccess: number;
       financeFinancialAccountAccess: number;
       operationalIdentityLinksInactivated: number;
+      fmFacilityAssignmentsInactivated: number;
     };
   }> {
     const { data, error } = await this.admin.rpc("platform_iam_offboard_profile", {
@@ -476,6 +477,9 @@ export class PlatformAdminRepository {
         ),
         operationalIdentityLinksInactivated: Number(
           revoked.operationalIdentityLinksInactivated ?? 0
+        ),
+        fmFacilityAssignmentsInactivated: Number(
+          revoked.fmFacilityAssignmentsInactivated ?? 0
         ),
       },
     };

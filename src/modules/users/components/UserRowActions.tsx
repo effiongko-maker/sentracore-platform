@@ -164,7 +164,7 @@ export function UserRowActions({
                 }}
               >
                 <UserX className="h-3.5 w-3.5" />
-                Deactivate
+                Deactivate assignment
               </button>
             ) : null}
           </div>,

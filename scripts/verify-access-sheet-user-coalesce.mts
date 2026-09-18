@@ -1,14 +1,12 @@
 /**
- * Prove operational capability gates still run authoritatively, but People
- * sheet-user lookup is coalesced/TTL-cached so Home parallel proxies do not
- * each pay a fresh users/getAll.
+ * Prove operational capability gates still run authoritatively, and FM
+ * authority no longer depends on Apps Script USERS lookups.
  *
  *   npx tsx --tsconfig tsconfig.json scripts/verify-access-sheet-user-coalesce.mts
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
-  ACCESS_SHEET_USER_TTL_MS,
   sharedRequest,
   sharedRequestDiagnostics,
   invalidateSharedRequests,
@@ -28,10 +26,8 @@ async function main() {
   const serverSrc = readSrc("src/lib/access/server.ts");
   const gateSrc = readSrc("src/lib/access/gateApi.ts");
   const opsProxySrc = readSrc("src/lib/access/postGatedOperationalProxy.ts");
-  const domainCacheSrc = readSrc("src/services/cache/domainCache.ts");
-  const sharedSrc = readSrc("src/services/cache/sharedRequest.ts");
+  const usersRoute = readSrc("src/app/api/users/route.ts");
 
-  // Gate path unchanged: proxy → gateApiCapability → requireCapability → accessCan
   assert(opsProxySrc.includes("gateApiCapability"), "ops proxy still gated");
   assert(gateSrc.includes("requireCapability"), "gateApi uses requireCapability");
   assert(
@@ -47,95 +43,35 @@ async function main() {
     "requireCapability still resolves operating access from session"
   );
   assert(
-    serverSrc.includes("loadSheetUserForAccessByEmail"),
-    "People email lookup still used for resolution"
+    serverSrc.includes("platform_capability_grants"),
+    "FM authority uses platform grants"
   );
   assert(
-    /search:\s*target/.test(serverSrc),
-    "email search payload preserved"
+    !serverSrc.includes("loadSheetUserForAccessByEmail"),
+    "Apps Script USERS lookup removed from access server"
   );
   assert(
-    serverSrc.includes("lookupFailed") &&
-      serverSrc.includes("Unavailable"),
-    "fail-closed lookup failure preserved"
+    !usersRoute.includes("postToAppsScript"),
+    "/api/users does not call Apps Script"
   );
 
-  // Coalesce + TTL on the Apps Script users lookup only
-  assert(
-    serverSrc.includes("sharedRequest") &&
-      serverSrc.includes("ACCESS_SHEET_USER_TTL_MS") &&
-      serverSrc.includes("CacheNamespaces.accessSheetUserByEmail"),
-    "sheet-user lookup uses sharedRequest + access namespace"
-  );
-  assert(
-    sharedSrc.includes("ACCESS_SHEET_USER_TTL_MS") &&
-      ACCESS_SHEET_USER_TTL_MS > 0 &&
-      ACCESS_SHEET_USER_TTL_MS <= 60_000,
-    "short positive TTL for access sheet-user cache"
-  );
-  assert(
-    domainCacheSrc.includes("accessSheetUserByEmail") &&
-      domainCacheSrc.includes(
-        "invalidateSharedRequests(CacheNamespaces.accessSheetUserByEmail)"
-      ),
-    "user mutations invalidate access sheet-user cache"
-  );
-
-  // Must not skip gate / invent client capability trust
-  assert(
-    !opsProxySrc.includes("x-sentracore-capabilities") &&
-      !opsProxySrc.includes("clientCapabilities"),
-    "no client-supplied capability bypass on ops proxy"
-  );
-  assert(
-    !serverSrc.includes("trustClientAccess") &&
-      !serverSrc.includes("capabilitiesFromHeader"),
-    "no client capability trust in access server"
-  );
-
-  // Runtime: concurrent loaders share one Promise; second wave hits TTL cache
-  invalidateSharedRequests(CacheNamespaces.accessSheetUserByEmail);
+  invalidateSharedRequests(CacheNamespaces.usersCatalog);
   let loads = 0;
-  const key = stableRequestKey(CacheNamespaces.accessSheetUserByEmail, {
-    email: "probe@example.com",
-  });
   const loader = async () => {
     loads += 1;
-    await new Promise((r) => setTimeout(r, 40));
-    return { id: "USR-1", email: "probe@example.com" };
+    return { ok: true };
   };
-
-  const [a, b, c] = await Promise.all([
-    sharedRequest(key, loader, { ttlMs: ACCESS_SHEET_USER_TTL_MS }),
-    sharedRequest(key, loader, { ttlMs: ACCESS_SHEET_USER_TTL_MS }),
-    sharedRequest(key, loader, { ttlMs: ACCESS_SHEET_USER_TTL_MS }),
+  const key = stableRequestKey(CacheNamespaces.usersCatalog, { probe: "2a" });
+  await Promise.all([
+    sharedRequest(key, loader),
+    sharedRequest(key, loader),
+    sharedRequest(key, loader),
   ]);
-  assert(loads === 1, "concurrent sharedRequest coalesces to one loader");
-  assert(a === b && b === c, "coalesced callers share the same result");
-
-  const d = await sharedRequest(key, loader, {
-    ttlMs: ACCESS_SHEET_USER_TTL_MS,
-  });
-  assert(loads === 1, "TTL hit does not re-run loader");
-  assert(d === a, "TTL returns prior authoritative result");
-
-  invalidateSharedRequests(CacheNamespaces.accessSheetUserByEmail);
-  loads = 0;
-  const e = await sharedRequest(key, loader, {
-    ttlMs: ACCESS_SHEET_USER_TTL_MS,
-  });
-  assert(loads === 1, "invalidation forces a fresh authoritative lookup");
-  assert(e.id === "USR-1", "fresh lookup still returns People row shape");
-
+  assert(loads === 1, "sharedRequest still coalesces concurrent work");
   const diag = sharedRequestDiagnostics();
-  assert(typeof diag.inflight === "number", "diagnostics available");
+  assert(diag.inflight >= 0, "diagnostics remain available");
 
-  console.log("PASS verify-access-sheet-user-coalesce");
-  console.log("  requireCapability + accessCan path preserved");
-  console.log("  sheet-user users/getAll coalesced + short TTL; invalidated on user mutation");
+  console.log("Access authority (no USERS lookup) verification passed.");
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+void main();

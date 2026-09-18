@@ -65,7 +65,7 @@ export function UsersToolbar({
   onCreate,
   canCreate = true,
 }: UsersToolbarProps) {
-  const { facilities } = useFacilityOptions();
+  const { facilities, error: facilitiesError } = useFacilityOptions();
   const [filterOpen, setFilterOpen] = useState(false);
 
   const activeFilterCount = countActiveFilters({ status, role, facility });
@@ -145,7 +145,7 @@ export function UsersToolbar({
               onClick={onCreate}
             >
               <Plus className="h-3.5 w-3.5" aria-hidden />
-              New user
+              Assign person
             </Button>
           ) : null
         }
@@ -174,6 +174,11 @@ export function UsersToolbar({
               }
             >
               <option value="all">All facilities</option>
+              {facilitiesError ? (
+                <option value="" disabled>
+                  Facilities unavailable
+                </option>
+              ) : null}
               {facilities.map((item) => (
                 <option key={item.id} value={item.name}>
                   {item.name}

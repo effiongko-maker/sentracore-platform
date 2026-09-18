@@ -102,7 +102,7 @@ async function runStatic(results: CheckResult[]) {
       "Person",
       linked.user
     );
-    assert(accessCan(linkedAccess, "users.manage"), "A: valid link → FM authority");
+    assert(!accessCan(linkedAccess, "users.manage"), "A: identity link is not FM authority");
 
     const emailFallback = await resolveFmOperationalIdentity({
       explicitLink: null,
@@ -115,8 +115,7 @@ async function runStatic(results: CheckResult[]) {
       "Person",
       emailFallback.user
     );
-    assert(accessCan(emailAccess, "ops.create"), "B: email fallback → FM staff");
-    assert(!accessCan(emailAccess, "users.manage"), "B: email fallback is not FM");
+    assert(!accessCan(emailAccess, "ops.create"), "B: email fallback is not FM authority");
 
     const none = await resolveFmOperationalIdentity({
       explicitLink: null,
@@ -155,8 +154,8 @@ async function runStatic(results: CheckResult[]) {
 
     const saUnresolved = applyPlatformSuperAdmin(orgOnly, true);
     assert(
-      saUnresolved.hasAdminOverride && accessCan(saUnresolved, "ops.view"),
-      "SA override remains explicit, not an unresolved-user fallback"
+      saUnresolved.hasAdminOverride && !accessCan(saUnresolved, "ops.view"),
+      "SA override does not grant FM business capabilities"
     );
 
     const capsSrc = readSrc("src/lib/access/capabilities.ts");
@@ -260,15 +259,19 @@ async function runStatic(results: CheckResult[]) {
     );
     assert(
       !isPlatformAdministrableCapability("platform_finance.view"),
-      "Finance caps not administrable here"
+      "Finance company caps not administrable here"
     );
     assert(
-      !isPlatformAdministrableCapability("users.manage"),
-      "FM caps not administrable here"
+      isPlatformAdministrableCapability("users.manage"),
+      "FM users.manage is administrable"
     );
     assert(
-      PLATFORM_ADMINISTRABLE_CAPABILITIES.length === 3,
-      "exactly three platform caps"
+      isPlatformAdministrableCapability("ops.view"),
+      "FM ops.view is administrable"
+    );
+    assert(
+      PLATFORM_ADMINISTRABLE_CAPABILITIES.includes("ops.view"),
+      "ops.view is in the control-plane allowlist"
     );
     assert(
       PLATFORM_AUTH_SIGN_IN_DISABLE_BAN_DURATION.endsWith("h"),
@@ -312,9 +315,12 @@ async function runStatic(results: CheckResult[]) {
     assert(!service.includes("deleteUser"), "never deletes Auth users");
     assert(service.includes("followUpRequired"), "partial failure is explicit");
     assert(
-      service.includes("fm_people_deactivate") &&
-        service.includes("auth_sign_in_disable"),
+      service.includes("auth_sign_in_disable"),
       "external follow-ups machine-readable"
+    );
+    assert(
+      !service.includes("postToAppsScript"),
+      "offboard does not write Apps Script USERS"
     );
 
     const pf = readSrc(

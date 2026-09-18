@@ -162,15 +162,15 @@ function main() {
     }
   );
   assert(sheetMatch.role === "facility_manager", "sheet role resolve");
-  assert(sheetMatch.source === "sheet", "sheet source");
+  assert(sheetMatch.source === "platform", "platform source");
   assert(sheetMatch.facility === "NCC Annex", "facility assignment");
-  assert(accessCan(sheetMatch, "users.manage"), "FM can manage users");
+  assert(!accessCan(sheetMatch, "users.manage"), "role does not grant users.manage");
   assert(sheetMatch.authorityKind === "facility_manager", "FM authority kind");
   assert(!sheetMatch.isSuperAdmin, "FM is not Super Admin");
   assert(!sheetMatch.hasAdminOverride, "FM has no platform override");
   assert(
-    resolveProtectedActionAuthority(sheetMatch)?.mode === "facility_manager",
-    "FM protected authority mode"
+    resolveProtectedActionAuthority(sheetMatch) == null,
+    "role alone does not authorize protected actions"
   );
 
   const inactiveAccess = resolveOperatingAccessFromSheetUser(
@@ -203,32 +203,20 @@ function main() {
 
   const serverSrc = readSrc("src/lib/access/server.ts");
   assert(
-    serverSrc.includes("lookupFailed"),
-    "sheet lookup failure is detected"
+    serverSrc.includes("platform_capability_grants"),
+    "FM authority loads explicit platform grants"
   );
   assert(
-    serverSrc.includes("denying operating capabilities") ||
-      serverSrc.includes("Unavailable"),
-    "sheet lookup failure fails closed (not legacy elevate)"
+    !serverSrc.includes("loadSheetUserForAccessByEmail"),
+    "People access no longer resolves via Apps Script USERS"
   );
   assert(
-    !serverSrc.includes("treating as unassigned"),
-    "must not elevate to unassigned on lookup failure"
+    !serverSrc.includes("resolveFmOperationalIdentity"),
+    "operational_identity_links is not an authorization source"
   );
   assert(
-    serverSrc.includes("loadSheetUserForAccessByEmail"),
-    "People access resolves by email search (not truncated page)"
-  );
-  assert(
-    serverSrc.includes("search: target") ||
-      serverSrc.includes("search:target") ||
-      /search:\s*target/.test(serverSrc),
-    "email used as People search term"
-  );
-  assert(
-    serverSrc.includes("sharedRequest") &&
-      serverSrc.includes("ACCESS_SHEET_USER_TTL_MS"),
-    "People email lookup coalesced/TTL-cached (no per-request fresh users/getAll storm)"
+    !serverSrc.includes("postToAppsScript"),
+    "access server does not query Apps Script USERS"
   );
 
   const legacyRole = resolveOperatingAccessFromSheetUser(
@@ -297,9 +285,9 @@ function main() {
     "Super Admin must NOT become Facility Manager"
   );
   assert(superAdmin.authorityKind === "platform_override", "override authority");
-  assert(!superAdmin.inactive, "override clears sheet inactive lockout");
+  assert(superAdmin.inactive, "override does not clear inactive operating status");
   assert(accessCan(superAdmin, "users.manage"), "override can manage users");
-  assert(accessCan(superAdmin, "finance.authorize"), "override finance");
+  assert(!accessCan(superAdmin, "finance.authorize"), "override does not grant finance");
   assert(
     accessCan(superAdmin, "platform.admin_override"),
     "override capability present"

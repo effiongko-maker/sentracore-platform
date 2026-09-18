@@ -70,7 +70,8 @@ export function MasterDataFormModal({
   onSaved?: () => void | Promise<void>;
 }) {
   const { toast } = useToast();
-  const { facilities, loading: facilitiesLoading } = useFacilityOptions(open);
+  const { facilities, loading: facilitiesLoading, error: facilitiesError } =
+    useFacilityOptions(open);
   const [form, setForm] = useState<CreateMasterDataInput>(
     toCreateFormValues(entity)
   );
@@ -250,13 +251,13 @@ export function MasterDataFormModal({
             label="Facility"
             htmlFor="md-facility"
             required
-            error={errors.facilityId}
+            error={errors.facilityId || facilitiesError || undefined}
           >
             <select
               id="md-facility"
               className={selectClassName}
               value={form.facilityId ?? ""}
-              disabled={facilitiesLoading}
+              disabled={facilitiesLoading || Boolean(facilitiesError)}
               onChange={(event) => {
                 updateField("facilityId", event.target.value);
                 updateField("buildingId", "");
@@ -264,7 +265,13 @@ export function MasterDataFormModal({
               }}
             >
               <option value="">
-                {facilitiesLoading ? "Loading facilities…" : "Select facility"}
+                {facilitiesLoading
+                  ? "Loading facilities…"
+                  : facilitiesError
+                    ? "Facilities unavailable"
+                    : facilities.length === 0
+                      ? "No facilities configured"
+                      : "Select facility"}
               </option>
               {facilities.map((facility) => (
                 <option key={facility.id} value={facility.id}>
