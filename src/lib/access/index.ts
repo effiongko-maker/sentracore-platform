@@ -20,7 +20,6 @@ export {
 
 export {
   ACCESS_CAPABILITIES,
-  LEGACY_UNASSIGNED_CAPABILITIES,
   SUPER_ADMIN_OVERRIDE_CAPABILITIES,
   capabilitiesForRole,
   hasCapability,

@@ -1,0 +1,145 @@
+import { ECC_CAPABILITIES } from "@/modules/ecc-operations/types";
+import { COMMAND_CENTRE_CAPABILITIES } from "@/modules/command-centre/types";
+import type { ProfileStatus } from "@/lib/auth/types";
+
+export const PLATFORM_IAM_AUDIT_ACTIONS = [
+  "user.invited",
+  "profile.attached_to_organisation",
+  "profile.activated",
+  "profile.suspended",
+  "profile.deactivated",
+  "module.enabled",
+  "module.disabled",
+  "capability.granted",
+  "capability.revoked",
+  "user.offboarded",
+] as const;
+
+export type PlatformIamAuditAction = (typeof PLATFORM_IAM_AUDIT_ACTIONS)[number];
+
+/**
+ * Platform-domain capabilities administrable through the control plane.
+ * Finance capabilities are intentionally absent.
+ */
+export const PLATFORM_ADMINISTRABLE_CAPABILITIES = [
+  ECC_CAPABILITIES.view,
+  COMMAND_CENTRE_CAPABILITIES.view,
+  COMMAND_CENTRE_CAPABILITIES.decide,
+] as const;
+
+export type PlatformAdministrableCapability =
+  (typeof PLATFORM_ADMINISTRABLE_CAPABILITIES)[number];
+
+export function isPlatformAdministrableCapability(
+  value: unknown
+): value is PlatformAdministrableCapability {
+  return (
+    typeof value === "string" &&
+    (PLATFORM_ADMINISTRABLE_CAPABILITIES as readonly string[]).includes(value)
+  );
+}
+
+export const PLATFORM_ADMIN_FOLLOW_UPS = [
+  "auth_sign_in_disable",
+  "fm_people_deactivate",
+  "profile_organisation_attachment",
+] as const;
+
+export type PlatformAdminFollowUp = (typeof PLATFORM_ADMIN_FOLLOW_UPS)[number];
+
+export type OrganisationModuleAdminStatus = "enabled" | "disabled" | "preparing";
+
+export type OrganisationAdminRecord = {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  modules: Array<{
+    slug: string;
+    name: string;
+    status: OrganisationModuleAdminStatus;
+  }>;
+};
+
+export type PlatformIdentityAdminRecord = {
+  profileId: string;
+  email: string | null;
+  fullName: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  organisationId: string | null;
+  organisationSlug: string | null;
+  organisationName: string | null;
+  status: ProfileStatus;
+  platformCapabilities: string[];
+  operationalIdentity: {
+    domain: string;
+    externalIdentityId: string;
+    status: string;
+  } | null;
+  financeWorkspaceGrantPresent: boolean;
+};
+
+export type InviteAttachResult = {
+  email: string;
+  profileId: string | null;
+  organisationId: string;
+  inviteSent: boolean;
+  attached: boolean;
+  alreadyExisted: boolean;
+  followUpRequired: PlatformAdminFollowUp[];
+};
+
+export type ProfileStatusResult = {
+  profileId: string;
+  organisationId: string | null;
+  status: ProfileStatus;
+  previousStatus: ProfileStatus;
+  changed: boolean;
+  authSignInDisabled: boolean | null;
+};
+
+export type OrganisationModuleResult = {
+  organisationId: string;
+  moduleSlug: string;
+  status: "enabled" | "disabled";
+  changed: boolean;
+};
+
+export type PlatformCapabilityGrantResult = {
+  organisationId: string;
+  profileId: string;
+  capability: PlatformAdministrableCapability;
+  changed: boolean;
+};
+
+export type FmOperationalDeactivation =
+  | { state: "deactivated" }
+  | { state: "not_applicable" }
+  | { state: "failed"; message: string };
+
+export type OffboardResult = {
+  profileId: string;
+  organisationId: string | null;
+  previousStatus: ProfileStatus;
+  status: "inactive";
+  platformAccessRevoked: boolean;
+  authSignInDisabled: boolean;
+  fmOperationalIdentityDeactivated: FmOperationalDeactivation["state"];
+  followUpRequired: PlatformAdminFollowUp[];
+  fullyOffboarded: boolean;
+  revoked: {
+    financeCapabilityGrants: number;
+    platformCapabilityGrants: number;
+    financeCompanyAccess: number;
+    financeFinancialAccountAccess: number;
+    operationalIdentityLinksInactivated: number;
+  };
+};
+
+/**
+ * Reversible Auth sign-in disable. GoTrue has no permanent "disable" flag
+ * without deletion; a long ban_duration is the supported mechanism.
+ * Lift with ban_duration: "none".
+ */
+export const PLATFORM_AUTH_SIGN_IN_DISABLE_BAN_DURATION = "876000h";

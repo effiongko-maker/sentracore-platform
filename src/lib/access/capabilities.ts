@@ -98,28 +98,6 @@ const ROLE_CAPABILITIES: Record<V1OperatingRole, readonly AccessCapability[]> = 
 };
 
 /**
- * Legacy / unassigned authenticated org members keep prior behaviour:
- * full FM + Finance module access (module gate only). Documented ambiguity.
- * Does NOT include platform.admin_override (that is Super Admin only).
- */
-export const LEGACY_UNASSIGNED_CAPABILITIES: readonly AccessCapability[] = [
-  "users.view",
-  "users.manage",
-  "ops.view",
-  "ops.create",
-  "ops.edit",
-  "ops.submit",
-  "finance.view",
-  "finance.create",
-  "finance.submit",
-  "finance.authorize",
-  "finance.pay",
-  "approvals.manage",
-  "requests.view",
-  "fm.authorize_protected",
-];
-
-/**
  * Operational capabilities granted under Super Admin override.
  * Includes admin areas; never implies the Facility Manager role identity.
  */
@@ -146,8 +124,9 @@ export function capabilitiesForRole(
   options?: { inactive?: boolean; unassigned?: boolean }
 ): AccessCapability[] {
   if (options?.inactive) return [];
+  // Unresolved / unrecognised People identity fails closed — no implicit FM role.
   if (options?.unassigned || role == null) {
-    return [...LEGACY_UNASSIGNED_CAPABILITIES];
+    return [];
   }
   return [...ROLE_CAPABILITIES[role]];
 }

@@ -67,6 +67,30 @@ async function main() {
     user: null,
   });
 
+  const missingAccess = resolveOperatingAccessFromSheetUser(
+    "missing@paychexng.com",
+    "Missing",
+    missing.user
+  );
+  assert.equal(accessCan(missingAccess, "ops.view"), false);
+  assert.equal(accessCan(missingAccess, "users.manage"), false);
+
+  const broken = await resolveFmOperationalIdentity({
+    explicitLink: { externalIdentityId: "USR-0002", status: "active" },
+    email: "profile@paychexng.com",
+    loadById: async () => null,
+    loadByEmail: async () => person("USR-9999", "profile@paychexng.com"),
+  });
+  assert.equal(broken.source, "explicit_link");
+  assert.equal(broken.enrichment, "not_found");
+  assert.equal(broken.user, null);
+  const brokenAccess = resolveOperatingAccessFromSheetUser(
+    "profile@paychexng.com",
+    "Person",
+    broken.user
+  );
+  assert.equal(accessCan(brokenAccess, "ops.view"), false);
+
   const root = new URL("../", import.meta.url);
   const read = (path: string) => readFile(new URL(path, root), "utf8");
   const [migration, access, workspace, api, maintenance, issue, incident, commandCentre] = await Promise.all([

@@ -59,8 +59,8 @@ export type OperatingAccess = {
   facility: string;
   source: OperatingAccessSource;
   /**
-   * True when no People-register match — capabilities fall back to legacy
-   * full module access so existing logins are not locked out.
+   * True when no valid V1 People-register role resolved.
+   * Unassigned is diagnostic only — it grants zero FM operating capabilities.
    */
   unassigned: boolean;
   inactive: boolean;

@@ -1,5 +1,6 @@
 import { ActionError } from "@/lib/actions/errors";
 import { getPlatformSession } from "@/lib/auth/session";
+import { assertActiveProfileForBusinessAccess } from "@/lib/auth/assertActiveProfile";
 import type { PlatformSession } from "@/lib/auth/types";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
@@ -31,6 +32,7 @@ async function resolveCommandCentreSessionContext(): Promise<{
   if (!session) {
     throw new ActionError("UNAUTHENTICATED");
   }
+  assertActiveProfileForBusinessAccess(session);
 
   const organisationId =
     session.organisation?.id ?? session.profile.organisationId ?? null;

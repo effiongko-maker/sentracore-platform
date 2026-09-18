@@ -7,7 +7,6 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   ACCESS_CAPABILITIES,
-  LEGACY_UNASSIGNED_CAPABILITIES,
   PLATFORM_SUPER_ADMIN_SLUG,
   SUPER_ADMIN_OVERRIDE_CAPABILITIES,
   V1_OPERATING_ROLES,
@@ -143,18 +142,11 @@ function main() {
   assert(isInactiveUserStatus("suspended"), "suspended status");
   assert(!isInactiveUserStatus("active"), "active status");
 
-  const legacy = capabilitiesForRole(null, { unassigned: true });
+  const unresolvedCaps = capabilitiesForRole(null, { unassigned: true });
+  assert(unresolvedCaps.length === 0, "unresolved identity has zero FM caps");
   assert(
-    legacy.length === LEGACY_UNASSIGNED_CAPABILITIES.length,
-    "legacy unassigned caps"
-  );
-  assert(
-    !legacy.includes("platform.admin_override"),
-    "legacy must not get platform override"
-  );
-  assert(
-    legacy.includes("fm.authorize_protected"),
-    "legacy preserves FM protected-action foundation"
+    capabilitiesForRole(null).length === 0,
+    "null role has zero FM caps"
   );
 
   const sheetMatch = resolveOperatingAccessFromSheetUser(
@@ -204,7 +196,10 @@ function main() {
   );
   assert(unassigned.unassigned, "unassigned flag");
   assert(unassigned.role == null, "unassigned role null");
-  assert(accessCan(unassigned, "users.manage"), "legacy preserves manage");
+  assert(unassigned.capabilities.length === 0, "unassigned has zero caps");
+  assert(!accessCan(unassigned, "users.manage"), "org membership alone is not FM manage");
+  assert(!accessCan(unassigned, "ops.view"), "unassigned cannot ops.view");
+  assert(!accessCan(unassigned, "fm.authorize_protected"), "unassigned cannot FM-authorize");
 
   const serverSrc = readSrc("src/lib/access/server.ts");
   assert(
@@ -248,8 +243,12 @@ function main() {
       facility: "NCC Annex",
     }
   );
-  assert(legacyRole.unassigned, "unrecognised sheet role → unassigned caps");
-  assert(accessCan(legacyRole, "ops.create"), "legacy sheet role keeps ops");
+  assert(legacyRole.unassigned, "unrecognised sheet role → unassigned");
+  assert(
+    legacyRole.capabilities.length === 0,
+    "unrecognised sheet role grants zero FM authority"
+  );
+  assert(!accessCan(legacyRole, "ops.create"), "unrecognised role cannot ops.create");
 
   // Super Admin is platform-level — not a People-register / FM role.
   assert(
@@ -413,6 +412,22 @@ function main() {
   const capsSrc = readSrc("src/lib/access/capabilities.ts");
   assert(capsSrc.includes("platform.admin_override"), "override capability");
   assert(capsSrc.includes("fm.authorize_protected"), "FM protected capability");
+  assert(
+    !capsSrc.includes("LEGACY_UNASSIGNED_CAPABILITIES"),
+    "legacy unassigned fallback must not remain as an authorization source"
+  );
+
+  const resolveSrc = readSrc("src/lib/access/resolveAccess.ts");
+  assert(
+    resolveSrc.includes("zero FM operating capabilities"),
+    "unassigned is documented as non-authorizing"
+  );
+
+  const visSrc = readSrc("src/lib/access/visibility.ts");
+  assert(
+    !visSrc.includes("access.unassigned"),
+    "visibility must not treat unresolved identity as full FM chrome"
+  );
 
   console.log("PASS verify-users-access");
   console.log("  operating roles:", V1_OPERATING_ROLES.join(", "));

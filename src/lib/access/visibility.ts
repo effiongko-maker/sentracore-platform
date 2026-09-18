@@ -85,12 +85,9 @@ export function surfaceForHref(href: string): VisibilitySurface | null {
 function surfacesFromCapabilities(
   access: Pick<OperatingAccess, "capabilities" | "role" | "unassigned" | "hasAdminOverride">
 ): Set<VisibilitySurface> {
-  // Super Admin / legacy unassigned / FM: full platform surfaces
-  if (
-    access.hasAdminOverride ||
-    access.unassigned ||
-    access.role === "facility_manager"
-  ) {
+  // Super Admin override / Facility Manager: full FM surfaces.
+  // Unresolved People identity must not inherit FM chrome.
+  if (access.hasAdminOverride || access.role === "facility_manager") {
     return new Set(ALL_SURFACES);
   }
 

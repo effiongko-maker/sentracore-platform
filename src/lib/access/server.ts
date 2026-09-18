@@ -79,8 +79,8 @@ function extractUserRows(payload: unknown): RemoteUser[] {
 
 /**
  * Load the People-register row for access resolution by email.
- * Uses Apps Script search so pagination cannot silently miss the actor
- * and elevate them to legacy unassigned powers.
+ * Uses Apps Script search so pagination cannot silently miss the actor.
+ * Lookup failure and unresolved identity fail closed (zero FM capabilities).
  *
  * Concurrent gates (Home WO/INC/MNT/…) coalesce on one in-flight lookup;
  * successful rows are TTL-cached briefly so each operational API request does
@@ -210,6 +210,29 @@ export async function resolveOperatingAccess(
   session: PlatformSession
 ): Promise<OperatingAccess> {
   const identity = toSessionIdentity(session);
+  if (session.profile.status !== "active") {
+    const inactive =
+      session.profile.status === "inactive" ||
+      session.profile.status === "suspended";
+    return {
+      ...resolveOperatingAccessFromSheetUser(identity.email, identity.name, null),
+      unassigned: true,
+      inactive,
+      capabilities: [],
+      roleLabel:
+        session.profile.status === "suspended"
+          ? "Suspended"
+          : session.profile.status === "inactive"
+            ? "Inactive"
+            : "Invited",
+      status:
+        session.profile.status === "inactive" ||
+        session.profile.status === "suspended"
+          ? session.profile.status
+          : "unknown",
+    };
+  }
+
   let sheetUser: ReturnType<typeof findSheetUserByEmail> = null;
   let identitySource: OperatingAccess["operationalIdentitySource"];
   let operationalUserId: string | null = null;
