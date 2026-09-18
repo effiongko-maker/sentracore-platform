@@ -43,6 +43,7 @@ export const PLATFORM_FINANCE_CAPABILITY_LABELS: Record<
   [PLATFORM_FINANCE_CAPABILITIES.invoice_create]: "Create invoices",
   [PLATFORM_FINANCE_CAPABILITIES.invoice_review]: "Review invoices",
   [PLATFORM_FINANCE_CAPABILITIES.invoice_issue]: "Issue invoices",
+  [PLATFORM_FINANCE_CAPABILITIES.receivable_view]: "View receivables",
 };
 
 export const PLATFORM_FINANCE_ENTITY_STATUS_LABELS: Record<

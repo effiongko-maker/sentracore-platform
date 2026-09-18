@@ -291,13 +291,18 @@ cross join (
     ('platform_finance.payable.approve'),
     ('platform_finance.vendor_bill.view'),
     ('platform_finance.vendor_bill.create'),
-    ('platform_finance.vendor_bill.review')
+    ('platform_finance.vendor_bill.review'),
+    ('platform_finance.counterparty.view'),
+    ('platform_finance.counterparty.manage'),
+    ('platform_finance.invoice.view'),
+    ('platform_finance.invoice.create'),
+    ('platform_finance.invoice.review'),
+    ('platform_finance.invoice.issue'),
+    ('platform_finance.receivable.view')
 ) as c(capability)
 where o.slug = 'paychex'
-  and (
-    (r.slug = 'organisation_owner' and ura.organisation_id = o.id)
-    or (r.slug = 'platform_super_admin' and ura.organisation_id is null)
-  )
+  and r.slug = 'organisation_owner'
+  and ura.organisation_id = o.id
 on conflict (profile_id, organisation_id, capability) do nothing;
 
 insert into public.platform_capability_grants (
@@ -340,9 +345,7 @@ join public.user_role_assignments ura on ura.profile_id = p.id
 join public.roles r on r.id = ura.role_id
 join public.finance_companies fc on fc.organisation_id = o.id
 where o.slug = 'paychex'
-  and (
-    (r.slug = 'organisation_owner' and ura.organisation_id = o.id)
-    or (r.slug = 'platform_super_admin' and ura.organisation_id is null)
-  )
+  and r.slug = 'organisation_owner'
+  and ura.organisation_id = o.id
   and fc.status = 'active'
 on conflict (profile_id, company_id) do nothing;

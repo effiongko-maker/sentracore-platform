@@ -19,8 +19,8 @@
  *   npx tsx --tsconfig tsconfig.json scripts/grant-platform-developer-access.mts --profile-id=<uuid>
  *
  * Default recipients (when no --email / --profile-id):
- *   PayChex organisation_owner + platform_super_admin profiles
- *   (same eligibility model as the prior Finance-only grant script).
+ *   PayChex organisation_owner profiles. Platform Super Admin is not business
+ *   authority; use an explicit --email / --profile-id for deliberate QA grants.
  *
  * Requires: NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
  */
@@ -154,9 +154,6 @@ async function resolveTargetProfiles(organisationId: string): Promise<
   for (const a of assignments ?? []) {
     const slug = roleById.get(a.role_id);
     if (slug === "organisation_owner" && a.organisation_id === organisationId) {
-      eligible.add(a.profile_id);
-    }
-    if (slug === "platform_super_admin" && a.organisation_id == null) {
       eligible.add(a.profile_id);
     }
   }

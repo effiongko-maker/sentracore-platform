@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Building2,
@@ -88,7 +89,7 @@ export function PlatformFinanceOverviewPage() {
   }, []);
 
   useEffect(() => {
-    void load(companyId, periodId);
+    Promise.resolve().then(() => load(companyId, periodId));
   }, [companyId, periodId, load]);
 
   const attentionTotal = useMemo(
@@ -199,7 +200,7 @@ export function PlatformFinanceOverviewPage() {
           <h2 className="pf-position-title">Payables</h2>
           <p className="pf-position-desc">Approved and due obligations</p>
           <p className="pf-position-value is-empty">Not available</p>
-          <p className="pf-position-meta">Payables not live yet</p>
+          <p className="pf-position-meta">Operational register is live</p>
           <ChevronRight className="pf-position-chevron h-4 w-4" aria-hidden />
         </article>
 
@@ -222,9 +223,13 @@ export function PlatformFinanceOverviewPage() {
             <LineChart className="h-4 w-4" />
           </div>
           <h2 className="pf-position-title">Expected Receivables</h2>
-          <p className="pf-position-desc">Confirmed and expected inflows</p>
-          <p className="pf-position-value is-empty">Not available</p>
-          <p className="pf-position-meta">Receivables not live yet</p>
+          <p className="pf-position-desc">Issued invoice obligations</p>
+          <p className={snapshot.receivables ? "pf-position-value" : "pf-position-value is-empty"}>
+            {snapshot.receivables ? formatNairaCompact(snapshot.receivables.open.totalAmount) : "Restricted"}
+          </p>
+          <p className="pf-position-meta">
+            {snapshot.receivables ? `${snapshot.receivables.open.count} open · ${snapshot.receivables.overdue.count} overdue` : "Receivable authority required"}
+          </p>
           <ChevronRight className="pf-position-chevron h-4 w-4" aria-hidden />
         </article>
       </section>
@@ -239,9 +244,9 @@ export function PlatformFinanceOverviewPage() {
               ) : null}
             </div>
             {snapshot.needsAttention.length > 0 ? (
-              <a className="pf-link" href="/platform-finance/requests">
+              <Link className="pf-link" href="/platform-finance/requests">
                 View all
-              </a>
+              </Link>
             ) : null}
           </div>
           {snapshot.needsAttention.length === 0 ? (
@@ -293,9 +298,9 @@ export function PlatformFinanceOverviewPage() {
         <article className="pf-panel">
           <div className="pf-panel-head">
             <h2 className="pf-panel-title">Financial requests</h2>
-            <a className="pf-link" href="/platform-finance/requests">
+            <Link className="pf-link" href="/platform-finance/requests">
               View all
-            </a>
+            </Link>
           </div>
           <div className="pf-request-rows">
             <div className="pf-request-row">

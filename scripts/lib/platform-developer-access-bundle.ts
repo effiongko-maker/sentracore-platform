@@ -26,7 +26,6 @@ export const PLATFORM_DEVELOPER_ACCESS_ORG_SLUG = "paychex";
  */
 export const PLATFORM_DEVELOPER_ACCESS_ROLE_SLUGS = [
   "organisation_owner",
-  "platform_super_admin",
 ] as const;
 
 /**
@@ -55,6 +54,13 @@ export const PLATFORM_DEVELOPER_FINANCE_CAPABILITIES = [
   PLATFORM_FINANCE_CAPABILITIES.vendor_bill_view,
   PLATFORM_FINANCE_CAPABILITIES.vendor_bill_create,
   PLATFORM_FINANCE_CAPABILITIES.vendor_bill_review,
+  PLATFORM_FINANCE_CAPABILITIES.counterparty_view,
+  PLATFORM_FINANCE_CAPABILITIES.counterparty_manage,
+  PLATFORM_FINANCE_CAPABILITIES.invoice_view,
+  PLATFORM_FINANCE_CAPABILITIES.invoice_create,
+  PLATFORM_FINANCE_CAPABILITIES.invoice_review,
+  PLATFORM_FINANCE_CAPABILITIES.invoice_issue,
+  PLATFORM_FINANCE_CAPABILITIES.receivable_view,
 ] as const;
 
 /** Command Centre capabilities (platform_capability_grants). */

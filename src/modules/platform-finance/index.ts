@@ -10,6 +10,12 @@ export { PlatformFinanceNewRequestPage } from "./components/PlatformFinanceNewRe
 export { PlatformFinanceRequestReviewPage } from "./components/PlatformFinanceRequestReviewPage";
 export { PlatformFinancePayablesPage } from "./components/PlatformFinancePayablesPage";
 export { PlatformFinancePayableDetailPage } from "./components/PlatformFinancePayableDetailPage";
+export { PlatformFinanceInvoicesPage } from "./components/PlatformFinanceInvoicesPage";
+export { PlatformFinanceCounterpartiesPage } from "./components/PlatformFinanceCounterpartiesPage";
+export { PlatformFinanceReceivablesPage } from "./components/PlatformFinanceReceivablesPage";
+export type { FinanceInvoice, FinanceInvoiceDetail } from "./domain/invoices";
+export type { OrganisationCounterparty } from "./domain/counterparties";
+export type { FinanceReceivable } from "./domain/receivables";
 export {
   PLATFORM_FINANCE_MODULE_SLUG,
   PLATFORM_FINANCE_WORKSPACE_ID,
@@ -111,6 +117,9 @@ export {
 export { PlatformFinanceService } from "@/services/platform-finance/PlatformFinanceService";
 export { PlatformFinanceRequestsService } from "@/services/platform-finance/PlatformFinanceRequestsService";
 export { PlatformFinancePayablesService } from "@/services/platform-finance/PlatformFinancePayablesService";
+export { PlatformFinanceInvoicesService } from "@/services/platform-finance/PlatformFinanceInvoicesService";
+export { PlatformFinanceCounterpartiesService } from "@/services/platform-finance/PlatformFinanceCounterpartiesService";
+export { PlatformFinanceReceivablesService } from "@/services/platform-finance/PlatformFinanceReceivablesService";
 export { PlatformFinanceRequestsServerService } from "./server/PlatformFinanceRequestsServerService";
 export { PlatformFinanceRequestsRepository } from "./server/PlatformFinanceRequestsRepository";
 export { PlatformFinancePayablesServerService } from "./server/PlatformFinancePayablesServerService";

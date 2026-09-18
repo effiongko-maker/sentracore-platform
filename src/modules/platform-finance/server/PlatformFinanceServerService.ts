@@ -986,6 +986,29 @@ export class PlatformFinanceServerService {
     const companyIdsForRequests = selectedCompanyId
       ? [selectedCompanyId]
       : companies.map((c) => c.id);
+    const admin = createAdminClient();
+    const { data: receivableGrant } = await admin
+      .from("finance_capability_grants")
+      .select("id")
+      .eq("organisation_id", this.organisationId)
+      .eq("profile_id", input.profileId)
+      .eq("capability", "platform_finance.receivable.view")
+      .maybeSingle();
+    let receivables: FinanceOverviewSnapshot["receivables"] = null;
+    if (receivableGrant && companyIdsForRequests.length) {
+      const { data: receivableRows, error: receivableError } = await admin
+        .from("finance_receivables")
+        .select("due_date,original_amount")
+        .eq("organisation_id", this.organisationId)
+        .in("company_id", companyIdsForRequests);
+      if (receivableError) throw new ActionError("INTERNAL_ERROR", receivableError.message);
+      const today = asOf.slice(0, 10);
+      const overdueRows = (receivableRows ?? []).filter((row) => row.due_date < today);
+      receivables = {
+        open: sumBucket((receivableRows ?? []).map((row) => Number(row.original_amount))),
+        overdue: sumBucket(overdueRows.map((row) => Number(row.original_amount))),
+      };
+    }
     const requests =
       await this.requestsRepo.listRequestsForCompanies(companyIdsForRequests);
     const vendorBills = organisationWide
@@ -1158,6 +1181,7 @@ export class PlatformFinanceServerService {
         ...pendingCeo.map((r) => r.requestedAmount),
         ...vendorBills.map((bill) => bill.billedAmount),
       ]),
+      receivables,
       needsAttention,
       accounting: {
         revenue,

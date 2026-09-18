@@ -62,6 +62,10 @@ export type FinanceOverviewSnapshot = {
   };
   /** Combined FR + Vendor Bill queue currently awaiting CEO funding decisions. */
   pendingCeoDecisions: FinanceOverviewMetricBucket;
+  receivables: {
+    open: FinanceOverviewMetricBucket;
+    overdue: FinanceOverviewMetricBucket;
+  } | null;
   needsAttention: FinanceOverviewAttentionItem[];
   accounting: FinanceOverviewAccountingSnapshot;
   recentActivity: FinanceOverviewActivityItem[];
