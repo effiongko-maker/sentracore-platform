@@ -13,6 +13,12 @@ import type {
 import type { FinanceOverviewSnapshot } from "@/modules/platform-finance/overviewTypes";
 import type { FinanceJournalRegisterResult } from "@/modules/platform-finance/journalTypes";
 import type { FinanceGeneralLedgerResult } from "@/modules/platform-finance/domain/generalLedger";
+import type { FinanceTrialBalanceResult } from "@/modules/platform-finance/domain/trialBalance";
+import type {
+  FinanceProfitAndLossResult,
+  FinanceProfitAndLossScope,
+} from "@/modules/platform-finance/domain/profitAndLoss";
+import type { FinanceBalanceSheetResult } from "@/modules/platform-finance/domain/balanceSheet";
 import type {
   OpeningPositionListItem,
   OpeningPositionReview,
@@ -358,15 +364,37 @@ export const PlatformFinanceService = {
 
   listGeneralLedger(input: {
     companyId: string;
-    periodId: string;
-    dateFrom: string;
-    dateTo: string;
-    accountId?: string | null;
+    accountId: string;
+    periodId?: string | null;
+    dateFrom?: string | null;
+    dateTo?: string | null;
     search?: string | null;
     page?: number;
     pageSize?: number;
   }): Promise<FinanceGeneralLedgerResult> {
     return postAction("listGeneralLedger", { input });
+  },
+
+  getTrialBalance(input: {
+    companyId: string;
+    periodId: string;
+  }): Promise<FinanceTrialBalanceResult> {
+    return postAction("getTrialBalance", { input });
+  },
+
+  getProfitAndLoss(input: {
+    companyId: string;
+    periodId: string;
+    scope?: FinanceProfitAndLossScope;
+  }): Promise<FinanceProfitAndLossResult> {
+    return postAction("getProfitAndLoss", { input });
+  },
+
+  getBalanceSheet(input: {
+    companyId: string;
+    periodId: string;
+  }): Promise<FinanceBalanceSheetResult> {
+    return postAction("getBalanceSheet", { input });
   },
 
   getJournalDetail(journalEntryId: string): Promise<{

@@ -72,12 +72,18 @@ function main() {
     "journal route exists (Slice 2)"
   );
   assert(
-    !existsSync(
+    existsSync(
       resolve(
         "src/app/(app)/platform-finance/accounting/trial-balance/page.tsx"
       )
     ),
-    "no fake trial balance page"
+    "trial balance route"
+  );
+  assert(
+    !existsSync(
+      resolve("src/app/(app)/platform-finance/accounting/cash-flow/page.tsx")
+    ),
+    "cash flow route remains dark"
   );
 
   // Nav: Accounting live; subnav has coming soon for statements

@@ -3921,6 +3921,89 @@ a.pf-new-save-success-action {
   color: var(--pf-ink, #111827);
 }
 
+.pf-gl-account-context {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: var(--pf-ink, #111827);
+}
+
+.pf-gl-totals {
+  grid-template-columns: repeat(3, minmax(0, 12rem));
+}
+
+.pf-gl-table {
+  min-width: 48rem;
+}
+
+.pf-statement-disclosure {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--pf-muted, #6b7280);
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--pf-border, #e5e7eb);
+  border-radius: 0.75rem;
+  background: #f9fafb;
+}
+
+.pf-statement-table {
+  min-width: 36rem;
+}
+
+.pf-statement-section td {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6b7280;
+  background: #f9fafb;
+}
+
+.pf-statement-total td {
+  font-weight: 700;
+}
+
+.pf-statement-result td {
+  font-weight: 750;
+  border-top: 1px solid var(--pf-border, #e5e7eb);
+}
+
+.pf-statement-derived td {
+  font-style: italic;
+  color: #4b5563;
+}
+
+.pf-statement-scope {
+  display: inline-flex;
+  border: 1px solid var(--pf-border, #e5e7eb);
+  border-radius: 0.65rem;
+  overflow: hidden;
+  background: #fff;
+}
+
+.pf-statement-scope button {
+  height: 2.5rem;
+  padding: 0 0.95rem;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  background: transparent;
+  border: 0;
+  color: var(--pf-muted, #6b7280);
+  cursor: pointer;
+}
+
+.pf-statement-scope button[aria-pressed="true"] {
+  background: #111827;
+  color: #fff;
+}
+
+.pf-journal .pf-empty-copy {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--pf-muted, #6b7280);
+}
+
 .pf-journal-table th {
   text-align: left;
   padding: 0.65rem 0.75rem;

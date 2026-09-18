@@ -53,3 +53,38 @@ export const FINANCE_PERIOD_MONTH_LABELS = [
 export function financePeriodLabel(year: number, month: number): string {
   return `${FINANCE_PERIOD_MONTH_LABELS[month - 1] ?? month} ${year}`;
 }
+
+/** Sort key: year*12 + month (1–12). */
+export function periodOrdinal(year: number, month: number): number {
+  return year * 12 + month;
+}
+
+/**
+ * Prefer the open period covering `asOf`, else the newest open period at or
+ * before that month, else the newest period at or before that month.
+ */
+export function selectDefaultFinancePeriod<
+  T extends { year: number; month: number; status: string },
+>(periods: readonly T[], asOf: Date = new Date()): T | null {
+  if (periods.length === 0) return null;
+  const currentOrdinal = asOf.getUTCFullYear() * 12 + (asOf.getUTCMonth() + 1);
+  const relevant = periods.filter(
+    (period) => periodOrdinal(period.year, period.month) <= currentOrdinal
+  );
+  if (relevant.length === 0) return null;
+
+  const open = relevant.filter((period) => period.status === "open");
+  const currentOpen = open.find(
+    (period) => periodOrdinal(period.year, period.month) === currentOrdinal
+  );
+  if (currentOpen) return currentOpen;
+
+  const newestOpen = [...open].sort(
+    (a, b) => periodOrdinal(b.year, b.month) - periodOrdinal(a.year, b.month)
+  )[0];
+  if (newestOpen) return newestOpen;
+
+  return [...relevant].sort(
+    (a, b) => periodOrdinal(b.year, b.month) - periodOrdinal(a.year, b.month)
+  )[0];
+}

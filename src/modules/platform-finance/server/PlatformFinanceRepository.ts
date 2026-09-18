@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/utils/supabase/admin";
 import type {
   FinanceAccount,
+  FinanceAccountType,
   FinanceCompany,
   FinanceFoundationStatus,
   FinanceJournalEntry,
@@ -11,6 +12,9 @@ import type {
   PlatformFinanceModuleSlug,
 } from "@/modules/platform-finance/types";
 import { PLATFORM_FINANCE_MODULE_SLUG } from "@/modules/platform-finance/types";
+import { isFinanceAccountType } from "@/modules/platform-finance/domain/coa";
+import type { PostedAccountMovement } from "@/modules/platform-finance/domain/accountingReadModels";
+import { roundMoney2 } from "@/modules/platform-finance/domain/accountingReadModels";
 import { PlatformFinanceFinancialAccountsRepository } from "@/modules/platform-finance/server/PlatformFinanceFinancialAccountsRepository";
 
 function db() {
@@ -995,14 +999,15 @@ export class PlatformFinanceRepository {
 
   /**
    * Posted GL activity from finance_general_ledger_v.
-   * Totals cover the full filtered set; rows are server-paginated.
+   * Totals cover the full filtered set via a server-only debit/credit scan;
+   * page rows are server-paginated. Does not use PostgREST aggregate aliases.
    */
   async queryGeneralLedger(input: {
     companyId: string;
-    periodId: string;
-    dateFrom: string;
-    dateTo: string;
-    accountId?: string | null;
+    accountId: string;
+    periodId?: string | null;
+    dateFrom?: string | null;
+    dateTo?: string | null;
     search?: string | null;
     page: number;
     pageSize: number;
@@ -1010,6 +1015,7 @@ export class PlatformFinanceRepository {
     rows: Array<{
       journalLineId: string;
       journalEntryId: string;
+      transactionId: string | null;
       entryDate: string;
       reference: string;
       entryDescription: string;
@@ -1018,6 +1024,7 @@ export class PlatformFinanceRepository {
       accountName: string;
       debit: number;
       credit: number;
+      preparedByProfileId: string | null;
     }>;
     total: number;
     totalDebit: number;
@@ -1035,61 +1042,49 @@ export class PlatformFinanceRepository {
           `entry_reference.ilike.%${search}%`,
           `entry_description.ilike.%${search}%`,
           `line_description.ilike.%${search}%`,
-          `account_code.ilike.%${search}%`,
-          `account_name.ilike.%${search}%`,
         ].join(",")
       : "";
+    const periodId = input.periodId?.trim() || null;
+    const dateFrom = input.dateFrom?.trim() || null;
+    const dateTo = input.dateTo?.trim() || null;
 
     let pageQuery = db()
       .from("finance_general_ledger_v")
       .select(
-        "journal_line_id,journal_entry_id,entry_date,entry_reference,entry_description,line_description,account_code,account_name,debit,credit,line_no",
+        "journal_line_id,journal_entry_id,transaction_id,entry_date,entry_reference,entry_description,line_description,account_code,account_name,debit,credit,line_no",
         { count: "exact" }
       )
       .eq("organisation_id", this.organisationId)
       .eq("company_id", input.companyId)
-      .eq("period_id", input.periodId)
-      .gte("entry_date", input.dateFrom)
-      .lte("entry_date", input.dateTo);
-    if (input.accountId) pageQuery = pageQuery.eq("account_id", input.accountId);
+      .eq("account_id", input.accountId);
+    if (periodId) pageQuery = pageQuery.eq("period_id", periodId);
+    if (dateFrom) pageQuery = pageQuery.gte("entry_date", dateFrom);
+    if (dateTo) pageQuery = pageQuery.lte("entry_date", dateTo);
     if (searchOr) pageQuery = pageQuery.or(searchOr);
 
-    let totalsQuery = db()
-      .from("finance_general_ledger_v")
-      .select("total_debit:debit.sum(), total_credit:credit.sum()")
-      .eq("organisation_id", this.organisationId)
-      .eq("company_id", input.companyId)
-      .eq("period_id", input.periodId)
-      .gte("entry_date", input.dateFrom)
-      .lte("entry_date", input.dateTo);
-    if (input.accountId) totalsQuery = totalsQuery.eq("account_id", input.accountId);
-    if (searchOr) totalsQuery = totalsQuery.or(searchOr);
-
-    const [pageResult, totalsResult] = await Promise.all([
+    const [pageResult, totals] = await Promise.all([
       pageQuery
         .order("entry_date", { ascending: true })
         .order("entry_reference", { ascending: true })
         .order("line_no", { ascending: true })
         .order("journal_line_id", { ascending: true })
         .range(from, to),
-      totalsQuery,
+      this.sumGeneralLedgerDebitCredit({
+        companyId: input.companyId,
+        accountId: input.accountId,
+        periodId,
+        dateFrom,
+        dateTo,
+        searchOr,
+      }),
     ]);
 
     if (pageResult.error) throwDb(pageResult.error, "Failed to load general ledger.");
-    if (totalsResult.error) throwDb(totalsResult.error, "Failed to load general ledger totals.");
-
-    const totalsRow = Array.isArray(totalsResult.data)
-      ? (totalsResult.data[0] as
-          | { total_debit?: number | string | null; total_credit?: number | string | null }
-          | undefined)
-      : (totalsResult.data as {
-          total_debit?: number | string | null;
-          total_credit?: number | string | null;
-        } | null);
 
     type LedgerRow = {
       journal_line_id: string;
       journal_entry_id: string;
+      transaction_id: string | null;
       entry_date: string;
       entry_reference: string;
       entry_description: string | null;
@@ -1100,23 +1095,163 @@ export class PlatformFinanceRepository {
       credit: number | string | null;
     };
 
+    const mappedRows = ((pageResult.data ?? []) as LedgerRow[]).map((row) => ({
+      journalLineId: row.journal_line_id,
+      journalEntryId: row.journal_entry_id,
+      transactionId: row.transaction_id ?? null,
+      entryDate: row.entry_date,
+      reference: row.entry_reference,
+      entryDescription: row.entry_description ?? "",
+      lineDescription: row.line_description ?? null,
+      accountCode: row.account_code,
+      accountName: row.account_name,
+      debit: Number(row.debit ?? 0),
+      credit: Number(row.credit ?? 0),
+      preparedByProfileId: null as string | null,
+    }));
+
+    const txIds = [
+      ...new Set(mappedRows.map((row) => row.transactionId).filter(Boolean)),
+    ] as string[];
+    if (txIds.length > 0) {
+      const { data: txRows, error: txError } = await db()
+        .from("finance_transactions")
+        .select("id, created_by_profile_id")
+        .eq("organisation_id", this.organisationId)
+        .in("id", txIds);
+      if (txError) throwDb(txError, "Failed to load ledger preparers.");
+      const createdByByTx = new Map(
+        (txRows ?? []).map((row) => [
+          String(row.id),
+          String(row.created_by_profile_id ?? "") || null,
+        ])
+      );
+      for (const row of mappedRows) {
+        row.preparedByProfileId = row.transactionId
+          ? createdByByTx.get(row.transactionId) ?? null
+          : null;
+      }
+    }
+
     return {
-      rows: ((pageResult.data ?? []) as LedgerRow[]).map((row) => ({
-        journalLineId: row.journal_line_id,
-        journalEntryId: row.journal_entry_id,
-        entryDate: row.entry_date,
-        reference: row.entry_reference,
-        entryDescription: row.entry_description ?? "",
-        lineDescription: row.line_description ?? null,
+      rows: mappedRows,
+      total: pageResult.count ?? 0,
+      totalDebit: totals.totalDebit,
+      totalCredit: totals.totalCredit,
+    };
+  }
+
+  private async sumGeneralLedgerDebitCredit(input: {
+    companyId: string;
+    accountId: string;
+    periodId: string | null;
+    dateFrom: string | null;
+    dateTo: string | null;
+    searchOr: string;
+  }): Promise<{ totalDebit: number; totalCredit: number }> {
+    const pageSize = 1000;
+    let offset = 0;
+    let totalDebit = 0;
+    let totalCredit = 0;
+    for (;;) {
+      let totalsQuery = db()
+        .from("finance_general_ledger_v")
+        .select("debit, credit")
+        .eq("organisation_id", this.organisationId)
+        .eq("company_id", input.companyId)
+        .eq("account_id", input.accountId);
+      if (input.periodId) totalsQuery = totalsQuery.eq("period_id", input.periodId);
+      if (input.dateFrom) totalsQuery = totalsQuery.gte("entry_date", input.dateFrom);
+      if (input.dateTo) totalsQuery = totalsQuery.lte("entry_date", input.dateTo);
+      if (input.searchOr) totalsQuery = totalsQuery.or(input.searchOr);
+      const { data, error } = await totalsQuery.range(offset, offset + pageSize - 1);
+      if (error) throwDb(error, "Failed to load general ledger totals.");
+      const batch = (data ?? []) as Array<{
+        debit: number | string | null;
+        credit: number | string | null;
+      }>;
+      for (const row of batch) {
+        totalDebit += Number(row.debit ?? 0);
+        totalCredit += Number(row.credit ?? 0);
+      }
+      if (batch.length < pageSize) break;
+      offset += pageSize;
+      if (offset >= 1_000_000) {
+        throw new Error("General ledger totals exceeded the v1 scan limit.");
+      }
+    }
+    return {
+      totalDebit: roundMoney2(totalDebit),
+      totalCredit: roundMoney2(totalCredit),
+    };
+  }
+
+  /**
+   * Period × account posted movement from finance_trial_balance_v,
+   * joined to period calendar and live CoA classification.
+   */
+  async listPostedAccountMovements(
+    companyId: string
+  ): Promise<PostedAccountMovement[]> {
+    const pageSize = 1000;
+    const raw: Array<{
+      period_id: string;
+      account_id: string;
+      account_code: string;
+      account_name: string;
+      account_type: string;
+      total_debit: number | string | null;
+      total_credit: number | string | null;
+    }> = [];
+    let offset = 0;
+    for (;;) {
+      const { data, error } = await db()
+        .from("finance_trial_balance_v")
+        .select(
+          "period_id, account_id, account_code, account_name, account_type, total_debit, total_credit"
+        )
+        .eq("organisation_id", this.organisationId)
+        .eq("company_id", companyId)
+        .range(offset, offset + pageSize - 1);
+      if (error) throwDb(error, "Failed to load posted account movements.");
+      const batch = (data ?? []) as typeof raw;
+      raw.push(...batch);
+      if (batch.length < pageSize) break;
+      offset += pageSize;
+      if (offset >= 1_000_000) {
+        throw new Error("Posted account movement scan exceeded the v1 limit.");
+      }
+    }
+
+    if (raw.length === 0) return [];
+
+    const [periods, accounts] = await Promise.all([
+      this.listPeriods(companyId),
+      this.listAccounts(),
+    ]);
+    const periodById = new Map(periods.map((period) => [period.id, period]));
+    const accountById = new Map(accounts.map((account) => [account.id, account]));
+
+    const movements: PostedAccountMovement[] = [];
+    for (const row of raw) {
+      const period = periodById.get(row.period_id);
+      if (!period) continue;
+      if (!isFinanceAccountType(row.account_type)) continue;
+      const account = accountById.get(row.account_id);
+      movements.push({
+        periodId: row.period_id,
+        year: period.year,
+        month: period.month,
+        accountId: row.account_id,
         accountCode: row.account_code,
         accountName: row.account_name,
-        debit: Number(row.debit ?? 0),
-        credit: Number(row.credit ?? 0),
-      })),
-      total: pageResult.count ?? 0,
-      totalDebit: Number(totalsRow?.total_debit ?? 0),
-      totalCredit: Number(totalsRow?.total_credit ?? 0),
-    };
+        accountType: row.account_type as FinanceAccountType,
+        classification: account?.classification ?? null,
+        totalDebit: Number(row.total_debit ?? 0),
+        totalCredit: Number(row.total_credit ?? 0),
+      });
+    }
+    return movements;
   }
 
   async listRecentAuditEvents(profileId: string, limit = 12): Promise<

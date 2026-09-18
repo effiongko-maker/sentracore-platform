@@ -38,26 +38,34 @@ function main() {
     "journal detail route"
   );
   assert(
-    !existsSync(
+    existsSync(
       resolve(
         "src/app/(app)/platform-finance/accounting/trial-balance/page.tsx"
       )
     ),
-    "no fake TB route"
+    "trial balance route"
   );
   assert(
-    !existsSync(
-      resolve("src/app/(app)/platform-finance/accounting/pnl/page.tsx")
+    existsSync(
+      resolve(
+        "src/app/(app)/platform-finance/accounting/profit-and-loss/page.tsx"
+      )
     ) &&
-      !existsSync(
+      existsSync(
         resolve(
           "src/app/(app)/platform-finance/accounting/balance-sheet/page.tsx"
         )
-      ) &&
-      !existsSync(
-        resolve("src/app/(app)/platform-finance/accounting/cash-flow/page.tsx")
       ),
-    "statement routes remain dark"
+    "P&L and Balance Sheet routes"
+  );
+  assert(
+    !existsSync(
+      resolve("src/app/(app)/platform-finance/accounting/cash-flow/page.tsx")
+    ) &&
+      !existsSync(
+        resolve("src/app/(app)/platform-finance/accounting/pnl/page.tsx")
+      ),
+    "Cash Flow route remains dark"
   );
 
   const nav = readSrc("src/modules/platform-finance/nav.ts");
@@ -82,17 +90,16 @@ function main() {
     "statement labels remain"
   );
   assert(
-    nav.includes('href: null,\n        label: "Trial Balance"'),
-    "Trial Balance remains dark"
+    nav.includes('href: "/platform-finance/accounting/trial-balance"'),
+    "Trial Balance is live"
   );
   assert(
-    nav.includes('href: null,\n        label: "P&L"') ||
-      nav.includes('{ href: null, label: "P&L"'),
-    "P&L remains dark"
+    nav.includes('href: "/platform-finance/accounting/profit-and-loss"'),
+    "P&L is live"
   );
   assert(
-    nav.includes('href: null,\n        label: "Balance Sheet"'),
-    "Balance Sheet remains dark"
+    nav.includes('href: "/platform-finance/accounting/balance-sheet"'),
+    "Balance Sheet is live"
   );
   assert(
     nav.includes('{ href: null, label: "Cash Flow"') ||
@@ -175,6 +182,9 @@ function main() {
   assert(repo.includes("queryJournalRegister"), "register query");
   assert(repo.includes("queryGeneralLedger"), "dedicated GL query");
   assert(repo.includes("finance_general_ledger_v"), "GL reads posted-line view");
+  assert(!repo.includes("debit.sum()"), "GL totals do not use PostgREST sum");
+  assert(!repo.includes("credit.sum()"), "GL totals do not use PostgREST credit sum");
+  assert(repo.includes("sumGeneralLedgerDebitCredit"), "server-only debit/credit scan");
   assert(repo.includes("enrichJournalRegisterLines"), "line-level enrichment");
   assert(repo.includes("listJournalLinesWithAccounts"), "lines+accounts");
   assert(
@@ -204,17 +214,29 @@ function main() {
   );
   assert(service.includes("preparedByName"), "service maps preparedByName");
   assert(
-    service.includes("Date range must fall within the selected period."),
-    "GL rejects dates outside period"
+    service.includes("GL account is required."),
+    "GL requires an account"
   );
 
   const glPage = readSrc(
     "src/modules/platform-finance/components/PlatformFinanceGeneralLedgerPage.tsx"
   );
   assert(glPage.includes(">Journal Ref</th>"), "GL Journal Ref column");
-  assert(glPage.includes(">GL Code</th>"), "GL Code column");
-  assert(glPage.includes("Total Debit"), "filtered debit total");
-  assert(glPage.includes("Total Credit"), "filtered credit total");
+  assert(glPage.includes(">Prepared By</th>"), "GL Prepared By column");
+  assert(!glPage.includes(">GL Code</th>"), "account-scoped GL omits GL Code column");
+  assert(glPage.includes("Total Debits"), "filtered debit total");
+  assert(glPage.includes("Total Credits"), "filtered credit total");
+  assert(glPage.includes("Net Movement"), "filtered net movement");
+  assert(
+    glPage.includes("Select a GL account to view posted activity."),
+    "account required empty state"
+  );
+  assert(
+    glPage.includes("Search reference or description..."),
+    "search placeholder omits account"
+  );
+  assert(!glPage.includes("Date from"), "period/date controls removed from primary GL UI");
+  assert(!glPage.includes("aria-label=\"Period\""), "period control removed from primary GL UI");
   assert(!/running balance|opening balance/i.test(glPage), "no running/opening balance");
   assert(
     !/last4|institution|account_number|Restricted corporate financial account/i.test(

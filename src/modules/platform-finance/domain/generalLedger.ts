@@ -1,17 +1,19 @@
 /**
  * General Ledger v1 — posted journal-line activity register.
- * Derived from finance_general_ledger_v. No running balance.
+ * Derived from finance_general_ledger_v. Account-scoped. No running balance.
  */
 
 export type FinanceGeneralLedgerFilters = {
   companyId: string;
-  periodId: string;
-  /** Inclusive YYYY-MM-DD; must fall within the selected period. */
-  dateFrom: string;
-  /** Inclusive YYYY-MM-DD; must fall within the selected period. */
-  dateTo: string;
-  accountId?: string | null;
-  /** Matches journal reference, entry/line description, account code, or name. */
+  /** Required before rows load. */
+  accountId: string;
+  /** Optional; retained for API compatibility. Not used by the primary GL UI. */
+  periodId?: string | null;
+  /** Inclusive YYYY-MM-DD. Optional. */
+  dateFrom?: string | null;
+  /** Inclusive YYYY-MM-DD. Optional. */
+  dateTo?: string | null;
+  /** Matches journal reference, entry description, or line description. */
   search?: string | null;
   page?: number;
   pageSize?: number;
@@ -28,6 +30,7 @@ export type FinanceGeneralLedgerRow = {
   accountName: string;
   debit: number;
   credit: number;
+  preparedByName: string | null;
 };
 
 export type FinanceGeneralLedgerResult = {

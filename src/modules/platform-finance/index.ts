@@ -6,6 +6,9 @@ export { PlatformFinancePeriodsPage } from "./components/PlatformFinancePeriodsP
 export { PlatformFinanceJournalPage } from "./components/PlatformFinanceJournalPage";
 export { PlatformFinanceJournalDetailPage } from "./components/PlatformFinanceJournalDetailPage";
 export { PlatformFinanceGeneralLedgerPage } from "./components/PlatformFinanceGeneralLedgerPage";
+export { PlatformFinanceTrialBalancePage } from "./components/PlatformFinanceTrialBalancePage";
+export { PlatformFinanceProfitAndLossPage } from "./components/PlatformFinanceProfitAndLossPage";
+export { PlatformFinanceBalanceSheetPage } from "./components/PlatformFinanceBalanceSheetPage";
 export { PlatformFinanceRequestsPage } from "./components/PlatformFinanceRequestsPage";
 export { PlatformFinanceNewRequestPage } from "./components/PlatformFinanceNewRequestPage";
 export { PlatformFinanceRequestReviewPage } from "./components/PlatformFinanceRequestReviewPage";

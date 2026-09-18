@@ -11,12 +11,7 @@ import {
   PLATFORM_FINANCE_JOURNAL_REGISTER_PAGE_SIZES,
 } from "@/modules/platform-finance/constants";
 import type { FinanceGeneralLedgerRow } from "@/modules/platform-finance/domain/generalLedger";
-import { financePeriodLabel } from "@/modules/platform-finance/domain/periods";
-import type {
-  FinanceAccount,
-  FinanceCompany,
-  FinancePeriod,
-} from "@/modules/platform-finance/types";
+import type { FinanceAccount, FinanceCompany } from "@/modules/platform-finance/types";
 
 function formatNaira(amount: number): string {
   if (!Number.isFinite(amount)) return "—";
@@ -31,6 +26,12 @@ function formatNairaCell(amount: number): string {
   return formatNaira(amount);
 }
 
+function formatNairaSigned(amount: number): string {
+  if (!Number.isFinite(amount)) return "—";
+  const formatted = formatNaira(Math.abs(amount));
+  return amount < 0 ? `(${formatted})` : formatted;
+}
+
 function formatDate(iso: string): string {
   const d = new Date(iso.includes("T") ? iso : `${iso}T00:00:00`);
   if (Number.isNaN(d.getTime())) return iso;
@@ -41,33 +42,8 @@ function formatDate(iso: string): string {
   });
 }
 
-function localIsoDate(): string {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${now.getFullYear()}-${month}-${day}`;
-}
-
-function datesWithinPeriod(
-  period: FinancePeriod,
-  dateFrom: string,
-  dateTo: string
-): string | null {
-  if (!dateFrom || !dateTo) {
-    return "Date from and date to are required.";
-  }
-  if (dateFrom > dateTo) {
-    return "Date from must be on or before date to.";
-  }
-  if (dateFrom < period.startDate || dateTo > period.endDate) {
-    return "Date range must fall within the selected period.";
-  }
-  return null;
-}
-
 export function PlatformFinanceGeneralLedgerPage() {
   const [companies, setCompanies] = useState<FinanceCompany[]>([]);
-  const [periods, setPeriods] = useState<FinancePeriod[]>([]);
   const [accounts, setAccounts] = useState<FinanceAccount[]>([]);
   const [rows, setRows] = useState<FinanceGeneralLedgerRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -79,24 +55,20 @@ export function PlatformFinanceGeneralLedgerPage() {
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dateError, setDateError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [searchApplied, setSearchApplied] = useState("");
   const [companyId, setCompanyId] = useState("");
-  const [periodId, setPeriodId] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
   const [accountId, setAccountId] = useState("");
-
-  const selectedPeriod = useMemo(
-    () => periods.find((period) => period.id === periodId) ?? null,
-    [periodId, periods]
-  );
 
   const activeAccounts = useMemo(
     () => accounts.filter((account) => account.status === "active"),
     [accounts]
+  );
+
+  const selectedAccount = useMemo(
+    () => activeAccounts.find((account) => account.id === accountId) ?? null,
+    [accountId, activeAccounts]
   );
 
   useEffect(() => {
@@ -110,11 +82,10 @@ export function PlatformFinanceGeneralLedgerPage() {
         if (cancelled) return;
         setCompanies(nextCompanies);
         setAccounts(nextAccounts);
-        if (nextCompanies.length === 1) {
-          setCompanyId(nextCompanies[0]!.id);
-        } else if (nextCompanies[0]) {
+        if (nextCompanies[0]) {
           setCompanyId(nextCompanies[0].id);
         }
+        setLoading(false);
       } catch (cause: unknown) {
         if (!cancelled) {
           setError(
@@ -129,47 +100,8 @@ export function PlatformFinanceGeneralLedgerPage() {
     };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!companyId) {
-        setPeriods([]);
-        setPeriodId("");
-        setDateFrom("");
-        setDateTo("");
-        return;
-      }
-      try {
-        const list = await PlatformFinanceService.listPeriods(companyId);
-        if (cancelled) return;
-        setPeriods(list);
-        const today = localIsoDate();
-        const covering = list.find(
-          (period) =>
-            period.status === "open" &&
-            period.startDate <= today &&
-            period.endDate >= today
-        );
-        const latestOpen = list.find((period) => period.status === "open");
-        const nextPeriod = covering ?? latestOpen ?? null;
-        setPeriodId(nextPeriod?.id ?? "");
-        setDateFrom(nextPeriod?.startDate ?? "");
-        setDateTo(nextPeriod?.endDate ?? "");
-        setPage(1);
-      } catch {
-        if (!cancelled) {
-          setPeriods([]);
-          setPeriodId("");
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [companyId]);
-
   const load = useCallback(async () => {
-    if (!companyId || !periodId || !selectedPeriod) {
+    if (!companyId || !accountId) {
       setRows([]);
       setTotal(0);
       setTotalDebit(0);
@@ -177,25 +109,11 @@ export function PlatformFinanceGeneralLedgerPage() {
       setLoading(false);
       return;
     }
-    const rangeError = datesWithinPeriod(selectedPeriod, dateFrom, dateTo);
-    if (rangeError) {
-      setDateError(rangeError);
-      setRows([]);
-      setTotal(0);
-      setTotalDebit(0);
-      setTotalCredit(0);
-      setLoading(false);
-      return;
-    }
-    setDateError(null);
     setLoading(true);
     try {
       const result = await PlatformFinanceService.listGeneralLedger({
         companyId,
-        periodId,
-        dateFrom,
-        dateTo,
-        accountId: accountId || null,
+        accountId,
         search: searchApplied || null,
         page,
         pageSize,
@@ -216,17 +134,7 @@ export function PlatformFinanceGeneralLedgerPage() {
     } finally {
       setLoading(false);
     }
-  }, [
-    accountId,
-    companyId,
-    dateFrom,
-    dateTo,
-    page,
-    pageSize,
-    periodId,
-    searchApplied,
-    selectedPeriod,
-  ]);
+  }, [accountId, companyId, page, pageSize, searchApplied]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -237,30 +145,18 @@ export function PlatformFinanceGeneralLedgerPage() {
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
   const showPager = total > pageSize;
+  const netMovement = totalDebit - totalCredit;
 
   function applySearch() {
     setSearchApplied(search.trim());
     setPage(1);
   }
 
-  function clearOptionalFilters() {
-    setAccountId("");
+  function clearSearch() {
     setSearch("");
     setSearchApplied("");
-    if (selectedPeriod) {
-      setDateFrom(selectedPeriod.startDate);
-      setDateTo(selectedPeriod.endDate);
-    }
     setPage(1);
   }
-
-  const hasOptionalFilters = Boolean(
-    accountId ||
-      searchApplied ||
-      (selectedPeriod &&
-        (dateFrom !== selectedPeriod.startDate ||
-          dateTo !== selectedPeriod.endDate))
-  );
 
   return (
     <div className="pf-journal">
@@ -268,26 +164,10 @@ export function PlatformFinanceGeneralLedgerPage() {
         <div className="pf-journal-header-copy">
           <h1 className="pf-journal-title">General Ledger</h1>
           <p className="pf-journal-desc">
-            Posted journal line activity for the selected company and period.
+            Posted activity for a selected company and GL account.
           </p>
         </div>
       </header>
-
-      <div className="pf-journal-toolbar">
-        <div className="pf-journal-search">
-          <Search size={16} aria-hidden />
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") applySearch();
-            }}
-            placeholder="Search reference, description, or account…"
-            aria-label="Search general ledger"
-          />
-        </div>
-      </div>
 
       <div className="pf-journal-filters">
         <SearchableSelect
@@ -306,54 +186,6 @@ export function PlatformFinanceGeneralLedgerPage() {
           }))}
           searchPlaceholder="Search companies…"
         />
-        <select
-          className={`${inputClassName} pf-journal-filter-control`}
-          value={periodId}
-          disabled={!companyId}
-          onChange={(event) => {
-            const nextId = event.target.value;
-            const nextPeriod = periods.find((period) => period.id === nextId);
-            setPeriodId(nextId);
-            setDateFrom(nextPeriod?.startDate ?? "");
-            setDateTo(nextPeriod?.endDate ?? "");
-            setPage(1);
-          }}
-          aria-label="Period"
-        >
-          <option value="">{companyId ? "Select period" : "Select a company first"}</option>
-          {periods.map((period) => (
-            <option key={period.id} value={period.id}>
-              {financePeriodLabel(period.year, period.month)}
-              {period.status === "closed" ? " (closed)" : ""}
-            </option>
-          ))}
-        </select>
-        <input
-          type="date"
-          className={`${inputClassName} pf-journal-filter-control`}
-          value={dateFrom}
-          min={selectedPeriod?.startDate}
-          max={selectedPeriod?.endDate}
-          disabled={!selectedPeriod}
-          onChange={(event) => {
-            setDateFrom(event.target.value);
-            setPage(1);
-          }}
-          aria-label="Date from"
-        />
-        <input
-          type="date"
-          className={`${inputClassName} pf-journal-filter-control`}
-          value={dateTo}
-          min={selectedPeriod?.startDate}
-          max={selectedPeriod?.endDate}
-          disabled={!selectedPeriod}
-          onChange={(event) => {
-            setDateTo(event.target.value);
-            setPage(1);
-          }}
-          aria-label="Date to"
-        />
         <SearchableSelect
           className="pf-journal-filter-control"
           aria-label="GL account"
@@ -362,9 +194,7 @@ export function PlatformFinanceGeneralLedgerPage() {
             setAccountId(value);
             setPage(1);
           }}
-          allowEmpty
-          emptyOptionLabel="All accounts"
-          placeholder="All accounts"
+          placeholder="Select GL account"
           options={activeAccounts.map((account) => ({
             value: account.id,
             label: `${account.code} — ${account.name}`,
@@ -372,22 +202,34 @@ export function PlatformFinanceGeneralLedgerPage() {
           }))}
           searchPlaceholder="Search accounts…"
         />
-        {hasOptionalFilters ? (
+      </div>
+
+      <div className="pf-journal-toolbar">
+        <div className="pf-journal-search">
+          <Search size={16} aria-hidden />
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") applySearch();
+            }}
+            placeholder="Search reference or description..."
+            aria-label="Search reference or description"
+            disabled={!accountId}
+          />
+        </div>
+        {searchApplied ? (
           <button
             type="button"
             className="pf-link-btn pf-journal-clear"
-            onClick={clearOptionalFilters}
+            onClick={clearSearch}
           >
-            Clear filters
+            Clear search
           </button>
         ) : null}
       </div>
 
-      {dateError ? (
-        <div className="pf-vb-alert is-danger" role="alert">
-          {dateError}
-        </div>
-      ) : null}
       {error ? (
         <div className="pf-vb-alert is-danger" role="alert">
           {error}
@@ -396,33 +238,55 @@ export function PlatformFinanceGeneralLedgerPage() {
 
       {!companyId ? (
         <p className="pf-empty-copy">Select a company to view the general ledger.</p>
+      ) : !accountId ? (
+        <p className="pf-empty-copy">Select a GL account to view posted activity.</p>
       ) : loading ? (
         <p className="pf-empty-copy">Loading general ledger…</p>
       ) : (
         <>
+          {selectedAccount ? (
+            <p className="pf-gl-account-context">
+              {selectedAccount.code} — {selectedAccount.name}
+            </p>
+          ) : null}
+
+          <div className="pf-journal-register-totals pf-gl-totals" aria-live="polite">
+            <div>
+              <span>Total Debits</span>
+              <strong>{formatNaira(totalDebit)}</strong>
+            </div>
+            <div>
+              <span>Total Credits</span>
+              <strong>{formatNaira(totalCredit)}</strong>
+            </div>
+            <div>
+              <span>Net Movement</span>
+              <strong>{formatNairaSigned(netMovement)}</strong>
+            </div>
+          </div>
+
           <div className="pf-journal-table-wrap">
-            <table className="pf-journal-table pf-journal-register-table">
+            <table className="pf-journal-table pf-journal-register-table pf-gl-table">
               <thead>
                 <tr>
                   <th>Date</th>
                   <th>Journal Ref</th>
                   <th>Description</th>
-                  <th>GL Code</th>
-                  <th>Account</th>
                   <th className="is-num">Debit (₦)</th>
                   <th className="is-num">Credit (₦)</th>
+                  <th>Prepared By</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length === 0 ? (
                   <tr className="pf-journal-empty-row">
-                    <td colSpan={7}>
+                    <td colSpan={6}>
                       <p className="pf-journal-empty-title">
-                        No posted ledger lines for the current filters.
+                        No posted ledger activity for this account.
                       </p>
                       <p className="pf-journal-empty-copy">
-                        Posted journal activity will appear here once it exists
-                        for this company and period.
+                        Posted journal activity for the selected company and
+                        account will appear here.
                       </p>
                     </td>
                   </tr>
@@ -439,26 +303,14 @@ export function PlatformFinanceGeneralLedgerPage() {
                         </Link>
                       </td>
                       <td className="pf-journal-desc-cell">{row.description}</td>
-                      <td className="pf-journal-code">{row.accountCode}</td>
-                      <td>{row.accountName}</td>
                       <td className="is-num">{formatNairaCell(row.debit)}</td>
                       <td className="is-num">{formatNairaCell(row.credit)}</td>
+                      <td>{row.preparedByName ?? "—"}</td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
-          </div>
-
-          <div className="pf-journal-register-totals" aria-live="polite">
-            <div>
-              <span>Total Debit</span>
-              <strong>{formatNaira(totalDebit)}</strong>
-            </div>
-            <div>
-              <span>Total Credit</span>
-              <strong>{formatNaira(totalCredit)}</strong>
-            </div>
           </div>
 
           {showPager ? (

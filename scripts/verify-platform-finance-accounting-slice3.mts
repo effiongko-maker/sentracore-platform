@@ -53,12 +53,12 @@ function mainStatic() {
     "new journal form component"
   );
   assert(
-    !existsSync(
+    existsSync(
       resolve(
         "src/app/(app)/platform-finance/accounting/trial-balance/page.tsx"
       )
     ),
-    "no fake TB route"
+    "trial balance route exists for statements pass"
   );
 
   const route = readSrc("src/app/api/platform-finance/route.ts");

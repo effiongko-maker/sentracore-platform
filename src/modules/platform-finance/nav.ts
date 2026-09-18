@@ -62,25 +62,22 @@ export const PLATFORM_FINANCE_NAV_ITEMS: readonly PlatformFinanceNavItem[] = [
         icon: BookOpen,
       },
       {
-        href: null,
+        href: "/platform-finance/accounting/trial-balance",
         label: "Trial Balance",
         match: "prefix",
         icon: BarChart3,
-        comingSoon: true,
       },
       {
-        href: null,
+        href: "/platform-finance/accounting/profit-and-loss",
         label: "P&L",
         match: "prefix",
         icon: BarChart3,
-        comingSoon: true,
       },
       {
-        href: null,
+        href: "/platform-finance/accounting/balance-sheet",
         label: "Balance Sheet",
         match: "prefix",
         icon: BarChart3,
-        comingSoon: true,
       },
       {
         href: null,
@@ -204,17 +201,19 @@ export const PLATFORM_FINANCE_ACCOUNTING_SUBNAV: readonly AccountingSubnavItem[]
       icon: BookOpen,
     },
     {
-      href: null,
+      href: "/platform-finance/accounting/trial-balance",
       label: "Trial Balance",
       icon: BarChart3,
-      comingSoon: true,
     },
-    { href: null, label: "P&L", icon: BarChart3, comingSoon: true },
     {
-      href: null,
+      href: "/platform-finance/accounting/profit-and-loss",
+      label: "P&L",
+      icon: BarChart3,
+    },
+    {
+      href: "/platform-finance/accounting/balance-sheet",
       label: "Balance Sheet",
       icon: BarChart3,
-      comingSoon: true,
     },
     { href: null, label: "Cash Flow", icon: BarChart3, comingSoon: true },
     {

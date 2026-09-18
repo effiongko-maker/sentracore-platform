@@ -43,6 +43,15 @@ import type {
   FinanceGeneralLedgerResult,
   FinanceGeneralLedgerRow,
 } from "@/modules/platform-finance/domain/generalLedger";
+import { buildTrialBalance } from "@/modules/platform-finance/domain/trialBalance";
+import type { FinanceTrialBalanceResult } from "@/modules/platform-finance/domain/trialBalance";
+import {
+  buildProfitAndLoss,
+  type FinanceProfitAndLossResult,
+  type FinanceProfitAndLossScope,
+} from "@/modules/platform-finance/domain/profitAndLoss";
+import { buildBalanceSheet } from "@/modules/platform-finance/domain/balanceSheet";
+import type { FinanceBalanceSheetResult } from "@/modules/platform-finance/domain/balanceSheet";
 import { PlatformFinanceRequestsRepository } from "@/modules/platform-finance/server/PlatformFinanceRequestsRepository";
 import { PlatformFinanceVendorBillsRepository } from "@/modules/platform-finance/server/PlatformFinanceVendorBillsRepository";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -69,6 +78,16 @@ const MONTH_LABELS = [
 
 function periodLabel(year: number, month: number): string {
   return `${MONTH_LABELS[month - 1] ?? month} ${year}`;
+}
+
+function formatStatementDate(iso: string): string {
+  const date = new Date(iso.includes("T") ? iso : `${iso}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 }
 
 /** Sort key: year*12 + month (1–12). */
@@ -824,27 +843,10 @@ export class PlatformFinanceServerService {
     };
   }
 
-  async listGeneralLedger(
+  private async requireCompanyAccess(
     profileId: string,
-    filters: FinanceGeneralLedgerFilters
-  ): Promise<FinanceGeneralLedgerResult> {
-    const companyId = filters.companyId?.trim() ?? "";
-    const periodId = filters.periodId?.trim() ?? "";
-    const dateFrom = filters.dateFrom?.trim() ?? "";
-    const dateTo = filters.dateTo?.trim() ?? "";
-    if (!companyId) {
-      throw new ActionError("VALIDATION_ERROR", "Company is required.");
-    }
-    if (!periodId) {
-      throw new ActionError("VALIDATION_ERROR", "Period is required.");
-    }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) {
-      throw new ActionError("VALIDATION_ERROR", "Date from and date to must be YYYY-MM-DD.");
-    }
-    if (dateFrom > dateTo) {
-      throw new ActionError("VALIDATION_ERROR", "Date from must be on or before date to.");
-    }
-
+    companyId: string
+  ): Promise<void> {
     const accessibleIds = await this.repo.listAccessibleCompanyIds(profileId);
     if (!accessibleIds.includes(companyId)) {
       throw new ActionError(
@@ -852,38 +854,80 @@ export class PlatformFinanceServerService {
         "You do not have access to this finance company."
       );
     }
+  }
 
+  private async requireCompanyPeriod(companyId: string, periodId: string) {
     const period = await this.repo.getPeriod(periodId);
     if (!period || period.companyId !== companyId) {
       throw new ActionError("VALIDATION_ERROR", "Period not found for this company.");
     }
-    if (dateFrom < period.startDate || dateTo > period.endDate) {
-      throw new ActionError(
-        "VALIDATION_ERROR",
-        "Date range must fall within the selected period."
-      );
+    return period;
+  }
+
+  async listGeneralLedger(
+    profileId: string,
+    filters: FinanceGeneralLedgerFilters
+  ): Promise<FinanceGeneralLedgerResult> {
+    const companyId = filters.companyId?.trim() ?? "";
+    const accountId = filters.accountId?.trim() ?? "";
+    const periodId = filters.periodId?.trim() || null;
+    const dateFrom = filters.dateFrom?.trim() || null;
+    const dateTo = filters.dateTo?.trim() || null;
+    if (!companyId) {
+      throw new ActionError("VALIDATION_ERROR", "Company is required.");
+    }
+    if (!accountId) {
+      throw new ActionError("VALIDATION_ERROR", "GL account is required.");
+    }
+    if (
+      (dateFrom && !/^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) ||
+      (dateTo && !/^\d{4}-\d{2}-\d{2}$/.test(dateTo))
+    ) {
+      throw new ActionError("VALIDATION_ERROR", "Date from and date to must be YYYY-MM-DD.");
+    }
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      throw new ActionError("VALIDATION_ERROR", "Date from must be on or before date to.");
     }
 
-    const accountId = filters.accountId?.trim() || null;
-    if (accountId) {
-      const account = await this.repo.getAccount(accountId);
-      if (!account) {
-        throw new ActionError("VALIDATION_ERROR", "GL account not found.");
+    await this.requireCompanyAccess(profileId, companyId);
+
+    if (periodId) {
+      const period = await this.requireCompanyPeriod(companyId, periodId);
+      if (dateFrom && dateFrom < period.startDate) {
+        throw new ActionError(
+          "VALIDATION_ERROR",
+          "Date range must fall within the selected period."
+        );
       }
+      if (dateTo && dateTo > period.endDate) {
+        throw new ActionError(
+          "VALIDATION_ERROR",
+          "Date range must fall within the selected period."
+        );
+      }
+    }
+
+    const account = await this.repo.getAccount(accountId);
+    if (!account) {
+      throw new ActionError("VALIDATION_ERROR", "GL account not found.");
     }
 
     const page = Math.max(1, filters.page ?? 1);
     const pageSize = filters.pageSize === 50 ? 50 : 20;
     const { rows, total, totalDebit, totalCredit } = await this.repo.queryGeneralLedger({
       companyId,
+      accountId,
       periodId,
       dateFrom,
       dateTo,
-      accountId,
       search: filters.search ?? null,
       page,
       pageSize,
     });
+
+    const preparerNames = await this.repo.getProfilesByIds(
+      rows.map((row) => row.preparedByProfileId).filter(Boolean) as string[]
+    );
 
     const mapped: FinanceGeneralLedgerRow[] = rows.map((row) => ({
       id: row.journalLineId,
@@ -895,6 +939,9 @@ export class PlatformFinanceServerService {
       accountName: row.accountName,
       debit: row.debit,
       credit: row.credit,
+      preparedByName: row.preparedByProfileId
+        ? preparerNames.get(row.preparedByProfileId) ?? null
+        : null,
     }));
 
     return {
@@ -905,6 +952,90 @@ export class PlatformFinanceServerService {
       totalDebit,
       totalCredit,
     };
+  }
+
+  async getTrialBalance(
+    profileId: string,
+    input: { companyId: string; periodId: string }
+  ): Promise<FinanceTrialBalanceResult> {
+    const companyId = input.companyId?.trim() ?? "";
+    const periodId = input.periodId?.trim() ?? "";
+    if (!companyId) {
+      throw new ActionError("VALIDATION_ERROR", "Company is required.");
+    }
+    if (!periodId) {
+      throw new ActionError("VALIDATION_ERROR", "Period is required.");
+    }
+    await this.requireCompanyAccess(profileId, companyId);
+    const period = await this.requireCompanyPeriod(companyId, periodId);
+    const movements = await this.repo.listPostedAccountMovements(companyId);
+    return buildTrialBalance({
+      companyId,
+      periodId,
+      asAtDate: period.endDate,
+      asAtLabel: `As at ${formatStatementDate(period.endDate)}`,
+      asOf: { year: period.year, month: period.month },
+      movements,
+    });
+  }
+
+  async getProfitAndLoss(
+    profileId: string,
+    input: {
+      companyId: string;
+      periodId: string;
+      scope?: FinanceProfitAndLossScope | null;
+    }
+  ): Promise<FinanceProfitAndLossResult> {
+    const companyId = input.companyId?.trim() ?? "";
+    const periodId = input.periodId?.trim() ?? "";
+    const scope: FinanceProfitAndLossScope =
+      input.scope === "ytd" ? "ytd" : "period";
+    if (!companyId) {
+      throw new ActionError("VALIDATION_ERROR", "Company is required.");
+    }
+    if (!periodId) {
+      throw new ActionError("VALIDATION_ERROR", "Period is required.");
+    }
+    await this.requireCompanyAccess(profileId, companyId);
+    const period = await this.requireCompanyPeriod(companyId, periodId);
+    const periodName = financePeriodLabel(period.year, period.month);
+    const movements = await this.repo.listPostedAccountMovements(companyId);
+    return buildProfitAndLoss({
+      companyId,
+      periodId,
+      scope,
+      period: { year: period.year, month: period.month },
+      heading: "Profit & Loss",
+      subheading:
+        scope === "ytd" ? `Year to ${periodName}` : `For ${periodName}`,
+      movements,
+    });
+  }
+
+  async getBalanceSheet(
+    profileId: string,
+    input: { companyId: string; periodId: string }
+  ): Promise<FinanceBalanceSheetResult> {
+    const companyId = input.companyId?.trim() ?? "";
+    const periodId = input.periodId?.trim() ?? "";
+    if (!companyId) {
+      throw new ActionError("VALIDATION_ERROR", "Company is required.");
+    }
+    if (!periodId) {
+      throw new ActionError("VALIDATION_ERROR", "Period is required.");
+    }
+    await this.requireCompanyAccess(profileId, companyId);
+    const period = await this.requireCompanyPeriod(companyId, periodId);
+    const movements = await this.repo.listPostedAccountMovements(companyId);
+    return buildBalanceSheet({
+      companyId,
+      periodId,
+      asAtDate: period.endDate,
+      asAtLabel: `As at ${formatStatementDate(period.endDate)}`,
+      asOf: { year: period.year, month: period.month },
+      movements,
+    });
   }
 
   async getJournalDetail(

@@ -30,6 +30,9 @@ type PlatformFinanceAction =
   | "getJournal"
   | "listJournals"
   | "listGeneralLedger"
+  | "getTrialBalance"
+  | "getProfitAndLoss"
+  | "getBalanceSheet"
   | "getJournalDetail";
 
 type RequestBody = {
@@ -98,6 +101,9 @@ function capabilityForAction(
     case "getAccount":
     case "listJournals":
     case "listGeneralLedger":
+    case "getTrialBalance":
+    case "getProfitAndLoss":
+    case "getBalanceSheet":
     case "getJournalDetail":
     case "findOpenPeriodForDate":
     default:
@@ -122,6 +128,9 @@ function companyIdForAction(
     action === "getMyAccountingCapabilities" ||
     action === "listJournals" ||
     action === "listGeneralLedger" ||
+    action === "getTrialBalance" ||
+    action === "getProfitAndLoss" ||
+    action === "getBalanceSheet" ||
     action === "getJournalDetail"
   ) {
     return undefined;
@@ -520,17 +529,49 @@ export async function POST(request: Request) {
           success: true,
           data: await service.listGeneralLedger(access.profileId, {
             companyId: String(input.companyId ?? ""),
-            periodId: String(input.periodId ?? ""),
-            dateFrom: String(input.dateFrom ?? ""),
-            dateTo: String(input.dateTo ?? ""),
-            accountId:
-              typeof input.accountId === "string" ? input.accountId : null,
+            accountId: String(input.accountId ?? ""),
+            periodId:
+              typeof input.periodId === "string" ? input.periodId : null,
+            dateFrom:
+              typeof input.dateFrom === "string" ? input.dateFrom : null,
+            dateTo: typeof input.dateTo === "string" ? input.dateTo : null,
             search: typeof input.search === "string" ? input.search : null,
             page: typeof input.page === "number" ? input.page : Number(input.page ?? 1),
             pageSize:
               typeof input.pageSize === "number"
                 ? input.pageSize
                 : Number(input.pageSize ?? 20),
+          }),
+        });
+      }
+      case "getTrialBalance": {
+        const input = body.input ?? {};
+        return NextResponse.json({
+          success: true,
+          data: await service.getTrialBalance(access.profileId, {
+            companyId: String(input.companyId ?? ""),
+            periodId: String(input.periodId ?? ""),
+          }),
+        });
+      }
+      case "getProfitAndLoss": {
+        const input = body.input ?? {};
+        return NextResponse.json({
+          success: true,
+          data: await service.getProfitAndLoss(access.profileId, {
+            companyId: String(input.companyId ?? ""),
+            periodId: String(input.periodId ?? ""),
+            scope: input.scope === "ytd" ? "ytd" : "period",
+          }),
+        });
+      }
+      case "getBalanceSheet": {
+        const input = body.input ?? {};
+        return NextResponse.json({
+          success: true,
+          data: await service.getBalanceSheet(access.profileId, {
+            companyId: String(input.companyId ?? ""),
+            periodId: String(input.periodId ?? ""),
           }),
         });
       }
