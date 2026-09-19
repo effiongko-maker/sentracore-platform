@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Hexagon, Home } from "lucide-react";
+import { ChevronDown, Hexagon, Home, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -16,7 +16,9 @@ import {
   isOperationsPath,
   isPlatformFinancePath,
   isPlatformHomePath,
+  isAdminConsolePath,
   isCommandCentrePath,
+  ADMIN_CONSOLE_HOME,
   PLATFORM_HOME,
   COMMAND_CENTRE_HOME,
 } from "@/lib/platform/workspaces";
@@ -30,6 +32,7 @@ import {
   canSeeSurface,
 } from "@/lib/access";
 import { AppFooter } from "@/components/layout/AppFooter";
+import { ADMIN_NAV_ITEMS } from "@/modules/platform-admin/nav";
 import { SentraCoreLogo } from "@/components/brand";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import {
@@ -54,6 +57,7 @@ export function OrganisationalCompass() {
   const {
     enabledModules,
     workspaceAccess,
+    isSuperAdmin,
     loading: sessionLoading,
   } = usePlatformSession();
   const {
@@ -82,6 +86,7 @@ export function OrganisationalCompass() {
   const inEccOperations = isEccOperationsPath(pathname);
   const inPlatformFinance = isPlatformFinancePath(pathname);
   const inCommandCentre = isCommandCentrePath(pathname);
+  const inAdminConsole = isAdminConsolePath(pathname);
   const canUseEcc = Boolean(workspaceAccess?.eccOperations);
   const canUsePlatformFinance = Boolean(workspaceAccess?.platformFinance);
   const canUseCommandCentre = Boolean(workspaceAccess?.commandCentre);
@@ -277,9 +282,58 @@ export function OrganisationalCompass() {
           </Link>
 
           <WorkspaceSwitcher />
+          {isSuperAdmin && !inAdminConsole ? (
+            <Link
+              href={ADMIN_CONSOLE_HOME.href}
+              onClick={closeMobileNav}
+              className="os-compass-module"
+              style={{ marginTop: 8 }}
+            >
+              <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden />
+              <span>{ADMIN_CONSOLE_HOME.label}</span>
+            </Link>
+          ) : null}
         </div>
 
-        {inOperations ? (
+        {inAdminConsole ? (
+          <div className="os-compass-scroll">
+            <p className="os-compass-workspace-caption">Admin Console</p>
+            {sessionLoading ? (
+              <p className="os-compass-nav-status" role="status">
+                Loading navigation…
+              </p>
+            ) : isSuperAdmin ? (
+              <div className="os-compass-group os-compass-group-active">
+                <div className="os-compass-modules">
+                  {ADMIN_NAV_ITEMS.map((item) => {
+                    const Icon = item.icon;
+                    const active = item.match(pathname);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={closeMobileNav}
+                        aria-current={active ? "page" : undefined}
+                        className={cn("os-compass-module", active && "os-compass-module-active")}
+                      >
+                        <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                        <span>{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <>
+                <p className="os-compass-nav-status">No access to this area.</p>
+                <Link href={PLATFORM_HOME.href} onClick={closeMobileNav} className="os-compass-module">
+                  <Home className="h-4 w-4 shrink-0" aria-hidden />
+                  <span>Platform Home</span>
+                </Link>
+              </>
+            )}
+          </div>
+        ) : inOperations ? (
           <div className="os-compass-scroll">
             <p className="os-compass-workspace-caption">Facility Management</p>
             {navLoading ? (

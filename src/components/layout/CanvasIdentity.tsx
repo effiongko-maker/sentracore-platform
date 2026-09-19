@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import {
+  isAdminConsolePath,
   isCommandCentrePath,
   isOperationsPath,
   isPlatformHomePath,
@@ -18,7 +19,9 @@ export function CanvasIdentity() {
   const inFacilityManagement = isOperationsPath(pathname);
   const inCommandCentre = isCommandCentrePath(pathname);
 
-  const line = inCommandCentre
+  const line = isAdminConsolePath(pathname)
+    ? "SentraCore™ · Admin Console"
+    : inCommandCentre
     ? "SentraCore™ · Command Centre"
     : onPlatform
       ? "SentraCore™ · Enterprise Operating Platform"

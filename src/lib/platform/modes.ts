@@ -1,5 +1,6 @@
 import { resolveLayerByPath, type OperatingLayerId } from "@/lib/platform/layers";
 import {
+  isAdminConsolePath,
   isCommandCentrePath,
   isPlatformHomePath,
   isWorkspacePreviewPath,
@@ -63,7 +64,8 @@ export function productModeFromPath(pathname: string): ProductMode {
   if (
     isPlatformHomePath(pathname) ||
     isWorkspacePreviewPath(pathname) ||
-    isCommandCentrePath(pathname)
+    isCommandCentrePath(pathname) ||
+    isAdminConsolePath(pathname)
   ) {
     return "platform";
   }

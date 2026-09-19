@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isActionError } from "@/lib/actions/errors";
 import { requirePlatformAdmin } from "@/modules/platform-admin/server/requirePlatformAdmin";
 import { PlatformAdminServerService } from "@/modules/platform-admin/server/PlatformAdminServerService";
+import { AUDIT_ACTIONS_BY_CATEGORY, type AuditCategory } from "@/modules/platform-admin/auditDescribe";
 
 type PlatformAdminAction =
   | "listOrganisations"
@@ -12,7 +13,14 @@ type PlatformAdminAction =
   | "setOrganisationModule"
   | "grantPlatformCapability"
   | "revokePlatformCapability"
-  | "offboardUser";
+  | "offboardUser"
+  | "getOverview"
+  | "listPeople"
+  | "getPerson"
+  | "listModules"
+  | "listFacilities"
+  | "listAudit"
+  | "setFacilityAssignment";
 
 type RequestBody = {
   action?: PlatformAdminAction;
@@ -25,6 +33,12 @@ type RequestBody = {
   status?: string;
   moduleSlug?: string;
   capability?: string;
+  category?: string;
+  before?: string;
+  limit?: number;
+  facilityId?: string;
+  operationalRole?: string;
+  assignmentId?: string;
 };
 
 function actionErrorStatus(code: string): number {
@@ -200,6 +214,54 @@ export async function POST(request: Request) {
         }
         const data = await service.offboardUser(ctx, {
           profileId: body.profileId,
+        });
+        return NextResponse.json({ success: true, data });
+      }
+      case "getOverview":
+      case "listPeople":
+      case "listModules":
+      case "listFacilities":
+      case "listAudit":
+      case "getPerson": {
+        if (!body.organisationId) {
+          return NextResponse.json({ success: false, message: "organisationId is required." }, { status: 400 });
+        }
+        const reader = service.reader();
+        if (action === "getOverview") return NextResponse.json({ success: true, data: await reader.overview(body.organisationId) });
+        if (action === "listPeople") return NextResponse.json({ success: true, data: await reader.listPeople(body.organisationId) });
+        if (action === "listFacilities") return NextResponse.json({ success: true, data: await reader.listFacilities(body.organisationId) });
+        if (action === "listModules") return NextResponse.json({ success: true, data: await reader.listModules(body.organisationId) });
+        if (action === "getPerson") {
+          if (!body.profileId) return NextResponse.json({ success: false, message: "profileId is required." }, { status: 400 });
+          return NextResponse.json({ success: true, data: await reader.getPerson(body.organisationId, body.profileId) });
+        }
+        const category = body.category && body.category in AUDIT_ACTIONS_BY_CATEGORY ? (body.category as AuditCategory) : undefined;
+        if (body.category && !category) {
+          return NextResponse.json({ success: false, message: "Unknown audit category." }, { status: 400 });
+        }
+        const data = await reader.listAudit({
+          organisationId: body.organisationId,
+          category,
+          profileId: body.profileId,
+          before: body.before,
+          limit: body.limit,
+        });
+        return NextResponse.json({ success: true, data });
+      }
+      case "setFacilityAssignment": {
+        if (!body.organisationId || !body.profileId || !body.operationalRole || (!body.facilityId && !body.assignmentId)) {
+          return NextResponse.json(
+            { success: false, message: "organisationId, profileId, operationalRole and facilityId are required." },
+            { status: 400 }
+          );
+        }
+        const data = await service.setFacilityAssignment(ctx, {
+          organisationId: body.organisationId,
+          profileId: body.profileId,
+          facilityId: body.facilityId ?? "",
+          operationalRole: body.operationalRole,
+          status: body.status,
+          assignmentId: body.assignmentId,
         });
         return NextResponse.json({ success: true, data });
       }

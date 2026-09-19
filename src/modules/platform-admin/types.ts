@@ -13,6 +13,11 @@ export const PLATFORM_IAM_AUDIT_ACTIONS = [
   "capability.granted",
   "capability.revoked",
   "user.offboarded",
+  "facility_assignment.created",
+  "facility_assignment.activated",
+  "facility_assignment.deactivated",
+  "facility_assignment.role_changed",
+  "facility_assignment.facility_changed",
 ] as const;
 
 export type PlatformIamAuditAction = (typeof PLATFORM_IAM_AUDIT_ACTIONS)[number];
@@ -158,3 +163,88 @@ export type OffboardResult = {
  * Lift with ban_duration: "none".
  */
 export const PLATFORM_AUTH_SIGN_IN_DISABLE_BAN_DURATION = "876000h";
+
+// ---------------------------------------------------------------------------
+// Admin Console read models (Super-Admin-gated; authoritative data only)
+// ---------------------------------------------------------------------------
+
+export type AdminFacilityAssignment = {
+  assignmentId: string;
+  facilityId: string;
+  facilityName: string;
+  operationalRole: string;
+  status: "active" | "inactive";
+};
+
+export type AdminFinanceAccess = {
+  /** platform_finance.* capability keys held (read-only in the Admin Console). */
+  capabilities: string[];
+  companies: string[];
+  financialAccountAccessCount: number;
+};
+
+export type AdminPersonSummary = {
+  profileId: string;
+  fullName: string | null;
+  email: string | null;
+  jobTitle: string | null;
+  status: ProfileStatus;
+  organisationId: string | null;
+  organisationName: string | null;
+  isPlatformSuperAdmin: boolean;
+  /** Explicit platform capability grants (keys). */
+  capabilities: string[];
+  financeAccessPresent: boolean;
+  facilityAssignments: AdminFacilityAssignment[];
+};
+
+export type AdminPersonDetail = AdminPersonSummary & {
+  /** Descriptive organisation roles from the role catalog — NOT permissions. */
+  organisationRoles: string[];
+  financeAccess: AdminFinanceAccess;
+  operationalIdentity: { domain: string; externalIdentityId: string; status: string } | null;
+};
+
+export type AdminAuditEntry = {
+  id: string;
+  at: string;
+  action: string;
+  category: string | null;
+  actor: { profileId: string; name: string };
+  person: { profileId: string; name: string } | null;
+  headline: string;
+  detail: string[];
+};
+
+export type AdminOverview = {
+  organisation: { id: string; name: string; slug: string; status: string };
+  modules: Array<{ slug: string; name: string; description: string | null; status: OrganisationModuleAdminStatus }>;
+  peopleByStatus: Record<ProfileStatus, number>;
+  peopleTotal: number;
+  /** Active people who hold no explicit platform capability grant and are not Super Admin. */
+  activeWithoutGrants: number;
+  recentAudit: AdminAuditEntry[];
+};
+
+export type AdminAuditPage = {
+  events: AdminAuditEntry[];
+  /** Pass back as `before` to load older events; null when there are none. */
+  nextBefore: string | null;
+};
+
+export type AdminModuleRecord = {
+  slug: string;
+  name: string;
+  description: string | null;
+  status: OrganisationModuleAdminStatus;
+  /** People holding at least one explicit grant in this module's capability domains. */
+  peopleWithGrants: number | null;
+};
+
+export type FacilityAssignmentResult = {
+  assignmentId: string;
+  profileId: string;
+  facilityId: string;
+  operationalRole: string;
+  status: "active" | "inactive";
+};

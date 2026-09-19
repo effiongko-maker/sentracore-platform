@@ -9,6 +9,7 @@ import {
 import {
   isPlatformAdministrableCapability,
   PLATFORM_AUTH_SIGN_IN_DISABLE_BAN_DURATION,
+  type FacilityAssignmentResult,
   type InviteAttachResult,
   type OffboardResult,
   type OrganisationAdminRecord,
@@ -18,6 +19,15 @@ import {
   type PlatformIdentityAdminRecord,
   type ProfileStatusResult,
 } from "../types";
+import { FmPeopleRepository } from "@/modules/users/server/FmPeopleRepository";
+import {
+  FmPeopleNotFoundError,
+  FmPeopleUnavailableError,
+  FmPeopleValidationError,
+  parseAssignmentStatus,
+  parseOperationalRole,
+} from "@/modules/users/server/fmPeopleDomain";
+import { AdminConsoleReader } from "./AdminConsoleReader";
 import { PlatformAdminRepository } from "./PlatformAdminRepository";
 import type { PlatformAdminContext } from "./requirePlatformAdmin";
 
@@ -397,6 +407,58 @@ export class PlatformAdminServerService {
       targetProfileId: input.profileId,
       capability: input.capability,
     });
+  }
+
+  /**
+   * Operating-context administration: assign a profile to a facility, change the
+   * operational role, or (de)activate an assignment. Operational role is
+   * context — it grants NO capability. Every change is audited atomically by the
+   * fm_facility_assignments trigger (actor = the acting Super Admin).
+   */
+  async setFacilityAssignment(
+    ctx: PlatformAdminContext,
+    input: {
+      organisationId: string;
+      profileId: string;
+      facilityId: string;
+      operationalRole: unknown;
+      status?: unknown;
+      assignmentId?: string;
+    }
+  ): Promise<FacilityAssignmentResult> {
+    const organisation = await this.repo.getOrganisationById(input.organisationId);
+    if (!organisation) throw new ActionError("VALIDATION_ERROR", "Organisation not found.");
+    if (organisation.status !== "active") throw new ActionError("ORGANISATION_INACTIVE");
+    const target = await this.repo.getProfile(input.profileId);
+    if (!target) throw new ActionError("PROFILE_NOT_FOUND");
+    if (target.organisation_id !== input.organisationId) {
+      throw new ActionError("VALIDATION_ERROR", "Profile is not attached to the requested organisation.");
+    }
+    const people = new FmPeopleRepository(input.organisationId, this.admin);
+    try {
+      const role = parseOperationalRole(input.operationalRole);
+      const status = parseAssignmentStatus(input.status);
+      if (input.assignmentId) {
+        const existing = await people.getAssignment(input.assignmentId);
+        if (!existing || existing.profile_id !== input.profileId) {
+          throw new ActionError("VALIDATION_ERROR", "Assignment not found for this person.");
+        }
+        const row = await people.updateAssignment(existing.id, { role, status }, ctx.actorProfileId);
+        return { assignmentId: row.id, profileId: row.profile_id, facilityId: row.facility_id, operationalRole: row.operational_role, status: row.status === "active" ? "active" : "inactive" };
+      }
+      const row = await people.createAssignment({ profileId: input.profileId, facilityId: input.facilityId, role, status, actorProfileId: ctx.actorProfileId });
+      return { assignmentId: row.id, profileId: row.profile_id, facilityId: row.facility_id, operationalRole: row.operational_role, status: row.status === "active" ? "active" : "inactive" };
+    } catch (error) {
+      if (error instanceof FmPeopleValidationError || error instanceof FmPeopleNotFoundError) {
+        throw new ActionError("VALIDATION_ERROR", error.message);
+      }
+      if (error instanceof FmPeopleUnavailableError) throw new ActionError("INTERNAL_ERROR", error.message);
+      throw error;
+    }
+  }
+
+  reader(): AdminConsoleReader {
+    return new AdminConsoleReader(this.admin);
   }
 
   async offboardUser(

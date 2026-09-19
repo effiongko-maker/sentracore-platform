@@ -296,6 +296,7 @@ export function resolveCurrentWorkspaceId(
 ): WorkspaceId | null {
   if (isPlatformHomePath(pathname)) return null;
   if (isCommandCentrePath(pathname)) return null;
+  if (isAdminConsolePath(pathname)) return null;
 
   if (isEccOperationsPath(pathname)) {
     return "ecc-operations";
@@ -339,6 +340,13 @@ export function resolveCurrentWorkspace(
 /** Primary live workspace for platform marketing surfaces (not route-current). */
 export function getActiveWorkspace(): PlatformWorkspace {
   return PLATFORM_WORKSPACES.find((workspace) => workspace.status === "active")!;
+}
+
+export const ADMIN_CONSOLE_HOME = { href: "/admin", label: "Admin Console" } as const;
+
+/** Platform administration control plane (not a business workspace). */
+export function isAdminConsolePath(pathname: string): boolean {
+  return pathname === ADMIN_CONSOLE_HOME.href || pathname.startsWith(`${ADMIN_CONSOLE_HOME.href}/`);
 }
 
 export function isPlatformHomePath(pathname: string): boolean {
