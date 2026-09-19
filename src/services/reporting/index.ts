@@ -5,7 +5,6 @@ export {
   type ISnapshotService,
   type SnapshotCacheMetadata,
 } from "./SnapshotService";
-export { tryLoadSheetsReportingSnapshot } from "./sheetsSnapshot";
 export type {
   ReportingHealth,
   ReportingHealthBand,

@@ -211,8 +211,7 @@ function main() {
     for (const file of walk("src")) {
       const text = readFileSync(file, "utf8");
       if (/resource:\s*"work-orders"/.test(text) && /postToAppsScript/.test(text)) offenders.push(file);
-      // reporting-snapshot legitimately remains (assets/users/facilities/Work still ride it);
-      // its Work Order + Incident domains are REPLACED by Supabase in ReportingService.
+      // Phase 2I: the Sheet reporting-snapshot is retired; Reporting composes from Supabase readers.
       if (/resource:\s*"operational-workload"/.test(text) && /postToAppsScript\(/.test(text)) offenders.push(file);
     }
     assert(offenders.length === 0, `Apps Script Work Order calls: ${offenders.join(", ")}`);
@@ -233,7 +232,7 @@ function main() {
     assert(cc.includes("WorkInstructionServerAccess") && (cc.match(/postToAppsScriptData\(/g) ?? []).length === 0, "Operational Picture: WO from Supabase; no Apps Script call (Approvals also Supabase since Phase 2F)");
     assert(!cc.includes("loadAssignmentSummary"), "Apps Script Assignment Summary retired");
     const reporting = readSrc("src/services/reporting/ReportingService.ts");
-    assert(reporting.includes("loadAuthoritativeWorkOrders") && reporting.includes('"workOrders"'), "reporting uses Supabase Work Instructions with explicit health");
+    assert(reporting.includes("loadAuthoritativeWorkOrders") && /workOrders: workOrderSource\.ok/.test(reporting), "reporting uses Supabase Work Instructions with explicit health");
     assert(!/WorkOrderService\.listWorkOrders\([^)]*\)\s*\)\.catch\(\(\) => \[\]\)/.test(reporting), "no silent-zero Work Order catch");
   });
 

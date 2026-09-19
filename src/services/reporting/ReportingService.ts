@@ -1,6 +1,9 @@
 import { AssetService } from "@/services/assets/AssetService";
 import { FacilityService } from "@/services/facilities/FacilityService";
 import type { Asset } from "@/modules/assets/types";
+import type { Facility } from "@/modules/facilities/types";
+import type { Maintenance } from "@/modules/maintenance/types";
+import type { User } from "@/modules/users/types";
 import type { Incident } from "@/modules/incidents/types";
 import type { WorkOrder } from "@/modules/work-orders/types";
 import { IncidentService } from "@/services/incidents/IncidentService";
@@ -13,26 +16,17 @@ import { loadAllPages } from "./loadAllPages";
 import { ageInSeconds, toIsoUtc } from "./normalize";
 import { normalizeReportingEntities } from "./normalizeEntities";
 import { computeReportingProjections } from "./projections";
-import {
-  hydrateReportingSnapshot,
-  tryLoadSheetsReportingSnapshot,
-} from "./sheetsSnapshot";
 import { SnapshotService } from "./SnapshotService";
 import type { ReportingQuery, ReportingSnapshot } from "./types";
 
-function filterByFacilityId<T extends { facilityId?: string; facility?: string }>(
+function filterByFacilityId<T extends { facilityId?: string }>(
   rows: T[],
   facilityId?: string
 ): T[] {
   if (!facilityId) return rows;
   return rows.filter((row) => {
-    if ("facilityId" in row && row.facilityId) {
-      return row.facilityId === facilityId;
-    }
-    if ("facility" in row && row.facility) {
-      return row.facility === facilityId;
-    }
-    return false;
+    // Facility identity is the UUID only — never a name or legacy code.
+    return row.facilityId === facilityId;
   });
 }
 
@@ -41,9 +35,10 @@ function snapshotCacheKey(params: ReportingQuery): string {
 }
 
 /**
- * Incidents (Phase 2D) and Work Instructions (Phase 2E) are Supabase-
- * authoritative. A failed or unauthorized source is reported as UNAVAILABLE —
- * never as zero rows.
+ * Every Reporting source is a Supabase-authoritative domain reader (People,
+ * Facilities, Assets, Incidents, Work, Work Instructions). A failed or
+ * unauthorized source is reported as UNAVAILABLE — never as zero rows, and never
+ * replaced by Sheet data.
  */
 async function loadAuthoritative<T>(
   load: () => Promise<T[]>
@@ -67,23 +62,41 @@ async function loadAuthoritativeWorkOrders(): Promise<{ rows: WorkOrder[]; ok: b
   );
 }
 
+async function loadAuthoritativeUsers(): Promise<{ rows: User[]; ok: boolean }> {
+  return loadAuthoritative(() => loadAllPages((page, pageSize) => UserService.listUsersCatalog({ page, pageSize })));
+}
+
+async function loadAuthoritativeFacilities(): Promise<{ rows: Facility[]; ok: boolean }> {
+  return loadAuthoritative(() => loadAllPages((page, pageSize) => FacilityService.listFacilities({ page, pageSize })));
+}
+
+/** Work (fm_work) — the Sheet Maintenance register is not authoritative Work. */
+async function loadAuthoritativeWork(): Promise<{ rows: Maintenance[]; ok: boolean }> {
+  return loadAuthoritative(() => loadAllPages((page, pageSize) => MaintenanceService.listMaintenance({ page, pageSize })));
+}
+
 async function loadAuthoritativeAssets(): Promise<{ rows: Asset[]; ok: boolean }> {
   return loadAuthoritative(() =>
     loadAllPages((page, pageSize) => AssetService.listAssetsCatalog({ page, pageSize }))
   );
 }
 
-const SOURCE_LABELS = { incidents: "Incident", workOrders: "Work Instruction", assets: "Asset" } as const;
+const SOURCE_LABELS = {
+  users: "People",
+  facilities: "Facility",
+  maintenance: "Work",
+  incidents: "Incident",
+  workOrders: "Work Instruction",
+  assets: "Asset",
+} as const;
+type ReportingSourceKey = keyof typeof SOURCE_LABELS;
 
 /** Mark a snapshot whose authoritative source failed: honest summary, never "healthy". */
 function withSourceHealth(
   snapshot: ReportingSnapshot,
-  sources: { incidents: boolean; workOrders: boolean; assets: boolean }
+  sources: Record<ReportingSourceKey, boolean>
 ): ReportingSnapshot {
-  const unavailable: Array<"incidents" | "workOrders" | "assets"> = [];
-  if (!sources.incidents) unavailable.push("incidents");
-  if (!sources.workOrders) unavailable.push("workOrders");
-  if (!sources.assets) unavailable.push("assets");
+  const unavailable = (Object.keys(SOURCE_LABELS) as ReportingSourceKey[]).filter((key) => !sources[key]);
   if (unavailable.length === 0) return snapshot;
   const label = unavailable.map((u) => SOURCE_LABELS[u]).join(", ").replace(/, ([^,]*)$/, " and $1");
   const meta = snapshot._snapshotMeta;
@@ -99,52 +112,47 @@ function withSourceHealth(
 }
 
 /**
- * Domain fan-out fallback when REPORTING_SNAPSHOT is missing/empty/corrupt.
- * KPIs are always computed via computeReportingKpis (authoritative).
+ * Composes the reporting snapshot from the authoritative domain readers.
+ * KPIs and projections are always computed via the TypeScript engines.
  */
-async function buildReportingSnapshotFromDomain(
+async function buildReportingSnapshot(
   params: ReportingQuery
 ): Promise<ReportingSnapshot> {
   const asOf = toIsoUtc(params.asOf ?? new Date().toISOString());
   const facilityId = params.facilityId;
 
   const [
-    users,
-    facilities,
+    userSource,
+    facilitySource,
     assetSource,
     incidentSource,
-    maintenance,
+    workSource,
     workOrderSource,
     currentUser,
   ] = await Promise.all([
-    loadAllPages((page, pageSize) =>
-      UserService.listUsersCatalog({ page, pageSize })
-    ),
-    loadAllPages((page, pageSize) =>
-      FacilityService.listFacilities({ page, pageSize })
-    ),
+    loadAuthoritativeUsers(),
+    loadAuthoritativeFacilities(),
     loadAuthoritativeAssets(),
     loadAuthoritativeIncidents(),
-    loadAllPages((page, pageSize) =>
-      MaintenanceService.listMaintenance({ page, pageSize })
-    ).catch(() => []),
+    loadAuthoritativeWork(),
     loadAuthoritativeWorkOrders(),
+    // Descriptive only (marks "me"); a failure leaves it unset, never fabricates data.
     UserService.getCurrentUser().catch(() => null),
   ]);
 
   const scopedFacilities = facilityId
-    ? facilities.filter((facility) => facility.id === facilityId)
-    : facilities;
+    ? facilitySource.rows.filter((facility) => facility.id === facilityId)
+    : facilitySource.rows;
   const scopedAssets = filterByFacilityId(assetSource.rows, facilityId);
   const scopedIncidents = filterByFacilityId(incidentSource.rows, facilityId);
-  const scopedMaintenance = filterByFacilityId(maintenance, facilityId);
+  const scopedMaintenance = filterByFacilityId(workSource.rows, facilityId);
   const scopedWorkOrders = filterByFacilityId(workOrderSource.rows, facilityId);
 
   const draft: ReportingSnapshot = {
     asOf,
     facilityId,
     currentUserId: currentUser?.id,
-    users,
+    users: userSource.rows,
     facilities: scopedFacilities,
     assets: scopedAssets,
     incidents: scopedIncidents,
@@ -213,53 +221,25 @@ async function buildReportingSnapshotFromDomain(
     projections,
     health,
     _snapshotMeta: {
-      source: "domain_fallback",
+      source: "authoritative_domains",
       generatedAt,
       ageInSeconds: ageInSeconds(generatedAt),
       snapshotVersion: generatedAt,
       scope: facilityId || "__portfolio__",
     },
-  }, { incidents: incidentSource.ok, workOrders: workOrderSource.ok, assets: assetSource.ok });
-}
-
-async function buildReportingSnapshot(
-  params: ReportingQuery
-): Promise<ReportingSnapshot> {
-  try {
-    const fromSheets = await tryLoadSheetsReportingSnapshot(params);
-    if (fromSheets) {
-      // The Sheets REPORTING_SNAPSHOT still carries Sheet Incidents, Work Orders
-      // and Assets. Replace those domains with the authoritative Supabase rows.
-      const [incidents, workOrders, assets] = await Promise.all([
-        loadAuthoritativeIncidents(),
-        loadAuthoritativeWorkOrders(),
-        loadAuthoritativeAssets(),
-      ]);
-      const rehydrated = hydrateReportingSnapshot({
-        ...fromSheets,
-        incidents: filterByFacilityId(incidents.rows, params.facilityId),
-        workOrders: filterByFacilityId(workOrders.rows, params.facilityId),
-        assets: filterByFacilityId(assets.rows, params.facilityId),
-      });
-      return withSourceHealth(rehydrated, {
-        incidents: incidents.ok,
-        workOrders: workOrders.ok,
-        assets: assets.ok,
-      });
-    }
-  } catch (error) {
-    console.warn(
-      "[reporting] sheet snapshot path failed — using domain fallback",
-      error instanceof Error ? error.message : error
-    );
-  }
-
-  return buildReportingSnapshotFromDomain(params);
+  }, {
+    users: userSource.ok,
+    facilities: facilitySource.ok,
+    maintenance: workSource.ok,
+    incidents: incidentSource.ok,
+    workOrders: workOrderSource.ok,
+    assets: assetSource.ok,
+  });
 }
 
 /**
  * Platform-wide reporting engine.
- * Public API unchanged. Prefers Sheets snapshot; falls back to domain fan-out.
+ * Public API unchanged. Composed only from authoritative domain readers.
  */
 function withFreshAge(snapshot: ReportingSnapshot): ReportingSnapshot {
   const meta = snapshot._snapshotMeta;

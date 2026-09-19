@@ -112,12 +112,7 @@ export class ApiClient {
                             endpoint: "/api/master-data",
                             resource: "master-data",
                           }
-                        : path === "/reporting-snapshot"
-                          ? {
-                              endpoint: "/api/reporting-snapshot",
-                              resource: "reporting-snapshot",
-                            }
-                          : path === "/cost-records"
+                        : path === "/cost-records"
                             ? {
                                 endpoint: "/api/cost-records",
                                 resource: "cost-records",

@@ -3,7 +3,7 @@
  *
  *   npx tsx --tsconfig tsconfig.json scripts/verify-operational-api-access.mts
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   accessCan,
@@ -412,8 +412,8 @@ function main() {
     "workload gated"
   );
   assert(
-    readSrc("src/app/api/reporting-snapshot/route.ts").includes("gateApiCapability"),
-    "reporting gated"
+    !existsSync(resolve("src/app/api/reporting-snapshot/route.ts")),
+    "Phase 2I: the Sheet reporting-snapshot route is retired"
   );
 
   // Server-action capability enforcement (closes Apps Script bypass via executeAction)

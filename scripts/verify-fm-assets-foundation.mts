@@ -176,10 +176,11 @@ function main() {
     const offenders = walk("src").filter((f) => /asset\.facility\s*===/.test(readFileSync(f, "utf8")));
     assert(offenders.length === 0, offenders.join(", "));
   });
-  check(results, "reporting: Supabase assets override the Sheet snapshot; failed source is degraded, not zero", () => {
+  check(results, "reporting: Assets come from the Supabase reader (Phase 2I: no Sheet snapshot); failed source is degraded, not zero", () => {
     const rs = readSrc("src/services/reporting/ReportingService.ts");
-    assert(rs.includes("loadAuthoritativeAssets") && /assets: filterByFacilityId\(assets\.rows/.test(rs), "override");
-    assert(rs.includes("assets: assets.ok"), "source health");
+    assert(rs.includes("loadAuthoritativeAssets") && /filterByFacilityId\(assetSource\.rows/.test(rs), "asset reader");
+    assert(/assets: assetSource\.ok/.test(rs), "source health");
+    assert(!existsSync(resolve("src/app/api/reporting-snapshot/route.ts")), "Sheet snapshot retired");
   });
 
   // ------------------------------------------------------------- facility scope
