@@ -17,10 +17,6 @@ import {
   sharedRequest,
   stableRequestKey,
 } from "@/services/cache/sharedRequest";
-import {
-  postToAppsScript,
-  postToAppsScriptData,
-} from "@/services/api/appsScriptProxy";
 
 type RemoteApproval = Record<string, unknown>;
 
@@ -138,6 +134,7 @@ function mapRemoteApproval(raw: RemoteApproval): Approval {
   );
   return {
     id: String(pickField(raw, "id", "Approval ID") ?? ""),
+    approvalUuid: optionalMappedString(raw, "approvalUuid"),
     title: String(pickField(raw, "title", "Title") ?? ""),
     type: mapType(pickField(raw, "type", "Type")),
     workOrderId: String(pickField(raw, "workOrderId", "Work Order ID") ?? ""),
@@ -291,6 +288,11 @@ function toPaginated(
   };
 }
 
+/**
+ * Browser FM Approval client: browser → /api/approvals → Supabase (fm_approvals).
+ * This module must stay free of server modules. Server actions use
+ * `@/modules/approvals/server/ApprovalServerAccess`.
+ */
 export const ApprovalService = {
   async listApprovals(
     params: ApprovalListParams = {},
@@ -309,26 +311,9 @@ export const ApprovalService = {
       asOf: params.asOf ?? "",
     });
     return sharedRequest(key, async () => {
-      if (typeof window === "undefined") {
-        const row = await postToAppsScriptData(
-          {
-            resource: "approvals",
-            action: "getAll",
-            payload: params,
-          },
-          { resource: "approvals", action: "getAll" },
-          "ApprovalService.listApprovals"
-        );
-        return toPaginated(row, params);
-      }
-
       const response = await apiClient.post<unknown>(
         "/approvals",
-        {
-          resource: "approvals",
-          action: "getAll",
-          payload: params,
-        },
+        { resource: "approvals", action: "getAll", payload: params },
         { signal: options?.signal }
       );
       return toPaginated(response.data, params);
@@ -337,19 +322,6 @@ export const ApprovalService = {
 
   async getApproval(id: string): Promise<Approval | null> {
     try {
-      if (typeof window === "undefined") {
-        const row = await postToAppsScriptData(
-          {
-            resource: "approvals",
-            action: "getById",
-            payload: { id },
-          },
-          { resource: "approvals", action: "getById" },
-          "ApprovalService.getApproval"
-        );
-        return mapRemoteApproval(row as RemoteApproval);
-      }
-
       const response = await apiClient.post<Approval>("/approvals", {
         resource: "approvals",
         action: "getById",
@@ -357,102 +329,30 @@ export const ApprovalService = {
       });
       return mapRemoteApproval(response.data as unknown as RemoteApproval);
     } catch (error) {
+      // A missing Approval is a normal outcome; failures and 403s are not.
       if (error instanceof ApiError && error.status === 404) return null;
-      if (
-        error instanceof Error &&
-        (error as Error & { status?: number }).status === 404
-      ) {
-        return null;
-      }
       throw error;
     }
   },
 
   async createApproval(input: CreateApprovalInput): Promise<Approval> {
-    if (typeof window === "undefined") {
-      const raw = await postToAppsScript(
-        {
-          resource: "approvals",
-          action: "create",
-          payload: input,
-        },
-        { resource: "approvals", action: "create" },
-        "ApprovalService.createApproval"
-      );
-      const envelope = raw as {
-        data?: unknown;
-        success?: boolean;
-        message?: string;
-      };
-      if (envelope && typeof envelope === "object" && envelope.success === false) {
-        throw new ApiError(
-          envelope.message ?? "Failed to create approval",
-          502
-        );
-      }
-      const row =
-        envelope && typeof envelope === "object" && "data" in envelope
-          ? envelope.data
-          : raw;
-      const created = mapRemoteApproval(row as RemoteApproval);
-      onApprovalMutation();
-      return created;
-    }
-
     const response = await apiClient.post<Approval>("/approvals", {
       resource: "approvals",
       action: "create",
       payload: input,
     });
-    const created = mapRemoteApproval(
-      response.data as unknown as RemoteApproval
-    );
+    const created = mapRemoteApproval(response.data as unknown as RemoteApproval);
     onApprovalMutation();
     return created;
   },
 
-  async updateApproval(
-    id: string,
-    input: UpdateApprovalInput
-  ): Promise<Approval> {
-    if (typeof window === "undefined") {
-      const raw = await postToAppsScript(
-        {
-          resource: "approvals",
-          action: "update",
-          payload: { id, ...input },
-        },
-        { resource: "approvals", action: "update" },
-        "ApprovalService.updateApproval"
-      );
-      const envelope = raw as {
-        data?: unknown;
-        success?: boolean;
-        message?: string;
-      };
-      if (envelope && typeof envelope === "object" && envelope.success === false) {
-        throw new ApiError(
-          envelope.message ?? "Failed to update approval",
-          502
-        );
-      }
-      const row =
-        envelope && typeof envelope === "object" && "data" in envelope
-          ? envelope.data
-          : raw;
-      const updated = mapRemoteApproval(row as RemoteApproval);
-      onApprovalMutation();
-      return updated;
-    }
-
+  async updateApproval(id: string, input: UpdateApprovalInput): Promise<Approval> {
     const response = await apiClient.post<Approval>("/approvals", {
       resource: "approvals",
       action: "update",
       payload: { id, ...input },
     });
-    const updated = mapRemoteApproval(
-      response.data as unknown as RemoteApproval
-    );
+    const updated = mapRemoteApproval(response.data as unknown as RemoteApproval);
     onApprovalMutation();
     return updated;
   },
@@ -463,9 +363,7 @@ export const ApprovalService = {
       action: "deactivate",
       payload: { id },
     });
-    const deactivated = mapRemoteApproval(
-      response.data as unknown as RemoteApproval
-    );
+    const deactivated = mapRemoteApproval(response.data as unknown as RemoteApproval);
     onApprovalMutation();
     return deactivated;
   },

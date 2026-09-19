@@ -3,13 +3,10 @@
 import { ActionError, executeAction, type ActionResult } from "@/lib/actions";
 import { emitActionEvent } from "@/lib/actions/events";
 import { OperationalEventTypes } from "@/lib/events/taxonomy";
-import { ApprovalService } from "@/services/approvals/ApprovalService";
-import { WorkInstructionServerAccess as WorkOrderService } from "@/modules/work-orders/server/WorkInstructionServerAccess";
+import { ApprovalServerAccess as ApprovalService } from "@/modules/approvals/server/ApprovalServerAccess";
 import {
-  appendApprovalActivity,
   isAwaitingResponse,
   isAwaitingSubmission,
-  newActivityId,
   normalizeApprovalStatus,
 } from "../lifecycle";
 import type {
@@ -17,22 +14,12 @@ import type {
   FollowUpApprovalInput,
   RecordApprovalDecisionInput,
   SubmitApprovalInput,
-  UpdateApprovalInput,
 } from "../types";
 
-async function bumpLinkedWorkOrder(approval: Approval) {
-  if (!approval.workOrderId) return;
-  try {
-    await WorkOrderService.updateWorkOrder(approval.workOrderId, {
-      approvalId: approval.id,
-      requiresApproval: true,
-    });
-  } catch {
-    // Non-blocking — approval already saved.
-  }
-}
-
-function approvalEventData(approval: Approval, extra?: Record<string, unknown>) {
+function approvalEventData(
+  approval: Approval,
+  extra?: Record<string, unknown>,
+) {
   return {
     approvalId: approval.id,
     workOrderId: approval.workOrderId,
@@ -52,7 +39,7 @@ function approvalEventData(approval: Approval, extra?: Record<string, unknown>) 
  */
 export async function submitApprovalRequest(
   approvalId: string,
-  input: SubmitApprovalInput
+  input: SubmitApprovalInput,
 ): Promise<ActionResult<{ approval: Approval }>> {
   return executeAction({
     name: "approval.submit",
@@ -68,7 +55,7 @@ export async function submitApprovalRequest(
       if (!payload?.submittedAt || !payload?.submissionMethod) {
         throw new ActionError(
           "VALIDATION_ERROR",
-          "Submission date and method are required."
+          "Submission date and method are required.",
         );
       }
 
@@ -79,7 +66,7 @@ export async function submitApprovalRequest(
       if (!isAwaitingSubmission(existing.status)) {
         throw new ActionError(
           "VALIDATION_ERROR",
-          "Only approvals awaiting submission can be marked submitted."
+          "Only approvals awaiting submission can be marked submitted.",
         );
       }
 
@@ -88,7 +75,7 @@ export async function submitApprovalRequest(
         payload.submittedTo ? ` to ${payload.submittedTo}` : ""
       } via ${payload.submissionMethod.replace(/_/g, " ")}.`;
 
-      const update: UpdateApprovalInput = {
+      const update = {
         status: "awaiting_decision",
         submittedAt: payload.submittedAt,
         submissionMethod: payload.submissionMethod,
@@ -97,14 +84,13 @@ export async function submitApprovalRequest(
         acknowledgementFileName: payload.acknowledgement?.fileName,
         acknowledgementFileMime: payload.acknowledgement?.mimeType,
         acknowledgementFileSize: payload.acknowledgement?.sizeBytes,
-        lastActivityAt: now,
-        lastActivitySummary: summary,
-        activityLog: appendApprovalActivity(existing.activityLog, {
-          id: newActivityId("apr-submit"),
+      };
+
+      const approval = await ApprovalService.updateApproval(id, update, {
+        activity: {
           action: "approval_submitted",
           at: now,
           summary,
-          actorUserId: context.userId,
           data: {
             submissionMethod: payload.submissionMethod,
             submittedTo: payload.submittedTo,
@@ -112,29 +98,25 @@ export async function submitApprovalRequest(
             notes: payload.notes,
             acknowledgementFileName: payload.acknowledgement?.fileName,
           },
-        }),
-      };
-
-      const approval = await ApprovalService.updateApproval(id, update);
+        },
+      });
       // Always re-read so client surfaces match sheet (status + submittedAt).
-      const verified =
-        (await ApprovalService.getApproval(id)) ?? approval;
+      const verified = (await ApprovalService.getApproval(id)) ?? approval;
       if (
         normalizeApprovalStatus(verified.status, verified.submittedAt) ===
         "draft"
       ) {
         throw new ActionError(
           "INTERNAL_ERROR",
-          "Submission saved but status did not transition to awaiting decision. Redeploy ApprovalRepository.gs and retry."
+          "Submission saved but status did not transition to awaiting decision.",
         );
       }
-      await bumpLinkedWorkOrder(verified);
 
       try {
         await emitActionEvent(context, {
           eventType: OperationalEventTypes.FACILITY_APPROVAL_SUBMITTED,
           entityType: "approval",
-          entityId: verified.id,
+          entityId: verified.approvalUuid ?? verified.id,
           data: approvalEventData(verified, {
             submissionMethod: payload.submissionMethod,
             submittedTo: payload.submittedTo ?? null,
@@ -154,7 +136,7 @@ export async function submitApprovalRequest(
  */
 export async function recordApprovalFollowUp(
   approvalId: string,
-  input: FollowUpApprovalInput
+  input: FollowUpApprovalInput,
 ): Promise<ActionResult<{ approval: Approval }>> {
   return executeAction({
     name: "approval.follow_up",
@@ -167,10 +149,14 @@ export async function recordApprovalFollowUp(
       if (!id) {
         throw new ActionError("VALIDATION_ERROR", "Approval id is required.");
       }
-      if (!payload?.followedUpAt || !payload?.method || !payload?.outcomeNotes) {
+      if (
+        !payload?.followedUpAt ||
+        !payload?.method ||
+        !payload?.outcomeNotes
+      ) {
         throw new ActionError(
           "VALIDATION_ERROR",
-          "Follow-up date, method, and notes are required."
+          "Follow-up date, method, and notes are required.",
         );
       }
 
@@ -181,39 +167,39 @@ export async function recordApprovalFollowUp(
       if (!isAwaitingResponse(existing.status)) {
         throw new ActionError(
           "VALIDATION_ERROR",
-          "Follow-ups apply to approvals awaiting a client response."
+          "Follow-ups apply to approvals awaiting a client response.",
         );
       }
 
       const now = context.now;
       const summary = `Follow-up recorded on ${existing.id} via ${payload.method.replace(/_/g, " ")}.`;
 
-      const approval = await ApprovalService.updateApproval(id, {
-        lastFollowUpAt: payload.followedUpAt,
-        lastActivityAt: now,
-        lastActivitySummary: summary,
-        activityLog: appendApprovalActivity(existing.activityLog, {
-          id: newActivityId("apr-fu"),
-          action: "approval_followed_up",
-          at: now,
-          summary,
-          actorUserId: context.userId,
-          data: {
-            method: payload.method,
-            contactPerson: payload.contactPerson,
-            outcomeNotes: payload.outcomeNotes,
-            nextFollowUpAt: payload.nextFollowUpAt,
-            followedUpAt: payload.followedUpAt,
+      const approval = await ApprovalService.updateApproval(
+        id,
+        {
+          lastFollowUpAt: payload.followedUpAt,
+        },
+        {
+          activity: {
+            action: "approval_followed_up",
+            at: now,
+            summary,
+            data: {
+              method: payload.method,
+              contactPerson: payload.contactPerson,
+              outcomeNotes: payload.outcomeNotes,
+              nextFollowUpAt: payload.nextFollowUpAt,
+              followedUpAt: payload.followedUpAt,
+            },
           },
-        }),
-      });
-      await bumpLinkedWorkOrder(approval);
+        },
+      );
 
       try {
         await emitActionEvent(context, {
           eventType: OperationalEventTypes.FACILITY_APPROVAL_FOLLOWED_UP,
           entityType: "approval",
-          entityId: approval.id,
+          entityId: approval.approvalUuid ?? approval.id,
           data: approvalEventData(approval, {
             method: payload.method,
             nextFollowUpAt: payload.nextFollowUpAt ?? null,
@@ -233,7 +219,7 @@ export async function recordApprovalFollowUp(
  */
 export async function recordApprovalDecision(
   approvalId: string,
-  input: RecordApprovalDecisionInput
+  input: RecordApprovalDecisionInput,
 ): Promise<ActionResult<{ approval: Approval }>> {
   return executeAction({
     name: "approval.record_decision",
@@ -253,7 +239,7 @@ export async function recordApprovalDecision(
       if (!payload?.decision || !payload?.decisionAt) {
         throw new ActionError(
           "VALIDATION_ERROR",
-          "Decision and decision date are required."
+          "Decision and decision date are required.",
         );
       }
 
@@ -264,15 +250,17 @@ export async function recordApprovalDecision(
       if (!isAwaitingResponse(existing.status)) {
         throw new ActionError(
           "VALIDATION_ERROR",
-          "Decisions can only be recorded while awaiting a response."
+          "Decisions can only be recorded while awaiting a response.",
         );
       }
 
       const now = context.now;
       let nextStatus: Approval["status"] = "approved";
       let eventType: string = OperationalEventTypes.FACILITY_APPROVAL_APPROVED;
-      let action: "approval_approved" | "approval_partially_approved" | "approval_rejected" =
-        "approval_approved";
+      let action:
+        | "approval_approved"
+        | "approval_partially_approved"
+        | "approval_rejected" = "approval_approved";
       let summary = `Approval ${existing.id} approved`;
 
       if (payload.decision === "rejected") {
@@ -297,47 +285,48 @@ export async function recordApprovalDecision(
         }.`;
       }
 
-      const approval = await ApprovalService.updateApproval(id, {
-        status: nextStatus,
-        decisionAt: payload.decisionAt,
-        decisionOutcome: payload.decision,
-        decisionNotes: payload.decisionNotes,
-        decisionReference: payload.decisionReference,
-        approvedAmount:
-          payload.decision === "rejected"
-            ? undefined
-            : payload.approvedAmount ?? existing.approvalAmount,
-        approvedByUserId: context.userId,
-        decisionDocumentFileName: payload.decisionDocument?.fileName,
-        decisionDocumentFileMime: payload.decisionDocument?.mimeType,
-        decisionDocumentFileSize: payload.decisionDocument?.sizeBytes,
-        lastActivityAt: now,
-        lastActivitySummary: summary,
-        activityLog: appendApprovalActivity(existing.activityLog, {
-          id: newActivityId("apr-dec"),
-          action,
-          at: now,
-          summary,
-          actorUserId: context.userId,
-          data: {
-            decision: payload.decision,
-            approvedAmount: payload.approvedAmount,
-            decisionReference: payload.decisionReference,
-            decisionDocumentFileName: payload.decisionDocument?.fileName,
-            authorityMode: context.protectedAuthority?.mode ?? null,
-            authorityLabel: context.protectedAuthority?.label ?? null,
-            operatingRole: context.operatingAccess?.role ?? null,
-            protectedActionId: "approval.record_decision",
+      const approval = await ApprovalService.updateApproval(
+        id,
+        {
+          status: nextStatus,
+          decisionAt: payload.decisionAt,
+          decisionOutcome: payload.decision,
+          decisionNotes: payload.decisionNotes,
+          decisionReference: payload.decisionReference,
+          approvedAmount:
+            payload.decision === "rejected"
+              ? undefined
+              : (payload.approvedAmount ?? existing.approvalAmount),
+          approvedByUserId: context.userId,
+          decisionDocumentFileName: payload.decisionDocument?.fileName,
+          decisionDocumentFileMime: payload.decisionDocument?.mimeType,
+          decisionDocumentFileSize: payload.decisionDocument?.sizeBytes,
+        },
+        {
+          activity: {
+            action,
+            at: now,
+            summary,
+            data: {
+              decision: payload.decision,
+              approvedAmount: payload.approvedAmount,
+              decisionReference: payload.decisionReference,
+              decisionDocumentFileName: payload.decisionDocument?.fileName,
+              authorityMode: context.protectedAuthority?.mode ?? null,
+              authorityLabel: context.protectedAuthority?.label ?? null,
+              operatingRole: context.operatingAccess?.role ?? null,
+              protectedActionId: "approval.record_decision",
+            },
           },
-        }),
-      });
-      await bumpLinkedWorkOrder(approval);
+          allowDecision: true,
+        },
+      );
 
       try {
         await emitActionEvent(context, {
           eventType,
           entityType: "approval",
-          entityId: approval.id,
+          entityId: approval.approvalUuid ?? approval.id,
           data: approvalEventData(approval, {
             decision: payload.decision,
             decisionReference: payload.decisionReference ?? null,
@@ -359,7 +348,7 @@ export async function recordApprovalDecision(
 }
 
 export async function cancelApprovalRequest(
-  approvalId: string
+  approvalId: string,
 ): Promise<ActionResult<{ approval: Approval }>> {
   return executeAction({
     name: "approval.cancel",
@@ -384,31 +373,31 @@ export async function cancelApprovalRequest(
       ) {
         throw new ActionError(
           "VALIDATION_ERROR",
-          "This approval can no longer be cancelled."
+          "This approval can no longer be cancelled.",
         );
       }
 
       const now = context.now;
       const summary = `Approval ${existing.id} cancelled.`;
-      const approval = await ApprovalService.updateApproval(id, {
-        status: "cancelled",
-        lastActivityAt: now,
-        lastActivitySummary: summary,
-        activityLog: appendApprovalActivity(existing.activityLog, {
-          id: newActivityId("apr-cancel"),
-          action: "approval_cancelled",
-          at: now,
-          summary,
-          actorUserId: context.userId,
-        }),
-      });
-      await bumpLinkedWorkOrder(approval);
+      const approval = await ApprovalService.updateApproval(
+        id,
+        {
+          status: "cancelled",
+        },
+        {
+          activity: {
+            action: "approval_cancelled",
+            at: now,
+            summary,
+          },
+        },
+      );
 
       try {
         await emitActionEvent(context, {
           eventType: OperationalEventTypes.FACILITY_APPROVAL_CANCELLED,
           entityType: "approval",
-          entityId: approval.id,
+          entityId: approval.approvalUuid ?? approval.id,
           data: approvalEventData(approval),
         });
       } catch {

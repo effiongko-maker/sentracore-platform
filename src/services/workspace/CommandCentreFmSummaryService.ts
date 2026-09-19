@@ -1,5 +1,4 @@
 import type { OperationalPictureAggregate } from "@/modules/workspace/operationalPicture";
-import { postToAppsScriptData } from "@/services/api/appsScriptProxy";
 
 export const OPERATIONAL_PICTURE_CONTRACT_VERSION =
   "operational-picture.v1" as const;
@@ -91,75 +90,57 @@ export function parseOperationalPictureSummary(
 }
 
 /**
- * Operational Picture. Maintenance (Work, Phase 2B) and Work Orders (Work
- * Instructions, Phase 2E) come from Supabase. The Apps Script mirror is now
- * consulted ONLY for Approvals — the one domain still on Sheets. A failed
- * domain is `unavailable`, never zero.
+ * Operational Picture — every domain is Supabase-authoritative:
+ * Maintenance (Work, Phase 2B), Work Orders (Work Instructions, Phase 2E) and
+ * Approvals (Phase 2F). There is no Apps Script call. A failed domain is
+ * `unavailable`, never zero; a successful empty register is a healthy zero.
  */
 export async function loadOperationalPictureSummary(
   asOf: string
 ): Promise<OperationalPictureSummary> {
-  const data = await postToAppsScriptData(
-    {
-      resource: "command-centre-fm",
-      action: "getOperationalPicture",
-      payload: { asOf },
-    },
-    { resource: "command-centre-fm", action: "getOperationalPicture" },
-    "CommandCentreFmSummaryService.getOperationalPicture"
-  );
-  const parsed = parseOperationalPictureSummary(data, asOf);
+  const domain = async <T>(label: string, load: () => Promise<T | undefined>): Promise<T | { state: "unavailable" }> => {
+    try {
+      const picture = await load();
+      if (picture && (picture as { state?: string }).state === "healthy") return picture;
+      return { state: "unavailable" };
+    } catch (error) {
+      console.error(`[CommandCentreFmSummaryService] ${label} picture unavailable`, error);
+      return { state: "unavailable" };
+    }
+  };
 
-  const [maintenance, workOrders] = await Promise.all([
-    (async (): Promise<OperationalPictureAggregate["maintenance"]> => {
-      try {
-        const { MaintenanceServerAccess } = await import(
-          "@/modules/maintenance/server/MaintenanceServerAccess"
-        );
-        const page = await MaintenanceServerAccess.listMaintenance({
-          page: 1,
-          pageSize: 1,
-          includeOperationalPictureTotals: true,
-          asOf,
-        });
-        const picture = page.operationalPictureMaintenance;
-        if (picture && (picture as { state?: string }).state === "healthy") {
-          return picture as Extract<
-            OperationalPictureAggregate["maintenance"],
-            { state: "healthy" }
-          >;
-        }
-        return { state: "unavailable" };
-      } catch (error) {
-        console.error("[CommandCentreFmSummaryService] Work picture unavailable", error);
-        return { state: "unavailable" };
-      }
-    })(),
-    (async (): Promise<OperationalPictureAggregate["workOrders"]> => {
-      try {
-        const { WorkInstructionServerAccess } = await import(
-          "@/modules/work-orders/server/WorkInstructionServerAccess"
-        );
-        const page = await WorkInstructionServerAccess.listWorkOrders({
-          page: 1,
-          pageSize: 1,
-          includeOperationalPictureTotals: true,
-          asOf,
-        });
-        const picture = page.operationalPictureWorkOrders as { state?: string } | undefined;
-        if (picture && picture.state === "healthy") {
-          return picture as Extract<
-            OperationalPictureAggregate["workOrders"],
-            { state: "healthy" }
-          >;
-        }
-        return { state: "unavailable" };
-      } catch (error) {
-        console.error("[CommandCentreFmSummaryService] Work Instruction picture unavailable", error);
-        return { state: "unavailable" };
-      }
-    })(),
+  const [maintenance, workOrders, approvals] = await Promise.all([
+    domain("Work", async () => {
+      const { MaintenanceServerAccess } = await import("@/modules/maintenance/server/MaintenanceServerAccess");
+      const page = await MaintenanceServerAccess.listMaintenance({
+        page: 1,
+        pageSize: 1,
+        includeOperationalPictureTotals: true,
+        asOf,
+      });
+      return page.operationalPictureMaintenance as OperationalPictureAggregate["maintenance"] | undefined;
+    }),
+    domain("Work Instruction", async () => {
+      const { WorkInstructionServerAccess } = await import("@/modules/work-orders/server/WorkInstructionServerAccess");
+      const page = await WorkInstructionServerAccess.listWorkOrders({
+        page: 1,
+        pageSize: 1,
+        includeOperationalPictureTotals: true,
+        asOf,
+      });
+      return page.operationalPictureWorkOrders as OperationalPictureAggregate["workOrders"] | undefined;
+    }),
+    domain("Approval", async () => {
+      const { getFmApprovalServerService } = await import("@/modules/approvals/server/getFmApprovalServerService");
+      return (await getFmApprovalServerService()).operationalPicture() as Promise<OperationalPictureAggregate["approvals"]>;
+    }),
   ]);
 
-  return { ...parsed, maintenance, workOrders };
+  return {
+    contractVersion: OPERATIONAL_PICTURE_CONTRACT_VERSION,
+    asOf,
+    maintenance,
+    workOrders,
+    approvals,
+  } as OperationalPictureSummary;
 }

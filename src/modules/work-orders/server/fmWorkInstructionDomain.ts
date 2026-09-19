@@ -109,7 +109,6 @@ export type FmWorkInstructionRow = {
   completion_notes: string | null;
   work_performed: string | null;
   requires_approval: boolean;
-  approval_ref: string | null;
   operational_event_id: string | null;
   created_by_profile_id: string | null;
   updated_by_profile_id: string | null;
@@ -118,7 +117,7 @@ export type FmWorkInstructionRow = {
 };
 
 export const FM_WORK_INSTRUCTION_SELECT =
-  "id, organisation_id, code, order_type, work_id, facility_id, title, description, instruction_text, work_category, maintenance_type, source, category_id, asset_ref, parent_instruction_id, reported_by_profile_id, assigned_to_profile_id, status, priority, hold_reason, requested_at, scheduled_start_at, scheduled_end_at, due_at, sla_due_at, started_at, completed_at, estimated_hours, actual_hours, estimated_cost, actual_cost, downtime_minutes, completion_notes, work_performed, requires_approval, approval_ref, operational_event_id, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
+  "id, organisation_id, code, order_type, work_id, facility_id, title, description, instruction_text, work_category, maintenance_type, source, category_id, asset_ref, parent_instruction_id, reported_by_profile_id, assigned_to_profile_id, status, priority, hold_reason, requested_at, scheduled_start_at, scheduled_end_at, due_at, sla_due_at, started_at, completed_at, estimated_hours, actual_hours, estimated_cost, actual_cost, downtime_minutes, completion_notes, work_performed, requires_approval, operational_event_id, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
 
 /** Relationships derived at read time — never stored as arrays or duplicated. */
 export type FmWorkInstructionRelations = {
@@ -126,6 +125,8 @@ export type FmWorkInstructionRelations = {
   /** Incident code derived THROUGH the Work (fm_work.incident_id). */
   incidentCode?: string;
   parentCode?: string;
+  /** Code of this instruction's Approval (fm_approvals.work_instruction_id) — derived. */
+  approvalCode?: string;
 };
 
 function optionalTrimmed(value: unknown): string | undefined {
@@ -260,7 +261,6 @@ export type InstructionFields = {
   completionNotes?: string | null;
   workPerformed?: string | null;
   requiresApproval?: boolean;
-  approvalRef?: string | null;
   operationalEventId?: string | null;
   /** Only a consistency assertion — facility is inherited from the Work. */
   assertFacilityRef?: string;
@@ -329,7 +329,7 @@ function parseFields(raw: Record<string, unknown>): InstructionFields {
   if (raw.completionNotes !== undefined) out.completionNotes = nullableText(raw.completionNotes);
   if (raw.workPerformed !== undefined) out.workPerformed = nullableText(raw.workPerformed);
   if (raw.requiresApproval !== undefined) out.requiresApproval = raw.requiresApproval === true;
-  if (raw.approvalId !== undefined) out.approvalRef = nullableText(raw.approvalId);
+  // approvalId is DERIVED from the Approval's work_instruction_id FK — never written here.
   if (raw.operationalEventId !== undefined) {
     const id = optionalTrimmed(raw.operationalEventId);
     out.operationalEventId = id && UUID_RE.test(id) ? id : null;
@@ -457,7 +457,7 @@ export function mapFmWorkInstructionRowToWorkOrder(
     downtimeMinutes: row.downtime_minutes ?? undefined,
     slaDueAt: row.sla_due_at ?? undefined,
     requiresApproval: row.requires_approval,
-    approvalId: row.approval_ref ?? undefined,
+    approvalId: relations.approvalCode,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     createdByUserId: row.created_by_profile_id ?? undefined,

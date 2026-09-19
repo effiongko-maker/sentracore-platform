@@ -95,7 +95,6 @@ function sampleRow(overrides: Partial<FmWorkInstructionRow> = {}): FmWorkInstruc
     completion_notes: null,
     work_performed: null,
     requires_approval: false,
-    approval_ref: null,
     operational_event_id: null,
     created_by_profile_id: null,
     updated_by_profile_id: null,
@@ -222,7 +221,6 @@ function main() {
       "src/lib/operational/orchestration/requestTreatment.ts",
       "src/lib/operational/lifecycle/transitionOperationalEntity.ts",
       "src/lib/operational/context/loadOperationalContext.ts",
-      "src/modules/approvals/actions/approvalLifecycleActions.ts",
       "src/modules/approvals/actions/createApprovalFromWorkOrder.ts",
     ]) {
       const text = readSrc(file);
@@ -232,7 +230,7 @@ function main() {
     const workload = readSrc("src/app/api/operational-workload/route.ts");
     assert(!workload.includes("postToAppsScript(") && workload.includes("FmWorkInstructionRepository"), "workload composed from Supabase");
     const cc = readSrc("src/services/workspace/CommandCentreFmSummaryService.ts");
-    assert(cc.includes("WorkInstructionServerAccess") && (cc.match(/postToAppsScriptData\(/g) ?? []).length === 1, "Operational Picture: WO from Supabase; Apps Script only for Approvals");
+    assert(cc.includes("WorkInstructionServerAccess") && (cc.match(/postToAppsScriptData\(/g) ?? []).length === 0, "Operational Picture: WO from Supabase; no Apps Script call (Approvals also Supabase since Phase 2F)");
     assert(!cc.includes("loadAssignmentSummary"), "Apps Script Assignment Summary retired");
     const reporting = readSrc("src/services/reporting/ReportingService.ts");
     assert(reporting.includes("loadAuthoritativeWorkOrders") && reporting.includes('"workOrders"'), "reporting uses Supabase Work Instructions with explicit health");
@@ -312,13 +310,13 @@ function main() {
     assert(parseInstructionListParams({}).status === "all" && parseInstructionListParams({}).sort === "newest", "list defaults");
 
     const mapped = mapFmWorkInstructionRowToWorkOrder(
-      sampleRow({ estimated_cost: 25_000_000, order_type: "work_order", asset_ref: "AST-1", approval_ref: "APR-1", requires_approval: true }),
-      { workCode: "WRK-2026-000001", incidentCode: "INC-2026-000001", parentCode: "WO-2026-000000" }
+      sampleRow({ estimated_cost: 25_000_000, order_type: "work_order", asset_ref: "AST-1", requires_approval: true }),
+      { workCode: "WRK-2026-000001", incidentCode: "INC-2026-000001", parentCode: "WO-2026-000000", approvalCode: "APR-2026-000001" }
     );
     assert(mapped.id === "WO-2026-000001" && mapped.workOrderUuid?.startsWith("1111"), "display id + uuid");
     assert(mapped.orderType === "work_order" && mapped.estimatedCost === 25_000_000, "order type and cost independent in mapping");
     assert(mapped.maintenanceId === "WRK-2026-000001" && mapped.incidentId === "INC-2026-000001", "Work + Incident (through Work) derived");
-    assert(mapped.approvalId === "APR-1" && mapped.assetId === "AST-1", "transitional legacy refs carried opaque");
+    assert(mapped.approvalId === "APR-2026-000001" && mapped.assetId === "AST-1", "Approval derived by UUID relation (Phase 2F); asset ref opaque");
   });
 
   check(results, "Operational Picture predicates preserved", () => {

@@ -92,7 +92,6 @@ function asRow(value: unknown): FmWorkInstructionRow {
     completion_notes: txt(rec, "completion_notes"),
     work_performed: txt(rec, "work_performed"),
     requires_approval: Boolean(rec.requires_approval),
-    approval_ref: txt(rec, "approval_ref"),
     operational_event_id: txt(rec, "operational_event_id"),
     created_by_profile_id: txt(rec, "created_by_profile_id"),
     updated_by_profile_id: txt(rec, "updated_by_profile_id"),
@@ -137,7 +136,6 @@ function toColumns(f: InstructionFields): Record<string, unknown> {
   set("completion_notes", f.completionNotes);
   set("work_performed", f.workPerformed);
   set("requires_approval", f.requiresApproval);
-  set("approval_ref", f.approvalRef);
   set("operational_event_id", f.operationalEventId);
   return out;
 }
@@ -317,7 +315,7 @@ export class FmWorkInstructionRepository {
     const workIds = [...new Set(rows.map((r) => r.work_id))];
     const parentIds = [...new Set(rows.map((r) => r.parent_instruction_id).filter((v): v is string => !!v))];
 
-    const [work, parents] = await Promise.all([
+    const [work, parents, approvals] = await Promise.all([
       this.admin
         .from("fm_work")
         .select("id, code, incident_id")
@@ -330,8 +328,15 @@ export class FmWorkInstructionRepository {
             .eq("organisation_id", this.organisationId)
             .in("id", parentIds)
         : Promise.resolve({ data: [], error: null }),
+      // Approval is a separate downstream domain related by UUID (one per instruction).
+      this.admin
+        .from("fm_approvals")
+        .select("code, work_instruction_id")
+        .eq("organisation_id", this.organisationId)
+        .in("work_instruction_id", rows.map((r) => r.id)),
     ]);
     if (work.error) throwDb(work.error, "Unable to load Work context.");
+    if (approvals.error) throwDb(approvals.error, "Unable to load Approval context.");
     if (parents.error) throwDb(parents.error, "Unable to load parent instructions.");
 
     const incidentIds = [
@@ -354,12 +359,19 @@ export class FmWorkInstructionRepository {
       })
     );
     const parentCode = new Map((parents.data ?? []).map((p) => [String((p as { id: string }).id), String((p as { code: string }).code)]));
+    const approvalCodeByInstruction = new Map(
+      (approvals.data ?? []).map((a) => [
+        String((a as { work_instruction_id: string }).work_instruction_id),
+        String((a as { code: string }).code),
+      ])
+    );
     for (const row of rows) {
       const w = workById.get(row.work_id);
       out.set(row.id, {
         workCode: w?.code,
         incidentCode: w?.incident,
         parentCode: row.parent_instruction_id ? parentCode.get(row.parent_instruction_id) : undefined,
+        approvalCode: approvalCodeByInstruction.get(row.id),
       });
     }
     return out;

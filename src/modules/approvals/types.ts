@@ -70,7 +70,10 @@ export interface ApprovalAttachmentRef {
 
 /** Formal client / authority approval request linked to a Work Order. */
 export interface Approval {
+  /** Display reference (APR-YYYY-######). Org-scoped, immutable. */
   id: string;
+  /** Authoritative Supabase identity (fm_approvals.id). */
+  approvalUuid?: string;
   title: string;
   type: ApprovalType;
   workOrderId: string;

@@ -71,7 +71,7 @@ assert(!service.includes("listMaintenance"), "Command Centre performs no Mainten
 assert(!service.includes("listWorkOrders"), "Command Centre performs no Work Order getAll");
 assert(!service.includes("listApprovals"), "Command Centre performs no Approval getAll");
 assert(!service.includes("listIncidents"), "Command Centre performs no assigned Incident getAll");
-assert((summaryClient.match(/postToAppsScriptData\(/g) ?? []).length === 1, "summary client keeps ONE Apps Script call (Approvals only)");
+assert((summaryClient.match(/postToAppsScriptData\(/g) ?? []).length === 0, "Phase 2F: summary client makes NO Apps Script call — Maintenance, Work Orders and Approvals are Supabase");
 assert(summaryClient.includes("Unsupported Operational Picture contract version"), "Operational Picture version mismatch fails closed");
 assert(workspace.includes("buildAssignedWorkDomains"), "Workspace retains canonical assignment predicate projection");
 assert(assignmentsComposer.includes('state === "unavailable"'), "Assignment domains preserve unavailable state");
