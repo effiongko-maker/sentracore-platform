@@ -1,14 +1,9 @@
-import { postGatedOperationalProxy } from "@/lib/access/postGatedOperationalProxy";
+import { handleFmLogRoute } from "@/modules/operational-logs/server/fmLogRoute";
 
 /**
- * Server-only proxy: browser → /api/fumigation-log → Apps Script.
- * Reads: ops.view. Creates: ops.create. Updates: ops.edit.
+ * FM fumigation-log persistence is Supabase. Compatibility route: /api/fumigation-log.
+ * No Apps Script call. Reads: ops.view. Creates: ops.create. Updates: ops.edit.
  */
-
 export async function POST(request: Request) {
-  return postGatedOperationalProxy(
-    request,
-    "fumigation-log",
-    "api/fumigation-log"
-  );
+  return handleFmLogRoute(request, "fumigation-log");
 }

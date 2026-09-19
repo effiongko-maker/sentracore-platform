@@ -1,10 +1,9 @@
-import { postGatedOperationalProxy } from "@/lib/access/postGatedOperationalProxy";
+import { handleFmLogRoute } from "@/modules/operational-logs/server/fmLogRoute";
 
 /**
- * Server-only proxy: browser → /api/waste-log → Apps Script.
- * Reads: ops.view. Creates: ops.create. Updates: ops.edit.
+ * FM waste-log persistence is Supabase. Compatibility route: /api/waste-log.
+ * No Apps Script call. Reads: ops.view. Creates: ops.create. Updates: ops.edit.
  */
-
 export async function POST(request: Request) {
-  return postGatedOperationalProxy(request, "waste-log", "api/waste-log");
+  return handleFmLogRoute(request, "waste-log");
 }

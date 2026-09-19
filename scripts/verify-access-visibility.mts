@@ -246,11 +246,10 @@ function main() {
     "cost detail mutate gate"
   );
 
-  const financeProxy = readSrc(
-    "src/lib/access/postFinanceProxyWithProtection.ts"
-  );
+  // Phase 2K: the Apps Script finance proxy is gone; the Supabase FM cost handler owns the gate.
+  const financeProxy = readSrc("src/modules/finance/server/fmCostRoute.ts");
   assert(
-    financeProxy.includes('readCapability ?? "finance.view"'),
+    financeProxy.includes('"finance.view"'),
     "finance reads require finance.view"
   );
 

@@ -121,11 +121,9 @@ function main() {
   assert(workflow.includes("Access restricted"), "workflow deny UX");
 
   // API enforcement untouched markers
-  const opsGate = readSrc("src/lib/access/postGatedOperationalProxy.ts");
+  const opsGate = readSrc("src/modules/operational-logs/server/fmLogRoute.ts");
   assert(opsGate.includes("gateApiCapability"), "ops API gate remains");
-  const finProxy = readSrc(
-    "src/lib/access/postFinanceProxyWithProtection.ts"
-  );
+  const finProxy = readSrc("src/modules/finance/server/fmCostRoute.ts");
   assert(finProxy.includes("writeCapability"), "finance write gate remains");
   assert(finProxy.includes("finance.view"), "finance read gate remains");
 

@@ -1,14 +1,9 @@
-import { postGatedOperationalProxy } from "@/lib/access/postGatedOperationalProxy";
+import { handleFmLogRoute } from "@/modules/operational-logs/server/fmLogRoute";
 
 /**
- * Server-only proxy: browser → /api/deep-cleaning-log → Apps Script.
- * Reads: ops.view. Creates: ops.create. Updates: ops.edit.
+ * FM deep-cleaning-log persistence is Supabase. Compatibility route: /api/deep-cleaning-log.
+ * No Apps Script call. Reads: ops.view. Creates: ops.create. Updates: ops.edit.
  */
-
 export async function POST(request: Request) {
-  return postGatedOperationalProxy(
-    request,
-    "deep-cleaning-log",
-    "api/deep-cleaning-log"
-  );
+  return handleFmLogRoute(request, "deep-cleaning-log");
 }

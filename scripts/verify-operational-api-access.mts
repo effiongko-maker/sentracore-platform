@@ -358,6 +358,19 @@ function main() {
       assert(!src.includes("postToAppsScript("), "assets route makes no Apps Script call");
       continue;
     }
+    if (
+      [
+        "generator-log", "energy-reading", "diesel-usage", "consumables-update",
+        "waste-log", "fumigation-log", "deep-cleaning-log",
+      ].includes(resource)
+    ) {
+      assert(src.includes("handleFmLogRoute"), `${resource} uses the Supabase log handler (Phase 2K)`);
+      assert(
+        !src.includes("postGatedOperationalProxy") && !src.includes("postToAppsScript("),
+        `${resource} route makes no Apps Script call`
+      );
+      continue;
+    }
     assert(
       src.includes("postGatedOperationalProxy"),
       `${resource} route uses gated proxy`
@@ -368,7 +381,9 @@ function main() {
     );
   }
 
-  const helper = readSrc("src/lib/access/postGatedOperationalProxy.ts");
+  // Phase 2K: the Apps Script gated proxy is retired; the shared Supabase log handler keeps the same gate.
+  assert(!existsSync(resolve("src/lib/access/postGatedOperationalProxy.ts")), "Apps Script ops proxy is retired");
+  const helper = readSrc("src/modules/operational-logs/server/fmLogRoute.ts");
   assert(helper.includes("gateApiCapability"), "helper uses gateApiCapability");
   assert(
     helper.includes("capabilityForOperationalProxyAction"),

@@ -1,14 +1,9 @@
-import { postGatedOperationalProxy } from "@/lib/access/postGatedOperationalProxy";
+import { handleFmLogRoute } from "@/modules/operational-logs/server/fmLogRoute";
 
 /**
- * Server-only proxy: browser → /api/consumables-update → Apps Script.
- * Reads: ops.view. Creates: ops.create. Updates: ops.edit.
+ * FM consumables-update persistence is Supabase. Compatibility route: /api/consumables-update.
+ * No Apps Script call. Reads: ops.view. Creates: ops.create. Updates: ops.edit.
  */
-
 export async function POST(request: Request) {
-  return postGatedOperationalProxy(
-    request,
-    "consumables-update",
-    "api/consumables-update"
-  );
+  return handleFmLogRoute(request, "consumables-update");
 }

@@ -25,7 +25,8 @@ function readSrc(path: string): string {
 async function main() {
   const serverSrc = readSrc("src/lib/access/server.ts");
   const gateSrc = readSrc("src/lib/access/gateApi.ts");
-  const opsProxySrc = readSrc("src/lib/access/postGatedOperationalProxy.ts");
+  // Phase 2K: the Apps Script ops proxy is retired; the shared Supabase log handler is the ops gate.
+  const opsProxySrc = readSrc("src/modules/operational-logs/server/fmLogRoute.ts");
   const usersRoute = readSrc("src/app/api/users/route.ts");
 
   assert(opsProxySrc.includes("gateApiCapability"), "ops proxy still gated");

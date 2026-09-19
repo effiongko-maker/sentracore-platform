@@ -1,14 +1,9 @@
-import { postGatedOperationalProxy } from "@/lib/access/postGatedOperationalProxy";
+import { handleFmLogRoute } from "@/modules/operational-logs/server/fmLogRoute";
 
 /**
- * Server-only proxy: browser → /api/diesel-usage → Apps Script.
- * Reads: ops.view. Creates: ops.create. Updates: ops.edit.
+ * FM diesel-usage persistence is Supabase. Compatibility route: /api/diesel-usage.
+ * No Apps Script call. Reads: ops.view. Creates: ops.create. Updates: ops.edit.
  */
-
 export async function POST(request: Request) {
-  return postGatedOperationalProxy(
-    request,
-    "diesel-usage",
-    "api/diesel-usage"
-  );
+  return handleFmLogRoute(request, "diesel-usage");
 }

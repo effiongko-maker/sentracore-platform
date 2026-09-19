@@ -1,14 +1,9 @@
-import { postGatedOperationalProxy } from "@/lib/access/postGatedOperationalProxy";
+import { handleFmLogRoute } from "@/modules/operational-logs/server/fmLogRoute";
 
 /**
- * Server-only proxy: browser → /api/energy-reading → Apps Script.
- * Reads: ops.view. Creates: ops.create. Updates: ops.edit.
+ * FM energy-reading persistence is Supabase. Compatibility route: /api/energy-reading.
+ * No Apps Script call. Reads: ops.view. Creates: ops.create. Updates: ops.edit.
  */
-
 export async function POST(request: Request) {
-  return postGatedOperationalProxy(
-    request,
-    "energy-reading",
-    "api/energy-reading"
-  );
+  return handleFmLogRoute(request, "energy-reading");
 }

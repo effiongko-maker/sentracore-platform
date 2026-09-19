@@ -361,11 +361,9 @@ function main() {
   assert(submissionRoute.includes("finance.create"), "submission create gate");
   assert(submissionRoute.includes("finance.view"), "submission read gate");
 
-  const financeProxy = readSrc(
-    "src/lib/access/postFinanceProxyWithProtection.ts"
-  );
-  assert(financeProxy.includes("finance.view"), "finance proxy read gate");
-  assert(financeProxy.includes("readCapability"), "finance proxy read option");
+  const financeProxy = readSrc("src/modules/finance/server/fmCostRoute.ts");
+  assert(financeProxy.includes("finance.view"), "finance route read gate (Phase 2G/2K: Supabase handler)");
+  assert(financeProxy.includes("writeCapability"), "finance route write gate");
 
   const accessMe = readSrc("src/app/api/access/me/route.ts");
   assert(accessMe.includes("getOperatingAccess"), "access me endpoint");
