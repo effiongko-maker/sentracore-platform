@@ -145,7 +145,41 @@ export async function loadOperationalPictureSummary(
     { resource: "command-centre-fm", action: "getOperationalPicture" },
     "CommandCentreFmSummaryService.getOperationalPicture"
   );
-  return parseOperationalPictureSummary(data, asOf);
+  const parsed = parseOperationalPictureSummary(data, asOf);
+
+  // Phase 2B: Work SoT is fm_work. Replace Apps Script Maintenance domain.
+  try {
+    const { MaintenanceServerAccess } = await import(
+      "@/modules/maintenance/server/MaintenanceServerAccess"
+    );
+    const page = await MaintenanceServerAccess.listMaintenance({
+      page: 1,
+      pageSize: 1,
+      includeOperationalPictureTotals: true,
+      asOf,
+    });
+    const picture = page.operationalPictureMaintenance;
+    if (
+      picture &&
+      typeof picture === "object" &&
+      (picture as { state?: string }).state === "healthy"
+    ) {
+      return {
+        ...parsed,
+        maintenance: picture as Extract<
+          OperationalPictureAggregate["maintenance"],
+          { state: "healthy" }
+        >,
+      };
+    }
+    return { ...parsed, maintenance: { state: "unavailable" } };
+  } catch (error) {
+    console.error(
+      "[CommandCentreFmSummaryService] Work operational picture unavailable",
+      error
+    );
+    return { ...parsed, maintenance: { state: "unavailable" } };
+  }
 }
 
 export async function loadAssignmentSummary(

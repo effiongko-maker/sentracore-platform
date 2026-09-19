@@ -9,7 +9,7 @@ import {
 } from "@/lib/operational/context/types";
 import { queryOperationalTimeline } from "@/lib/operational/timeline";
 import { IncidentService } from "@/services/incidents/IncidentService";
-import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
+import { MaintenanceServerAccess as MaintenanceService } from "@/modules/maintenance/server/MaintenanceServerAccess";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
 import { createClient } from "@/utils/supabase/server";
 import { cookies } from "next/headers";

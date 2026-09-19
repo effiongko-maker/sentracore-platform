@@ -15,7 +15,7 @@ import { OperationalEventTypes } from "@/lib/events/taxonomy";
 import { isRequestTerminal } from "@/modules/requests/treatment/status";
 import type { RequestRecord } from "@/modules/requests/types";
 import { IncidentService } from "@/services/incidents/IncidentService";
-import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
+import { MaintenanceServerAccess as MaintenanceService } from "@/modules/maintenance/server/MaintenanceServerAccess";
 import { RequestService } from "@/services/requests/RequestService";
 
 export type EvaluateRequestAfterTreatmentOutcome =

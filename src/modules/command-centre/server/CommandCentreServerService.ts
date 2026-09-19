@@ -131,8 +131,9 @@ function financeModuleEnabled(session: PlatformSession): boolean {
 }
 
 /**
- * Transitional Sheet WO/MNT/INC assignee lookup only.
- * NOT FM authorization. Retained until Work cuts over to profile UUID.
+ * Transitional Sheet WO/INC assignee lookup only.
+ * NOT FM authorization. Work (fm_work) uses profile UUID directly.
+ * Retained until Work Instructions / Incidents cut over to profile UUID.
  */
 async function loadTransitionalSheetAssigneeId(
   session: PlatformSession
@@ -643,37 +644,57 @@ export class CommandCentreServerService {
       };
     }
     try {
+      type DomainSource =
+        | { state: "healthy"; active: number }
+        | { state: "unavailable" };
+
+      let workSource: DomainSource = { state: "unavailable" };
+      try {
+        const { FmWorkRepository } = await import(
+          "@/modules/maintenance/server/FmWorkRepository"
+        );
+        const count = await new FmWorkRepository(
+          access.organisationId
+        ).countActiveForProfile(access.profileId);
+        workSource = { state: "healthy", active: count };
+      } catch {
+        workSource = { state: "unavailable" };
+      }
+
+      let workOrdersSource: DomainSource = { state: "unavailable" };
+      let incidentsSource: DomainSource = { state: "unavailable" };
       const sheetAssigneeId = await loadTransitionalSheetAssigneeId(
         access.session
       );
-      if (!sheetAssigneeId) {
-        return {
-          state: "unavailable",
-          message: "Assigned work cannot be derived yet.",
-          detail:
-            "Work still uses Sheet assignee IDs. Workload mapping is unavailable until Work cuts over.",
-          items: [],
-        };
+      if (sheetAssigneeId) {
+        try {
+          const summary = await loadAssignmentSummary(sheetAssigneeId);
+          workOrdersSource = summary.workOrders;
+          incidentsSource = summary.incidents;
+        } catch {
+          workOrdersSource = { state: "unavailable" };
+          incidentsSource = { state: "unavailable" };
+        }
       }
-      const summary = await loadAssignmentSummary(sheetAssigneeId);
+
       const domains = [
         {
           id: "assigned-work",
           label: "Assigned Work",
           href: "/work",
-          source: summary.maintenance,
+          source: workSource,
         },
         {
           id: "assigned-work-orders",
           label: "Assigned Work Orders",
           href: "/work-orders",
-          source: summary.workOrders,
+          source: workOrdersSource,
         },
         {
           id: "assigned-legacy-incidents",
           label: "Legacy Incidents Assigned",
           href: "/incidents",
-          source: summary.incidents,
+          source: incidentsSource,
         },
       ];
       const unavailable = domains.filter(
@@ -706,7 +727,8 @@ export class CommandCentreServerService {
       return {
         state: assigned.length === 0 ? "empty" : "healthy",
         message: assigned.length === 0 ? "You have no active assignments." : "",
-        detail: "Only active work assigned to your People-register identity is shown.",
+        detail:
+          "Work uses your profile identity. Work Orders and Incidents still use transitional Sheet assignee mapping when available.",
         items: assigned,
       };
     } catch {

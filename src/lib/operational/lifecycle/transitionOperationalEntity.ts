@@ -11,7 +11,7 @@ import {
 } from "@/lib/operational/lifecycle/mapStatusTransition";
 import { evaluateRequestAfterTreatmentCompletion } from "@/lib/operational/orchestration/evaluateRequestAfterTreatment";
 import { IncidentService } from "@/services/incidents/IncidentService";
-import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
+import { MaintenanceServerAccess as MaintenanceService } from "@/modules/maintenance/server/MaintenanceServerAccess";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
 import type {
   Incident,
@@ -184,7 +184,7 @@ export async function transitionMaintenance(options: {
     eventEmitted = await emitLifecycleSafely({
       context: options.context,
       entityType: "maintenance",
-      entityId: entity.id,
+      entityId: entity.workUuid ?? entity.id,
       eventType: mapped,
       data: maintenanceEventData(
         entity,

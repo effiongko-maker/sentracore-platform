@@ -62,7 +62,30 @@ export class FmPeopleServerService {
     const rows = await this.repo().listDirectoryRows();
     const mapped = collapsePeopleByProfile(rows.map(mapDirectoryRowToUser));
     const filtered = filterPeopleRows(mapped, params);
-    return paginatePeople(filtered, params.page ?? 1, params.pageSize ?? 8);
+    const page = paginatePeople(filtered, params.page ?? 1, params.pageSize ?? 8);
+
+    const { FmWorkRepository } = await import(
+      "@/modules/maintenance/server/FmWorkRepository"
+    );
+    const workRepo = new FmWorkRepository(this.ctx.organisationId);
+    const data: User[] = [];
+    for (const user of page.data) {
+      try {
+        const count = await workRepo.countActiveForProfile(user.id);
+        data.push({
+          ...user,
+          activeWorkOrders: count,
+          workloadAvailable: true,
+        });
+      } catch {
+        data.push({
+          ...user,
+          activeWorkOrders: 0,
+          workloadAvailable: false,
+        });
+      }
+    }
+    return { ...page, data };
   }
 
   async listEligible(): Promise<EligibleProfile[]> {
@@ -75,7 +98,26 @@ export class FmPeopleServerService {
     if (rows.length === 0) {
       throw new FmPeopleNotFoundError(`Person ${id} not found.`);
     }
-    return collapsePeopleByProfile(rows.map(mapDirectoryRowToUser))[0]!;
+    const user = collapsePeopleByProfile(rows.map(mapDirectoryRowToUser))[0]!;
+    try {
+      const { FmWorkRepository } = await import(
+        "@/modules/maintenance/server/FmWorkRepository"
+      );
+      const count = await new FmWorkRepository(
+        this.ctx.organisationId
+      ).countActiveForProfile(user.id);
+      return {
+        ...user,
+        activeWorkOrders: count,
+        workloadAvailable: true,
+      };
+    } catch {
+      return {
+        ...user,
+        activeWorkOrders: 0,
+        workloadAvailable: false,
+      };
+    }
   }
 
   async create(payload: unknown): Promise<User> {

@@ -13,8 +13,7 @@ export function formatWorkload(
   available = true
 ) {
   if (!available) return "Unavailable";
-  const count = activeWorkOrders;
-  return `${count} Active Work Order${count === 1 ? "" : "s"}`;
+  return `${activeWorkOrders} Active Work`;
 }
 
 export function labelize(value: string) {

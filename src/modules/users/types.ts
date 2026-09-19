@@ -23,9 +23,8 @@ export interface User {
   facilityId?: string;
   assignmentId?: string;
   /**
-   * Display value for current workload.
-   * Not stored. Sheet-era WO assignee IDs cannot be proven from profile UUID,
-   * so this is 0 with workloadAvailable=false until Work cuts over.
+   * Display value for current Active Work (fm_work assigned to profile).
+   * Not stored. Does not include Work Instructions (still Apps Script).
    */
   activeWorkOrders: number;
   workloadWorkOrderIds?: string[];

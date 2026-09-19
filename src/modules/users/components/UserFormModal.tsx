@@ -62,6 +62,8 @@ export function UserFormModal({
 
   useEffect(() => {
     if (!open) return;
+    // The modal can reopen for a different person; reset its local draft then.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setForm(toCreateFormValues(mode === "edit" ? user : null));
     setErrors({});
   }, [open, mode, user]);
@@ -69,6 +71,7 @@ export function UserFormModal({
   useEffect(() => {
     if (!open || mode !== "create") return;
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEligibleLoading(true);
     setEligibleError(null);
     void UserService.listEligibleProfiles()
@@ -95,6 +98,8 @@ export function UserFormModal({
 
   useEffect(() => {
     if (!open || facilities.length === 0) return;
+    // Resolve the draft facility after the directory arrives.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setForm((current) => {
       if (current.facilityId) return current;
       if (current.facility.trim()) {
@@ -406,8 +411,8 @@ export function UserFormModal({
             </p>
             <p className="mt-1 text-xs text-muted">
               {user.workloadAvailable === false
-                ? "Workload cannot be derived until Work uses platform profile identity."
-                : "Derived from active Work Orders assigned to this person. Not editable."}
+                ? "Workload cannot be derived from Work storage right now."
+                : "Derived from active Work assigned to this person. Does not include Work Instructions. Not editable."}
             </p>
           </div>
         ) : null}

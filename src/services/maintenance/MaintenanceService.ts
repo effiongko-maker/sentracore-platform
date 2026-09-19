@@ -1,4 +1,3 @@
-import { parseIdList, primaryId } from "@/lib/operational/idLists";
 import type { PaginatedResult } from "@/types";
 import type {
   CreateMaintenanceInput,
@@ -24,10 +23,6 @@ import {
   sharedRequest,
   stableRequestKey,
 } from "@/services/cache/sharedRequest";
-import {
-  postToAppsScript,
-  postToAppsScriptData,
-} from "@/services/api/appsScriptProxy";
 
 type RemoteMaintenance = Record<string, unknown>;
 
@@ -72,24 +67,11 @@ function mapStatus(raw: string): MaintenanceStatus {
   return (value || "requested") as MaintenanceStatus;
 }
 
-function coalesceIdList(...sources: unknown[]): string[] {
-  for (const source of sources) {
-    const parsed = parseIdList(source);
-    if (parsed.length > 0) return parsed;
-  }
-  return [];
-}
-
-function readOperationalEventId(raw: RemoteMaintenance): string | undefined {
-  const legacy = optionalMappedString(raw, "eventId", "Event ID", "Event Id");
-  const explicit = optionalMappedString(raw, "operationalEventId");
-  const value = explicit ?? legacy;
-  if (!value) return undefined;
-  if (/^MNT-/i.test(value) || /^INC-/i.test(value)) return undefined;
-  return value;
-}
-
-function mapRemoteMaintenance(raw: RemoteMaintenance): Maintenance {
+/**
+ * Compatibility mapper for /api/maintenance responses (Supabase fm_work).
+ * workOrderIds are never authoritative on Work after Phase 2B.
+ */
+export function mapRemoteMaintenance(raw: RemoteMaintenance): Maintenance {
   const type = normalizeEnum(
     String(pickField(raw, "type", "Type", "Maintenance Type") ?? "corrective")
   ) as MaintenanceType;
@@ -104,66 +86,19 @@ function mapRemoteMaintenance(raw: RemoteMaintenance): Maintenance {
   );
 
   const description = optionalMappedString(raw, "description", "Description");
-  const explicitTitle = optionalMappedString(
-    raw,
-    "title",
-    "Title",
-    "Maintenance Title"
-  );
-  // Never promote the full description blob (Location/Category/Requester notes)
-  // into title when the Title column is empty — take the first free-text line.
   const title =
-    explicitTitle ||
-    (() => {
-      if (!description) return "";
-      const firstBlock = description
-        .split(/\n\n+/)
-        .map((block) => block.trim())
-        .find(
-          (block) =>
-            block &&
-            !/^(Location|Category|Attachment|Requested by|Reported by):/i.test(
-              block
-            )
-        );
-      if (firstBlock) return firstBlock.split(/\n+/)[0]?.trim() || "";
-      return "";
-    })();
+    optionalMappedString(raw, "title", "Title", "Maintenance Title") || "";
 
   const reportedAt = String(
-    pickField(
-      raw,
-      "reportedAt",
-      "Reported At",
-      "Date Requested",
-      "Date Reported"
-    ) ?? new Date().toISOString()
+    pickField(raw, "reportedAt", "Reported At") ?? new Date().toISOString()
   );
-
-  const completedAt = optionalMappedString(
-    raw,
-    "completedAt",
-    "Completed At",
-    "Date Completed"
-  );
-
-  const workOrderIds = coalesceIdList(
-    pickField(raw, "workOrderIds"),
-    pickField(raw, "Work Order IDs"),
-    pickField(raw, "workOrderId", "Work Order ID")
-  );
-  const workOrderId = primaryId(workOrderIds);
-  let requiresWorkOrder = optionalBoolean(
-    raw,
-    "requiresWorkOrder",
-    "Requires Work Order"
-  );
-  if (requiresWorkOrder == null) {
-    requiresWorkOrder = workOrderIds.length > 0;
-  }
+  const completedAt = optionalMappedString(raw, "completedAt", "Completed At");
+  const requiresWorkOrder =
+    optionalBoolean(raw, "requiresWorkOrder", "Requires Work Order") ?? false;
 
   return applyWorkOrderRule({
     id: String(pickField(raw, "id", "Maintenance ID") ?? ""),
+    workUuid: optionalMappedString(raw, "workUuid"),
     title,
     description,
     type: type || "corrective",
@@ -175,31 +110,22 @@ function mapRemoteMaintenance(raw: RemoteMaintenance): Maintenance {
     reportedByUserId: optionalMappedString(
       raw,
       "reportedByUserId",
-      "Requester",
-      "Reported By",
       "Reported By User ID"
     ),
     assignedToUserId: optionalMappedString(
       raw,
       "assignedToUserId",
-      "Assigned To",
       "Assigned To User ID"
     ),
-    assignedGroupId: optionalMappedString(
+    operationalEventId: optionalMappedString(
       raw,
-      "assignedGroupId",
-      "Assigned Group ID"
+      "operationalEventId",
+      "eventId"
     ),
-    operationalEventId: readOperationalEventId(raw),
-    eventId: readOperationalEventId(raw),
+    eventId: optionalMappedString(raw, "operationalEventId", "eventId"),
     incidentId: optionalMappedString(raw, "incidentId", "Incident ID"),
-    workOrderId,
-    workOrderIds,
-    parentMaintenanceId: optionalMappedString(
-      raw,
-      "parentMaintenanceId",
-      "Parent Maintenance ID"
-    ),
+    workOrderId: undefined,
+    workOrderIds: [],
     sourceRequestId: optionalMappedString(
       raw,
       "sourceRequestId",
@@ -210,45 +136,19 @@ function mapRemoteMaintenance(raw: RemoteMaintenance): Maintenance {
     holdReason: optionalMappedString(raw, "holdReason", "Hold Reason"),
     requiresWorkOrder,
     reportedAt,
-    scheduledStartAt: optionalMappedString(
-      raw,
-      "scheduledStartAt",
-      "Scheduled Start At"
-    ),
-    scheduledEndAt: optionalMappedString(
-      raw,
-      "scheduledEndAt",
-      "Scheduled End At"
-    ),
+    scheduledStartAt: optionalMappedString(raw, "scheduledStartAt"),
+    scheduledEndAt: optionalMappedString(raw, "scheduledEndAt"),
     dueAt: optionalMappedString(raw, "dueAt", "Due At"),
-    startedAt: optionalMappedString(raw, "startedAt", "Started At"),
+    startedAt: optionalMappedString(raw, "startedAt"),
     completedAt,
-    completionNotes: optionalMappedString(
-      raw,
-      "completionNotes",
-      "Completion Notes"
-    ),
-    workPerformed: optionalMappedString(
-      raw,
-      "workPerformed",
-      "Work Performed"
-    ),
-    createdAt: String(
-      pickField(raw, "createdAt", "Created At") ?? reportedAt
-    ),
+    completionNotes: optionalMappedString(raw, "completionNotes"),
+    workPerformed: optionalMappedString(raw, "workPerformed"),
+    createdAt: String(pickField(raw, "createdAt", "Created At") ?? reportedAt),
     updatedAt: String(
       pickField(raw, "updatedAt", "Updated At") ?? completedAt ?? reportedAt
     ),
-    createdByUserId: optionalMappedString(
-      raw,
-      "createdByUserId",
-      "Created By User ID"
-    ),
-    updatedByUserId: optionalMappedString(
-      raw,
-      "updatedByUserId",
-      "Updated By User ID"
-    ),
+    createdByUserId: optionalMappedString(raw, "createdByUserId"),
+    updatedByUserId: optionalMappedString(raw, "updatedByUserId"),
   });
 }
 
@@ -272,7 +172,6 @@ function toPaginatedMaintenance(
   if (payload && typeof payload === "object") {
     const page = payload as Record<string, unknown>;
     const rows = Array.isArray(page.data) ? page.data : [];
-    // Only forward a finite number — strings/objects must not become Critical Work.
     const criticalRaw = page.criticalWorkTotal;
     const criticalWorkTotal =
       typeof criticalRaw === "number" && Number.isFinite(criticalRaw)
@@ -291,22 +190,7 @@ function toPaginatedMaintenance(
     };
   }
 
-  return {
-    data: [],
-    page: 1,
-    pageSize: params.pageSize ?? 8,
-    total: 0,
-    totalPages: 1,
-  };
-}
-
-function mapRemoteMaintenanceCatalogEntry(
-  raw: RemoteMaintenance
-): MaintenanceCatalogEntry {
-  return {
-    id: String(pickField(raw, "id", "Maintenance ID") ?? ""),
-    title: String(pickField(raw, "title", "Title") ?? ""),
-  };
+  throw new ApiError("Work list response was malformed.", 502, payload);
 }
 
 function toPaginatedMaintenanceCatalog(
@@ -314,9 +198,13 @@ function toPaginatedMaintenanceCatalog(
   params: MaintenanceCatalogListParams
 ): PaginatedResult<MaintenanceCatalogEntry> {
   if (Array.isArray(payload)) {
-    const data = payload.map((row) =>
-      mapRemoteMaintenanceCatalogEntry(row as RemoteMaintenance)
-    );
+    const data = payload.map((row) => {
+      const raw = row as RemoteMaintenance;
+      return {
+        id: String(pickField(raw, "id") ?? ""),
+        title: String(pickField(raw, "title") ?? ""),
+      };
+    });
     return {
       data,
       page: params.page ?? 1,
@@ -330,9 +218,13 @@ function toPaginatedMaintenanceCatalog(
     const page = payload as Record<string, unknown>;
     const rows = Array.isArray(page.data) ? page.data : [];
     return {
-      data: rows.map((row) =>
-        mapRemoteMaintenanceCatalogEntry(row as RemoteMaintenance)
-      ),
+      data: rows.map((row) => {
+        const raw = row as RemoteMaintenance;
+        return {
+          id: String(pickField(raw, "id") ?? ""),
+          title: String(pickField(raw, "title") ?? ""),
+        };
+      }),
       page: Number(page.page ?? params.page ?? 1),
       pageSize: Number(page.pageSize ?? params.pageSize ?? rows.length),
       total: Number(page.total ?? rows.length),
@@ -340,34 +232,9 @@ function toPaginatedMaintenanceCatalog(
     };
   }
 
-  return {
-    data: [],
-    page: 1,
-    pageSize: params.pageSize ?? 500,
-    total: 0,
-    totalPages: 1,
-  };
+  throw new ApiError("Work catalog response was malformed.", 502, payload);
 }
 
-async function loadAllMaintenanceCatalog(): Promise<MaintenanceCatalogEntry[]> {
-  return sharedRequest(
-    `${CacheNamespaces.maintenanceCatalog}:all`,
-    async () => {
-      const response = await apiClient.post<unknown>("/maintenance", {
-        resource: "maintenance",
-        action: "listCatalog",
-        payload: { page: 1, pageSize: 500 },
-      });
-      return toPaginatedMaintenanceCatalog(response.data, {
-        page: 1,
-        pageSize: 500,
-      }).data;
-    },
-    { ttlMs: CATALOG_TTL_MS }
-  );
-}
-
-/** Phase 32 — previous status comes from authoritative GAS update, not a pre-read. */
 function resolvePreviousStatus(
   raw: { _previousStatus?: string; status?: string },
   statusInUpdate: boolean
@@ -378,17 +245,21 @@ function resolvePreviousStatus(
   if (!statusInUpdate) {
     return String(raw.status ?? "requested");
   }
-  throw new Error(
-    "Maintenance update did not return _previousStatus. Deploy Apps Script v0.7.8 (MaintenanceRepository + MaintenanceService)."
-  );
+  throw new Error("Work update did not return _previousStatus.");
 }
 
 /**
- * Maintenance domain service.
- * Talks only to ApiClient. Mirrors IncidentService / WorkOrderService.
+ * Work domain service (compatibility name: Maintenance).
+ *
+ * Browser-safe. Always goes through /api/maintenance → fm_work.
+ * Never imports server-only session/admin clients.
+ * Never Apps Script after Phase 2B.
+ *
+ * Server Action / orchestration callers that need direct persistence must use
+ * `@/modules/maintenance/server/MaintenanceServerAccess` instead.
  */
 export const MaintenanceService = {
-  /** Map an Apps Script maintenance row (shared by createTreatment). */
+  /** Map a Work/API row (shared by createTreatment orchestration). */
   fromAppsScriptRow(raw: unknown): Maintenance {
     return mapRemoteMaintenance(raw as RemoteMaintenance);
   },
@@ -413,18 +284,6 @@ export const MaintenanceService = {
       asOf: params.asOf ?? "",
     });
     return sharedRequest(key, async () => {
-      if (typeof window === "undefined") {
-        const data = await postToAppsScriptData(
-          {
-            resource: "maintenance",
-            action: "getAll",
-            payload: params,
-          },
-          { resource: "maintenance", action: "getAll" },
-          "MaintenanceService.listMaintenance"
-        );
-        return toPaginatedMaintenance(data, params);
-      }
       const response = await apiClient.post<unknown>(
         "/maintenance",
         {
@@ -438,14 +297,25 @@ export const MaintenanceService = {
     });
   },
 
-  /**
-   * Lightweight id/title catalog for filter dropdowns.
-   * Uses listCatalog on Apps Script (column-limited sheet read).
-   */
   async listMaintenanceCatalog(
     params: MaintenanceCatalogListParams = {}
   ): Promise<PaginatedResult<MaintenanceCatalogEntry>> {
-    const all = await loadAllMaintenanceCatalog();
+    const all = await sharedRequest(
+      `${CacheNamespaces.maintenanceCatalog}:all`,
+      async () => {
+        const response = await apiClient.post<unknown>("/maintenance", {
+          resource: "maintenance",
+          action: "listCatalog",
+          payload: { page: 1, pageSize: 500 },
+        });
+        return toPaginatedMaintenanceCatalog(response.data, {
+          page: 1,
+          pageSize: 500,
+        }).data;
+      },
+      { ttlMs: CATALOG_TTL_MS }
+    );
+
     const search = (params.search ?? "").trim().toLowerCase();
     const filtered = search
       ? all.filter(
@@ -472,24 +342,15 @@ export const MaintenanceService = {
   },
 
   async fetchMaintenanceCatalog(): Promise<MaintenanceCatalogEntry[]> {
-    return loadAllMaintenanceCatalog();
+    const page = await MaintenanceService.listMaintenanceCatalog({
+      page: 1,
+      pageSize: 500,
+    });
+    return page.data;
   },
 
   async getMaintenance(id: string): Promise<Maintenance | null> {
     try {
-      if (typeof window === "undefined") {
-        const row = await postToAppsScriptData(
-          {
-            resource: "maintenance",
-            action: "getById",
-            payload: { id },
-          },
-          { resource: "maintenance", action: "getById" },
-          "MaintenanceService.getMaintenance"
-        );
-        return mapRemoteMaintenance(row as RemoteMaintenance);
-      }
-
       const response = await apiClient.post<Maintenance>("/maintenance", {
         resource: "maintenance",
         action: "getById",
@@ -510,43 +371,6 @@ export const MaintenanceService = {
 
   async createMaintenance(input: CreateMaintenanceInput): Promise<Maintenance> {
     const payload = applyWorkOrderRule(input);
-
-    // Server Actions / Action Engine: write directly via Apps Script (same path as API route).
-    // Browser: keep using /api/maintenance proxy.
-    if (typeof window === "undefined") {
-      const raw = await postToAppsScript(
-        {
-          resource: "maintenance",
-          action: "create",
-          payload,
-        },
-        { resource: "maintenance", action: "create" },
-        "MaintenanceService.createMaintenance"
-      );
-
-      const envelope = raw as {
-        data?: unknown;
-        success?: boolean;
-        message?: string;
-      };
-      if (envelope && typeof envelope === "object" && envelope.success === false) {
-        throw new ApiError(
-          envelope.message ?? "Failed to create maintenance",
-          400,
-          envelope
-        );
-      }
-
-      const row =
-        envelope && typeof envelope === "object" && "data" in envelope
-          ? envelope.data
-          : raw;
-
-      const created = mapRemoteMaintenance(row as RemoteMaintenance);
-      onMaintenanceMutation();
-      return created;
-    }
-
     const response = await apiClient.post<Maintenance>("/maintenance", {
       resource: "maintenance",
       action: "create",
@@ -570,10 +394,6 @@ export const MaintenanceService = {
     return entity;
   },
 
-  /**
-   * Single GAS round-trip update that returns pre-merge status for lifecycle transitions.
-   * Avoids a separate getMaintenance read before updateMaintenance.
-   */
   async updateMaintenanceWithMeta(
     id: string,
     input: UpdateMaintenanceInput
@@ -589,23 +409,6 @@ export const MaintenanceService = {
       _returnPreviousStatus: boolean;
     });
 
-    if (typeof window === "undefined") {
-      const row = await postToAppsScriptData(
-        {
-          resource: "maintenance",
-          action: "update",
-          payload,
-        },
-        { resource: "maintenance", action: "update" },
-        "MaintenanceService.updateMaintenanceWithMeta"
-      );
-      const raw = row as RemoteMaintenance & { _previousStatus?: string };
-      const previousStatus = resolvePreviousStatus(raw, statusInUpdate);
-      const updated = mapRemoteMaintenance(raw);
-      onMaintenanceMutation();
-      return { entity: updated, previousStatus };
-    }
-
     const response = await apiClient.post<
       Maintenance & { _previousStatus?: string }
     >("/maintenance", {
@@ -620,7 +423,7 @@ export const MaintenanceService = {
     return { entity: updated, previousStatus };
   },
 
-  /** Soft-cancel — maintenance rows are never deleted. */
+  /** Soft-cancel — work rows are never deleted. */
   async deactivateMaintenance(id: string): Promise<Maintenance> {
     const response = await apiClient.post<Maintenance>("/maintenance", {
       resource: "maintenance",

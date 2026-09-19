@@ -25,9 +25,8 @@ import type {
   Maintenance,
 } from "@/modules/maintenance/types";
 import type { RequestRecord } from "@/modules/requests/types";
-import type { WorkOrder } from "@/modules/work-orders/types";
 import { IncidentService } from "@/services/incidents/IncidentService";
-import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
+import { MaintenanceServerAccess as MaintenanceService } from "@/modules/maintenance/server/MaintenanceServerAccess";
 import { RequestService } from "@/services/requests/RequestService";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
 import {
@@ -103,33 +102,50 @@ export async function orchestrateCreateMaintenanceFromRequest(options: {
     idempotent: boolean;
   };
 
+  /**
+   * Phase 2B: Work is Supabase SoT. Do NOT call Apps Script createTreatment
+   * for maintenance (that path writes the frozen Maintenance sheet).
+   * Create Work in Supabase, then link on the Request sheet only.
+   */
   const invokeCreateTreatment = async (): Promise<Bundle> => {
+    const request = await loadRequestOrThrow(options.requestId);
+    assertRequestTreatable(request);
+
+    const existingIds = request.maintenanceIds ?? [];
+    // Lease recovers by entity id; duplicate create within lease is prevented.
+    const maintenance = await MaintenanceService.createMaintenance(writeInput);
     appsScriptCalls += 1;
     try {
-      const result = await RequestService.createTreatment({
-        kind: "maintenance",
-        requestId: options.requestId,
-        childInput: writeInput,
-        idempotencyKey,
-        actorUserId: options.context.userId,
+      const nextStatus =
+        request.status === "resolved" ||
+        request.status === "closed" ||
+        request.status === "cancelled"
+          ? request.status
+          : "being_treated";
+      const maintenanceIds = existingIds.includes(maintenance.id)
+        ? existingIds
+        : [...existingIds, maintenance.id];
+      const updatedRequest = await RequestService.updateRequest({
+        id: options.requestId,
+        status: nextStatus,
+        maintenanceIds,
+        updatedByUserId: options.context.userId,
       });
-      if (!result.maintenance) {
-        throw new ActionError(
-          "INTERNAL_ERROR",
-          "createTreatment did not return maintenance."
-        );
-      }
       return {
-        request: result.request,
-        maintenance: result.maintenance,
-        idempotent: result.idempotent,
+        request: updatedRequest,
+        maintenance,
+        idempotent: existingIds.includes(maintenance.id),
       };
     } catch (error) {
       const message =
         error instanceof Error && error.message.trim()
           ? error.message.trim()
-          : "createTreatment failed";
-      if (/cannot receive treatment/i.test(message) || /not found/i.test(message) || /Facility mismatch/i.test(message) || /idempotencyKey is required/i.test(message)) {
+          : "Request link after Work create failed";
+      if (
+        /cannot receive treatment/i.test(message) ||
+        /not found/i.test(message) ||
+        /Facility mismatch/i.test(message)
+      ) {
         throw new ActionError("VALIDATION_ERROR", message, { cause: error });
       }
       throw new ActionError("INTERNAL_ERROR", message, { cause: error });
@@ -142,13 +158,21 @@ export async function orchestrateCreateMaintenanceFromRequest(options: {
     actorProfileId: options.context.userId,
     entityType: "maintenance",
     recoverExisting: async () => null,
-    loadByEntityId: async () => {
-      const recovered = await invokeCreateTreatment();
-      return { entityId: recovered.maintenance.id, value: recovered };
+    loadByEntityId: async (entityId) => {
+      const maintenance = await MaintenanceService.getMaintenance(entityId);
+      if (!maintenance) return null;
+      const request = await loadRequestOrThrow(options.requestId);
+      return {
+        entityId: maintenance.id,
+        value: { request, maintenance, idempotent: true },
+      };
     },
     create: async () => {
       const created = await invokeCreateTreatment();
-      return { entityId: created.maintenance.id, value: created };
+      return {
+        entityId: created.maintenance.id,
+        value: { ...created, idempotent: false },
+      };
     },
   });
 
@@ -157,7 +181,7 @@ export async function orchestrateCreateMaintenanceFromRequest(options: {
       const event = await emitActionEvent(options.context, {
         eventType: OperationalEventTypes.FACILITY_MAINTENANCE_REQUESTED,
         entityType: "maintenance_request",
-        entityId: String(bundle.maintenance.id),
+        entityId: bundle.maintenance.workUuid ?? String(bundle.maintenance.id),
         data: withIntakeMetadata(
           maintenanceEventData(bundle.maintenance, {
             actor: options.context.userId,
@@ -395,25 +419,51 @@ export async function orchestrateLinkMaintenanceToRequest(options: {
     idempotent: boolean;
   };
 
+  /**
+   * Phase 2B: load Work from Supabase; update Request sheet link only.
+   * Apps Script linkTreatment would try MaintenanceRepository.getById and fail.
+   */
   const invokeLinkTreatment = async (): Promise<Bundle> => {
+    const request = await loadRequestOrThrow(options.requestId);
+    assertRequestTreatable(request);
+    const maintenance = await MaintenanceService.getMaintenance(maintenanceId);
+    if (!maintenance) {
+      throw new ActionError(
+        "VALIDATION_ERROR",
+        `Work ${maintenanceId} not found.`
+      );
+    }
+    const existingIds = request.maintenanceIds ?? [];
+    const alreadyLinked = existingIds.includes(maintenance.id);
+    if (alreadyLinked) {
+      return { request, maintenance, idempotent: true };
+    }
     appsScriptCalls += 1;
     try {
-      const result = await RequestService.linkTreatment({
-        kind: "maintenance",
-        requestId: options.requestId,
-        childId: maintenanceId,
-        actorUserId: options.context.userId,
-      });
-      if (!result.maintenance) {
-        throw new ActionError(
-          "INTERNAL_ERROR",
-          "linkTreatment did not return maintenance."
-        );
+      if (!maintenance.sourceRequestId) {
+        await MaintenanceService.updateMaintenance(maintenance.id, {
+          sourceRequestId: options.requestId,
+        });
       }
+      const nextStatus =
+        request.status === "resolved" ||
+        request.status === "closed" ||
+        request.status === "cancelled"
+          ? request.status
+          : "being_treated";
+      const updatedRequest = await RequestService.updateRequest({
+        id: options.requestId,
+        status: nextStatus,
+        maintenanceIds: [...existingIds, maintenance.id],
+        updatedByUserId: options.context.userId,
+      });
       return {
-        request: result.request,
-        maintenance: result.maintenance,
-        idempotent: result.idempotent,
+        request: updatedRequest,
+        maintenance: {
+          ...maintenance,
+          sourceRequestId: maintenance.sourceRequestId ?? options.requestId,
+        },
+        idempotent: false,
       };
     } catch (error) {
       if (error instanceof ActionError) throw error;
@@ -430,9 +480,14 @@ export async function orchestrateLinkMaintenanceToRequest(options: {
     actorProfileId: options.context.userId,
     entityType: "maintenance",
     recoverExisting: async () => null,
-    loadByEntityId: async () => {
-      const recovered = await invokeLinkTreatment();
-      return { entityId: recovered.maintenance.id, value: recovered };
+    loadByEntityId: async (entityId) => {
+      const maintenance = await MaintenanceService.getMaintenance(entityId);
+      if (!maintenance) return null;
+      const request = await loadRequestOrThrow(options.requestId);
+      return {
+        entityId: maintenance.id,
+        value: { request, maintenance, idempotent: true },
+      };
     },
     create: async () => {
       const created = await invokeLinkTreatment();

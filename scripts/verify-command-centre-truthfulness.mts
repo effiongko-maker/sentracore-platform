@@ -63,7 +63,7 @@ const summaryClient = readFileSync(resolve("src/services/workspace/CommandCentre
 const workspace = readFileSync(resolve("src/services/workspace/WorkspaceService.ts"), "utf8");
 const assignmentsComposer = service.slice(service.indexOf("private async composeAssignments"), service.indexOf("private async composeLastVisit"));
 assert(service.includes("loadOperationalPictureSummary(asOf)"), "Command Centre requests one Operational Picture summary");
-assert(assignmentsComposer.includes("loadAssignmentSummary(operatingAccess.sheetUserId)"), "Command Centre requests one actor Assignment Summary");
+assert(assignmentsComposer.includes("loadAssignmentSummary(sheetAssigneeId)"), "Command Centre requests one actor Assignment Summary");
 assert(!service.includes("loadOperationalFmSnapshot"), "full-row OperationalFmSnapshot is superseded");
 assert(!service.includes("listMaintenance"), "Command Centre performs no Maintenance getAll/pagination");
 assert(!service.includes("listWorkOrders"), "Command Centre performs no Work Order getAll");

@@ -327,6 +327,13 @@ function main() {
       );
       continue;
     }
+    if (resource === "maintenance") {
+      assert(src.includes("gateApiCapability"), "maintenance route uses gateApiCapability");
+      assert(src.includes("capabilityForOperationalProxyAction"), "maintenance maps action → capability");
+      assert(src.includes("FmWorkServerService"), "maintenance uses Supabase Work service");
+      assert(!src.includes("postGatedOperationalProxy"), "maintenance no longer uses Apps Script proxy");
+      continue;
+    }
     assert(
       src.includes("postGatedOperationalProxy"),
       `${resource} route uses gated proxy`

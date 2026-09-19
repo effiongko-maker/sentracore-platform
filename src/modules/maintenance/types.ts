@@ -34,6 +34,8 @@ export type MaintenanceSort =
 /** Canonical Maintenance domain model — frozen. Do not modify. */
 export interface Maintenance {
   id: string;
+  /** Canonical fm_work UUID for operational event linkage. */
+  workUuid?: string;
 
   title: string;
   description?: string;
