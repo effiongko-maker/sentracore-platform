@@ -1,5 +1,6 @@
 import { AssetService } from "@/services/assets/AssetService";
 import { FacilityService } from "@/services/facilities/FacilityService";
+import type { Asset } from "@/modules/assets/types";
 import type { Incident } from "@/modules/incidents/types";
 import type { WorkOrder } from "@/modules/work-orders/types";
 import { IncidentService } from "@/services/incidents/IncidentService";
@@ -66,16 +67,25 @@ async function loadAuthoritativeWorkOrders(): Promise<{ rows: WorkOrder[]; ok: b
   );
 }
 
+async function loadAuthoritativeAssets(): Promise<{ rows: Asset[]; ok: boolean }> {
+  return loadAuthoritative(() =>
+    loadAllPages((page, pageSize) => AssetService.listAssetsCatalog({ page, pageSize }))
+  );
+}
+
+const SOURCE_LABELS = { incidents: "Incident", workOrders: "Work Instruction", assets: "Asset" } as const;
+
 /** Mark a snapshot whose authoritative source failed: honest summary, never "healthy". */
 function withSourceHealth(
   snapshot: ReportingSnapshot,
-  sources: { incidents: boolean; workOrders: boolean }
+  sources: { incidents: boolean; workOrders: boolean; assets: boolean }
 ): ReportingSnapshot {
-  const unavailable: Array<"incidents" | "workOrders"> = [];
+  const unavailable: Array<"incidents" | "workOrders" | "assets"> = [];
   if (!sources.incidents) unavailable.push("incidents");
   if (!sources.workOrders) unavailable.push("workOrders");
+  if (!sources.assets) unavailable.push("assets");
   if (unavailable.length === 0) return snapshot;
-  const label = unavailable.map((u) => (u === "incidents" ? "Incident" : "Work Instruction")).join(" and ");
+  const label = unavailable.map((u) => SOURCE_LABELS[u]).join(", ").replace(/, ([^,]*)$/, " and $1");
   const meta = snapshot._snapshotMeta;
   return {
     ...snapshot,
@@ -101,7 +111,7 @@ async function buildReportingSnapshotFromDomain(
   const [
     users,
     facilities,
-    assets,
+    assetSource,
     incidentSource,
     maintenance,
     workOrderSource,
@@ -113,9 +123,7 @@ async function buildReportingSnapshotFromDomain(
     loadAllPages((page, pageSize) =>
       FacilityService.listFacilities({ page, pageSize })
     ),
-    loadAllPages((page, pageSize) =>
-      AssetService.listAssetsCatalog({ page, pageSize })
-    ),
+    loadAuthoritativeAssets(),
     loadAuthoritativeIncidents(),
     loadAllPages((page, pageSize) =>
       MaintenanceService.listMaintenance({ page, pageSize })
@@ -127,7 +135,7 @@ async function buildReportingSnapshotFromDomain(
   const scopedFacilities = facilityId
     ? facilities.filter((facility) => facility.id === facilityId)
     : facilities;
-  const scopedAssets = filterByFacilityId(assets, facilityId);
+  const scopedAssets = filterByFacilityId(assetSource.rows, facilityId);
   const scopedIncidents = filterByFacilityId(incidentSource.rows, facilityId);
   const scopedMaintenance = filterByFacilityId(maintenance, facilityId);
   const scopedWorkOrders = filterByFacilityId(workOrderSource.rows, facilityId);
@@ -211,7 +219,7 @@ async function buildReportingSnapshotFromDomain(
       snapshotVersion: generatedAt,
       scope: facilityId || "__portfolio__",
     },
-  }, { incidents: incidentSource.ok, workOrders: workOrderSource.ok });
+  }, { incidents: incidentSource.ok, workOrders: workOrderSource.ok, assets: assetSource.ok });
 }
 
 async function buildReportingSnapshot(
@@ -220,20 +228,23 @@ async function buildReportingSnapshot(
   try {
     const fromSheets = await tryLoadSheetsReportingSnapshot(params);
     if (fromSheets) {
-      // The Sheets REPORTING_SNAPSHOT still carries Sheet Incidents and Work
-      // Orders. Replace those domains with the authoritative Supabase rows.
-      const [incidents, workOrders] = await Promise.all([
+      // The Sheets REPORTING_SNAPSHOT still carries Sheet Incidents, Work Orders
+      // and Assets. Replace those domains with the authoritative Supabase rows.
+      const [incidents, workOrders, assets] = await Promise.all([
         loadAuthoritativeIncidents(),
         loadAuthoritativeWorkOrders(),
+        loadAuthoritativeAssets(),
       ]);
       const rehydrated = hydrateReportingSnapshot({
         ...fromSheets,
         incidents: filterByFacilityId(incidents.rows, params.facilityId),
         workOrders: filterByFacilityId(workOrders.rows, params.facilityId),
+        assets: filterByFacilityId(assets.rows, params.facilityId),
       });
       return withSourceHealth(rehydrated, {
         incidents: incidents.ok,
         workOrders: workOrders.ok,
+        assets: assets.ok,
       });
     }
   } catch (error) {

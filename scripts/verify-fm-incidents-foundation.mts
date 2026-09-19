@@ -80,7 +80,7 @@ function sampleRow(overrides: Partial<FmIncidentRow> = {}): FmIncidentRow {
     requires_work_instruction: false,
     source_request_id: null,
     parent_incident_id: null,
-    asset_ref: null,
+    asset_id: null,
     reported_by_profile_id: null,
     assigned_to_profile_id: null,
     operational_event_id: null,
@@ -131,7 +131,7 @@ function main() {
     assert(code.includes("drop table public.fm_request_incident_links"), "bridge retired");
     assert(/refusing to drop/.test(code), "guards refuse to drop populated data");
     assert(!/references public\.(assets|fm_assets|work_orders|fm_work_instructions)/i.test(code), "no FK to unmigrated Asset / Work Instruction");
-    assert(/asset_ref text/.test(code), "transitional asset ref is opaque text");
+    assert(/asset_ref text/.test(code), "Phase 2D migration: asset ref was opaque text (superseded by Phase 2H asset_id FK)");
     // Phase 2E: the opaque Work Order ref was replaced by the relational chain.
     assert(!/work_order_ref/.test(code) || true, "work_order_ref superseded by Phase 2E");
   });
@@ -325,14 +325,14 @@ function main() {
     assert(!/[,()%*]/.test(sanitizeSearchTerm("a,b(c)%d*")), "search sanitised");
 
     const mapped = mapFmIncidentRowToIncident(
-      sampleRow({ asset_ref: "AST-1", requires_work_instruction: true }),
+      sampleRow({ asset_id: "00000000-0000-4000-8000-0000000000a1", requires_work_instruction: true }),
       { maintenanceIds: ["WRK-2026-000001"], sourceRequestCode: "REQ-2026-000001", workOrderIds: ["WO-2026-000009"] }
     );
     assert(mapped.id === "INC-2026-000001" && mapped.incidentUuid?.startsWith("1111"), "display id + uuid");
     assert(mapped.maintenanceIds?.[0] === "WRK-2026-000001", "Work links derived");
     assert(mapped.sourceRequestId === "REQ-2026-000001", "Request link derived");
     assert(mapped.workOrderId === "WO-2026-000009", "Work Instruction derived through Work → compat shape");
-    assert(mapped.assetId === "AST-1", "Sheet asset id carried as transitional ref");
+    assert(mapped.assetId === "00000000-0000-4000-8000-0000000000a1", "Asset UUID relation carried (Phase 2H)");
     assert(mapped.createdByUserId === undefined, "absent creator stays absent");
   });
 

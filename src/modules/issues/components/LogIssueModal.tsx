@@ -9,10 +9,10 @@ import {
   selectClassName,
 } from "@/components/forms/FormField";
 import { useToast } from "@/components/ui/Toast";
+import { useScopedFacilityResolver } from "@/hooks/useScopedFacilityResolver";
 import { useFacilities } from "@/modules/facilities/hooks/useFacilities";
 import {
   facilityDisplayName,
-  resolveScopedFacilityId,
 } from "@/lib/platform/scopedFacility";
 import { labelize } from "@/modules/incidents/utils";
 import { logIssue, type LogIssueResult } from "../actions/logIssue";
@@ -40,14 +40,15 @@ export function LogIssueModal({ open, onClose, onCreated }: Props) {
     useState<(typeof URGENCY)[number]>("medium");
   const [saving, setSaving] = useState(false);
 
+  const resolveScoped = useScopedFacilityResolver();
   useEffect(() => {
     if (!open) return;
     setTitle("");
     setDescription("");
     setLocationDetail("");
     setUrgency("medium");
-    setFacilityId(resolveScopedFacilityId(facilities));
-  }, [open, facilities]);
+    setFacilityId(resolveScoped(facilities));
+  }, [open, facilities, resolveScoped]);
 
   const facilityName = facilityDisplayName(facilities, facilityId);
 

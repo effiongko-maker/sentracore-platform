@@ -54,7 +54,7 @@ async function main() {
     status: "open",
     priority: "high",
     type: "corrective",
-    assetId: "AST-1",
+    assetId: "00000000-0000-4000-8000-0000000000a1",
     facilityId: "FAC-0001",
     assignedToUserId: "00000000-0000-4000-8000-000000000001",
     dueDate: "next_7_days",
@@ -74,7 +74,7 @@ async function main() {
   assert((await repo.relationsFor([])).size === 0, "relations shape (empty)");
   assert(Array.isArray(await repo.operationalPictureRows()), "operational picture rows shape");
   assert((await repo.countAssignedForProfile("00000000-0000-4000-8000-000000000001")) === 0, "assigned count shape");
-  const load = await repo.activeWorkload({ userIds: ["00000000-0000-4000-8000-000000000001"], assetRefs: ["AST-NOPE"] });
+  const load = await repo.activeWorkload({ userIds: ["00000000-0000-4000-8000-000000000001"], assetIds: ["00000000-0000-4000-8000-0000000000a1"] });
   assert(load.byUser.size === 0 && load.byAsset.size === 0, "workload shape");
 
   let rejected = false;
@@ -87,7 +87,7 @@ async function main() {
 
   const work = new FmWorkRepository(orgId, admin);
   assert(Array.isArray(await work.listRows()), "Work list reads (derives instruction codes)");
-  assert((await work.activeByAssetRefs(["AST-NOPE"])).size === 0, "asset Work workload shape");
+  assert((await work.activeByAssetIds(["00000000-0000-4000-8000-0000000000a1"])).size === 0, "asset Work workload shape");
   const incidents = new FmIncidentRepository(orgId, admin);
   assert((await incidents.listPage({ page: 1, pageSize: 8 })).total >= 0, "Incident list reads");
 

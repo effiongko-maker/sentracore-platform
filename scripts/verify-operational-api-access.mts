@@ -350,6 +350,14 @@ function main() {
       assert(!src.includes("postToAppsScript("), "incidents route makes no Apps Script call");
       continue;
     }
+    if (resource === "assets") {
+      assert(src.includes("gateApiCapability"), "assets route uses gateApiCapability");
+      assert(src.includes("capabilityForOperationalProxyAction"), "assets maps action → capability");
+      assert(src.includes("FmAssetServerService"), "assets uses Supabase Asset service");
+      assert(!src.includes("postGatedOperationalProxy"), "assets no longer uses Apps Script proxy");
+      assert(!src.includes("postToAppsScript("), "assets route makes no Apps Script call");
+      continue;
+    }
     assert(
       src.includes("postGatedOperationalProxy"),
       `${resource} route uses gated proxy`

@@ -20,7 +20,13 @@ export type AssetCategory =
   | "other";
 
 export interface Asset {
+  /** Canonical UUID — the only relational identity. */
   id: string;
+  /** Org-scoped display reference (AST-YYYY-######). Never a relationship key. */
+  code: string;
+  /** Facility UUID (tenant-safe relationship). */
+  facilityId: string;
+  /** Facility display name projected from facilityId. */
   facility: string;
   name: string;
   category: AssetCategory;
@@ -32,6 +38,9 @@ export interface Asset {
   oemId: string;
   condition: AssetCondition;
   status: AssetStatus;
+  /** Assigned person as a profile UUID (empty when unassigned). */
+  assignedToUserId: string;
+  /** Assigned person display name projected from the profile. */
   assignedTo: string;
   criticality: AssetCriticality;
   /**
@@ -50,8 +59,8 @@ export interface Asset {
 export interface CreateAssetInput {
   name: string;
   category: AssetCategory;
-  /** Facility display name as stored on the sheet (e.g. "NCC Annex"). */
-  facility: string;
+  /** Facility UUID. */
+  facilityId: string;
   manufacturer: string;
   model: string;
   serialNumber: string;
@@ -60,7 +69,8 @@ export interface CreateAssetInput {
   oemId: string;
   condition: AssetCondition;
   status: AssetStatus;
-  assignedTo: string;
+  /** Profile UUID, or empty for unassigned. */
+  assignedToUserId: string;
   criticality: AssetCriticality;
 }
 
@@ -78,7 +88,8 @@ export interface AssetListParams {
   search?: string;
   status?: AssetStatus | "all";
   category?: AssetCategory | "all";
-  facility?: string | "all";
+  /** Facility UUID filter. */
+  facilityId?: string | "all";
   criticality?: AssetCriticality | "all";
   sort?: AssetSort;
 }

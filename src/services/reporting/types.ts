@@ -88,7 +88,7 @@ export interface ReportingSnapshotMeta {
    * Domains whose authoritative source failed while this snapshot was built.
    * Figures for these domains are NOT zero — they are unknown.
    */
-  unavailableSources?: Array<"incidents" | "workOrders">;
+  unavailableSources?: Array<"incidents" | "workOrders" | "assets">;
 }
 
 /**

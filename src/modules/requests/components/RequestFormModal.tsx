@@ -12,8 +12,8 @@ import { useToast } from "@/components/ui/Toast";
 import { FacilityService } from "@/services/facilities/FacilityService";
 import {
   facilityDisplayName,
-  resolveScopedFacilityId,
 } from "@/lib/platform/scopedFacility";
+import { useScopedFacilityResolver } from "@/hooks/useScopedFacilityResolver";
 import type { Facility } from "@/modules/facilities/types";
 import { RequestService } from "../services/RequestService";
 import { optionalString, toDatetimeLocalValue } from "../utils";
@@ -96,15 +96,16 @@ export function RequestFormModal({
     };
   }, [open]);
 
+  const resolveScoped = useScopedFacilityResolver();
   useEffect(() => {
     if (!open || facilities.length === 0) return;
     setForm((current) => {
       if (current.facilityId.trim()) return current;
-      const nextId = resolveScopedFacilityId(facilities, request?.facilityId);
+      const nextId = resolveScoped(facilities, request?.facilityId);
       if (!nextId || current.facilityId === nextId) return current;
       return { ...current, facilityId: nextId };
     });
-  }, [open, facilities, request?.facilityId]);
+  }, [open, facilities, request?.facilityId, resolveScoped]);
 
   function updateField<K extends keyof CreateRequestInput>(
     key: K,

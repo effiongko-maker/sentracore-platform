@@ -1,4 +1,6 @@
 import "server-only";
+import { FmAssetRepository } from "@/modules/assets/server/FmAssetRepository";
+import { uuidsOnly } from "@/modules/assets/server/fmAssetDomain";
 import { createAdminClient } from "@/utils/supabase/admin";
 import type { WorkOrderListParams } from "@/modules/work-orders/types";
 import {
@@ -40,6 +42,7 @@ function throwDb(error: { code?: string; message?: string } | null, fallback: st
       "A work instruction with this reference already exists in the organisation."
     );
   }
+  if (/_asset_fk/.test(message)) throw new FmWorkInstructionValidationError("The asset must exist in this organisation and belong to the same facility.");
   if (error?.code === "23503" || /foreign key/i.test(message)) {
     throw new FmWorkInstructionValidationError(
       "Work Instruction references an invalid Work, parent or profile for this organisation."
@@ -70,7 +73,7 @@ function asRow(value: unknown): FmWorkInstructionRow {
     maintenance_type: txt(rec, "maintenance_type"),
     source: String(rec.source ?? "manual"),
     category_id: txt(rec, "category_id"),
-    asset_ref: txt(rec, "asset_ref"),
+    asset_id: txt(rec, "asset_id"),
     parent_instruction_id: txt(rec, "parent_instruction_id"),
     reported_by_profile_id: txt(rec, "reported_by_profile_id"),
     assigned_to_profile_id: txt(rec, "assigned_to_profile_id"),
@@ -115,7 +118,7 @@ function toColumns(f: InstructionFields): Record<string, unknown> {
   set("maintenance_type", f.maintenanceType);
   set("source", f.source);
   set("category_id", f.categoryId);
-  set("asset_ref", f.assetRef);
+  set("asset_id", f.assetRef); // assetRef is already the resolved Asset UUID here
   set("reported_by_profile_id", f.reportedByProfileId);
   set("assigned_to_profile_id", f.assignedToProfileId);
   set("status", f.status);
@@ -145,6 +148,15 @@ export class FmWorkInstructionRepository {
     private readonly organisationId: string,
     private readonly admin: AdminClient = db()
   ) {}
+
+  /** Resolve an Asset reference (UUID, or a code accepted as INPUT only) to its tenant UUID. */
+  private async resolveAssetRef(ref: string | null | undefined): Promise<string | null | undefined> {
+    if (ref === undefined) return undefined;
+    if (ref === null || !ref.trim()) return null;
+    const id = await new FmAssetRepository(this.organisationId, this.admin).findId(ref);
+    if (!id) throw new FmWorkInstructionValidationError(`Asset ${ref.trim()} not found in this organisation.`);
+    return id;
+  }
 
   async resolveWork(workRef: string): Promise<WorkRef> {
     const target = workRef.trim();
@@ -244,7 +256,10 @@ export class FmWorkInstructionRepository {
     if (params.status && params.status !== "all") query = query.eq("status", params.status);
     if (params.priority && params.priority !== "all") query = query.eq("priority", params.priority);
     if (params.type && params.type !== "all") query = query.eq("work_category", params.type);
-    if (params.assetId && params.assetId !== "all") query = query.eq("asset_ref", params.assetId);
+    if (params.assetId && params.assetId !== "all") {
+      if (!UUID_RE.test(params.assetId)) return { rows: [], total: 0 };
+      query = query.eq("asset_id", params.assetId);
+    }
     if (params.assignedToUserId && params.assignedToUserId !== "all") {
       if (!UUID_RE.test(params.assignedToUserId)) return { rows: [], total: 0 };
       query = query.eq("assigned_to_profile_id", params.assignedToUserId);
@@ -393,7 +408,7 @@ export class FmWorkInstructionRepository {
     const work = await this.resolveWork(input.workRef);
     await this.assertInherited(work, input);
     const parentId = input.parentRef ? await this.resolveParentId(input.parentRef) : null;
-    const columns = toColumns(input);
+    const columns = toColumns({ ...input, assetRef: await this.resolveAssetRef(input.assetRef) });
     const now = new Date().toISOString();
 
     for (let attempt = 0; attempt < CODE_RETRY_LIMIT; attempt += 1) {
@@ -430,7 +445,7 @@ export class FmWorkInstructionRepository {
     const existing = await this.getByIdOrCode(input.id);
     if (!existing) throw new FmWorkInstructionNotFoundError(`Work Instruction ${input.id} not found.`);
 
-    const patch = toColumns(input);
+    const patch = toColumns({ ...input, assetRef: await this.resolveAssetRef(input.assetRef) });
     let workId = existing.work_id;
     let workRow: WorkRef | null = null;
     if (input.workRef) {
@@ -498,16 +513,16 @@ export class FmWorkInstructionRepository {
     return count ?? 0;
   }
 
-  /** Active instruction codes per assignee profile / per asset ref (workload). */
-  async activeWorkload(input: { userIds: string[]; assetRefs: string[] }): Promise<{
+  /** Active instruction codes per assignee profile / per Asset UUID (workload). */
+  async activeWorkload(input: { userIds: string[]; assetIds: string[] }): Promise<{
     byUser: Map<string, string[]>;
     byAsset: Map<string, string[]>;
   }> {
     const byUser = new Map<string, string[]>();
     const byAsset = new Map<string, string[]>();
     const users = [...new Set(input.userIds.filter((id) => UUID_RE.test(id)))];
-    const assets = [...new Set(input.assetRefs.map((a) => a.trim()).filter(Boolean))];
-    const run = async (column: "assigned_to_profile_id" | "asset_ref", values: string[], into: Map<string, string[]>) => {
+    const assets = uuidsOnly(input.assetIds);
+    const run = async (column: "assigned_to_profile_id" | "asset_id", values: string[], into: Map<string, string[]>) => {
       if (values.length === 0) return;
       const { data, error } = await this.admin
         .from("fm_work_instructions")
@@ -522,7 +537,7 @@ export class FmWorkInstructionRepository {
         into.set(key, [...(into.get(key) ?? []), String(row.code)]);
       }
     };
-    await Promise.all([run("assigned_to_profile_id", users, byUser), run("asset_ref", assets, byAsset)]);
+    await Promise.all([run("assigned_to_profile_id", users, byUser), run("asset_id", assets, byAsset)]);
     return { byUser, byAsset };
   }
 }

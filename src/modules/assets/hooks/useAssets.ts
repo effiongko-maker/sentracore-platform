@@ -70,7 +70,7 @@ export function useAssets() {
           search: debouncedSearch,
           status,
           category,
-          facility,
+          facilityId: facility,
           sort,
         });
 

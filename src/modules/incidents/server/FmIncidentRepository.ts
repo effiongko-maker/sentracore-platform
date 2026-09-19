@@ -1,4 +1,6 @@
 import "server-only";
+import { FmAssetRepository } from "@/modules/assets/server/FmAssetRepository";
+import { uuidsOnly } from "@/modules/assets/server/fmAssetDomain";
 import { createAdminClient } from "@/utils/supabase/admin";
 import type { IncidentListParams } from "@/modules/incidents/types";
 import {
@@ -55,6 +57,7 @@ function throwDb(
       "An incident with this reference already exists in the organisation."
     );
   }
+  if (/_asset_fk/.test(message)) throw new FmIncidentValidationError("The asset must exist in this organisation and belong to the same facility.");
   if (error?.code === "23503" || /foreign key/i.test(message)) {
     throw new FmIncidentValidationError(
       "Incident references an invalid facility, request, incident or profile for this organisation."
@@ -90,7 +93,7 @@ function asRow(value: unknown): FmIncidentRow {
     requires_work_instruction: Boolean(rec.requires_work_instruction),
     source_request_id: text("source_request_id"),
     parent_incident_id: text("parent_incident_id"),
-    asset_ref: text("asset_ref"),
+    asset_id: text("asset_id"),
     reported_by_profile_id: text("reported_by_profile_id"),
     assigned_to_profile_id: text("assigned_to_profile_id"),
     operational_event_id: text("operational_event_id"),
@@ -119,6 +122,7 @@ function toColumns(
     facilityId?: string;
     sourceRequestId?: string | null;
     parentIncidentId?: string | null;
+    assetId?: string | null;
   }
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -138,7 +142,7 @@ function toColumns(
   set("people_affected", input.peopleAffected);
   set("hold_reason", input.holdReason);
   set("requires_work_instruction", input.requiresWorkInstruction);
-  set("asset_ref", input.assetRef);
+  set("asset_id", resolved.assetId);
   set("reported_by_profile_id", input.reportedByProfileId);
   set("assigned_to_profile_id", input.assignedToProfileId);
   set("operational_event_id", input.operationalEventId);
@@ -374,12 +378,23 @@ export class FmIncidentRepository {
     return ((data ?? [])[0] as { code?: string } | undefined)?.code ?? null;
   }
 
+  /** Resolve an Asset reference (UUID, or a code accepted as INPUT only) to its tenant UUID. */
+  private async resolveAssetRef(ref: string | null | undefined): Promise<string | null | undefined> {
+    if (ref === undefined) return undefined;
+    if (ref === null || !ref.trim()) return null;
+    const id = await new FmAssetRepository(this.organisationId, this.admin).findId(ref);
+    if (!id) throw new FmIncidentValidationError(`Asset ${ref.trim()} not found in this organisation.`);
+    return id;
+  }
+
   private async resolveRelations(input: {
     facilityId?: string;
     sourceRequestRef?: string | null;
     parentIncidentRef?: string | null;
+    assetRef?: string | null;
   }) {
     return {
+      assetId: await this.resolveAssetRef(input.assetRef),
       facilityId: input.facilityId
         ? await this.resolveFacilityId(input.facilityId)
         : undefined,
@@ -484,24 +499,24 @@ export class FmIncidentRepository {
     return count ?? 0;
   }
 
-  /** Active Incidents per (transitional Sheet) asset ref — asset workload. */
-  async activeByAssetRefs(assetRefs: string[]): Promise<Map<string, string[]>> {
+  /** Active Incident codes per Asset UUID — asset workload. */
+  async activeByAssetIds(assetIds: string[]): Promise<Map<string, string[]>> {
     const out = new Map<string, string[]>();
-    const refs = [...new Set(assetRefs.map((r) => r.trim()).filter(Boolean))];
+    const refs = uuidsOnly(assetIds);
     if (refs.length === 0) return out;
     const { data, error } = await this.admin
       .from("fm_incidents")
-      .select("code, asset_ref")
+      .select("code, asset_id")
       .eq("organisation_id", this.organisationId)
-      .in("asset_ref", refs)
+      .in("asset_id", refs)
       .in("status", [...ACTIVE_INCIDENT_STATUS_LIST])
       .order("code", { ascending: true });
     if (error) throwDb(error, "Unable to load asset incident workload.");
     for (const row of data ?? []) {
-      const rec = row as { code: string; asset_ref: string };
-      const list = out.get(rec.asset_ref) ?? [];
+      const rec = row as { code: string; asset_id: string };
+      const list = out.get(rec.asset_id) ?? [];
       list.push(String(rec.code));
-      out.set(rec.asset_ref, list);
+      out.set(rec.asset_id, list);
     }
     return out;
   }

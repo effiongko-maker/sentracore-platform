@@ -1,15 +1,10 @@
 import type { PaginatedResult } from "@/types";
 import type {
   Asset,
-  AssetCategory,
-  AssetCondition,
-  AssetCriticality,
   AssetListParams,
-  AssetStatus,
   CreateAssetInput,
   UpdateAssetInput,
 } from "@/modules/assets/types";
-import { normalizeAssetToken } from "@/modules/assets/utils";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
 import {
@@ -21,322 +16,101 @@ import {
   sharedRequest,
   stableRequestKey,
 } from "@/services/cache/sharedRequest";
-import { FacilityService } from "@/services/facilities/FacilityService";
 import {
   applyAssetWorkloadSummary,
   loadBoundedWorkloadSummary,
 } from "@/lib/operational/workload/loadBoundedWorkloadSummary";
-import { queryAssetsPage } from "./queryAssets";
 
-/** Raw row shape from the Apps Script assets API. */
-type RemoteAsset = Record<string, unknown>;
+/** The server returns the Asset contract directly (Supabase `fm_assets`). */
+type RemoteAsset = Asset;
 
-function pickField(raw: RemoteAsset, ...keys: string[]): unknown {
-  for (const key of keys) {
-    const value = raw[key];
-    if (value != null && String(value).trim() !== "") return value;
-  }
-  return undefined;
-}
-
-function normalizeText(value: unknown): string {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase();
-}
-
-function mapRemoteAsset(raw: RemoteAsset): Asset {
-  const id = String(pickField(raw, "id", "Asset ID") ?? "");
-
-  const category = normalizeAssetToken(
-    pickField(raw, "category", "Category") ?? "other"
-  ) as AssetCategory;
-  const status = normalizeAssetToken(
-    pickField(raw, "status", "Status") ?? "pending"
-  ) as AssetStatus;
-  const condition = normalizeAssetToken(
-    pickField(raw, "condition", "Condition") ?? "good"
-  ) as AssetCondition;
-  const criticality = normalizeAssetToken(
-    pickField(raw, "criticality", "Criticality") ?? "unassessed"
-  ) as AssetCriticality;
-
+function mapAsset(raw: RemoteAsset): Asset {
   return {
-    id,
-    facility: String(pickField(raw, "facility", "Facility") ?? ""),
-    name: String(pickField(raw, "name", "Asset Name") ?? ""),
-    category,
-    manufacturer: String(pickField(raw, "manufacturer", "Manufacturer") ?? ""),
-    model: String(pickField(raw, "model", "Model") ?? ""),
-    serialNumber: String(
-      pickField(raw, "serialNumber", "Serial Number") ?? ""
-    ),
-    installDate: String(
-      pickField(raw, "installDate", "Install Date") ?? ""
-    ),
-    warrantyExpiry: String(
-      pickField(raw, "warrantyExpiry", "Warranty Expiry") ?? ""
-    ),
-    oemId: String(pickField(raw, "oemId", "OEM ID") ?? ""),
-    condition,
-    status,
-    assignedTo: String(
-      pickField(raw, "assignedTo", "Assigned To") ?? ""
-    ),
-    criticality,
+    ...raw,
+    id: String(raw.id ?? ""),
+    code: String(raw.code ?? ""),
+    facilityId: String(raw.facilityId ?? ""),
+    facility: String(raw.facility ?? ""),
+    assignedToUserId: String(raw.assignedToUserId ?? ""),
+    assignedTo: String(raw.assignedTo ?? ""),
   };
 }
 
-function toPaginatedAssets(
-  payload: unknown,
-  params: AssetListParams
-): PaginatedResult<Asset> {
-  if (Array.isArray(payload)) {
-    const data = payload.map((row) => mapRemoteAsset(row as RemoteAsset));
-    return {
-      data,
-      page: params.page ?? 1,
-      pageSize: params.pageSize ?? data.length,
-      total: data.length,
-      totalPages: 1,
-    };
+function toPaginatedAssets(payload: unknown): PaginatedResult<Asset> {
+  if (!payload || typeof payload !== "object" || !Array.isArray((payload as { data?: unknown }).data)) {
+    // A malformed response is a failure, never a healthy empty page.
+    throw new ApiError("Asset source returned an invalid response.", 502);
   }
-
-  if (payload && typeof payload === "object") {
-    const page = payload as Record<string, unknown>;
-    const rows = Array.isArray(page.data) ? page.data : [];
-    return {
-      data: rows.map((row) => mapRemoteAsset(row as RemoteAsset)),
-      page: Number(page.page ?? params.page ?? 1),
-      pageSize: Number(page.pageSize ?? params.pageSize ?? rows.length),
-      total: Number(page.total ?? rows.length),
-      totalPages: Number(page.totalPages ?? 1),
-    };
-  }
-
+  const page = payload as { data: RemoteAsset[]; page?: number; pageSize?: number; total?: number; totalPages?: number };
   return {
-    data: [],
-    page: 1,
+    data: page.data.map(mapAsset),
+    page: Number(page.page ?? 1),
+    pageSize: Number(page.pageSize ?? page.data.length),
+    total: Number(page.total ?? page.data.length),
+    totalPages: Number(page.totalPages ?? 1),
+  };
+}
+
+function listPayload(params: AssetListParams) {
+  return {
+    page: params.page ?? 1,
     pageSize: params.pageSize ?? 8,
-    total: 0,
-    totalPages: 1,
+    search: params.search ?? "",
+    status: params.status ?? "all",
+    category: params.category ?? "all",
+    facilityId: params.facilityId ?? "all",
+    criticality: params.criticality ?? "all",
+    sort: params.sort ?? "newest",
   };
 }
 
-async function fetchAssetsPage(
-  params: AssetListParams
-): Promise<PaginatedResult<Asset>> {
+async function fetchAssetsPage(params: AssetListParams): Promise<PaginatedResult<Asset>> {
   const response = await apiClient.post<unknown>("/assets", {
     resource: "assets",
     action: "getAll",
-    payload: {
-      page: params.page ?? 1,
-      pageSize: params.pageSize ?? 8,
-      search: params.search ?? "",
-      status: params.status ?? "all",
-      category: params.category ?? "all",
-      facility: params.facility ?? "all",
-      sort: params.sort ?? "newest",
-    },
+    payload: listPayload(params),
   });
-  return toPaginatedAssets(response.data, params);
+  return toPaginatedAssets(response.data);
 }
 
 async function fetchAllAssetsUncached(): Promise<Asset[]> {
   const pageSize = 500;
-  let page = 1;
-  let totalPages = 1;
   const all: Asset[] = [];
-
-  while (page <= totalPages) {
-    const response = await apiClient.post<unknown>("/assets", {
-      resource: "assets",
-      action: "getAll",
-      payload: {
-        page,
-        pageSize,
-        search: "",
-        status: "all",
-        category: "all",
-        facility: "all",
-      },
-    });
-
-    const payload = response.data;
-    const rows = toPaginatedAssets(payload, {
-      page,
-      pageSize,
-      search: "",
-      status: "all",
-      category: "all",
-      facility: "all",
-    }).data;
-    all.push(...rows);
-
-    if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-      const meta = payload as Record<string, unknown>;
-      totalPages = Math.max(1, Number(meta.totalPages ?? 1));
-      const total = Number(meta.total ?? all.length);
-      if (all.length >= total || rows.length === 0) break;
-    } else {
-      break;
-    }
-
-    page += 1;
-    if (page > 100) break;
+  for (let page = 1; page <= 100; page += 1) {
+    const result = await fetchAssetsPage({ page, pageSize });
+    all.push(...result.data);
+    if (all.length >= result.total || result.data.length === 0) break;
   }
-
   const byId = new Map<string, Asset>();
-  for (const asset of all) {
-    if (asset.id) byId.set(asset.id, asset);
-  }
+  for (const asset of all) byId.set(asset.id, asset);
   return Array.from(byId.values());
 }
 
 /** Coalesced + short-TTL asset catalog rows (no workload enrichment). */
 async function loadAllAssets(): Promise<Asset[]> {
-  return sharedRequest(
-    `${CacheNamespaces.assetsCatalog}:all`,
-    fetchAllAssetsUncached,
-    { ttlMs: CATALOG_TTL_MS }
-  );
-}
-
-async function loadFacilityNameById(): Promise<Map<string, string>> {
-  try {
-    const result = await FacilityService.listFacilities({
-      page: 1,
-      pageSize: 500,
-    });
-    return new Map(result.data.map((facility) => [facility.id, facility.name]));
-  } catch {
-    return new Map();
-  }
-}
-
-function facilitiesEquivalent(
-  expected: string,
-  actual: string,
-  facilityNameById: Map<string, string>
-): boolean {
-  const left = String(expected ?? "").trim();
-  const right = String(actual ?? "").trim();
-  if (!left && !right) return true;
-  if (normalizeText(left) === normalizeText(right)) return true;
-
-  const leftName = facilityNameById.get(left) ?? left;
-  const rightName = facilityNameById.get(right) ?? right;
-  if (normalizeText(leftName) === normalizeText(rightName)) return true;
-
-  for (const [id, name] of facilityNameById) {
-    const aliases = [id, name].map(normalizeText);
-    if (
-      aliases.includes(normalizeText(left)) &&
-      aliases.includes(normalizeText(right))
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function fieldMismatch(
-  field: string,
-  expected: string,
-  actual: string
-): ApiError {
-  return new ApiError(
-    `Asset ${field} did not persist (expected "${expected}", got "${actual || "(empty)"}"). Redeploy Apps Script if this continues.`,
-    502
-  );
-}
-
-async function assertAssetPersisted(
-  expectedId: string,
-  intended: UpdateAssetInput,
-  actual: Asset
-): Promise<void> {
-  if (normalizeText(actual.id) !== normalizeText(expectedId)) {
-    throw fieldMismatch("id", expectedId, actual.id);
-  }
-
-  const checks: Array<[keyof UpdateAssetInput, string | undefined]> = [
-    ["name", intended.name],
-    ["category", intended.category],
-    ["manufacturer", intended.manufacturer],
-    ["model", intended.model],
-    ["serialNumber", intended.serialNumber],
-    ["installDate", intended.installDate],
-    ["warrantyExpiry", intended.warrantyExpiry],
-    ["oemId", intended.oemId],
-    ["condition", intended.condition],
-    ["status", intended.status],
-    ["assignedTo", intended.assignedTo],
-    ["criticality", intended.criticality],
-  ];
-
-  for (const [field, expected] of checks) {
-    if (expected == null) continue;
-    const actualValue = String(actual[field as keyof Asset] ?? "");
-    if (normalizeText(expected) !== normalizeText(actualValue)) {
-      throw fieldMismatch(field, String(expected), actualValue);
-    }
-  }
-
-  if (intended.facility != null) {
-    const facilityNameById = await loadFacilityNameById();
-    if (
-      !facilitiesEquivalent(
-        intended.facility,
-        actual.facility,
-        facilityNameById
-      )
-    ) {
-      throw fieldMismatch("facility", intended.facility, actual.facility);
-    }
-  }
+  return sharedRequest(`${CacheNamespaces.assetsCatalog}:all`, fetchAllAssetsUncached, { ttlMs: CATALOG_TTL_MS });
 }
 
 /**
- * Assets domain service.
- *
- * List uses server-side pagination via Apps Script (Phase 33).
+ * Assets domain service (browser client → /api/assets → Supabase).
  * Workload overlay is applied separately via enrichAssetsWorkload().
  */
 export const AssetService = {
   async listAssets(params: AssetListParams = {}): Promise<PaginatedResult<Asset>> {
-    const key = stableRequestKey(CacheNamespaces.assetsList, {
-      page: params.page ?? 1,
-      pageSize: params.pageSize ?? 8,
-      search: params.search ?? "",
-      status: params.status ?? "all",
-      category: params.category ?? "all",
-      facility: params.facility ?? "all",
-      sort: params.sort ?? "newest",
-    });
+    const key = stableRequestKey(CacheNamespaces.assetsList, listPayload(params));
     return sharedRequest(key, () => fetchAssetsPage(params));
   },
 
   /** Bounded workload overlay for visible asset rows (lazy — not on list critical path). */
   async enrichAssetsWorkload(assets: Asset[]): Promise<Asset[]> {
     if (assets.length === 0) return assets;
-    const assetIds = assets.map((row) => row.id).filter(Boolean);
-    const summary = await loadBoundedWorkloadSummary({ assetIds });
+    const summary = await loadBoundedWorkloadSummary({ assetIds: assets.map((row) => row.id) });
     return applyAssetWorkloadSummary(assets, summary);
   },
 
-  /**
-   * Lightweight reference catalog — id/name selects and EntityResolver only.
-   * Does NOT run OperationalWorkloadService (no WO/MNT/INC fan-out).
-   */
-  async listAssetsCatalog(
-    params: AssetListParams = {}
-  ): Promise<PaginatedResult<Asset>> {
-    const [assets, facilityNameById] = await Promise.all([
-      loadAllAssets(),
-      loadFacilityNameById(),
-    ]);
-    return queryAssetsPage(assets, params, facilityNameById);
+  /** Lightweight reference catalog — selects and EntityResolver only (server-filtered). */
+  async listAssetsCatalog(params: AssetListParams = {}): Promise<PaginatedResult<Asset>> {
+    return AssetService.listAssets(params);
   },
 
   /** Full unfiltered asset list without workload enrichment. */
@@ -346,103 +120,40 @@ export const AssetService = {
 
   async getAsset(id: string): Promise<Asset | null> {
     try {
-      const response = await apiClient.post<Asset>("/assets", {
-        resource: "assets",
-        action: "getById",
-        payload: { id },
-      });
+      const response = await apiClient.post<RemoteAsset>("/assets", { resource: "assets", action: "getById", payload: { id } });
       if (response.data == null) return null;
-      const asset = mapRemoteAsset(response.data as unknown as RemoteAsset);
+      const asset = mapAsset(response.data);
       const [enriched] = await AssetService.enrichAssetsWorkload([asset]);
       return enriched ?? asset;
     } catch (error) {
-      if (
-        error instanceof ApiError &&
-        (error.status === 404 || /not found/i.test(error.message))
-      ) {
-        return null;
-      }
+      if (error instanceof ApiError && (error.status === 404 || /not found/i.test(error.message))) return null;
       throw error;
     }
   },
 
   async createAsset(input: CreateAssetInput): Promise<Asset> {
-    const response = await apiClient.post<Asset>("/assets", {
-      resource: "assets",
-      action: "create",
-      payload: input,
-    });
-    if (response.data == null) {
-      throw new ApiError(
-        "Asset create returned no record. Redeploy AssetRepository.gs if the Assets sheet headers differ.",
-        502
-      );
-    }
-    const created = mapRemoteAsset(response.data as unknown as RemoteAsset);
-    if (!created.id) {
-      throw new ApiError("Asset create returned a record without an id.", 502);
-    }
-
-    const verified = await AssetService.getAsset(created.id);
-    if (!verified) {
-      throw new ApiError(
-        "Asset was created but could not be re-read from storage.",
-        502
-      );
-    }
-    await assertAssetPersisted(created.id, input, verified);
+    const response = await apiClient.post<RemoteAsset>("/assets", { resource: "assets", action: "create", payload: input });
+    if (response.data == null) throw new ApiError("Asset create returned no record.", 502);
+    const created = mapAsset(response.data);
+    if (!created.id) throw new ApiError("Asset create returned a record without an id.", 502);
     onAssetMutation();
-    return verified;
+    return created;
   },
 
   async updateAsset(id: string, input: UpdateAssetInput): Promise<Asset> {
-    if (!id.trim()) {
-      throw new ApiError("Asset id is required for update.", 400);
-    }
-
-    const response = await apiClient.post<Asset>("/assets", {
-      resource: "assets",
-      action: "update",
-      payload: { id, ...input },
-    });
-    if (response.data == null) {
-      throw new ApiError("Asset update returned no record.", 502);
-    }
-
-    const verified = await AssetService.getAsset(id);
-    if (!verified) {
-      throw new ApiError(
-        `Asset ${id} update could not be confirmed — record missing after save.`,
-        502
-      );
-    }
-    await assertAssetPersisted(id, input, verified);
+    if (!id.trim()) throw new ApiError("Asset id is required for update.", 400);
+    const response = await apiClient.post<RemoteAsset>("/assets", { resource: "assets", action: "update", payload: { id, ...input } });
+    if (response.data == null) throw new ApiError("Asset update returned no record.", 502);
     onAssetMutation();
-    return verified;
+    return mapAsset(response.data);
   },
 
   /** Soft-deactivate only — assets are never deleted. */
   async deactivateAsset(id: string): Promise<Asset> {
-    const response = await apiClient.post<Asset>("/assets", {
-      resource: "assets",
-      action: "deactivate",
-      payload: { id },
-    });
-    if (response.data == null) {
-      throw new ApiError("Asset deactivate returned no record.", 502);
-    }
-    const verified = await AssetService.getAsset(id);
-    if (!verified) {
-      throw new ApiError(
-        `Asset ${id} deactivate could not be confirmed.`,
-        502
-      );
-    }
-    if (normalizeText(verified.status) !== "inactive") {
-      throw fieldMismatch("status", "inactive", verified.status);
-    }
+    const response = await apiClient.post<RemoteAsset>("/assets", { resource: "assets", action: "deactivate", payload: { id } });
+    if (response.data == null) throw new ApiError("Asset deactivate returned no record.", 502);
     onAssetMutation();
-    return verified;
+    return mapAsset(response.data);
   },
 };
 

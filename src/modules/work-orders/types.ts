@@ -184,7 +184,8 @@ export interface WorkOrderFilterCatalogUser {
 export interface WorkOrderFilterCatalogAsset {
   id: string;
   name: string;
-  facility: string;
+  /** Facility UUID. */
+  facilityId: string;
 }
 
 export interface WorkOrderFilterCatalog {

@@ -82,7 +82,7 @@ function sampleRow(overrides: Partial<FmWorkRow> = {}): FmWorkRow {
     source: "manual",
     priority: "high",
     status: "requested",
-    asset_ref: null,
+    asset_id: null,
     source_request_id: null,
     source_request_code: null,
     incident_id: null,

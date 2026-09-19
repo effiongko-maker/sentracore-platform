@@ -190,12 +190,10 @@ export function ReportIncidentModal({
     };
   }, [open]);
 
-  const facilityName = facilities.find((f) => f.id === form.facilityId)?.name;
   const filteredAssets = form.facilityId
     ? assets.filter(
         (asset) =>
-          asset.facility === form.facilityId ||
-          (facilityName != null && asset.facility === facilityName)
+          asset.facilityId === form.facilityId
       )
     : assets;
 

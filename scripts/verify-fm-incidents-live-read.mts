@@ -67,7 +67,7 @@ async function main() {
   assert((await incidents.getByIdOrCode("00000000-0000-4000-8000-000000000001")) === null, "missing uuid → null");
   assert((await incidents.relationsFor([])).size === 0, "relations shape (empty)");
   assert((await incidents.countActiveForProfile("00000000-0000-4000-8000-000000000001")) === 0, "active count shape");
-  assert((await incidents.activeByAssetRefs(["AST-NOPE"])).size === 0, "asset workload shape");
+  assert((await incidents.activeByAssetIds(["00000000-0000-4000-8000-0000000000a1"])).size === 0, "asset workload shape");
 
   const requests = new FmRequestRepository(orgId, admin);
   const links = await requests.linksFor(["00000000-0000-4000-8000-000000000001"]);

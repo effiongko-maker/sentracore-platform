@@ -93,7 +93,7 @@ export function AssetsToolbar({
     }
     if (facility !== "all") {
       const match = facilities.find(
-        (item) => item.id === facility || item.name === facility
+        (item) => item.id === facility
       );
       next.push({
         id: "facility",

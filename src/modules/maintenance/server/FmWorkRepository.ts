@@ -1,4 +1,6 @@
 import "server-only";
+import { FmAssetRepository } from "@/modules/assets/server/FmAssetRepository";
+import { uuidsOnly } from "@/modules/assets/server/fmAssetDomain";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
   FM_WORK_SELECT,
@@ -32,6 +34,7 @@ function throwDb(
       "A work item with this code already exists in the organisation."
     );
   }
+  if (/_asset_fk/.test(message)) throw new FmWorkValidationError("The asset must exist in this organisation and belong to the same facility.");
   if (error?.code === "23503" || /foreign key/i.test(message)) {
     throw new FmWorkValidationError(
       "Work references an invalid facility or profile for this organisation."
@@ -63,7 +66,7 @@ function asRow(value: unknown): FmWorkRow {
     source: String(rec.source ?? "manual"),
     priority: String(rec.priority ?? "medium"),
     status: String(rec.status ?? "requested"),
-    asset_ref: rec.asset_ref != null ? String(rec.asset_ref) : null,
+    asset_id: rec.asset_id != null ? String(rec.asset_id) : null,
     source_request_id:
       rec.source_request_id != null ? String(rec.source_request_id) : null,
     source_request_code: null,
@@ -384,7 +387,7 @@ export class FmWorkRepository {
       source: input.source,
       priority: input.priority,
       status: input.status,
-      asset_ref: input.assetRef ?? null,
+      asset_id: (await this.resolveAssetRef(input.assetRef)) ?? null,
       source_request_id: sourceRequestId,
       incident_id: incidentId,
       assigned_to_profile_id: input.assignedToProfileId ?? null,
@@ -467,7 +470,7 @@ export class FmWorkRepository {
       patch.department = input.department ?? null;
     }
     if (input.facilityId !== undefined) patch.facility_id = facilityId;
-    if (input.assetRef !== undefined) patch.asset_ref = input.assetRef ?? null;
+    if (input.assetRef !== undefined) patch.asset_id = (await this.resolveAssetRef(input.assetRef)) ?? null;
     if (input.sourceRequestRef !== undefined) {
       patch.source_request_id = input.sourceRequestRef
         ? await this.resolveRequestId(input.sourceRequestRef)
@@ -541,22 +544,31 @@ export class FmWorkRepository {
     return row;
   }
 
-  /** Active Work codes per (transitional Sheet) asset ref — asset workload. */
-  async activeByAssetRefs(assetRefs: string[]): Promise<Map<string, string[]>> {
+  /** Resolve an Asset reference (UUID, or a code accepted as INPUT only) to its tenant UUID. */
+  private async resolveAssetRef(ref: string | null | undefined): Promise<string | null | undefined> {
+    if (ref === undefined) return undefined;
+    if (ref === null || !ref.trim()) return null;
+    const id = await new FmAssetRepository(this.organisationId, this.admin).findId(ref);
+    if (!id) throw new FmWorkValidationError(`Asset ${ref.trim()} not found in this organisation.`);
+    return id;
+  }
+
+  /** Active Work codes per Asset UUID — asset workload. */
+  async activeByAssetIds(assetIds: string[]): Promise<Map<string, string[]>> {
     const out = new Map<string, string[]>();
-    const refs = [...new Set(assetRefs.map((r) => r.trim()).filter(Boolean))];
+    const refs = uuidsOnly(assetIds);
     if (refs.length === 0) return out;
     const { data, error } = await this.admin
       .from("fm_work")
-      .select("code, asset_ref")
+      .select("code, asset_id")
       .eq("organisation_id", this.organisationId)
-      .in("asset_ref", refs)
+      .in("asset_id", refs)
       .in("status", ["requested", "triaged", "scheduled", "in_progress", "on_hold"])
       .order("code", { ascending: true });
     if (error) throwDb(error, "Unable to load asset Work workload.");
     for (const row of data ?? []) {
-      const rec = row as { code: string; asset_ref: string };
-      out.set(rec.asset_ref, [...(out.get(rec.asset_ref) ?? []), String(rec.code)]);
+      const rec = row as { code: string; asset_id: string };
+      out.set(rec.asset_id, [...(out.get(rec.asset_id) ?? []), String(rec.code)]);
     }
     return out;
   }

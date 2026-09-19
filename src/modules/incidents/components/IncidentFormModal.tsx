@@ -16,8 +16,8 @@ import { UserService } from "@/services/users/UserService";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
 import {
   facilityDisplayName,
-  resolveScopedFacilityId,
 } from "@/lib/platform/scopedFacility";
+import { useScopedFacilityResolver } from "@/hooks/useScopedFacilityResolver";
 import type { Facility } from "@/modules/facilities/types";
 import type { Asset } from "@/modules/assets/types";
 import type { User } from "@/modules/users/types";
@@ -105,22 +105,21 @@ export function IncidentFormModal({
     };
   }, [open]);
 
+  const resolveScoped = useScopedFacilityResolver();
   useEffect(() => {
     if (!open || facilities.length === 0) return;
     setForm((current) => {
       if (current.facilityId.trim()) return current;
-      const nextId = resolveScopedFacilityId(facilities, incident?.facilityId);
+      const nextId = resolveScoped(facilities, incident?.facilityId);
       if (!nextId || current.facilityId === nextId) return current;
       return { ...current, facilityId: nextId };
     });
-  }, [open, facilities, incident?.facilityId]);
+  }, [open, facilities, incident?.facilityId, resolveScoped]);
 
-  const facilityName = facilities.find((f) => f.id === form.facilityId)?.name;
   const filteredAssets = form.facilityId
     ? assets.filter(
         (asset) =>
-          asset.facility === form.facilityId ||
-          (facilityName != null && asset.facility === facilityName)
+          asset.facilityId === form.facilityId
       )
     : assets;
 

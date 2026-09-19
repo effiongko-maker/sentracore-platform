@@ -12,7 +12,8 @@ import { Modal } from "@/components/modals/Modal";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { useFacilityOptions } from "@/hooks/useFacilityOptions";
-import { resolveScopedFacilityId } from "@/lib/platform/scopedFacility";
+import { useScopedFacilityResolver } from "@/hooks/useScopedFacilityResolver";
+
 import {
   COST_CATEGORIES,
   COST_CATEGORY_LABELS,
@@ -153,11 +154,12 @@ export function CostRecordFormModal({
   >([]);
   const [workOrderLoading, setWorkOrderLoading] = useState(false);
 
-  /** NCC Annex deployment scope — same preferred facility as Submit Request. */
+  /** The user's active facility assignment (UUID) — or the record's own facility. */
+  const resolveScoped = useScopedFacilityResolver();
   const scopedFacilityId = useMemo(() => {
     if (initialValues?.facilityId?.trim()) return initialValues.facilityId.trim();
-    return resolveScopedFacilityId(facilities);
-  }, [facilities, initialValues?.facilityId]);
+    return resolveScoped(facilities);
+  }, [facilities, initialValues?.facilityId, resolveScoped]);
 
   useEffect(() => {
     if (!open) return;

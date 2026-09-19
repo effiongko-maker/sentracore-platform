@@ -328,7 +328,7 @@ export const WorkOrderService = {
 
   /**
    * Filter dropdown catalogs, composed from the authoritative registers
-   * (Facilities and People are Supabase; Assets are still legacy).
+   * (Facilities, People and Assets are Supabase).
    * A failing catalog is an error, never an empty dropdown.
    */
   async getFilterCatalog(): Promise<WorkOrderFilterCatalog> {
@@ -347,7 +347,7 @@ export const WorkOrderService = {
     return {
       facilities: facilities.map((f) => ({ id: f.id, name: f.name })),
       users: users.map((u) => ({ id: u.id, name: u.name })),
-      assets: assets.map((a) => ({ id: a.id, name: a.name, facility: a.facility })),
+      assets: assets.map((a) => ({ id: a.id, name: a.name, facilityId: a.facilityId })),
     };
   },
 

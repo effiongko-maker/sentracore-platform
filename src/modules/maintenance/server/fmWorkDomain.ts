@@ -88,7 +88,7 @@ export type FmWorkRow = {
   source: string;
   priority: string;
   status: string;
-  asset_ref: string | null;
+  asset_id: string | null;
   /** fm_requests.id — tenant-safe provenance FK. */
   source_request_id: string | null;
   /** Display code of the source Request; hydrated by the repository (not a column). */
@@ -120,7 +120,7 @@ export type FmWorkRow = {
 };
 
 export const FM_WORK_SELECT =
-  "id, organisation_id, code, facility_id, title, description, work_kind, source, priority, status, asset_ref, source_request_id, incident_id, assigned_to_profile_id, reported_by_profile_id, hold_reason, requires_work_instruction, operational_event_id, reported_at, due_at, scheduled_start_at, scheduled_end_at, started_at, completed_at, completion_notes, category_id, department, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
+  "id, organisation_id, code, facility_id, title, description, work_kind, source, priority, status, asset_id, source_request_id, incident_id, assigned_to_profile_id, reported_by_profile_id, hold_reason, requires_work_instruction, operational_event_id, reported_at, due_at, scheduled_start_at, scheduled_end_at, started_at, completed_at, completion_notes, category_id, department, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -246,7 +246,7 @@ export function mapFmWorkRowToMaintenance(row: FmWorkRow): Maintenance {
     categoryId: row.category_id ?? undefined,
     department: row.department ?? undefined,
     facilityId: row.facility_id,
-    assetId: row.asset_ref ?? undefined,
+    assetId: row.asset_id ?? undefined,
     reportedByUserId: row.reported_by_profile_id ?? undefined,
     assignedToUserId: row.assigned_to_profile_id ?? undefined,
     operationalEventId: row.operational_event_id ?? undefined,

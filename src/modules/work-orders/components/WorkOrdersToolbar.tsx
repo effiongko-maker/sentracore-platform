@@ -341,14 +341,12 @@ export function WorkOrdersToolbar({
     onMaintenanceIdChange("all");
   }
 
-  const facilityName = facilities.find((item) => item.id === facilityId)?.name;
   const filteredAssets =
     facilityId === "all"
       ? assets
       : assets.filter(
           (asset) =>
-            asset.facility === facilityId ||
-            (facilityName != null && asset.facility === facilityName)
+            asset.facilityId === facilityId
         );
 
   const resultNoun =

@@ -56,6 +56,11 @@ export type OperatingAccess = {
   authorityKind: AuthorityKind;
   status: UserStatus | "" | "unknown";
   facility: string;
+  /**
+   * Canonical UUID of the user's active facility assignment (empty when none).
+   * The only source for the scoped facility — never a display name or code.
+   */
+  facilityId: string;
   source: OperatingAccessSource;
   /**
    * True when no valid V1 operating assignment resolved.
@@ -89,6 +94,7 @@ export function resolveOperatingAccessFromGrants(input: {
   roleLabel?: string;
   status?: UserStatus | "" | "unknown";
   facility?: string;
+  facilityId?: string;
   inactive?: boolean;
   unassigned?: boolean;
   capabilities: readonly AccessCapability[];
@@ -110,6 +116,7 @@ export function resolveOperatingAccessFromGrants(input: {
     authorityKind: baseAuthorityKind(role),
     status: input.status ?? "unknown",
     facility: input.facility ?? "",
+    facilityId: input.facilityId ?? "",
     source: "platform",
     unassigned,
     inactive: Boolean(input.inactive),

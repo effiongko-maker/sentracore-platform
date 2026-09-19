@@ -10,6 +10,8 @@ import {
 } from "@/components/forms/FormField";
 import { useToast } from "@/components/ui/Toast";
 import { useFacilityOptions } from "@/hooks/useFacilityOptions";
+import { UserService } from "@/services/users/UserService";
+import type { User } from "@/modules/users/types";
 import {
   ASSET_CATEGORIES,
   ASSET_CONDITIONS,
@@ -17,7 +19,7 @@ import {
   ASSET_STATUSES,
 } from "../constants";
 import { AssetService } from "../services/AssetService";
-import { labelize, resolveFacilityDisplayName, toCreateFormValues } from "../utils";
+import { labelize, toCreateFormValues } from "../utils";
 import type {
   Asset,
   AssetCategory,
@@ -56,15 +58,26 @@ export function AssetFormModal({
     setErrors({});
   }, [open, mode, asset]);
 
-  // Sheet stores facility display names; normalise legacy id-stored values once options load.
+  const [people, setPeople] = useState<User[]>([]);
+  const [peopleError, setPeopleError] = useState<string | null>(null);
   useEffect(() => {
-    if (!open || facilities.length === 0) return;
-    setForm((current) => {
-      const resolved = resolveFacilityDisplayName(current.facility, facilities);
-      if (!resolved || resolved === current.facility) return current;
-      return { ...current, facility: resolved };
-    });
-  }, [open, facilities]);
+    if (!open) return;
+    let cancelled = false;
+    UserService.listUsersCatalog({ page: 1, pageSize: 200 })
+      .then((page) => {
+        if (cancelled) return;
+        setPeople(page.data);
+        setPeopleError(null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPeople([]);
+        setPeopleError("Unable to load people.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   function updateField<K extends keyof CreateAssetInput>(
     key: K,
@@ -77,7 +90,7 @@ export function AssetFormModal({
   function validate() {
     const next: Partial<Record<keyof CreateAssetInput, string>> = {};
     if (!form.name.trim()) next.name = "Asset name is required";
-    if (!form.facility.trim()) next.facility = "Facility is required";
+    if (!form.facilityId.trim()) next.facilityId = "Facility is required";
     if (!form.manufacturer.trim())
       next.manufacturer = "Manufacturer is required";
     setErrors(next);
@@ -90,26 +103,17 @@ export function AssetFormModal({
 
     setSaving(true);
     try {
-      const facilityName = resolveFacilityDisplayName(form.facility, facilities);
-      if (!facilityName) {
-        setErrors((current) => ({
-          ...current,
-          facility: "Facility is required",
-        }));
-        return;
-      }
-
       const payload: CreateAssetInput = {
         ...form,
         name: form.name.trim(),
-        facility: facilityName,
+        facilityId: form.facilityId.trim(),
         manufacturer: form.manufacturer.trim(),
         model: form.model.trim(),
         serialNumber: form.serialNumber.trim(),
         installDate: form.installDate.trim(),
         warrantyExpiry: form.warrantyExpiry.trim(),
         oemId: form.oemId.trim(),
-        assignedTo: form.assignedTo.trim(),
+        assignedToUserId: form.assignedToUserId.trim(),
         criticality:
           mode === "edit" ? form.criticality : ("unassessed" as const),
       };
@@ -150,13 +154,7 @@ export function AssetFormModal({
   }
 
   const isEdit = mode === "edit";
-  const facilitySelectValue = resolveFacilityDisplayName(
-    form.facility,
-    facilities
-  );
-  const facilityKnown = facilities.some(
-    (item) => item.name === facilitySelectValue
-  );
+  const facilityKnown = facilities.some((item) => item.id === form.facilityId);
 
   return (
     <Modal
@@ -240,28 +238,23 @@ export function AssetFormModal({
           label="Facility"
           htmlFor="asset-facility"
           required
-          error={errors.facility}
+          error={errors.facilityId}
         >
           <select
             id="asset-facility"
             className={selectClassName}
-            value={facilitySelectValue}
-            onChange={(event) =>
-              updateField(
-                "facility",
-                resolveFacilityDisplayName(event.target.value, facilities)
-              )
-            }
+            value={form.facilityId}
+            onChange={(event) => updateField("facilityId", event.target.value)}
             disabled={facilitiesLoading}
           >
             <option value="">
               {facilitiesLoading ? "Loading facilities…" : "Select facility"}
             </option>
-            {facilitySelectValue && !facilityKnown ? (
-              <option value={facilitySelectValue}>{facilitySelectValue}</option>
+            {form.facilityId && !facilityKnown && !facilitiesLoading ? (
+              <option value={form.facilityId}>Unavailable facility</option>
             ) : null}
             {facilities.map((item) => (
-              <option key={item.id} value={item.name}>
+              <option key={item.id} value={item.id}>
                 {item.name}
               </option>
             ))}
@@ -317,14 +310,23 @@ export function AssetFormModal({
           />
         </FormField>
 
-        <FormField label="Assigned to" htmlFor="asset-assigned">
-          <input
+        <FormField label="Assigned to" htmlFor="asset-assigned" error={peopleError ?? undefined}>
+          <select
             id="asset-assigned"
-            className={inputClassName}
-            placeholder="e.g. Daniel Mensah"
-            value={form.assignedTo}
-            onChange={(event) => updateField("assignedTo", event.target.value)}
-          />
+            className={selectClassName}
+            value={form.assignedToUserId}
+            onChange={(event) => updateField("assignedToUserId", event.target.value)}
+          >
+            <option value="">Unassigned</option>
+            {form.assignedToUserId && !people.some((p) => p.id === form.assignedToUserId) ? (
+              <option value={form.assignedToUserId}>{asset?.assignedTo || "Assigned person"}</option>
+            ) : null}
+            {people.map((person) => (
+              <option key={person.id} value={person.id}>
+                {person.name}
+              </option>
+            ))}
+          </select>
         </FormField>
 
         <FormField label="Install date" htmlFor="asset-install">

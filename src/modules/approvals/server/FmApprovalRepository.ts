@@ -152,7 +152,7 @@ function toColumns(f: ApprovalFields): Record<string, unknown> {
   return out;
 }
 
-type InstructionRef = { id: string; code: string; facility_id: string; asset_ref: string | null };
+type InstructionRef = { id: string; code: string; facility_id: string; asset_id: string | null };
 
 export class FmApprovalRepository {
   constructor(
@@ -165,7 +165,7 @@ export class FmApprovalRepository {
     const target = ref.trim();
     const query = this.admin
       .from("fm_work_instructions")
-      .select("id, code, facility_id, asset_ref")
+      .select("id, code, facility_id, asset_id")
       .eq("organisation_id", this.organisationId);
     const { data, error } = UUID_RE.test(target)
       ? await query.eq("id", target).maybeSingle()
@@ -177,7 +177,7 @@ export class FmApprovalRepository {
       id: String(rec.id),
       code: String(rec.code),
       facility_id: String(rec.facility_id),
-      asset_ref: rec.asset_ref != null ? String(rec.asset_ref) : null,
+      asset_id: rec.asset_id != null ? String(rec.asset_id) : null,
     };
   }
 
@@ -282,7 +282,7 @@ export class FmApprovalRepository {
     const [instructions, activities] = await Promise.all([
       this.admin
         .from("fm_work_instructions")
-        .select("id, code, facility_id, asset_ref")
+        .select("id, code, facility_id, asset_id")
         .eq("organisation_id", this.organisationId)
         .in("id", [...new Set(rows.map((r) => r.work_instruction_id))]),
       this.admin
@@ -297,7 +297,7 @@ export class FmApprovalRepository {
 
     const byInstruction = new Map(
       (instructions.data ?? []).map((i) => {
-        const rec = i as { id: string; code: string; facility_id: string; asset_ref: string | null };
+        const rec = i as { id: string; code: string; facility_id: string; asset_id: string | null };
         return [rec.id, rec] as const;
       })
     );
@@ -306,7 +306,7 @@ export class FmApprovalRepository {
       out.set(row.id, {
         workInstructionCode: wi?.code,
         facilityId: wi?.facility_id,
-        assetRef: wi?.asset_ref ?? undefined,
+        assetRef: wi?.asset_id ?? undefined,
         activities: [],
       });
     }

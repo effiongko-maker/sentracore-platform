@@ -33,24 +33,11 @@ export function toDateInputValue(value: string | undefined): string {
   return new Date(parsed).toISOString().slice(0, 10);
 }
 
-/** Resolve a stored facility value to the display name written on the sheet. */
-export function resolveFacilityDisplayName(
-  value: string,
-  facilities: Array<{ id: string; name: string }>
-): string {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  const match = facilities.find(
-    (item) => item.id === trimmed || item.name === trimmed
-  );
-  return match?.name ?? trimmed;
-}
-
 export function toCreateFormValues(asset?: Asset | null) {
   return {
     name: asset?.name ?? "",
     category: asset?.category ?? ("other" as const),
-    facility: asset?.facility ?? "",
+    facilityId: asset?.facilityId ?? "",
     manufacturer: asset?.manufacturer ?? "",
     model: asset?.model ?? "",
     serialNumber: asset?.serialNumber ?? "",
@@ -59,7 +46,7 @@ export function toCreateFormValues(asset?: Asset | null) {
     oemId: asset?.oemId ?? "",
     condition: asset?.condition ?? ("good" as const),
     status: asset?.status ?? ("pending" as const),
-    assignedTo: asset?.assignedTo ?? "",
+    assignedToUserId: asset?.assignedToUserId ?? "",
     criticality: asset?.criticality ?? ("unassessed" as const),
   };
 }

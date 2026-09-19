@@ -58,13 +58,14 @@ function main() {
   assert(modal.includes("How much?"), "amount label");
   assert(!modal.includes('label="Where?"'), "facility selector removed from UX");
   assert(!modal.includes("cost-facility"), "no facility dropdown field");
-  assert(modal.includes('facility.id === "FAC-0001"'), "uses existing NCC Annex facility id");
-  assert(modal.includes("scopedFacilityId"), "auto facility for NCC Annex deployment");
+  assert(!modal.includes("FAC-0001"), "no legacy facility code as identity");
+  assert(modal.includes("useScopedFacilityResolver"), "facility scope comes from the canonical assignment resolver");
+  assert(modal.includes("scopedFacilityId"), "auto facility from the resolved scope");
   assert(modal.includes("payload: CreateCostRecordInput"), "create payload preserved");
   assert(modal.includes("facilityId,"), "facilityId still submitted on create");
   assert(modal.includes("COST_CATEGORY_LABELS"), "category validation");
   assert(modal.includes("COST_REIMBURSABILITY_LABELS"), "D reimbursability labels");
-  assert(modal.includes("Can we claim this back?"), "reimbursement eligibility label");
+  assert(modal.includes("Cost category (reimbursement)"), "reimbursement eligibility label (current wording)");
   assert(modal.includes("More details"), "secondary details section");
   assert(modal.includes("Receipt or invoice"), "E evidence required label");
   assert(
@@ -73,7 +74,8 @@ function main() {
   );
   assert(modal.includes('type="file"'), "E receipt upload input");
   assert(modal.includes("application/pdf,image/jpeg,image/png"), "E accepted receipt types");
-  assert(modal.includes("toEvidenceUpload"), "E evidence upload encoding");
+  assert(!modal.includes("toEvidenceUpload"), "Phase 2G: receipt upload is unavailable — no upload encoding");
+  assert(modal.includes("Receipt file upload is unavailable until evidence storage moves to SentraCore™"), "Phase 2G: explicit upload-unavailable hint");
   assert(modal.includes("Budgeted amount"), "budgeted amount label");
   assert(!modal.includes("Estimated amount"), "no estimated label");
   assert(modal.includes("Location"), "location field");

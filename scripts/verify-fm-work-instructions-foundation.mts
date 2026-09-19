@@ -73,7 +73,7 @@ function sampleRow(overrides: Partial<FmWorkInstructionRow> = {}): FmWorkInstruc
     maintenance_type: null,
     source: "manual",
     category_id: null,
-    asset_ref: null,
+    asset_id: null,
     parent_instruction_id: null,
     reported_by_profile_id: null,
     assigned_to_profile_id: null,
@@ -129,7 +129,7 @@ function main() {
     assert(!code.includes("is_platform_super_admin()"), "no Super Admin bypass");
     assert(code.includes("drop column work_order_ref") && /refusing to drop/.test(code), "opaque Incident WO ref retired, guarded");
     assert(!/references public\.(assets|fm_assets|approvals|vendors|cost)/i.test(code), "no FK to unmigrated Asset/Approval/Vendor/Cost");
-    assert(/asset_ref text/.test(code) && /approval_ref text/.test(code), "transitional refs are opaque text");
+    assert(/asset_ref text/.test(code) && /approval_ref text/.test(code), "Phase 2E migration: refs were opaque text (asset superseded by Phase 2H asset_id FK)");
   });
 
   check(results, "no cost-threshold classifier is active", () => {
@@ -310,13 +310,13 @@ function main() {
     assert(parseInstructionListParams({}).status === "all" && parseInstructionListParams({}).sort === "newest", "list defaults");
 
     const mapped = mapFmWorkInstructionRowToWorkOrder(
-      sampleRow({ estimated_cost: 25_000_000, order_type: "work_order", asset_ref: "AST-1", requires_approval: true }),
+      sampleRow({ estimated_cost: 25_000_000, order_type: "work_order", asset_id: "00000000-0000-4000-8000-0000000000a1", requires_approval: true }),
       { workCode: "WRK-2026-000001", incidentCode: "INC-2026-000001", parentCode: "WO-2026-000000", approvalCode: "APR-2026-000001" }
     );
     assert(mapped.id === "WO-2026-000001" && mapped.workOrderUuid?.startsWith("1111"), "display id + uuid");
     assert(mapped.orderType === "work_order" && mapped.estimatedCost === 25_000_000, "order type and cost independent in mapping");
     assert(mapped.maintenanceId === "WRK-2026-000001" && mapped.incidentId === "INC-2026-000001", "Work + Incident (through Work) derived");
-    assert(mapped.approvalId === "APR-2026-000001" && mapped.assetId === "AST-1", "Approval derived by UUID relation (Phase 2F); asset ref opaque");
+    assert(mapped.approvalId === "APR-2026-000001" && mapped.assetId === "00000000-0000-4000-8000-0000000000a1", "Approval derived by UUID relation (Phase 2F); Asset UUID (Phase 2H)");
   });
 
   check(results, "Operational Picture predicates preserved", () => {

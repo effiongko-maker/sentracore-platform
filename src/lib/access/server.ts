@@ -58,6 +58,7 @@ async function loadActiveAssignmentContext(
 ): Promise<{
   role: V1OperatingRole | null;
   facility: string;
+  facilityId: string;
   status: OperatingAccess["status"];
 }> {
   const admin = createAdminClient();
@@ -76,7 +77,7 @@ async function loadActiveAssignmentContext(
     | { operational_role?: string; facility_id?: string }
     | undefined;
   if (!row) {
-    return { role: null, facility: "", status: "unknown" };
+    return { role: null, facility: "", facilityId: "", status: "unknown" };
   }
   const rawRole = String(row.operational_role ?? "");
   const role = isV1OperatingRole(rawRole)
@@ -99,6 +100,7 @@ async function loadActiveAssignmentContext(
   return {
     role,
     facility,
+    facilityId,
     status: "active",
   };
 }
@@ -158,6 +160,7 @@ export async function resolveOperatingAccess(
   let capabilities: AccessCapability[] = [];
   let role: V1OperatingRole | null = null;
   let facility = "";
+  let facilityId = "";
   let assignmentStatus: OperatingAccess["status"] = "unknown";
   try {
     capabilities = await loadExplicitFmGrants(organisationId, profileId);
@@ -176,6 +179,7 @@ export async function resolveOperatingAccess(
     );
     role = context.role;
     facility = context.facility;
+    facilityId = context.facilityId;
     assignmentStatus = context.status;
   } catch (error) {
     console.warn(
@@ -191,6 +195,7 @@ export async function resolveOperatingAccess(
     roleLabel: role ? v1OperatingRoleLabel(role) : "Unassigned",
     status: assignmentStatus,
     facility,
+    facilityId,
     inactive: isInactiveUserStatus(session.profile.status),
     unassigned: role == null,
     capabilities,

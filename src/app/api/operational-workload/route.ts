@@ -36,9 +36,9 @@ export async function POST(request: Request) {
 
     const { organisationId } = resolveFmIncidentOrganisation(gate.session);
     const [instructions, workByAsset, incidentsByAsset] = await Promise.all([
-      new FmWorkInstructionRepository(organisationId).activeWorkload({ userIds, assetRefs: assetIds }),
-      assetIds.length ? new FmWorkRepository(organisationId).activeByAssetRefs(assetIds) : new Map<string, string[]>(),
-      assetIds.length ? new FmIncidentRepository(organisationId).activeByAssetRefs(assetIds) : new Map<string, string[]>(),
+      new FmWorkInstructionRepository(organisationId).activeWorkload({ userIds, assetIds }),
+      assetIds.length ? new FmWorkRepository(organisationId).activeByAssetIds(assetIds) : new Map<string, string[]>(),
+      assetIds.length ? new FmIncidentRepository(organisationId).activeByAssetIds(assetIds) : new Map<string, string[]>(),
     ]);
 
     const summary = composeWorkloadSummary({

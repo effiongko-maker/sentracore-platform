@@ -5,7 +5,7 @@ import { Modal } from "@/components/modals/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { formatDate } from "@/lib/utils";
-import { useFacilityName } from "@/hooks/useEntityLabel";
+import { useAssetName, useFacilityName } from "@/hooks/useEntityLabel";
 import { APPROVAL_STATUS_VARIANT } from "../constants";
 import { getApprovalLifecycleActions, parseApprovalActivityLog } from "../lifecycle";
 import {
@@ -57,6 +57,7 @@ export function ViewApprovalModal({
   onDecision,
 }: ViewApprovalModalProps) {
   const facilityName = useFacilityName(approval?.facilityId);
+  const assetName = useAssetName(approval?.assetId);
 
   if (!approval) return null;
 
@@ -161,7 +162,7 @@ export function ViewApprovalModal({
           label="Facility"
           value={facilityName || approval.facilityId || "—"}
         />
-        <Detail label="Asset" value={approval.assetId || "—"} />
+        <Detail label="Asset" value={approval.assetId ? assetName || approval.assetId : "—"} />
         <Detail label="Client" value={approval.clientName || "—"} />
         <Detail
           label="Amount"

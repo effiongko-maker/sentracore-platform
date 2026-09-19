@@ -16,8 +16,8 @@ import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 import { UserService } from "@/services/users/UserService";
 import {
   facilityDisplayName,
-  resolveScopedFacilityId,
 } from "@/lib/platform/scopedFacility";
+import { useScopedFacilityResolver } from "@/hooks/useScopedFacilityResolver";
 import type { Facility } from "@/modules/facilities/types";
 import type { Asset } from "@/modules/assets/types";
 import type { Maintenance } from "@/modules/maintenance/types";
@@ -166,30 +166,25 @@ export function WorkOrderFormModal({
     };
   }, [open]);
 
+  const resolveScoped = useScopedFacilityResolver();
   useEffect(() => {
     if (!open || facilities.length === 0) return;
     setForm((current) => {
       if (current.facilityId.trim()) return current;
-      const nextId = resolveScopedFacilityId(
-        facilities,
-        workOrder?.facilityId
-      );
+      const nextId = resolveScoped(facilities, workOrder?.facilityId);
       if (!nextId || current.facilityId === nextId) return current;
       return { ...current, facilityId: nextId };
     });
-  }, [open, facilities, workOrder?.facilityId]);
+  }, [open, facilities, workOrder?.facilityId, resolveScoped]);
 
   const assetsForFacility = form.facilityId
-    ? assets.filter((asset) => asset.facility === form.facilityId || !form.facilityId)
+    ? assets.filter((asset) => asset.facilityId === form.facilityId)
     : assets;
 
-  // Assets store facility as name in live sheet — also match by resolved facility name.
-  const facilityName = facilities.find((f) => f.id === form.facilityId)?.name;
   const filteredAssets = form.facilityId
     ? assets.filter(
         (asset) =>
-          asset.facility === form.facilityId ||
-          (facilityName != null && asset.facility === facilityName)
+          asset.facilityId === form.facilityId
       )
     : assets;
 

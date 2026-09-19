@@ -106,7 +106,7 @@ export type FmIncidentRow = {
   requires_work_instruction: boolean;
   source_request_id: string | null;
   parent_incident_id: string | null;
-  asset_ref: string | null;
+  asset_id: string | null;
   reported_by_profile_id: string | null;
   assigned_to_profile_id: string | null;
   operational_event_id: string | null;
@@ -129,7 +129,7 @@ export type FmIncidentRow = {
 };
 
 export const FM_INCIDENT_SELECT =
-  "id, organisation_id, code, facility_id, title, description, location_detail, incident_type, source, category_id, severity, status, reported_via, is_emergency, people_affected, hold_reason, requires_work_instruction, source_request_id, parent_incident_id, asset_ref, reported_by_profile_id, assigned_to_profile_id, operational_event_id, reported_at, discovered_at, acknowledged_at, response_due_at, contained_at, resolved_at, closed_at, immediate_actions, root_cause, corrective_actions, preventive_actions, resolution_notes, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
+  "id, organisation_id, code, facility_id, title, description, location_detail, incident_type, source, category_id, severity, status, reported_via, is_emergency, people_affected, hold_reason, requires_work_instruction, source_request_id, parent_incident_id, asset_id, reported_by_profile_id, assigned_to_profile_id, operational_event_id, reported_at, discovered_at, acknowledged_at, response_due_at, contained_at, resolved_at, closed_at, immediate_actions, root_cause, corrective_actions, preventive_actions, resolution_notes, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
 
 /** Relationships derived at read time — never stored on the Incident row. */
 export type FmIncidentRelations = {
@@ -445,7 +445,7 @@ export function mapFmIncidentRowToIncident(
     source: row.source as IncidentSource,
     categoryId: row.category_id ?? undefined,
     facilityId: row.facility_id,
-    assetId: row.asset_ref ?? undefined,
+    assetId: row.asset_id ?? undefined,
     locationDetail: row.location_detail ?? undefined,
     reportedByUserId: row.reported_by_profile_id ?? undefined,
     assignedToUserId: row.assigned_to_profile_id ?? undefined,

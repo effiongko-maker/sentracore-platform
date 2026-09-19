@@ -115,9 +115,8 @@ function assetFacilityName(
   scoped: ReportingSnapshot,
   asset: ReportingSnapshot["assets"][number]
 ): string {
-  const byId = scoped.facilities.find((f) => f.id === asset.facility)?.name;
-  if (byId) return byId;
-  return asset.facility || "—";
+  const byId = scoped.facilities.find((f) => f.id === asset.facilityId)?.name;
+  return byId || asset.facility || "—";
 }
 
 function closureRate(scoped: ReportingSnapshot): number {

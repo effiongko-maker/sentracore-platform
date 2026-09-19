@@ -70,7 +70,7 @@ export function AssetsTable({
       {
         key: "facility",
         header: "Facility",
-        render: (asset) => <FacilityCell value={asset.facility} />,
+        render: (asset) => <FacilityCell value={asset.facilityId} />,
       },
       {
         key: "condition",

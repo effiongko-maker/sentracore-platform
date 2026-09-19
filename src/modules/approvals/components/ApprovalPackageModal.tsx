@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/modals/Modal";
 import { Button } from "@/components/ui/Button";
 import { formatDate } from "@/lib/utils";
-import { useFacilityName } from "@/hooks/useEntityLabel";
+import { useAssetName, useFacilityName } from "@/hooks/useEntityLabel";
 import { useToast } from "@/components/ui/Toast";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
 import type { WorkOrder } from "@/modules/work-orders/types";
@@ -30,6 +30,7 @@ export function ApprovalPackageModal({
   const [workOrder, setWorkOrder] = useState<WorkOrder | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const assetName = useAssetName(workOrder?.assetId);
   const facilityName = useFacilityName(
     approval?.facilityId || workOrder?.facilityId
   );
@@ -175,7 +176,7 @@ export function ApprovalPackageModal({
                 label="Facility"
                 value={facilityName || workOrder.facilityId}
               />
-              <PackageDetail label="Asset" value={workOrder.assetId || "—"} />
+              <PackageDetail label="Asset" value={workOrder.assetId ? assetName || workOrder.assetId : "—"} />
               <PackageDetail
                 label="Assigned to"
                 value={workOrder.assignedToUserId || "—"}

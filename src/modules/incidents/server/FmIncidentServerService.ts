@@ -95,8 +95,8 @@ export class FmIncidentServerService {
     return this.repo().countActiveForProfile(profileId);
   }
 
-  async activeByAssetRefs(assetRefs: string[]): Promise<Map<string, string[]>> {
-    return this.repo().activeByAssetRefs(assetRefs);
+  async activeByAssetIds(assetIds: string[]): Promise<Map<string, string[]>> {
+    return this.repo().activeByAssetIds(assetIds);
   }
 
   async dispatch(action: string, payload: unknown): Promise<unknown> {
