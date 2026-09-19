@@ -2,6 +2,8 @@ export type {
   ConsumerRunState,
   EventIntelligence,
   EventIntelligenceStatus,
+  IntelligenceAuthority,
+  IntelligenceAuthorityState,
   IntelligenceChange,
   IntelligenceChangeCategory,
   IntelligenceChangeComparisonWindow,

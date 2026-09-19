@@ -14,7 +14,14 @@ import {
 import { createClient } from "@/utils/supabase/server";
 import { cookies } from "next/headers";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  distinctEntityCount,
+  reconcileEvents,
+  type AuthoritySnapshot,
+  type ReconciliationSummary,
+} from "./authority/reconcileEvents";
 import type {
+  IntelligenceAuthority,
   IntelligencePattern,
   IntelligencePriority,
   IntelligencePrioritySeverity,
@@ -61,6 +68,9 @@ type DecisionRow = {
   decision: RecommendationDecisionValue;
   created_at: string;
 };
+
+/** Decision plus the root event it responds to (used only for reconciliation). */
+type DecisionRowWithEvent = DecisionRow & { operational_event_id: string };
 
 function daysAgoIso(to: Date, days: number): string {
   return new Date(to.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
@@ -194,10 +204,10 @@ async function loadDecisionsInWindow(options: {
   organisationId: string;
   fromIso: string;
   toIso: string;
-}): Promise<DecisionRow[]> {
+}): Promise<DecisionRowWithEvent[]> {
   const { data, error } = await options.supabase
     .from("recommendation_decisions")
-    .select("id, decision, created_at, organisation_id")
+    .select("id, decision, created_at, organisation_id, operational_event_id")
     .eq("organisation_id", options.organisationId)
     .gte("created_at", options.fromIso)
     .lte("created_at", options.toIso);
@@ -210,13 +220,16 @@ async function loadDecisionsInWindow(options: {
     );
   }
 
-  return ((data ?? []) as Array<DecisionRow & { organisation_id: string }>)
+  return (
+    (data ?? []) as Array<DecisionRowWithEvent & { organisation_id: string }>
+  )
     .filter((row) => row.organisation_id === options.organisationId)
     .filter((row) => isRecommendationDecisionValue(row.decision))
     .map((row) => ({
       id: row.id,
       decision: row.decision,
       created_at: row.created_at,
+      operational_event_id: row.operational_event_id,
     }));
 }
 
@@ -1003,6 +1016,12 @@ export function assembleOrganisationIntelligence(input: {
   riskRunsByEventId: Map<string, ActionRunRow>;
   patternRuns: ActionRunRow[];
   decisions: DecisionRow[];
+  /**
+   * Authority evidence from reconciliation. Omitted ⇒ the inputs were not
+   * reconciled with authoritative FM records, so the result can never claim
+   * live authority.
+   */
+  authority?: IntelligenceAuthority;
 }): OrganisationIntelligence {
   const {
     windowFrom,
@@ -1016,6 +1035,7 @@ export function assembleOrganisationIntelligence(input: {
     patternRuns,
     decisions,
   } = input;
+  const authority = input.authority ?? unreconciledAuthority();
 
   if (!facilityManagementEnabled) {
     return emptyOrganisationIntelligence(windowFrom, windowTo, {
@@ -1024,6 +1044,7 @@ export function assembleOrganisationIntelligence(input: {
       notes: [
         "Facility Management is not enabled for this organisation.",
       ],
+      authority: unreconciledAuthority(),
     });
   }
 
@@ -1621,12 +1642,12 @@ export function assembleOrganisationIntelligence(input: {
     )
   );
 
-  const recentWorkCount7d = workEvents.filter(
-    (e) => Date.parse(e.occurred_at) >= recentCutoffMs
-  ).length;
-  const recentIncidentCount7d = incidentEvents.filter(
-    (e) => Date.parse(e.occurred_at) >= recentCutoffMs
-  ).length;
+  const recentWorkCount7d = distinctEntityCount(
+    workEvents.filter((e) => Date.parse(e.occurred_at) >= recentCutoffMs)
+  );
+  const recentIncidentCount7d = distinctEntityCount(
+    incidentEvents.filter((e) => Date.parse(e.occurred_at) >= recentCutoffMs)
+  );
 
   const rootEventCount = workEvents.length + incidentEvents.length;
   let state: OrganisationIntelligence["status"]["state"] = "ready";
@@ -1680,25 +1701,35 @@ export function assembleOrganisationIntelligence(input: {
       responsePatterns: responsePatternsForHealth,
     },
     operationalContext: {
-      recentWorkCount30d: workEvents.length,
+      // Distinct authoritative Work / Incident records with a reconciled
+      // root event in the window — never a raw ledger row count.
+      recentWorkCount30d: distinctEntityCount(workEvents),
       recentWorkCount7d,
-      recentIncidentCount30d: incidentEvents.length,
+      recentIncidentCount30d: distinctEntityCount(incidentEvents),
       recentIncidentCount7d,
       highOrCriticalRiskCount,
       criticalRiskCount,
       facilitiesWithRecentActivity: facilities.size,
-      maintenanceRequestedCount30d: lifecycleEvents.filter(
-        (event) =>
-          event.event_type === OperationalEventTypes.FACILITY_MAINTENANCE_REQUESTED
-      ).length,
-      workOrdersCreatedCount30d: lifecycleEvents.filter(
-        (event) =>
-          event.event_type === OperationalEventTypes.FACILITY_WORK_ORDER_CREATED
-      ).length,
-      workOrdersCompletedCount30d: lifecycleEvents.filter(
-        (event) =>
-          event.event_type === OperationalEventTypes.FACILITY_WORK_ORDER_COMPLETED
-      ).length,
+      maintenanceRequestedCount30d: distinctEntityCount(
+        lifecycleEvents.filter(
+          (event) =>
+            event.event_type ===
+            OperationalEventTypes.FACILITY_MAINTENANCE_REQUESTED
+        )
+      ),
+      workOrdersCreatedCount30d: distinctEntityCount(
+        lifecycleEvents.filter(
+          (event) =>
+            event.event_type === OperationalEventTypes.FACILITY_WORK_ORDER_CREATED
+        )
+      ),
+      workOrdersCompletedCount30d: distinctEntityCount(
+        lifecycleEvents.filter(
+          (event) =>
+            event.event_type ===
+            OperationalEventTypes.FACILITY_WORK_ORDER_COMPLETED
+        )
+      ),
       lifecycleEventCount30d: lifecycleEvents.length,
     },
     stories: storySummaries,
@@ -1706,7 +1737,19 @@ export function assembleOrganisationIntelligence(input: {
       state,
       supported: true,
       notes,
+      authority,
     },
+  };
+}
+
+function unreconciledAuthority(): IntelligenceAuthority {
+  return {
+    state: "unavailable",
+    reconciledAt: null,
+    eventsConsidered: 0,
+    eventsReconciled: 0,
+    eventsExcluded: 0,
+    authoritativeCounts: null,
   };
 }
 
@@ -1764,11 +1807,68 @@ function emptyOrganisationIntelligence(
  * Testable loader: organisation-scoped aggregation of existing intelligence.
  * Does not call getEventIntelligence per event (avoids N+1).
  */
+export type AuthorityLoader = (input: {
+  organisationId: string;
+  events: EventRow[];
+}) => Promise<AuthoritySnapshot>;
+
+async function defaultAuthorityLoader(input: {
+  organisationId: string;
+  events: EventRow[];
+}): Promise<AuthoritySnapshot> {
+  const { loadAuthoritySnapshot } = await import(
+    "./authority/loadAuthoritySnapshot"
+  );
+  return loadAuthoritySnapshot(input);
+}
+
+function deriveAuthorityState(input: {
+  reconciledEvents: number;
+  counts: AuthoritySnapshot["counts"];
+}): IntelligenceAuthority["state"] {
+  if (input.reconciledEvents > 0) return "live";
+  const c = input.counts;
+  const authoritativeActivity =
+    c.work + c.workInstructions + c.requests + c.incidents + c.approvals > 0;
+  return authoritativeActivity ? "history_insufficient" : "no_activity";
+}
+
+function authorityNotes(
+  authority: IntelligenceAuthority,
+  summary: ReconciliationSummary
+): string[] {
+  const notes: string[] = [];
+  if (authority.state === "no_activity") {
+    notes.push("No operational activity has been recorded yet.");
+  } else if (authority.state === "history_insufficient") {
+    notes.push(
+      "Operational records exist, but there is not yet enough reconciled activity history to analyse."
+    );
+  }
+  if (summary.excluded > 0) {
+    notes.push(
+      `${summary.excluded} historical event${summary.excluded === 1 ? "" : "s"} could not be tied to current records and ${summary.excluded === 1 ? "was" : "were"} left out.`
+    );
+  }
+  return notes;
+}
+
+/**
+ * Organisation-scoped aggregation of existing intelligence, reconciled with
+ * authoritative FM records before any analysis runs:
+ *
+ *   ledger events ──► reconcile (UUID → fm_* records) ──► analysis
+ *
+ * Events that do not resolve are excluded logically (never deleted). A failed
+ * authoritative read yields an `unavailable` result — never zeros.
+ * Does not call getEventIntelligence per event (avoids N+1).
+ */
 export async function loadOrganisationIntelligence(options: {
   supabase: SupabaseClient;
   organisationId: string;
   facilityManagementEnabled: boolean;
   now?: Date;
+  loadAuthority?: AuthorityLoader;
 }): Promise<OrganisationIntelligence> {
   const now = options.now ?? new Date();
   const toIso = now.toISOString();
@@ -1781,10 +1881,11 @@ export async function loadOrganisationIntelligence(options: {
       notes: [
         "Facility Management is not enabled for this organisation.",
       ],
+      authority: unreconciledAuthority(),
     });
   }
 
-  const workEvents = await loadEventsInWindow({
+  const rawWorkEvents = await loadEventsInWindow({
     supabase: options.supabase,
     organisationId: options.organisationId,
     eventType: OperationalEventTypes.FACILITY_MAINTENANCE_REQUESTED,
@@ -1792,7 +1893,7 @@ export async function loadOrganisationIntelligence(options: {
     toIso,
   });
 
-  const incidentEvents = await loadEventsInWindow({
+  const rawIncidentEvents = await loadEventsInWindow({
     supabase: options.supabase,
     organisationId: options.organisationId,
     eventType: OperationalEventTypes.FACILITY_INCIDENT_REPORTED,
@@ -1800,14 +1901,14 @@ export async function loadOrganisationIntelligence(options: {
     toIso,
   });
 
-  const lifecycleEvents = await loadLifecycleEventsInWindow({
+  const rawLifecycleEvents = await loadLifecycleEventsInWindow({
     supabase: options.supabase,
     organisationId: options.organisationId,
     fromIso,
     toIso,
   });
 
-  const decisionEvents = await loadEventsInWindow({
+  const rawDecisionEvents = await loadEventsInWindow({
     supabase: options.supabase,
     organisationId: options.organisationId,
     eventType: OperationalEventTypes.SYSTEM_RECOMMENDATION_DECIDED,
@@ -1815,34 +1916,96 @@ export async function loadOrganisationIntelligence(options: {
     toIso,
   });
 
-  const rootEventIds = [
+  // ── Authoritative reconciliation ───────────────────────────────────────
+  const candidates = [
+    ...rawWorkEvents,
+    ...rawIncidentEvents,
+    ...rawLifecycleEvents,
+  ];
+  let snapshot: AuthoritySnapshot;
+  try {
+    snapshot = await (options.loadAuthority ?? defaultAuthorityLoader)({
+      organisationId: options.organisationId,
+      events: candidates,
+    });
+  } catch (error) {
+    console.error("[intelligence] authoritative FM source unavailable", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return emptyOrganisationIntelligence(fromIso, toIso, {
+      state: "unavailable",
+      supported: true,
+      notes: ["Current operational records could not be read."],
+      authority: {
+        ...unreconciledAuthority(),
+        eventsConsidered: candidates.length,
+      },
+    });
+  }
+
+  const work = reconcileEvents(rawWorkEvents, snapshot.index);
+  const incidents = reconcileEvents(rawIncidentEvents, snapshot.index);
+  const lifecycle = reconcileEvents(rawLifecycleEvents, snapshot.index);
+  const workEvents = work.kept;
+  const incidentEvents = incidents.kept;
+  const lifecycleEvents = lifecycle.kept;
+
+  // Root events are a subset of lifecycle events (maintenance_requested and
+  // incident_reported are lifecycle types), so lifecycle is the unduplicated
+  // population for the exclusion accounting.
+  const summary: ReconciliationSummary = lifecycle.summary;
+
+  const rootEventIds = new Set([
     ...workEvents.map((e) => e.id),
     ...incidentEvents.map((e) => e.id),
-  ];
-  const decisionEventIds = decisionEvents.map((e) => e.id);
+  ]);
 
-  const [rootRuns, patternRuns, decisions] = await Promise.all([
+  const rawDecisions = await loadDecisionsInWindow({
+    supabase: options.supabase,
+    organisationId: options.organisationId,
+    fromIso,
+    toIso,
+  });
+  // A decision is only meaningful for a recommendation on a reconciled root event.
+  const keptDecisions = rawDecisions.filter((d) =>
+    rootEventIds.has(d.operational_event_id)
+  );
+  const keptDecisionIds = new Set(keptDecisions.map((d) => d.id));
+  const decisionEvents = rawDecisionEvents.filter(
+    (e) =>
+      e.entity_type === "recommendation_decision" &&
+      !!e.entity_id &&
+      keptDecisionIds.has(e.entity_id)
+  );
+
+  const [rootRuns, patternRuns] = await Promise.all([
     loadActionRunsForEvents({
       supabase: options.supabase,
       organisationId: options.organisationId,
-      eventIds: rootEventIds,
+      eventIds: [...rootEventIds],
       actionKeys: [SIGNAL_ACTION_KEY, RISK_ACTION_KEY],
     }),
     loadActionRunsForEvents({
       supabase: options.supabase,
       organisationId: options.organisationId,
-      eventIds: decisionEventIds,
+      eventIds: decisionEvents.map((e) => e.id),
       actionKeys: [PATTERN_ACTION_KEY],
-    }),
-    loadDecisionsInWindow({
-      supabase: options.supabase,
-      organisationId: options.organisationId,
-      fromIso,
-      toIso,
     }),
   ]);
 
-  return assembleOrganisationIntelligence({
+  const authority: IntelligenceAuthority = {
+    state: deriveAuthorityState({
+      reconciledEvents: summary.reconciled,
+      counts: snapshot.counts,
+    }),
+    reconciledAt: new Date().toISOString(),
+    eventsConsidered: summary.considered,
+    eventsReconciled: summary.reconciled,
+    eventsExcluded: summary.excluded,
+    authoritativeCounts: snapshot.counts,
+  };
+
+  const result = assembleOrganisationIntelligence({
     windowFrom: fromIso,
     windowTo: toIso,
     facilityManagementEnabled: true,
@@ -1857,8 +2020,21 @@ export async function loadOrganisationIntelligence(options: {
     patternRuns: patternRuns.filter(
       (r) => r.action_key === PATTERN_ACTION_KEY
     ),
-    decisions,
+    decisions: keptDecisions.map(({ id, decision, created_at }) => ({
+      id,
+      decision,
+      created_at,
+    })),
+    authority,
   });
+
+  return {
+    ...result,
+    status: {
+      ...result.status,
+      notes: [...result.status.notes, ...authorityNotes(authority, summary)],
+    },
+  };
 }
 
 /**

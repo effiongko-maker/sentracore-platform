@@ -211,10 +211,44 @@ export type OrganisationOperationalContext = {
   lifecycleEventCount30d: number;
 };
 
+/**
+ * What the analysis is actually grounded in.
+ * - live: reconciled to existing authoritative FM records
+ * - no_activity: authoritative FM domain is healthy but holds nothing to analyse
+ * - history_insufficient: authoritative activity exists but no reconciled event
+ *   history covers it in the window
+ * - unavailable: a required authoritative source could not be read (or was not
+ *   consulted) — never to be shown as zero or as live
+ */
+export type IntelligenceAuthorityState =
+  | "live"
+  | "no_activity"
+  | "history_insufficient"
+  | "unavailable";
+
+export type IntelligenceAuthority = {
+  state: IntelligenceAuthorityState;
+  /** When authoritative reconciliation completed; null when it did not. */
+  reconciledAt: string | null;
+  eventsConsidered: number;
+  eventsReconciled: number;
+  /** Ledger events left physically in place but excluded from live analysis. */
+  eventsExcluded: number;
+  /** Authoritative population; null when the source was unavailable. */
+  authoritativeCounts: {
+    work: number;
+    workInstructions: number;
+    requests: number;
+    incidents: number;
+    approvals: number;
+  } | null;
+};
+
 export type OrganisationIntelligenceStatus = {
   state: IntelligenceStatusState;
   supported: boolean;
   notes: string[];
+  authority: IntelligenceAuthority;
 };
 
 /* -------------------------------------------------------------------------- */

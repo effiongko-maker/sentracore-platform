@@ -66,6 +66,7 @@ export type BriefingViewModel = {
   patternFindings: BriefingFinding[];
   recommendationHealth: OrganisationIntelligence["recommendationHealth"];
   operationalContext: OrganisationIntelligence["operationalContext"];
+  authority: OrganisationIntelligence["status"]["authority"];
 };
 
 function severityRank(severity: IntelligencePrioritySeverity): number {
@@ -328,6 +329,7 @@ export function buildBriefingViewModel(
     patternFindings,
     recommendationHealth,
     operationalContext,
+    authority: status.authority,
   };
 }
 

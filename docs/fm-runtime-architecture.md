@@ -44,3 +44,22 @@ These are standing rules, not history. They exist so nobody reconnects FM to She
 - **Zero is data. Failure is not zero.** A healthy empty source may produce zero. A failed source must
   surface as unavailable or degraded and must never be rendered as zero, "clear" or "caught up".
 - A Supabase source that fails is never replaced by Sheet data.
+
+## Intelligence authority
+
+Intelligence is a synthesis layer, not a source of operational reality. `operational_events`,
+`action_runs` and `recommendation_decisions` describe history and analysis; they never establish
+what exists.
+
+- An event contributes to live Intelligence only if its `entity_id` is a canonical UUID that resolves,
+  in the same organisation, to an existing `fm_*` record (`src/lib/intelligence/authority/`). Display
+  codes are never identity; unresolved events stay in the ledger but are logically excluded.
+- Facility, asset and relationship references in the analysed projection are re-derived from the
+  authoritative row (display codes are emitted from that row), or dropped.
+- Headline figures count distinct authoritative records, never raw ledger rows. "Active sites" are
+  authoritative facilities represented by reconciled activity.
+- `status.authority` states what the analysis is grounded in: `live`, `no_activity`,
+  `history_insufficient` or `unavailable`. The UI may only claim "live" for `live`; an unreadable
+  authoritative source is `unavailable`, never zero.
+- Verification: `scripts/verify-intelligence-authority.mts` (in-memory) and
+  `scripts/verify-intelligence-authority-live-read.mts` (read-only, linked DB).

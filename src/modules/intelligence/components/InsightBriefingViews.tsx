@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { ArrowRight, Check, Sparkles } from "lucide-react";
 import type { IntelligenceInsight } from "@/lib/intelligence/insights/types";
-import type { OrganisationOperationalContext } from "@/lib/intelligence";
+import type {
+  IntelligenceAuthority,
+  OrganisationOperationalContext,
+} from "@/lib/intelligence";
+import { presentAuthority, statValue } from "../view-model/authorityPresentation";
 import type { ClassifiedFinding } from "../view-model/buildIntelligenceExperience";
 import {
   buildActionableItems,
@@ -43,12 +47,15 @@ function kindLabel(kind: ActionableItem["kind"]): string {
 export function InsightHero({
   primary,
   ctx,
+  authority,
   windowDays,
 }: {
   primary: ClassifiedFinding | null;
   ctx: OrganisationOperationalContext;
+  authority: IntelligenceAuthority;
   windowDays: number;
 }) {
+  const presentation = presentAuthority(authority);
   const { headline, support } = heroStatement(primary);
   const lead =
     primary?.priority === "attention"
@@ -66,25 +73,27 @@ export function InsightHero({
         <div className="ix-ref-hero-stats">
           <div className="ix-ref-stat">
             <span className="ix-ref-stat-value">
-              {ctx.recentWorkCount30d}
+              {statValue(presentation, ctx.recentWorkCount30d)}
             </span>
             <span className="ix-ref-stat-label">Work analysed</span>
           </div>
           <div className="ix-ref-stat">
             <span className="ix-ref-stat-value">
-              {ctx.highOrCriticalRiskCount}
+              {statValue(presentation, ctx.highOrCriticalRiskCount)}
             </span>
             <span className="ix-ref-stat-label">Elevated-risk events</span>
           </div>
           <div className="ix-ref-stat">
             <span className="ix-ref-stat-value">
-              {ctx.facilitiesWithRecentActivity}
+              {statValue(presentation, ctx.facilitiesWithRecentActivity)}
             </span>
             <span className="ix-ref-stat-label">Active sites</span>
           </div>
           <div className="ix-ref-live">
-            <span className="ix-ref-live-dot" aria-hidden />
-            Updated just now · Live intelligence
+            {presentation.live ? (
+              <span className="ix-ref-live-dot" aria-hidden />
+            ) : null}
+            {presentation.label}
           </div>
         </div>
       </section>

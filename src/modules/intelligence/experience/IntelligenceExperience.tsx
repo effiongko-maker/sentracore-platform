@@ -241,6 +241,7 @@ export function IntelligenceExperience({
           <InsightHero
             primary={vm.primary}
             ctx={data.operationalContext}
+            authority={data.status.authority}
             windowDays={vm.windowDays}
           />
 

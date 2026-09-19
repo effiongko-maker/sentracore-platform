@@ -2,6 +2,7 @@
 
 import { ArrowRight } from "lucide-react";
 import type { BriefingFinding, BriefingViewModel } from "../../view-model/buildBriefingViewModel";
+import { presentAuthority, statValue } from "../../view-model/authorityPresentation";
 
 export function ReferenceTopInsight({
   finding,
@@ -33,6 +34,7 @@ export function ReferenceHero({
   vm: BriefingViewModel;
 }) {
   const { operationalContext: ctx } = vm;
+  const presentation = presentAuthority(vm.authority);
 
   return (
     <section className="ix-ref-hero" aria-label="Intelligence overview">
@@ -44,20 +46,22 @@ export function ReferenceHero({
 
       <div className="ix-ref-hero-stats">
         <div className="ix-ref-stat">
-          <span className="ix-ref-stat-value">{ctx.recentWorkCount30d}</span>
+          <span className="ix-ref-stat-value">{statValue(presentation, ctx.recentWorkCount30d)}</span>
           <span className="ix-ref-stat-label">Work reviewed</span>
         </div>
         <div className="ix-ref-stat">
-          <span className="ix-ref-stat-value">{ctx.highOrCriticalRiskCount}</span>
+          <span className="ix-ref-stat-value">{statValue(presentation, ctx.highOrCriticalRiskCount)}</span>
           <span className="ix-ref-stat-label">Elevated-risk activity</span>
         </div>
         <div className="ix-ref-stat">
-          <span className="ix-ref-stat-value">{ctx.facilitiesWithRecentActivity}</span>
+          <span className="ix-ref-stat-value">{statValue(presentation, ctx.facilitiesWithRecentActivity)}</span>
           <span className="ix-ref-stat-label">Active sites</span>
         </div>
         <div className="ix-ref-live">
-          <span className="ix-ref-live-dot" aria-hidden />
-          Updated just now · Live intelligence
+          {presentation.live ? (
+            <span className="ix-ref-live-dot" aria-hidden />
+          ) : null}
+          {presentation.label}
         </div>
       </div>
     </section>
