@@ -206,7 +206,7 @@ export class PlatformAdminRepository {
       return { platformCaps, financeGrantPresent, identityLinks };
     }
 
-    const [{ data: caps }, { data: financeCaps }, { data: links }] = await Promise.all([
+    const [capsResult, financeResult, linksResult] = await Promise.all([
       this.admin
         .from("platform_capability_grants")
         .select("profile_id, capability")
@@ -220,6 +220,14 @@ export class PlatformAdminRepository {
         .select("profile_id, identity_domain, external_identity_id, status")
         .in("profile_id", profileIds),
     ]);
+
+    // A failed read must surface — never present as "no grants".
+    if (capsResult.error || financeResult.error || linksResult.error) {
+      throw new ActionError("INTERNAL_ERROR", "Unable to resolve identity access.");
+    }
+    const caps = capsResult.data;
+    const financeCaps = financeResult.data;
+    const links = linksResult.data;
 
     for (const row of caps ?? []) {
       const profileId = String(row.profile_id);
