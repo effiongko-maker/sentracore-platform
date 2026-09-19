@@ -10,10 +10,11 @@ import {
   PROTECTED_ACTIONS,
   accessCan,
   applyPlatformSuperAdmin,
-  capabilitiesForRole,
-  resolveOperatingAccessFromSheetUser,
   resolveProtectedActionAuthority,
 } from "../src/lib/access";
+
+import { parseV1OperatingRole } from "../src/lib/access/roles";
+import { explicitGrantBundle, contextAccess } from "./lib/accessFixtures";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);
@@ -23,8 +24,9 @@ function readSrc(path: string): string {
   return readFileSync(resolve(path), "utf8");
 }
 
-function sheet(roleLabel: string, email: string) {
-  return resolveOperatingAccessFromSheetUser(email, email, {
+/** Operating CONTEXT (role label / facility) — confers NO capability by itself. */
+function contextOnly(roleLabel: string, email: string) {
+  return contextAccess(email, email, {
     id: `USR-${email}`,
     name: email,
     email,
@@ -32,6 +34,13 @@ function sheet(roleLabel: string, email: string) {
     status: "active",
     facility: "NCC Annex",
   });
+}
+
+/** The same person after an administrator EXPLICITLY granted the matching capability bundle. */
+function sheet(roleLabel: string, email: string) {
+  const base = contextOnly(roleLabel, email);
+  const parsed = parseV1OperatingRole(roleLabel);
+  return { ...base, capabilities: parsed ? explicitGrantBundle(parsed) : [] };
 }
 
 function main() {
@@ -55,6 +64,12 @@ function main() {
     PROTECTED_ACTIONS["approval.record_decision"].baseCapability ===
       "approvals.manage",
     "decision base cap"
+  );
+
+  // A role label alone confers no protected authority — only an explicit grant does.
+  assert(
+    resolveProtectedActionAuthority(contextOnly("Facility Manager", "label@example.com")) === null,
+    "Facility Manager label without an explicit grant has no protected authority"
   );
 
   const fm = sheet("Facility Manager", "fm@example.com");
@@ -120,8 +135,12 @@ function main() {
     !accessCan(sa, "fm.authorize_protected"),
     "SA override ≠ fm.authorize_protected"
   );
-  assert(accessCan(sa, "finance.authorize"), "SA can attempt finance via override");
-  assert(accessCan(sa, "approvals.manage"), "SA can attempt approvals via override");
+  // Current law: override never substitutes for the base business capability.
+  assert(!accessCan(sa, "finance.authorize"), "SA override does not satisfy the base capability");
+  const saWithGrant = applyPlatformSuperAdmin({ ...ncc, capabilities: ["finance.authorize"] }, true);
+  assert(accessCan(saWithGrant, "finance.authorize"), "an explicit base grant still applies to a Super Admin");
+  assert(resolveProtectedActionAuthority(saWithGrant)?.mode === "platform_override", "override authority applies on top of the explicit base grant");
+  assert(!accessCan(sa, "approvals.manage"), "SA override does not satisfy approvals.manage (base capability required)");
 
   // Infrastructure wiring
   const execute = readSrc("src/lib/actions/execute.ts");
@@ -132,35 +151,16 @@ function main() {
   assert(verify.includes("signInWithPassword"), "Supabase step-up");
   assert(!verify.includes("spreadsheet"), "no sheet passwords");
 
-  const authRoute = readSrc(
-    "src/app/api/reimbursement-authorizations/route.ts"
-  );
-  assert(
-    authRoute.includes("finance.authorization.revise"),
-    "auth revise gated"
-  );
-  const payRoute = readSrc("src/app/api/reimbursement-payments/route.ts");
-  assert(payRoute.includes("finance.payment.correct"), "payment correct gated");
-
-  const claimRoute = readSrc("src/app/api/cost-submissions/route.ts");
-  assert(
-    claimRoute.includes("finance.claim.edit_submitted"),
-    "claim edit protected id"
-  );
-  assert(
-    claimRoute.includes("loadExistingSubmissionStatus") ||
-      claimRoute.includes("status-check"),
-    "claim edit forced via existing status lookup"
-  );
-  assert(
-    claimRoute.includes("gateProtectedActionOrResponse"),
-    "claim edit uses protected gate"
-  );
-  assert(
-    claimRoute.includes("503") &&
-      claimRoute.includes("Fail closed"),
-    "claim edit fails closed when status lookup fails"
-  );
+  // Phase 2G/2L: protected finance decisions are enforced by the Supabase FM cost handler + service.
+  const costRoute = readSrc("src/modules/finance/server/fmCostRoute.ts");
+  const costService = readSrc("src/modules/finance/server/FmCostServerService.ts");
+  for (const id of ["finance.authorization.revise", "finance.payment.correct", "finance.claim.edit_submitted", "finance.cost.unlock_edit"]) {
+    assert(costRoute.includes(id) && costService.includes(id), `${id} is enforced server-side`);
+  }
+  assert(costRoute.includes("gateProtectedActionOrResponse") && costRoute.includes("extractProtectedProof"), "protected proof is verified by the shared gate");
+  assert(costService.includes("requireProtected"), "service refuses a protected mutation without the grant");
+  assert(costRoute.includes("is not valid for"), "a proof for the wrong action is rejected");
+  assert(costRoute.includes('action !== "update"'), "protected proof only applies to updates — first authorization / payment stay capability-only");
 
   const approvalsRoute = readSrc("src/app/api/approvals/route.ts");
   assert(
@@ -168,11 +168,6 @@ function main() {
       approvalsRoute.includes("decisions must be recorded"),
     "approvals proxy blocks unprotected decisions"
   );
-
-  const costGs = readSrc("apps-script/CostRecordService.gs");
-  assert(costGs.includes("allowsProtectedCostUnlock_"), "GS unlock path");
-  assert(costGs.includes("finance.cost.unlock_edit"), "GS action id");
-  assert(costGs.includes("platform_override"), "GS accepts SA mode");
 
   const decision = readSrc(
     "src/modules/approvals/actions/approvalLifecycleActions.ts"
@@ -187,14 +182,10 @@ function main() {
   assert(detail.includes("finance.payment.correct"), "UI correct protect");
   assert(detail.includes("createAuthorization"), "first auth still normal");
 
-  // First-auth / first-pay remain capability-only (create not requireProtected)
+  // First-auth / first-pay remain capability-only (asserted above: proof applies to updates only)
   assert(
-    !authRoute.includes("requireProtectedForActions: {\n      create"),
-    "create auth not protected"
-  );
-  assert(
-    capabilitiesForRole("finance").includes("finance.authorize") &&
-      !capabilitiesForRole("finance").includes("fm.authorize_protected"),
+    explicitGrantBundle("finance").includes("finance.authorize") &&
+      !explicitGrantBundle("finance").includes("fm.authorize_protected"),
     "Finance role matrix unchanged for protected FM cap"
   );
 

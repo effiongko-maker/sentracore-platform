@@ -6,7 +6,3 @@ export {
   type ApiRequestOptions,
   type ApiResponse,
 } from "./ApiResponse";
-export {
-  postToAppsScript,
-  type AppsScriptProxyBody,
-} from "./appsScriptProxy";

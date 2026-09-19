@@ -46,11 +46,17 @@ function latestActivity(
 
 function sectionFor<T extends DatedRecord>(
   registerId: OperationalRegisterId,
-  records: T[]
+  records: T[],
+  failed: readonly OperationalRegisterId[]
 ): OperationalRegisterSection<T> {
+  // A failed register is UNAVAILABLE (count unknown) — never a healthy zero.
+  if (failed.includes(registerId)) {
+    return { registerId, count: null, unavailable: true, latest: null, records: [] };
+  }
   return {
     registerId,
     count: records.length,
+    unavailable: false,
     latest: latestActivity(records),
     records,
   };
@@ -65,7 +71,8 @@ function buildDerived(
   dieselUsage: DieselUsage[],
   consumablesUpdates: ConsumablesUpdate[],
   fumigationLogs: FumigationLog[],
-  asOf: string
+  asOf: string,
+  failed: readonly OperationalRegisterId[]
 ): OperationalPictureDerived {
   const asOfDt = asOfDate(asOf);
 
@@ -93,7 +100,13 @@ function buildDerived(
     else if (state === "scheduled") fumigationScheduled.push(row);
   }
 
+  const unavailable: OperationalPictureDerived["unavailable"] = [];
+  if (failed.includes("diesel-usage")) unavailable.push("dieselHighUsage", "dieselNegativeConsumption");
+  if (failed.includes("consumables-update")) unavailable.push("consumablesReorder");
+  if (failed.includes("fumigation-log")) unavailable.push("fumigationOverdue", "fumigationDueSoon", "fumigationScheduled");
+
   return {
+    unavailable,
     dieselHighUsage,
     dieselNegativeConsumption,
     consumablesReorder,
@@ -117,6 +130,7 @@ export function buildOperationalPicture(
   const wasteLogs: WasteLog[] = bundle.wasteLogs;
   const fumigationLogs: FumigationLog[] = bundle.fumigationLogs;
   const deepCleaningLogs: DeepCleaningLog[] = bundle.deepCleaningLogs;
+  const failed = bundle.meta.failed;
 
   return {
     asOf: bundle.asOf,
@@ -124,19 +138,20 @@ export function buildOperationalPicture(
     dateFrom: bundle.dateFrom,
     dateTo: bundle.dateTo,
     registers: {
-      generatorLog: sectionFor("generator-log", generatorLogs),
-      energyReading: sectionFor("energy-reading", energyReadings),
-      dieselUsage: sectionFor("diesel-usage", dieselUsage),
-      consumablesUpdate: sectionFor("consumables-update", consumablesUpdates),
-      wasteLog: sectionFor("waste-log", wasteLogs),
-      fumigationLog: sectionFor("fumigation-log", fumigationLogs),
-      deepCleaningLog: sectionFor("deep-cleaning-log", deepCleaningLogs),
+      generatorLog: sectionFor("generator-log", generatorLogs, failed),
+      energyReading: sectionFor("energy-reading", energyReadings, failed),
+      dieselUsage: sectionFor("diesel-usage", dieselUsage, failed),
+      consumablesUpdate: sectionFor("consumables-update", consumablesUpdates, failed),
+      wasteLog: sectionFor("waste-log", wasteLogs, failed),
+      fumigationLog: sectionFor("fumigation-log", fumigationLogs, failed),
+      deepCleaningLog: sectionFor("deep-cleaning-log", deepCleaningLogs, failed),
     },
     derived: buildDerived(
       dieselUsage,
       consumablesUpdates,
       fumigationLogs,
-      bundle.asOf
+      bundle.asOf,
+      failed
     ),
     meta: {
       ...bundle.meta,

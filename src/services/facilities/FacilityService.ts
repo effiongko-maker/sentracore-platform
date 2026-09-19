@@ -19,7 +19,7 @@ import {
   stableRequestKey,
 } from "@/services/cache/sharedRequest";
 
-/** Raw row shape from the Apps Script facilities API. */
+/** Raw row shape from the facilities API. */
 type RemoteFacility = Record<string, unknown>;
 
 function pickField(raw: RemoteFacility, ...keys: string[]): unknown {

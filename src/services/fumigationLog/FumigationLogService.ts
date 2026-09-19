@@ -16,7 +16,7 @@ import {
   stableRequestKey,
 } from "@/services/cache/sharedRequest";
 
-/** Raw row shape from the Apps Script fumigation-log API. */
+/** Raw row shape from the fumigation-log API. */
 type RemoteFumigationLog = Record<string, unknown>;
 
 function pickField(raw: RemoteFumigationLog, ...keys: string[]): unknown {

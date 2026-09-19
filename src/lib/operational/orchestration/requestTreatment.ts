@@ -232,7 +232,6 @@ export async function orchestrateCreateMaintenanceFromRequest(options: {
   return {
     request: bundle.request,
     maintenance: bundle.maintenance,
-    _appsScriptCalls: 0,
   };
 }
 
@@ -363,7 +362,6 @@ export async function orchestrateLinkMaintenanceToRequest(options: {
   return {
     request: bundle.request,
     maintenance: bundle.maintenance,
-    _appsScriptCalls: 0,
   };
 }
 
@@ -463,7 +461,6 @@ export async function orchestrateLinkIncidentToRequest(options: {
   return {
     request: bundle.request,
     incident: bundle.incident,
-    _appsScriptCalls: 0,
   };
 }
 

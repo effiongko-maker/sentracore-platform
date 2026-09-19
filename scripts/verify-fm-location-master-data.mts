@@ -11,7 +11,6 @@ import { resolve } from "node:path";
 import {
   accessCan,
   applyPlatformSuperAdmin,
-  resolveOperatingAccessFromSheetUser,
   type AccessCapability,
 } from "../src/lib/access";
 import {
@@ -26,6 +25,8 @@ import {
   parseLocationListParams,
   type FmLocationRow,
 } from "../src/modules/master-data/server/fmLocationDomain";
+
+import { contextAccess } from "./lib/accessFixtures";
 
 type CheckResult = {
   name: string;
@@ -257,10 +258,10 @@ function runStatic(results: CheckResult[]) {
     assert(generateNextLocationCode("DEP", ["DEP-0009"]) === "DEP-0010", "next department code");
     push(results, "pagination, filters, code generation, healthy zero", "PASS");
 
-    const unassigned = resolveOperatingAccessFromSheetUser("sa@x.com", "SA", null);
+    const unassigned = contextAccess("sa@x.com", "SA", null);
     const saOnly = applyPlatformSuperAdmin(unassigned, true);
     assert(!accessCan(saOnly, "ops.view"), "SA override does not grant ops.view");
-    const ncc = resolveOperatingAccessFromSheetUser("c@x.com", "Client", {
+    const ncc = contextAccess("c@x.com", "Client", {
       id: "USR-0009",
       name: "Client",
       email: "c@x.com",
@@ -270,7 +271,7 @@ function runStatic(results: CheckResult[]) {
     });
     assert(!accessCan(ncc, "ops.view"), "ncc_client cannot read master-data");
     const staff = {
-      ...resolveOperatingAccessFromSheetUser("s@x.com", "Staff", {
+      ...contextAccess("s@x.com", "Staff", {
         id: "USR-0003",
         name: "Staff",
         email: "s@x.com",

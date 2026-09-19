@@ -11,7 +11,7 @@ import {
   FmPeopleServerService,
   resolveFmPeopleOrganisation,
 } from "@/modules/users/server/FmPeopleServerService";
-import type { AppsScriptProxyBody } from "@/services/api/appsScriptProxy";
+import type { ApiRequestEnvelope } from "@/lib/api/requestEnvelope";
 
 /**
  * FM People directory is profiles + fm_facility_assignments (Supabase).
@@ -46,9 +46,9 @@ function ok(data: unknown) {
 
 export async function POST(request: Request) {
   try {
-    let body: AppsScriptProxyBody = {};
+    let body: ApiRequestEnvelope = {};
     try {
-      body = (await request.json()) as AppsScriptProxyBody;
+      body = (await request.json()) as ApiRequestEnvelope;
     } catch {
       body = {};
     }

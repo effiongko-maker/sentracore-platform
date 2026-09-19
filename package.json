@@ -8,7 +8,6 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "verify-operational-api-access": "tsx --tsconfig tsconfig.json scripts/verify-operational-api-access.mts",
-    "verify-operational-registers-write": "tsx --tsconfig tsconfig.json scripts/verify-operational-registers-write.mts",
     "lint": "eslint",
     "apps-script:pack": "node scripts/generate-apps-script-deployment-pack.cjs"
   },

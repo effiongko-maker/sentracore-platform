@@ -18,7 +18,7 @@ export const FINANCE_RECENT_COSTS_LIMIT = 5;
 
 /**
  * Bounded overview pool for CostRecords (attention + recent slice).
- * Newest-first from Apps Script; not the full sheet.
+ * Newest-first; not the full sheet.
  */
 export const FINANCE_COST_POOL_FETCH_SIZE = 100;
 

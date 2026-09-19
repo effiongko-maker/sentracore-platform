@@ -89,7 +89,7 @@ function mapRemoteItem(raw: RemoteItem): MasterDataItem {
 }
 
 /**
- * Live Apps Script sheets use facility/building/floor column names.
+ * Legacy sheets used facility/building/floor column names.
  * Include both camelId and short aliases so either schema accepts writes.
  */
 function relationWriteAliases(input: {

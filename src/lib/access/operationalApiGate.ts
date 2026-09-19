@@ -1,5 +1,5 @@
 /**
- * Map operational Apps Script proxy actions → existing V1 capabilities.
+ * Map operational /api action verbs → existing V1 capabilities.
  * Does not invent capabilities; ops.submit has no distinct proxy action yet.
  */
 

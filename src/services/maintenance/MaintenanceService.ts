@@ -260,7 +260,7 @@ function resolvePreviousStatus(
  */
 export const MaintenanceService = {
   /** Map a Work/API row (shared by createTreatment orchestration). */
-  fromAppsScriptRow(raw: unknown): Maintenance {
+  fromApiRow(raw: unknown): Maintenance {
     return mapRemoteMaintenance(raw as RemoteMaintenance);
   },
 

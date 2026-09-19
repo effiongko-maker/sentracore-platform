@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { gateApiCapability } from "@/lib/access/gateApi";
-import type { AppsScriptProxyBody } from "@/services/api/appsScriptProxy";
+import type { ApiRequestEnvelope } from "@/lib/api/requestEnvelope";
 import { composeWorkloadSummary } from "@/lib/operational/workload/composeWorkloadSummary";
 import { FmIncidentRepository } from "@/modules/incidents/server/FmIncidentRepository";
 import { resolveFmIncidentOrganisation } from "@/modules/incidents/server/FmIncidentServerService";
@@ -19,9 +19,9 @@ export async function POST(request: Request) {
     const gate = await gateApiCapability("ops.view");
     if (!gate.ok) return gate.response;
 
-    let body: AppsScriptProxyBody = {};
+    let body: ApiRequestEnvelope = {};
     try {
-      body = (await request.json()) as AppsScriptProxyBody;
+      body = (await request.json()) as ApiRequestEnvelope;
     } catch {
       body = {};
     }

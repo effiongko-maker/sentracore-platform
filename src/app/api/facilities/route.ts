@@ -11,7 +11,7 @@ import {
   FmFacilityUnavailableError,
   FmFacilityValidationError,
 } from "@/modules/facilities/server/fmFacilityDomain";
-import type { AppsScriptProxyBody } from "@/services/api/appsScriptProxy";
+import type { ApiRequestEnvelope } from "@/lib/api/requestEnvelope";
 
 /**
  * Facilities persistence is Supabase (fm_facilities).
@@ -46,9 +46,9 @@ function ok(data: unknown) {
 
 export async function POST(request: Request) {
   try {
-    let body: AppsScriptProxyBody = {};
+    let body: ApiRequestEnvelope = {};
     try {
-      body = (await request.json()) as AppsScriptProxyBody;
+      body = (await request.json()) as ApiRequestEnvelope;
     } catch {
       body = {};
     }

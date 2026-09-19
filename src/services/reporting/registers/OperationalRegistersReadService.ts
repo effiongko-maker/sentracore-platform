@@ -48,6 +48,13 @@ function rowsForRegister<K extends OperationalRegisterId>(
   }
 }
 
+export class OperationalRegisterUnavailableError extends Error {
+  constructor(readonly registerId: OperationalRegisterId) {
+    super(`The ${registerId} register is unavailable.`);
+    this.name = "OperationalRegisterUnavailableError";
+  }
+}
+
 /**
  * Reporting/read facade for Operational Registers.
  *
@@ -76,6 +83,12 @@ export const OperationalRegistersReadService = {
       ...query,
       registers: [id],
     });
+    // The bundle substitutes [] for a failed register so it can still compose the
+    // others. A single-register read has no other data to protect: failure must
+    // surface, never masquerade as an empty (healthy) register.
+    if (bundle.meta.failed.includes(id)) {
+      throw new OperationalRegisterUnavailableError(id);
+    }
     return rowsForRegister(bundle, id);
   },
 };

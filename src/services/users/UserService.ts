@@ -29,7 +29,7 @@ import { queryUsersPage } from "./queryUsers";
 
 export const USER_REPOSITORY_BUILD = "2026-09-18-fm-people-supabase";
 
-/** Raw row shape from the Apps Script users API. */
+/** Raw row shape from the users API. */
 type RemoteUser = Record<string, unknown>;
 
 function pickField(raw: RemoteUser, ...keys: string[]): unknown {
@@ -250,7 +250,7 @@ function fieldMismatch(
   actual: string
 ): ApiError {
   return new ApiError(
-    `User ${field} did not persist (expected "${expected}", got "${actual || "(empty)"}"). Redeploy Apps Script if this continues.`,
+    `User ${field} did not persist (expected "${expected}", got "${actual || "(empty)"}").`,
     502
   );
 }

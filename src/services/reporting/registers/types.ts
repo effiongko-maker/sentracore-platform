@@ -44,7 +44,10 @@ export interface OperationalRegistersBundleMeta {
   requested: OperationalRegisterId[];
   /** Registers that returned successfully (may be empty arrays). */
   loaded: OperationalRegisterId[];
-  /** Registers that threw and were replaced with empty arrays. */
+  /**
+   * Registers that threw and were replaced with empty arrays. An empty array for a
+   * register listed here means UNKNOWN, not zero — every consumer must check this.
+   */
   failed: OperationalRegisterId[];
   /** Registers intentionally skipped via `registers` filter. */
   omitted: OperationalRegisterId[];

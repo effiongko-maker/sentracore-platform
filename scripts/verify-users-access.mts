@@ -13,16 +13,15 @@ import {
   V1_OPERATING_ROLE_LABELS,
   accessCan,
   applyPlatformSuperAdmin,
-  capabilitiesForRole,
-  findSheetUserByEmail,
   isInactiveUserStatus,
   isPlatformSuperAdminFromSlugs,
   parseV1OperatingRole,
-  resolveOperatingAccessFromSheetUser,
   resolveProtectedActionAuthority,
   type AccessCapability,
   type V1OperatingRole,
 } from "../src/lib/access";
+
+import { explicitGrantBundle, contextAccess } from "./lib/accessFixtures";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);
@@ -37,7 +36,7 @@ function expectCaps(
   required: AccessCapability[],
   forbidden: AccessCapability[]
 ) {
-  const caps = capabilitiesForRole(role);
+  const caps = explicitGrantBundle(role);
   for (const cap of required) {
     assert(caps.includes(cap), `${role} should have ${cap}`);
   }
@@ -136,20 +135,20 @@ function main() {
     ]
   );
 
-  const inactive = capabilitiesForRole("facility_manager", { inactive: true });
+  const inactive = explicitGrantBundle("facility_manager", { inactive: true });
   assert(inactive.length === 0, "inactive has no capabilities");
   assert(isInactiveUserStatus("inactive"), "inactive status");
   assert(isInactiveUserStatus("suspended"), "suspended status");
   assert(!isInactiveUserStatus("active"), "active status");
 
-  const unresolvedCaps = capabilitiesForRole(null, { unassigned: true });
+  const unresolvedCaps = explicitGrantBundle(null, { unassigned: true });
   assert(unresolvedCaps.length === 0, "unresolved identity has zero FM caps");
   assert(
-    capabilitiesForRole(null).length === 0,
+    explicitGrantBundle(null).length === 0,
     "null role has zero FM caps"
   );
 
-  const sheetMatch = resolveOperatingAccessFromSheetUser(
+  const sheetMatch = contextAccess(
     "fm@example.com",
     "Session Name",
     {
@@ -173,7 +172,7 @@ function main() {
     "role alone does not authorize protected actions"
   );
 
-  const inactiveAccess = resolveOperatingAccessFromSheetUser(
+  const inactiveAccess = contextAccess(
     "x@example.com",
     "X",
     {
@@ -189,7 +188,7 @@ function main() {
   assert(inactiveAccess.capabilities.length === 0, "inactive caps empty");
   assert(!accessCan(inactiveAccess, "ops.view"), "inactive cannot ops.view");
 
-  const unassigned = resolveOperatingAccessFromSheetUser(
+  const unassigned = contextAccess(
     "legacy@example.com",
     "Legacy",
     null
@@ -219,7 +218,7 @@ function main() {
     "access server does not query Apps Script USERS"
   );
 
-  const legacyRole = resolveOperatingAccessFromSheetUser(
+  const legacyRole = contextAccess(
     "tech@example.com",
     "Tech",
     {
@@ -256,7 +255,7 @@ function main() {
     "FM / org roles are not Super Admin"
   );
 
-  const nccBase = resolveOperatingAccessFromSheetUser(
+  const nccBase = contextAccess(
     "admin@example.com",
     "Admin",
     {
@@ -326,20 +325,7 @@ function main() {
     "override capability list"
   );
 
-  const found = findSheetUserByEmail(
-    [
-      {
-        id: "1",
-        name: "A",
-        email: "Ada@Example.com",
-        role: "Finance",
-        status: "active",
-        facility: "NCC Annex",
-      },
-    ],
-    "ada@example.com"
-  );
-  assert(found?.id === "1", "email match case-insensitive");
+  // Phase 2L: email-keyed Sheet user lookup was removed — email never resolves authority.
 
   const usersRoute = readSrc("src/app/api/users/route.ts");
   assert(usersRoute.includes("users.manage"), "users API manage gate");

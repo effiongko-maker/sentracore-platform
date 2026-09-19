@@ -11,7 +11,7 @@ import {
   FmWorkServerService,
   resolveFmWorkOrganisation,
 } from "@/modules/maintenance/server/FmWorkServerService";
-import type { AppsScriptProxyBody } from "@/services/api/appsScriptProxy";
+import type { ApiRequestEnvelope } from "@/lib/api/requestEnvelope";
 
 /**
  * Work persistence is Supabase (fm_work).
@@ -47,9 +47,9 @@ function ok(data: unknown) {
 
 export async function POST(request: Request) {
   try {
-    let body: AppsScriptProxyBody = {};
+    let body: ApiRequestEnvelope = {};
     try {
-      body = (await request.json()) as AppsScriptProxyBody;
+      body = (await request.json()) as ApiRequestEnvelope;
     } catch {
       body = {};
     }

@@ -16,7 +16,7 @@ import {
   stableRequestKey,
 } from "@/services/cache/sharedRequest";
 
-/** Raw row shape from the Apps Script energy-reading API. */
+/** Raw row shape from the energy-reading API. */
 type RemoteEnergyReading = Record<string, unknown>;
 
 function pickField(raw: RemoteEnergyReading, ...keys: string[]): unknown {

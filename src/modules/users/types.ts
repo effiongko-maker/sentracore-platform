@@ -24,7 +24,7 @@ export interface User {
   assignmentId?: string;
   /**
    * Display value for current Active Work (fm_work assigned to profile).
-   * Not stored. Does not include Work Instructions (still Apps Script).
+   * Not stored. Does not include Work Instructions (Supabase).
    */
   activeWorkOrders: number;
   workloadWorkOrderIds?: string[];

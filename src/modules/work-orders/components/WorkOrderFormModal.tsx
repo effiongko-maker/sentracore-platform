@@ -406,7 +406,7 @@ export function WorkOrderFormModal({
         });
       } else {
         const result = await createWorkOrder(payload);
-        const afterMutation = mark("createWorkOrder(serverAction+AppsScript)");
+        const afterMutation = mark("createWorkOrder(serverAction)");
         if (!result.success) {
           throw new Error(result.error.message);
         }

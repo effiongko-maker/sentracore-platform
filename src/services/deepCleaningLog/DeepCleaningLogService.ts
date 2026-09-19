@@ -16,7 +16,7 @@ import {
   stableRequestKey,
 } from "@/services/cache/sharedRequest";
 
-/** Raw row shape from the Apps Script deep-cleaning-log API. */
+/** Raw row shape from the deep-cleaning-log API. */
 type RemoteDeepCleaningLog = Record<string, unknown>;
 
 function pickField(raw: RemoteDeepCleaningLog, ...keys: string[]): unknown {

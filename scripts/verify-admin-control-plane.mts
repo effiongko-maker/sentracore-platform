@@ -11,10 +11,7 @@ import { resolve } from "node:path";
 import {
   accessCan,
   applyPlatformSuperAdmin,
-  capabilitiesForRole,
-  resolveOperatingAccessFromSheetUser,
 } from "../src/lib/access";
-import { resolveFmOperationalIdentity } from "../src/lib/access/operationalIdentity";
 import {
   isAllowedProfileStatusTransition,
   isProfileStatus,
@@ -32,6 +29,8 @@ import {
   withFinanceVerifyTransaction,
   type FinanceVerifyClient,
 } from "./lib/platform-finance-verify-transaction";
+
+import { explicitGrantBundle, contextAccess } from "./lib/accessFixtures";
 
 type CheckResult = {
   name: string;
@@ -76,75 +75,16 @@ const ECC_MIGRATION =
 const IAM_MIGRATION =
   "supabase/migrations/20260918181000_platform_iam_admin_control_plane.sql";
 
-const person = (id: string, email: string, role = "FM Staff") => ({
-  id,
-  email,
-  name: "Person",
-  role,
-  status: "active" as const,
-  facility: "NCC Annex",
-});
 
 async function runStatic(results: CheckResult[]) {
   try {
     assert(
-      capabilitiesForRole(null, { unassigned: true }).length === 0,
+      explicitGrantBundle(null, { unassigned: true }).length === 0,
       "unassigned caps empty"
     );
-    const linked = await resolveFmOperationalIdentity({
-      explicitLink: { externalIdentityId: "USR-0001", status: "active" },
-      email: "fm@paychexng.com",
-      loadById: async (id) => person(id, "typo@x.com", "Facility Manager"),
-      loadByEmail: async () => null,
-    });
-    const linkedAccess = resolveOperatingAccessFromSheetUser(
-      "fm@paychexng.com",
-      "Person",
-      linked.user
-    );
-    assert(!accessCan(linkedAccess, "users.manage"), "A: identity link is not FM authority");
-
-    const emailFallback = await resolveFmOperationalIdentity({
-      explicitLink: null,
-      email: "staff@paychexng.com",
-      loadById: async () => null,
-      loadByEmail: async (email) => person("USR-0003", email, "FM Staff"),
-    });
-    const emailAccess = resolveOperatingAccessFromSheetUser(
-      "staff@paychexng.com",
-      "Person",
-      emailFallback.user
-    );
-    assert(!accessCan(emailAccess, "ops.create"), "B: email fallback is not FM authority");
-
-    const none = await resolveFmOperationalIdentity({
-      explicitLink: null,
-      email: "ghost@paychexng.com",
-      loadById: async () => null,
-      loadByEmail: async () => null,
-    });
-    const noneAccess = resolveOperatingAccessFromSheetUser(
-      "ghost@paychexng.com",
-      "Ghost",
-      none.user
-    );
-    assert(noneAccess.capabilities.length === 0, "C: no match → zero caps");
-    assert(!accessCan(noneAccess, "ops.view"), "C: no FM authority");
-
-    const broken = await resolveFmOperationalIdentity({
-      explicitLink: { externalIdentityId: "USR-0009", status: "active" },
-      email: "broken@paychexng.com",
-      loadById: async () => null,
-      loadByEmail: async () => person("USR-0003", "broken@paychexng.com"),
-    });
-    const brokenAccess = resolveOperatingAccessFromSheetUser(
-      "broken@paychexng.com",
-      "Broken",
-      broken.user
-    );
-    assert(!accessCan(brokenAccess, "ops.view"), "D: broken link → no FM authority");
-
-    const orgOnly = resolveOperatingAccessFromSheetUser(
+    // Phase 2L: identity links / email lookup are not an authority path and the Sheet-based
+    // resolver is gone. Runtime authority is explicit grants only — asserted below.
+    const orgOnly = contextAccess(
       "member@paychexng.com",
       "Member",
       null

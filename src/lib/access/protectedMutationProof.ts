@@ -1,6 +1,6 @@
 /**
  * Client→API proof fields for protected finance mutations.
- * Password never persists; API strips it before Apps Script.
+ * Password never persists; the API strips it before any mutation is applied.
  */
 
 import {

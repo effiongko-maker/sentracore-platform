@@ -12,13 +12,13 @@ import {
   applyPlatformSuperAdmin,
   canSeeHref,
   canSeeSurface,
-  capabilitiesForRole,
   parseV1OperatingRole,
   resolveAccessVisibility,
-  resolveOperatingAccessFromSheetUser,
   type OperatingAccess,
   type VisibilitySurface,
 } from "../src/lib/access";
+
+import { explicitGrantBundle, contextAccess } from "./lib/accessFixtures";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);
@@ -33,7 +33,7 @@ function sheetAccess(
   email = "user@example.com"
 ): OperatingAccess {
   const parsed = parseV1OperatingRole(role);
-  const base = resolveOperatingAccessFromSheetUser(email, "User", {
+  const base = contextAccess(email, "User", {
     id: "USR-1",
     name: "User",
     email,
@@ -43,7 +43,7 @@ function sheetAccess(
   });
   return {
     ...base,
-    capabilities: parsed ? [...capabilitiesForRole(parsed)] : [],
+    capabilities: parsed ? [...explicitGrantBundle(parsed)] : [],
   };
 }
 
@@ -64,7 +64,7 @@ function expectSurfaces(
 
 function main() {
   // —— Super Admin: full visibility; distinct from FM ——
-  const nccInactive = resolveOperatingAccessFromSheetUser(
+  const nccInactive = contextAccess(
     "sa@example.com",
     "User",
     {
@@ -254,9 +254,12 @@ function main() {
   );
 
   const capsSrc = readSrc("src/lib/access/capabilities.ts");
-  assert(capsSrc.includes("executive:"), "executive capability matrix");
+  assert(
+    !capsSrc.includes("ROLE_CAPABILITIES") && !capsSrc.includes("capabilitiesForRole"),
+    "Phase 2L: no role → capability table exists in runtime"
+  );
 
-  const execCaps = capabilitiesForRole("executive");
+  const execCaps = explicitGrantBundle("executive");
   assert(
     !execCaps.includes("fm.authorize_protected"),
     "executive caps omit FM protected"

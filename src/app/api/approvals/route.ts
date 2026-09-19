@@ -12,7 +12,7 @@ import {
   FmApprovalServerService,
   resolveFmApprovalOrganisation,
 } from "@/modules/approvals/server/FmApprovalServerService";
-import type { AppsScriptProxyBody } from "@/services/api/appsScriptProxy";
+import type { ApiRequestEnvelope } from "@/lib/api/requestEnvelope";
 
 /**
  * FM Approval persistence is Supabase (fm_approvals).
@@ -44,9 +44,9 @@ function fail(status: number, message: string, extra?: { errorClass?: string }) 
 
 export async function POST(request: Request) {
   try {
-    let body: AppsScriptProxyBody = {};
+    let body: ApiRequestEnvelope = {};
     try {
-      body = (await request.json()) as AppsScriptProxyBody;
+      body = (await request.json()) as ApiRequestEnvelope;
     } catch {
       body = {};
     }

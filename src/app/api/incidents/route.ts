@@ -11,7 +11,7 @@ import {
   FmIncidentServerService,
   resolveFmIncidentOrganisation,
 } from "@/modules/incidents/server/FmIncidentServerService";
-import type { AppsScriptProxyBody } from "@/services/api/appsScriptProxy";
+import type { ApiRequestEnvelope } from "@/lib/api/requestEnvelope";
 
 /**
  * Incident persistence is Supabase (fm_incidents).
@@ -53,9 +53,9 @@ function ok(data: unknown) {
 
 export async function POST(request: Request) {
   try {
-    let body: AppsScriptProxyBody = {};
+    let body: ApiRequestEnvelope = {};
     try {
-      body = (await request.json()) as AppsScriptProxyBody;
+      body = (await request.json()) as ApiRequestEnvelope;
     } catch {
       body = {};
     }

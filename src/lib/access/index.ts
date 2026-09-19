@@ -22,19 +22,16 @@ export {
   ACCESS_CAPABILITIES,
   SUPER_ADMIN_OVERRIDE_CAPABILITIES,
   FM_EXPLICIT_GRANT_CAPABILITIES,
-  capabilitiesForRole,
   hasCapability,
   capabilitySatisfied,
   type AccessCapability,
 } from "./capabilities";
 
 export {
-  resolveOperatingAccessFromSheetUser,
   resolveOperatingAccessFromGrants,
   applyPlatformSuperAdmin,
   accessCan,
   resolveProtectedActionAuthority,
-  findSheetUserByEmail,
   isInactiveUserStatus,
   type OperatingAccess,
   type OperatingAccessSource,

@@ -104,8 +104,8 @@ function emptyForm(initial?: Partial<CreateCostRecordInput>): CostEntryForm {
 function userFacingError(error: unknown): string {
   if (error instanceof ApiError) {
     const message = error.message;
-    if (/driveapp|authori[sz]|permission|access denied/i.test(message)) {
-      return "Receipt storage needs a one-time Google Drive approval in Apps Script. Ask an administrator to run the evidence-storage setup, then try again.";
+    if (/permission|access denied|forbidden/i.test(message)) {
+      return "You do not have permission to record this cost.";
     }
     if (/is required|must be|invalid|non-negative|evidence/i.test(message)) {
       return message.replace(/^Invalid CostRecord on create:\s*/i, "");

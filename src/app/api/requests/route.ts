@@ -11,7 +11,7 @@ import {
   FmRequestServerService,
   resolveFmRequestOrganisation,
 } from "@/modules/requests/server/FmRequestServerService";
-import type { AppsScriptProxyBody } from "@/services/api/appsScriptProxy";
+import type { ApiRequestEnvelope } from "@/lib/api/requestEnvelope";
 
 /**
  * Request persistence is Supabase (fm_requests).
@@ -67,9 +67,9 @@ function ok(data: unknown) {
 
 export async function POST(request: Request) {
   try {
-    let body: AppsScriptProxyBody = {};
+    let body: ApiRequestEnvelope = {};
     try {
-      body = (await request.json()) as AppsScriptProxyBody;
+      body = (await request.json()) as ApiRequestEnvelope;
     } catch {
       body = {};
     }

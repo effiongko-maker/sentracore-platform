@@ -17,7 +17,7 @@ import {
   stableRequestKey,
 } from "@/services/cache/sharedRequest";
 
-/** Raw row shape from the Apps Script generator-log API. */
+/** Raw row shape from the generator-log API. */
 type RemoteGeneratorLog = Record<string, unknown>;
 
 function pickField(raw: RemoteGeneratorLog, ...keys: string[]): unknown {

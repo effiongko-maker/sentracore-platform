@@ -7,6 +7,4 @@ export type RequestTreatmentResult = {
   request: RequestRecord;
   maintenance?: Maintenance;
   incident?: Incident;
-  /** Dev/measure only — Apps Script round-trips inside link orchestration. */
-  _appsScriptCalls?: number;
 };

@@ -17,7 +17,7 @@ import {
   stableRequestKey,
 } from "@/services/cache/sharedRequest";
 
-/** Raw row shape from the Apps Script diesel-usage API. */
+/** Raw row shape from the diesel-usage API. */
 type RemoteDieselUsage = Record<string, unknown>;
 
 function pickField(raw: RemoteDieselUsage, ...keys: string[]): unknown {

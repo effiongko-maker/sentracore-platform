@@ -1,4 +1,4 @@
-import type { User, UserStatus } from "@/modules/users/types";
+import type { UserStatus } from "@/modules/users/types";
 import {
   SUPER_ADMIN_OVERRIDE_CAPABILITIES,
   capabilitySatisfied,
@@ -10,7 +10,6 @@ import {
   type PlatformRole,
 } from "./platformRoles";
 import {
-  parseV1OperatingRole,
   v1OperatingRoleLabel,
   type V1OperatingRole,
 } from "./roles";
@@ -71,8 +70,6 @@ export type OperatingAccess = {
   capabilities: AccessCapability[];
   /** Canonical actor identity: platform profile UUID when known. */
   sheetUserId?: string;
-  /** Transitional Sheet WO mapping is never an authorization grant. */
-  operationalIdentitySource?: "explicit_link" | "email_fallback";
 };
 
 export function isInactiveUserStatus(status: string | null | undefined): boolean {
@@ -123,43 +120,6 @@ export function resolveOperatingAccessFromGrants(input: {
     capabilities: [...input.capabilities],
     ...(input.profileId ? { sheetUserId: input.profileId } : {}),
   };
-}
-
-/**
- * @deprecated Sheet USERS is not FM runtime authority. Kept for static tests
- * of descriptive role parsing. Does NOT map job title to capabilities.
- */
-export function resolveOperatingAccessFromSheetUser(
-  email: string,
-  name: string,
-  sheetUser: Pick<User, "id" | "role" | "status" | "facility" | "name" | "email"> | null
-): OperatingAccess {
-  if (!sheetUser) {
-    return resolveOperatingAccessFromGrants({
-      email,
-      name,
-      role: null,
-      unassigned: true,
-      inactive: false,
-      capabilities: [],
-    });
-  }
-
-  const role = parseV1OperatingRole(sheetUser.role);
-  const inactive = isInactiveUserStatus(sheetUser.status);
-  const unassigned = role == null;
-  return resolveOperatingAccessFromGrants({
-    email: sheetUser.email || email,
-    name: sheetUser.name || name,
-    role,
-    roleLabel: role ? v1OperatingRoleLabel(role) : sheetUser.role || "Unassigned",
-    status: sheetUser.status || "",
-    facility: sheetUser.facility || "",
-    inactive,
-    unassigned,
-    capabilities: [],
-    profileId: sheetUser.id,
-  });
 }
 
 /**
@@ -225,13 +185,3 @@ export function resolveProtectedActionAuthority(
   return null;
 }
 
-export function findSheetUserByEmail(
-  users: Array<Pick<User, "id" | "role" | "status" | "facility" | "name" | "email">>,
-  email: string
-): (typeof users)[number] | null {
-  const target = email.trim().toLowerCase();
-  if (!target) return null;
-  return (
-    users.find((row) => row.email.trim().toLowerCase() === target) ?? null
-  );
-}

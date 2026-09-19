@@ -10,13 +10,13 @@ import {
   applyPlatformSuperAdmin,
   capabilityForOperationalProxyAction,
   capabilityForRequestsProxyAction,
-  capabilitiesForRole,
-  resolveOperatingAccessFromSheetUser,
   resolveProtectedActionAuthority,
   type AccessCapability,
   type OperationalProxyResource,
   type V1OperatingRole,
 } from "../src/lib/access";
+
+import { explicitGrantBundle, contextAccess } from "./lib/accessFixtures";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);
@@ -27,7 +27,7 @@ function readSrc(path: string): string {
 }
 
 function sheetAccess(role: V1OperatingRole, email = `${role}@example.com`) {
-  const access = resolveOperatingAccessFromSheetUser(email, role, {
+  const access = contextAccess(email, role, {
     id: `USR-${role}`,
     name: role,
     email,
@@ -46,7 +46,7 @@ function sheetAccess(role: V1OperatingRole, email = `${role}@example.com`) {
   });
   return {
     ...access,
-    capabilities: [...capabilitiesForRole(role)],
+    capabilities: [...explicitGrantBundle(role)],
   };
 }
 
@@ -204,7 +204,7 @@ function main() {
   const ncc = sheetAccess("ncc_client", "sa@example.com");
   assert(!accessCan(ncc, "ops.create"), "NCC denied create before override");
   const sa = applyPlatformSuperAdmin(
-    resolveOperatingAccessFromSheetUser("sa@example.com", "ncc_client", {
+    contextAccess("sa@example.com", "ncc_client", {
       id: "USR-ncc",
       name: "ncc_client",
       email: "sa@example.com",
@@ -238,7 +238,7 @@ function main() {
 
   // ops.submit exists on roles but is not mapped to a distinct proxy verb yet
   assert(
-    capabilitiesForRole("fm_staff").includes("ops.submit"),
+    explicitGrantBundle("fm_staff").includes("ops.submit"),
     "ops.submit remains on FM Staff matrix"
   );
   for (const resource of resources) {

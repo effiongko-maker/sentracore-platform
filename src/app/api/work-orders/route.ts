@@ -11,7 +11,7 @@ import {
   FmWorkInstructionServerService,
   resolveFmWorkInstructionOrganisation,
 } from "@/modules/work-orders/server/FmWorkInstructionServerService";
-import type { AppsScriptProxyBody } from "@/services/api/appsScriptProxy";
+import type { ApiRequestEnvelope } from "@/lib/api/requestEnvelope";
 
 /**
  * Work Instruction (Work Order / Job Order) persistence is Supabase
@@ -31,9 +31,9 @@ function fail(status: number, message: string, extra?: { errorClass?: string }) 
 
 export async function POST(request: Request) {
   try {
-    let body: AppsScriptProxyBody = {};
+    let body: ApiRequestEnvelope = {};
     try {
-      body = (await request.json()) as AppsScriptProxyBody;
+      body = (await request.json()) as ApiRequestEnvelope;
     } catch {
       body = {};
     }

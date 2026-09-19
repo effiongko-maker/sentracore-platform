@@ -31,7 +31,13 @@ export interface OperationalRegisterLatestActivity {
  */
 export interface OperationalRegisterSection<T> {
   registerId: OperationalRegisterId;
-  count: number;
+  /**
+   * Zero is data; failure is not zero. `null` means the register FAILED to
+   * load and its count is unknown — never a healthy zero.
+   */
+  count: number | null;
+  /** True when this register failed to load. `records` is then empty and must not be read as "none". */
+  unavailable: boolean;
   latest: OperationalRegisterLatestActivity | null;
   records: T[];
 }
@@ -41,6 +47,18 @@ export interface OperationalRegisterSection<T> {
  * Grouped by existing semantics — no new thresholds or severities.
  */
 export interface OperationalPictureDerived {
+  /**
+   * Derived lists whose SOURCE register failed. An empty list for a key named
+   * here means "unknown", not "none" (e.g. no overdue fumigation).
+   */
+  unavailable: Array<
+    | "dieselHighUsage"
+    | "dieselNegativeConsumption"
+    | "consumablesReorder"
+    | "fumigationOverdue"
+    | "fumigationDueSoon"
+    | "fumigationScheduled"
+  >;
   dieselHighUsage: DieselUsage[];
   dieselNegativeConsumption: DieselUsage[];
   consumablesReorder: ConsumablesUpdate[];

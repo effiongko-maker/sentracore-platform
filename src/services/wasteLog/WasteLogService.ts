@@ -16,7 +16,7 @@ import {
   stableRequestKey,
 } from "@/services/cache/sharedRequest";
 
-/** Raw row shape from the Apps Script waste-log API. */
+/** Raw row shape from the waste-log API. */
 type RemoteWasteLog = Record<string, unknown>;
 
 function pickField(raw: RemoteWasteLog, ...keys: string[]): unknown {

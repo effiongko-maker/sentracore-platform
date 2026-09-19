@@ -8,11 +8,13 @@ import { resolve } from "node:path";
 import {
   canSeeHref,
   resolveAccessVisibility,
-  resolveOperatingAccessFromSheetUser,
   applyPlatformSuperAdmin,
   accessCan,
   surfaceForHref,
 } from "../src/lib/access";
+
+import { parseV1OperatingRole } from "../src/lib/access/roles";
+import { explicitGrantBundle, contextAccess } from "./lib/accessFixtures";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);
@@ -22,8 +24,10 @@ function readSrc(path: string): string {
   return readFileSync(resolve(path), "utf8");
 }
 
+/** A person with the given operating CONTEXT who has been EXPLICITLY granted the matching bundle. */
 function sheet(role: string, email = "u@example.com") {
-  return resolveOperatingAccessFromSheetUser(email, "U", {
+  const parsed = parseV1OperatingRole(role);
+  const base = contextAccess(email, "U", {
     id: "1",
     name: "U",
     email,
@@ -31,6 +35,7 @@ function sheet(role: string, email = "u@example.com") {
     status: "active",
     facility: "NCC Annex",
   });
+  return { ...base, capabilities: parsed ? explicitGrantBundle(parsed) : [] };
 }
 
 function main() {
@@ -97,7 +102,7 @@ function main() {
   const wo = readSrc("src/modules/work-orders/components/WorkOrdersPage.tsx");
   assert(wo.includes('can("ops.create")'), "WO create capability");
   assert(wo.includes('can("ops.edit")'), "WO edit capability");
-  assert(wo.includes("canCreate={canCreateOps}"), "WO create UI gate");
+  assert(/canCreate=\{[^}]*canCreateOps/.test(wo), "WO create UI gate");
   assert(wo.includes("canMutate={canMutateOps}"), "WO mutate UI gate");
 
   const issues = readSrc("src/modules/issues/components/IssuesPage.tsx");

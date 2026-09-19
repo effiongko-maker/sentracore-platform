@@ -10,15 +10,15 @@ import {
  * Transport layer for all SentraCore HTTP calls.
  *
  * Domain services must call only this client.
- * Module CRUD uses live POST proxies to Next.js (facilities + location
- * master-data → Supabase; vendors and other FM registers → Apps Script).
+ * Module CRUD uses POST envelopes to the Next.js /api routes, each served by a
+ * server-only Supabase service.
  * Platform identity uses /api/auth/me.
  *
  * The frontend never references Spreadsheets or other storage backends.
  *
  * Retry policy (bounded, transient-only):
  * - Retry network failures and HTTP 408/429/502/503/504.
- * - Never retry validation/schema failures (4xx with Apps Script validation).
+ * - Never retry validation/schema failures (4xx validation responses).
  * - Max 2 retries with short backoff — avoids storms; sharedRequest coalesces peers.
  */
 
@@ -88,8 +88,7 @@ export class ApiClient {
     body?: unknown,
     options?: ApiRequestOptions
   ): Promise<ApiResponse<T>> {
-    // Live proxy routes → Next.js API → Apps Script.
-    // Frontend never calls Apps Script directly.
+    // Live routes → Next.js API → server-only Supabase services.
     const liveProxy =
       path === "/users"
         ? { endpoint: "/api/users", resource: "users" }
@@ -264,7 +263,7 @@ export class ApiClient {
           } catch (error) {
             if (error instanceof ApiError) throw error;
             if (options?.signal?.aborted) throw error;
-            // Never retry writes — retries amplify Apps Script load and duplicate side effects.
+            // Never retry writes — retries would duplicate side effects.
             if (!isWriteAction && attempt < MAX_TRANSIENT_RETRIES) {
               attempt += 1;
               await sleep(RETRY_BASE_MS * attempt);

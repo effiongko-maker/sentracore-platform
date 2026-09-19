@@ -11,9 +11,7 @@ import { resolve } from "node:path";
 import {
   accessCan,
   applyPlatformSuperAdmin,
-  capabilitiesForRole,
   resolveOperatingAccessFromGrants,
-  resolveOperatingAccessFromSheetUser,
 } from "../src/lib/access";
 import {
   collapsePeopleByProfile,
@@ -26,6 +24,8 @@ import {
   expectSqlFailure,
   type FinanceVerifyClient,
 } from "./lib/platform-finance-verify-transaction";
+
+import { explicitGrantBundle, contextAccess } from "./lib/accessFixtures";
 
 type CheckResult = {
   name: string;
@@ -125,7 +125,7 @@ function runStatic(results: CheckResult[]) {
     );
     push(results, "SA override narrowed", "PASS");
 
-    const roleOnly = resolveOperatingAccessFromSheetUser("a@x.com", "A", {
+    const roleOnly = contextAccess("a@x.com", "A", {
       id: "ee7eb825-090d-4db9-a852-feb278a69763",
       name: "A",
       email: "a@x.com",
@@ -222,7 +222,7 @@ function runStatic(results: CheckResult[]) {
     push(results, "useFacilityOptions reliability", "PASS");
 
     assert(
-      capabilitiesForRole("facility_manager").includes("ops.view"),
+      explicitGrantBundle("facility_manager").includes("ops.view"),
       "historical catalog retained, unused at runtime"
     );
     push(results, "historical catalog unused at runtime", "PASS");
