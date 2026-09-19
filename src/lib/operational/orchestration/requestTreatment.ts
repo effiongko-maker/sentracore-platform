@@ -3,7 +3,6 @@ import { ActionError } from "@/lib/actions/errors";
 import { OperationalEventTypes } from "@/lib/events/taxonomy";
 import { assertNewIncidentCreateAllowed } from "@/lib/operational/work/incidentWriteFreeze";
 import {
-  requestCreateIncidentLeaseKey,
   requestCreateMaintenanceLeaseKey,
   requestLinkIncidentLeaseKey,
   requestLinkMaintenanceLeaseKey,
@@ -27,10 +26,10 @@ import type {
 import type { RequestRecord } from "@/modules/requests/types";
 import { IncidentService } from "@/services/incidents/IncidentService";
 import { MaintenanceServerAccess as MaintenanceService } from "@/modules/maintenance/server/MaintenanceServerAccess";
-import { RequestService } from "@/services/requests/RequestService";
+import { RequestServerAccess } from "@/modules/requests/server/RequestServerAccess";
+import { isRequestTerminal } from "@/modules/requests/treatment/status";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
 import {
-  incidentEventData,
   maintenanceEventData,
   withIntakeMetadata,
 } from "@/lib/operational/events/payloads";
@@ -44,7 +43,7 @@ export type {
 import type { RequestTreatmentResult } from "@/modules/requests/treatment/resultTypes";
 
 async function loadRequestOrThrow(requestId: string): Promise<RequestRecord> {
-  const request = await RequestService.getRequest(requestId);
+  const request = await RequestServerAccess.getRequest(requestId);
   if (!request) {
     throw new ActionError(
       "VALIDATION_ERROR",
@@ -54,22 +53,56 @@ async function loadRequestOrThrow(requestId: string): Promise<RequestRecord> {
   return request;
 }
 
-function mapLinkAppsScriptError(error: unknown): never {
-  const message =
-    error instanceof Error && error.message.trim()
-      ? error.message.trim()
-      : "linkTreatment failed";
-  if (
-    /cannot receive treatment/i.test(message) ||
-    /not found/i.test(message) ||
-    /Facility mismatch/i.test(message) ||
-    /already linked/i.test(message) ||
-    /childId is required/i.test(message) ||
-    /requestId is required/i.test(message)
-  ) {
-    throw new ActionError("VALIDATION_ERROR", message, { cause: error });
+/** Request entity identity for events: the Supabase UUID (code travels in data). */
+function requestEntityId(request: RequestRecord): string {
+  return request.requestUuid ?? request.id;
+}
+
+/**
+ * First successful treatment moves an open Request to `being_treated`.
+ * Terminal Requests are never reopened. Idempotent — safe to repeat on
+ * lease recovery so an interrupted transition is repaired, not duplicated.
+ */
+async function advanceRequestAfterTreatment(
+  requestId: string
+): Promise<RequestRecord> {
+  const request = await loadRequestOrThrow(requestId);
+  if (isRequestTerminal(request.status) || request.status === "being_treated") {
+    return request;
   }
-  throw new ActionError("INTERNAL_ERROR", message, { cause: error });
+  const { request: updated } = await RequestServerAccess.transitionStatus(
+    request.id,
+    "being_treated"
+  );
+  return updated;
+}
+
+function sameIdentity(a: string | undefined, b: string | undefined): boolean {
+  return !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+function assertFacilityMatch(
+  request: RequestRecord,
+  childFacilityId: string | undefined,
+  requestFacilityCode?: string | null
+): void {
+  const child = childFacilityId?.trim();
+  if (!child) {
+    throw new ActionError(
+      "VALIDATION_ERROR",
+      "Child facilityId is required for treatment."
+    );
+  }
+  if (
+    sameIdentity(child, request.facilityId) ||
+    sameIdentity(child, requestFacilityCode ?? undefined)
+  ) {
+    return;
+  }
+  throw new ActionError(
+    "VALIDATION_ERROR",
+    `Facility mismatch: child facilityId ${child} does not match request facilityId ${request.facilityId}.`
+  );
 }
 
 export async function orchestrateCreateMaintenanceFromRequest(options: {
@@ -78,8 +111,6 @@ export async function orchestrateCreateMaintenanceFromRequest(options: {
   idempotencyKey: string;
   context: ActionContext;
 }): Promise<RequestTreatmentResult> {
-  let appsScriptCalls = 0;
-
   const idempotencyKey = options.idempotencyKey.trim();
   if (!idempotencyKey) {
     throw new ActionError(
@@ -88,14 +119,6 @@ export async function orchestrateCreateMaintenanceFromRequest(options: {
     );
   }
 
-  const writeInput: CreateMaintenanceInput = {
-    ...options.input,
-    source: options.input.source ?? "request",
-    sourceRequestId: options.requestId,
-    createdByUserId: options.context.userId,
-    updatedByUserId: options.context.userId,
-  };
-
   type Bundle = {
     request: RequestRecord;
     maintenance: Maintenance;
@@ -103,53 +126,29 @@ export async function orchestrateCreateMaintenanceFromRequest(options: {
   };
 
   /**
-   * Phase 2B: Work is Supabase SoT. Do NOT call Apps Script createTreatment
-   * for maintenance (that path writes the frozen Maintenance sheet).
-   * Create Work in Supabase, then link on the Request sheet only.
+   * Phase 2C: Request and Work are both Supabase. Provenance is the Work row's
+   * source_request_id (written atomically with the Work insert) — the Request
+   * stores no child ids. The Request then advances to `being_treated`.
    */
   const invokeCreateTreatment = async (): Promise<Bundle> => {
     const request = await loadRequestOrThrow(options.requestId);
     assertRequestTreatable(request);
+    assertFacilityMatch(
+      request,
+      options.input.facilityId,
+      await RequestServerAccess.facilityCode(request)
+    );
 
-    const existingIds = request.maintenanceIds ?? [];
     // Lease recovers by entity id; duplicate create within lease is prevented.
-    const maintenance = await MaintenanceService.createMaintenance(writeInput);
-    appsScriptCalls += 1;
-    try {
-      const nextStatus =
-        request.status === "resolved" ||
-        request.status === "closed" ||
-        request.status === "cancelled"
-          ? request.status
-          : "being_treated";
-      const maintenanceIds = existingIds.includes(maintenance.id)
-        ? existingIds
-        : [...existingIds, maintenance.id];
-      const updatedRequest = await RequestService.updateRequest({
-        id: options.requestId,
-        status: nextStatus,
-        maintenanceIds,
-        updatedByUserId: options.context.userId,
-      });
-      return {
-        request: updatedRequest,
-        maintenance,
-        idempotent: existingIds.includes(maintenance.id),
-      };
-    } catch (error) {
-      const message =
-        error instanceof Error && error.message.trim()
-          ? error.message.trim()
-          : "Request link after Work create failed";
-      if (
-        /cannot receive treatment/i.test(message) ||
-        /not found/i.test(message) ||
-        /Facility mismatch/i.test(message)
-      ) {
-        throw new ActionError("VALIDATION_ERROR", message, { cause: error });
-      }
-      throw new ActionError("INTERNAL_ERROR", message, { cause: error });
-    }
+    const maintenance = await MaintenanceService.createMaintenance({
+      ...options.input,
+      source: options.input.source ?? "request",
+      sourceRequestId: request.id,
+      createdByUserId: options.context.userId,
+      updatedByUserId: options.context.userId,
+    });
+    const updatedRequest = await advanceRequestAfterTreatment(request.id);
+    return { request: updatedRequest, maintenance, idempotent: false };
   };
 
   const bundle = await runExclusiveOperationalAction({
@@ -161,7 +160,8 @@ export async function orchestrateCreateMaintenanceFromRequest(options: {
     loadByEntityId: async (entityId) => {
       const maintenance = await MaintenanceService.getMaintenance(entityId);
       if (!maintenance) return null;
-      const request = await loadRequestOrThrow(options.requestId);
+      // Repairs an interrupted status transition; never creates a second Work.
+      const request = await advanceRequestAfterTreatment(options.requestId);
       return {
         entityId: maintenance.id,
         value: { request, maintenance, idempotent: true },
@@ -188,7 +188,7 @@ export async function orchestrateCreateMaintenanceFromRequest(options: {
             transitionSource: "specialised_action",
           }),
           "staff",
-          options.requestId
+          bundle.request.id
         ),
       });
       void MaintenanceService.updateMaintenance(bundle.maintenance.id, {
@@ -214,7 +214,7 @@ export async function orchestrateCreateMaintenanceFromRequest(options: {
       await emitActionEvent(options.context, {
         eventType: OperationalEventTypes.FACILITY_REQUEST_MAINTENANCE_CREATED,
         entityType: "request",
-        entityId: bundle.request.id,
+        entityId: requestEntityId(bundle.request),
         data: {
           requestId: bundle.request.id,
           maintenanceId: bundle.maintenance.id,
@@ -229,16 +229,10 @@ export async function orchestrateCreateMaintenanceFromRequest(options: {
     }
   }
 
-  if (process.env.NODE_ENV !== "production") {
-    console.info(
-      `[create-treatment.write.timing] kind=maintenance appsScriptCalls=${appsScriptCalls} requestId=${bundle.request.id} childId=${bundle.maintenance.id} idempotent=${bundle.idempotent ? 1 : 0}`
-    );
-  }
-
   return {
     request: bundle.request,
     maintenance: bundle.maintenance,
-    _appsScriptCalls: appsScriptCalls,
+    _appsScriptCalls: 0,
   };
 }
 
@@ -249,156 +243,21 @@ export async function orchestrateCreateMaintenanceFromRequest(options: {
 export const orchestrateCreateWorkFromRequest =
   orchestrateCreateMaintenanceFromRequest;
 
+/**
+ * FROZEN (Phase 18): new FM Request → Incident creation is not allowed.
+ * Phase 15 canonical path is orchestrateCreateWorkFromRequest. The former
+ * Apps Script createTreatment body is intentionally removed — it wrote the
+ * Sheet Request, which is no longer authoritative.
+ */
 export async function orchestrateCreateIncidentFromRequest(options: {
   requestId: string;
   input: CreateIncidentInput;
   idempotencyKey: string;
   context: ActionContext;
 }): Promise<RequestTreatmentResult> {
+  void options;
   assertNewIncidentCreateAllowed("orchestrateCreateIncidentFromRequest");
-
-  /**
-   * LEGACY: creates Incident from Request.
-   * Phase 15 canonical path is orchestrateCreateWorkFromRequest.
-   * Frozen Phase 18 — no new FM Request → Incident creation.
-   */
-  let appsScriptCalls = 0;
-
-  const idempotencyKey = options.idempotencyKey.trim();
-  if (!idempotencyKey) {
-    throw new ActionError(
-      "VALIDATION_ERROR",
-      "Idempotency key is required."
-    );
-  }
-
-  const writeInput: CreateIncidentInput = {
-    ...options.input,
-    source: options.input.source ?? "request",
-    sourceRequestId: options.requestId,
-    createdByUserId: options.context.userId,
-    updatedByUserId: options.context.userId,
-  };
-
-  type Bundle = {
-    request: RequestRecord;
-    incident: Incident;
-    idempotent: boolean;
-  };
-
-  const invokeCreateTreatment = async (): Promise<Bundle> => {
-    appsScriptCalls += 1;
-    try {
-      const result = await RequestService.createTreatment({
-        kind: "incident",
-        requestId: options.requestId,
-        childInput: writeInput,
-        idempotencyKey,
-        actorUserId: options.context.userId,
-      });
-      if (!result.incident) {
-        throw new ActionError(
-          "INTERNAL_ERROR",
-          "createTreatment did not return incident."
-        );
-      }
-      return {
-        request: result.request,
-        incident: result.incident,
-        idempotent: result.idempotent,
-      };
-    } catch (error) {
-      const message =
-        error instanceof Error && error.message.trim()
-          ? error.message.trim()
-          : "createTreatment failed";
-      if (/cannot receive treatment/i.test(message) || /not found/i.test(message) || /Facility mismatch/i.test(message) || /idempotencyKey is required/i.test(message)) {
-        throw new ActionError("VALIDATION_ERROR", message, { cause: error });
-      }
-      throw new ActionError("INTERNAL_ERROR", message, { cause: error });
-    }
-  };
-
-  const bundle = await runExclusiveOperationalAction({
-    organisationId: options.context.organisation.id,
-    scopeKey: requestCreateIncidentLeaseKey(options.requestId, idempotencyKey),
-    actorProfileId: options.context.userId,
-    entityType: "incident",
-    recoverExisting: async () => null,
-    loadByEntityId: async () => {
-      const recovered = await invokeCreateTreatment();
-      return { entityId: recovered.incident.id, value: recovered };
-    },
-    create: async () => {
-      const created = await invokeCreateTreatment();
-      return { entityId: created.incident.id, value: created };
-    },
-  });
-
-  if (!bundle.idempotent) {
-    try {
-      const event = await emitActionEvent(options.context, {
-        eventType: OperationalEventTypes.FACILITY_INCIDENT_REPORTED,
-        entityType: "incident",
-        entityId: bundle.incident.id,
-        data: withIntakeMetadata(
-          incidentEventData(bundle.incident, {
-            actor: options.context.userId,
-            transitionSource: "specialised_action",
-          }),
-          "staff",
-          options.requestId
-        ),
-      });
-      void IncidentService.updateIncident(bundle.incident.id, {
-        operationalEventId: event.id,
-      }).catch((patchError) => {
-        console.error("[requestTreatment] incident event id patch failed", {
-          incidentId: bundle.incident.id,
-          error:
-            patchError instanceof Error
-              ? patchError.message
-              : String(patchError),
-        });
-      });
-    } catch (eventError) {
-      console.error("[requestTreatment] incident event failed", {
-        incidentId: bundle.incident.id,
-        error:
-          eventError instanceof Error ? eventError.message : String(eventError),
-      });
-    }
-
-    try {
-      await emitActionEvent(options.context, {
-        eventType: OperationalEventTypes.FACILITY_REQUEST_INCIDENT_CREATED,
-        entityType: "request",
-        entityId: bundle.request.id,
-        data: {
-          requestId: bundle.request.id,
-          incidentId: bundle.incident.id,
-          actor: options.context.userId,
-        },
-      });
-    } catch (eventError) {
-      console.error("[orchestrateCreateIncidentFromRequest] event failed", {
-        error:
-          eventError instanceof Error ? eventError.message : String(eventError),
-      });
-    }
-  }
-
-  if (process.env.NODE_ENV !== "production") {
-    console.info(
-      `[create-treatment.write.timing] kind=incident appsScriptCalls=${appsScriptCalls} requestId=${bundle.request.id} childId=${bundle.incident.id} idempotent=${bundle.idempotent ? 1 : 0}`
-    );
-  }
-
-  return {
-    request: bundle.request,
-    incident: bundle.incident,
-    _appsScriptCalls: appsScriptCalls,
-  };
+  throw new ActionError("VALIDATION_ERROR", "Incident creation is frozen.");
 }
 
 export async function orchestrateLinkMaintenanceToRequest(options: {
@@ -411,8 +270,6 @@ export async function orchestrateLinkMaintenanceToRequest(options: {
     throw new ActionError("VALIDATION_ERROR", "Maintenance id is required.");
   }
 
-  let appsScriptCalls = 0;
-
   type Bundle = {
     request: RequestRecord;
     maintenance: Maintenance;
@@ -420,8 +277,8 @@ export async function orchestrateLinkMaintenanceToRequest(options: {
   };
 
   /**
-   * Phase 2B: load Work from Supabase; update Request sheet link only.
-   * Apps Script linkTreatment would try MaintenanceRepository.getById and fail.
+   * Phase 2C: linking sets Work.source_request_id (FK). Ownership conflict and
+   * facility rules are preserved from the retired Apps Script linkTreatment.
    */
   const invokeLinkTreatment = async (): Promise<Bundle> => {
     const request = await loadRequestOrThrow(options.requestId);
@@ -433,42 +290,33 @@ export async function orchestrateLinkMaintenanceToRequest(options: {
         `Work ${maintenanceId} not found.`
       );
     }
-    const existingIds = request.maintenanceIds ?? [];
-    const alreadyLinked = existingIds.includes(maintenance.id);
-    if (alreadyLinked) {
-      return { request, maintenance, idempotent: true };
+    assertFacilityMatch(
+      request,
+      maintenance.facilityId,
+      await RequestServerAccess.facilityCode(request)
+    );
+
+    const owner = maintenance.sourceRequestId?.trim();
+    if (owner && !sameIdentity(owner, request.id)) {
+      throw new ActionError(
+        "VALIDATION_ERROR",
+        `${maintenance.id} is already linked to ${owner} and cannot be reassigned.`
+      );
     }
-    appsScriptCalls += 1;
-    try {
-      if (!maintenance.sourceRequestId) {
-        await MaintenanceService.updateMaintenance(maintenance.id, {
-          sourceRequestId: options.requestId,
-        });
-      }
-      const nextStatus =
-        request.status === "resolved" ||
-        request.status === "closed" ||
-        request.status === "cancelled"
-          ? request.status
-          : "being_treated";
-      const updatedRequest = await RequestService.updateRequest({
-        id: options.requestId,
-        status: nextStatus,
-        maintenanceIds: [...existingIds, maintenance.id],
-        updatedByUserId: options.context.userId,
-      });
-      return {
-        request: updatedRequest,
-        maintenance: {
-          ...maintenance,
-          sourceRequestId: maintenance.sourceRequestId ?? options.requestId,
-        },
-        idempotent: false,
-      };
-    } catch (error) {
-      if (error instanceof ActionError) throw error;
-      mapLinkAppsScriptError(error);
+    if (owner) {
+      const advanced = await advanceRequestAfterTreatment(request.id);
+      return { request: advanced, maintenance, idempotent: true };
     }
+
+    const linked = await MaintenanceService.updateMaintenance(maintenance.id, {
+      sourceRequestId: request.id,
+    });
+    const advanced = await advanceRequestAfterTreatment(request.id);
+    return {
+      request: advanced,
+      maintenance: { ...maintenance, ...linked, sourceRequestId: request.id },
+      idempotent: false,
+    };
   };
 
   const bundle = await runExclusiveOperationalAction({
@@ -483,7 +331,7 @@ export async function orchestrateLinkMaintenanceToRequest(options: {
     loadByEntityId: async (entityId) => {
       const maintenance = await MaintenanceService.getMaintenance(entityId);
       if (!maintenance) return null;
-      const request = await loadRequestOrThrow(options.requestId);
+      const request = await advanceRequestAfterTreatment(options.requestId);
       return {
         entityId: maintenance.id,
         value: { request, maintenance, idempotent: true },
@@ -500,7 +348,7 @@ export async function orchestrateLinkMaintenanceToRequest(options: {
       await emitActionEvent(options.context, {
         eventType: OperationalEventTypes.FACILITY_REQUEST_MAINTENANCE_LINKED,
         entityType: "request",
-        entityId: bundle.request.id,
+        entityId: requestEntityId(bundle.request),
         data: {
           requestId: bundle.request.id,
           maintenanceId: bundle.maintenance.id,
@@ -508,20 +356,14 @@ export async function orchestrateLinkMaintenanceToRequest(options: {
         },
       });
     } catch {
-      // non-blocking — Supabase, not Apps Script
+      // non-blocking
     }
-  }
-
-  if (process.env.NODE_ENV !== "production") {
-    console.info(
-      `[link-treatment.write.timing] kind=maintenance appsScriptCalls=${appsScriptCalls} requestId=${bundle.request.id} childId=${bundle.maintenance.id} idempotent=${bundle.idempotent ? 1 : 0}`
-    );
   }
 
   return {
     request: bundle.request,
     maintenance: bundle.maintenance,
-    _appsScriptCalls: appsScriptCalls,
+    _appsScriptCalls: 0,
   };
 }
 
@@ -535,7 +377,8 @@ export async function orchestrateLinkIncidentToRequest(options: {
     throw new ActionError("VALIDATION_ERROR", "Incident id is required.");
   }
 
-  let appsScriptCalls = 0;
+  /** Legacy Sheet calls made by this orchestration (Incident read + mirror). */
+  let legacyCalls = 0;
 
   type Bundle = {
     request: RequestRecord;
@@ -543,30 +386,65 @@ export async function orchestrateLinkIncidentToRequest(options: {
     idempotent: boolean;
   };
 
+  /**
+   * Phase 2C: Incident remains a Sheet domain. The Request↔Incident link is
+   * stored in Supabase (fm_request_incident_links, opaque incident_ref).
+   * Ownership is decided by that table — NOT by the Sheet's sourceRequestId,
+   * which may hold a frozen-era REQ-* code that never existed here.
+   */
   const invokeLinkTreatment = async (): Promise<Bundle> => {
-    appsScriptCalls += 1;
-    try {
-      const result = await RequestService.linkTreatment({
-        kind: "incident",
-        requestId: options.requestId,
-        childId: incidentId,
-        actorUserId: options.context.userId,
-      });
-      if (!result.incident) {
-        throw new ActionError(
-          "INTERNAL_ERROR",
-          "linkTreatment did not return incident."
-        );
-      }
-      return {
-        request: result.request,
-        incident: result.incident,
-        idempotent: result.idempotent,
-      };
-    } catch (error) {
-      if (error instanceof ActionError) throw error;
-      mapLinkAppsScriptError(error);
+    const request = await loadRequestOrThrow(options.requestId);
+    assertRequestTreatable(request);
+
+    legacyCalls += 1;
+    const incident = await IncidentService.getIncident(incidentId);
+    if (!incident) {
+      throw new ActionError("VALIDATION_ERROR", `Incident ${incidentId} not found.`);
     }
+    assertFacilityMatch(
+      request,
+      incident.facilityId,
+      await RequestServerAccess.facilityCode(request)
+    );
+
+    const owner = await RequestServerAccess.findRequestForIncident(incident.id);
+    if (owner && !sameIdentity(owner.id, request.id)) {
+      throw new ActionError(
+        "VALIDATION_ERROR",
+        `${incident.id} is already linked to ${owner.id} and cannot be reassigned.`
+      );
+    }
+
+    const { created } = await RequestServerAccess.linkIncident(
+      request.id,
+      incident.id
+    );
+
+    // Incident's own back-reference for legacy Incident consumers.
+    // The Supabase link is authoritative; a failed mirror never fails the link.
+    if (!sameIdentity(incident.sourceRequestId, request.id)) {
+      legacyCalls += 1;
+      try {
+        await IncidentService.updateIncident(incident.id, {
+          sourceRequestId: request.id,
+        });
+      } catch (mirrorError) {
+        console.error("[requestTreatment] incident back-reference mirror failed", {
+          incidentId: incident.id,
+          error:
+            mirrorError instanceof Error
+              ? mirrorError.message
+              : String(mirrorError),
+        });
+      }
+    }
+
+    const advanced = await advanceRequestAfterTreatment(request.id);
+    return {
+      request: advanced,
+      incident: { ...incident, sourceRequestId: request.id },
+      idempotent: !created,
+    };
   };
 
   const bundle = await runExclusiveOperationalAction({
@@ -590,7 +468,7 @@ export async function orchestrateLinkIncidentToRequest(options: {
       await emitActionEvent(options.context, {
         eventType: OperationalEventTypes.FACILITY_REQUEST_INCIDENT_LINKED,
         entityType: "request",
-        entityId: bundle.request.id,
+        entityId: requestEntityId(bundle.request),
         data: {
           requestId: bundle.request.id,
           incidentId: bundle.incident.id,
@@ -602,16 +480,10 @@ export async function orchestrateLinkIncidentToRequest(options: {
     }
   }
 
-  if (process.env.NODE_ENV !== "production") {
-    console.info(
-      `[link-treatment.write.timing] kind=incident appsScriptCalls=${appsScriptCalls} requestId=${bundle.request.id} childId=${bundle.incident.id} idempotent=${bundle.idempotent ? 1 : 0}`
-    );
-  }
-
   return {
     request: bundle.request,
     incident: bundle.incident,
-    _appsScriptCalls: appsScriptCalls,
+    _appsScriptCalls: legacyCalls,
   };
 }
 
@@ -622,20 +494,17 @@ export async function orchestrateResolveRequest(options: {
   const request = await loadRequestOrThrow(options.requestId);
   assertRequestResolvable(request);
 
-  const updated = await RequestService.updateRequest({
-    id: request.id,
-    status: "resolved",
-    updatedByUserId: options.context.userId,
-  });
+  const { request: updated, previousStatus } =
+    await RequestServerAccess.transitionStatus(request.id, "resolved");
 
   try {
     await emitActionEvent(options.context, {
       eventType: OperationalEventTypes.FACILITY_REQUEST_RESOLVED,
       entityType: "request",
-      entityId: updated.id,
+      entityId: requestEntityId(updated),
       data: {
         requestId: updated.id,
-        previousStatus: request.status,
+        previousStatus,
         actor: options.context.userId,
       },
     });
@@ -653,13 +522,13 @@ export async function orchestrateCancelRequest(options: {
   const request = await loadRequestOrThrow(options.requestId);
   assertRequestCancellable(request);
 
-  const updated = await RequestService.deactivateRequest(request.id);
+  const updated = await RequestServerAccess.cancelRequest(request.id);
 
   try {
     await emitActionEvent(options.context, {
       eventType: OperationalEventTypes.FACILITY_REQUEST_CANCELLED,
       entityType: "request",
-      entityId: updated.id,
+      entityId: requestEntityId(updated),
       data: {
         requestId: updated.id,
         previousStatus: request.status,
@@ -686,17 +555,16 @@ export async function orchestrateStartRequestReview(options: {
     return request;
   }
 
-  const updated = await RequestService.updateRequest({
-    id: request.id,
-    status: "under_review",
-    updatedByUserId: options.context.userId,
-  });
+  const { request: updated } = await RequestServerAccess.transitionStatus(
+    request.id,
+    "under_review"
+  );
 
   try {
     await emitActionEvent(options.context, {
       eventType: OperationalEventTypes.FACILITY_REQUEST_REVIEW_STARTED,
       entityType: "request",
-      entityId: updated.id,
+      entityId: requestEntityId(updated),
       data: {
         requestId: updated.id,
         actor: options.context.userId,
@@ -815,21 +683,28 @@ export async function searchLinkableIncidents(options: {
   const request = await loadRequestOrThrow(options.requestId);
   const pageSize = Math.min(Math.max(options.pageSize ?? 200, 1), 500);
 
+  // Legacy Sheet Incidents key facilities by display code, not Supabase UUID.
+  const facilityCode = await RequestServerAccess.facilityCode(request);
   const listed = await IncidentService.listIncidents({
     page: 1,
     pageSize,
-    facilityId: request.facilityId,
+    facilityId: facilityCode ?? request.facilityId,
     status: "all",
   });
+
+  // Ownership is the Supabase link table — not the Sheet's sourceRequestId.
+  const owners = await RequestServerAccess.incidentOwners(
+    listed.data.map((row) => row.id)
+  );
 
   const linkable = listed.data
     .filter(
       (row) => row.status !== "cancelled" && row.status !== "closed"
     )
     .filter((row) => {
-      const src = row.sourceRequestId?.trim();
-      if (!src) return true;
-      return src === request.id;
+      const owner = owners.get(row.id.toLowerCase());
+      if (!owner) return true;
+      return sameIdentity(owner, request.id);
     })
     .map((row) => ({
       id: row.id,
@@ -837,7 +712,7 @@ export async function searchLinkableIncidents(options: {
       status: row.status,
       facilityId: row.facilityId,
       date: row.reportedAt || row.createdAt,
-      sourceRequestId: row.sourceRequestId,
+      sourceRequestId: owners.get(row.id.toLowerCase()),
     }));
 
   return {

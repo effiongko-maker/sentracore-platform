@@ -83,7 +83,8 @@ function sampleRow(overrides: Partial<FmWorkRow> = {}): FmWorkRow {
     priority: "high",
     status: "requested",
     asset_ref: null,
-    source_request_ref: null,
+    source_request_id: null,
+    source_request_code: null,
     incident_ref: null,
     assigned_to_profile_id: null,
     reported_by_profile_id: null,
@@ -167,8 +168,10 @@ function runStatic(results: CheckResult[]) {
 
   try {
     const treatment = readSrc(REQUEST_TREATMENT);
+    // Phase 2C superseded the 2B transitional Sheet Request link: Request and
+    // Work are both Supabase now (see verify-fm-requests-foundation.mts).
     assert(
-      treatment.includes("Phase 2B: Work is Supabase SoT"),
+      treatment.includes("Phase 2C: Request and Work are both Supabase"),
       "Request→Work uses Supabase path"
     );
     assert(
@@ -176,8 +179,9 @@ function runStatic(results: CheckResult[]) {
       "creates Work via service"
     );
     assert(
-      treatment.includes("RequestService.updateRequest"),
-      "links Request sheet only"
+      !treatment.includes("RequestService.updateRequest") &&
+        !treatment.includes("services/requests/RequestService"),
+      "no Sheet Request writer remains"
     );
     const orch = readSrc(WO_ORCH);
     assert(

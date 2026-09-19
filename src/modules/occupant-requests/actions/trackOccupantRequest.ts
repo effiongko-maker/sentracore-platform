@@ -1,7 +1,8 @@
 "use server";
 
 import { executeAction, type ActionResult } from "@/lib/actions";
-import { RequestService } from "@/services/requests/RequestService";
+import { FmRequestServerService } from "@/modules/requests/server/FmRequestServerService";
+import { loadOccupantPortalTarget } from "@/modules/requests/server/occupantPortalTarget";
 import { OCCUPANT_STATUS_LABELS } from "../constants";
 import { mapRequestToOccupantStatus } from "../status";
 import type { OccupantRequestStatus } from "../types";
@@ -66,7 +67,12 @@ export async function trackOccupantRequest(
         throw new Error("Enter the email or phone used on the request.");
       }
 
-      const request = await RequestService.getRequest(reference);
+      // Tenant comes from the configured portal facility, not the caller.
+      const target = await loadOccupantPortalTarget();
+      const request = await new FmRequestServerService({
+        organisationId: target.organisationId,
+        profileId: null,
+      }).findById(reference);
       if (!request) {
         throw new Error(
           "We couldn’t find that reference. Check the number and try again."

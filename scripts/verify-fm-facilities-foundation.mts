@@ -143,9 +143,12 @@ function runStatic(results: CheckResult[]) {
     push(results, "master-data split (location Supabase, vendors Apps Script)", "PASS");
 
     const occupant = readSrc(OCCUPANT);
-    assert(occupant.includes("NCC Annex") || occupant.includes("FAC-0001"), "occupant still hardcoded V1 default");
+    // Phase 2C cut the occupant writer over: the portal facility is the real
+    // Supabase UUID resolved server-side, not a hardcoded Sheet-era string.
+    assert(!/["']FAC-0001["']/.test(occupant), "occupant no longer hardcodes the Sheet-era FAC-0001 identity");
+    assert(occupant.includes("listOccupantFacilities"), "occupant facility comes from the server (Supabase) action");
     assert(!occupant.includes("listFacilitiesForSession"), "occupant not guessing a UUID");
-    push(results, "H occupant hardcoded default unchanged", "PASS");
+    push(results, "H occupant portal uses real facility UUID (Phase 2C)", "PASS");
 
     const mapped = mapFmFacilityRowToApi(sampleRow());
     assert(mapped.id === sampleRow().id, "UUID id");

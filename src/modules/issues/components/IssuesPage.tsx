@@ -108,6 +108,7 @@ export function IssuesPage() {
         requests: requests.data,
         maintenances: maintenances.data,
         incidents: incidents.data,
+        requestsComplete: requests.total <= requests.data.length,
       });
       setItems(next);
       setError(null);

@@ -160,9 +160,11 @@ function runStatic(results: CheckResult[]) {
     push(results, "public API contract preserved", "PASS");
 
     const occupant = readSrc(OCCUPANT);
-    assert(occupant.includes("FAC-0001"), "occupant still hardcoded FAC-0001");
-    assert(occupant.includes("NCC Annex"), "occupant still NCC Annex");
-    push(results, "occupant portal adapter unchanged", "PASS");
+    // Phase 2C: identity is the real fm_facilities UUID; FAC-0001 is only the
+    // display code read from Supabase, never a hardcoded identity.
+    assert(!/["']FAC-0001["']/.test(occupant), "occupant no longer hardcodes FAC-0001");
+    assert(occupant.includes("listOccupantFacilities"), "occupant facility comes from the server (Supabase) action");
+    push(results, "occupant portal uses real facility UUID (Phase 2C)", "PASS");
 
     const options = readSrc("src/hooks/useMasterDataOptions.ts");
     assert(options.includes("setError"), "lookup hook reports load failure");

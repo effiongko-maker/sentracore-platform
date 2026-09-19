@@ -67,9 +67,8 @@ export function OccupantRequestPage() {
   const { toast } = useToast();
   const { facilities, loading, error } = useOccupantFacilities();
   const defaultFacilityId = useMemo(() => {
-    const preferred =
-      facilities.find((f) => f.id === "FAC-0001") ?? facilities[0];
-    return preferred?.id ?? "";
+    // The portal serves exactly one facility (real Supabase UUID).
+    return facilities[0]?.id ?? "";
   }, [facilities]);
   const facilityName = useMemo(() => {
     return (

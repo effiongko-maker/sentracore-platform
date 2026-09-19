@@ -1,7 +1,14 @@
 "use server";
 
 import { executeAction, type ActionResult } from "@/lib/actions";
-import { RequestService } from "@/services/requests/RequestService";
+import type { ActionContext } from "@/lib/actions";
+import { FmRequestServerService } from "@/modules/requests/server/FmRequestServerService";
+import {
+  assertPortalFacility,
+  loadOccupantPortalTarget,
+} from "@/modules/requests/server/occupantPortalTarget";
+import { onRequestMutation } from "@/services/cache/domainCache";
+import type { CreateRequestInput } from "@/modules/requests/types";
 import { getOccupantActor } from "../context/OccupantSession";
 import { mapRequestToOccupantStatus } from "../status";
 import type {
@@ -13,6 +20,41 @@ import {
   toCreateRequestFromIncidentForm,
   toCreateRequestFromMaintenanceForm,
 } from "../utils";
+
+/**
+ * Occupant intake writes Supabase (fm_requests) through the same server
+ * service as /api/requests. The tenant is the configured portal facility's
+ * organisation — never client-supplied. Anonymous submissions record no
+ * profile; a signed-in person of that organisation is recorded as reporter.
+ */
+async function createPortalRequest(
+  context: ActionContext,
+  input: CreateRequestInput
+) {
+  const target = await loadOccupantPortalTarget();
+  assertPortalFacility(target, input.facilityId);
+
+  const profileId =
+    context.profile.id && context.organisation.id === target.organisationId
+      ? context.profile.id
+      : null;
+
+  const service = new FmRequestServerService({
+    organisationId: target.organisationId,
+    profileId,
+  });
+  const request = await service.create({
+    ...input,
+    facilityId: target.facilityId,
+    // Actor identity is derived from the session, never from the payload.
+    reportedByUserId: profileId ?? undefined,
+    createdByUserId: undefined,
+    updatedByUserId: undefined,
+    status: "submitted",
+  });
+  onRequestMutation();
+  return request;
+}
 
 export async function submitOccupantMaintenanceRequest(
   form: MaintenanceRequestFormValues
@@ -27,13 +69,7 @@ export async function submitOccupantMaintenanceRequest(
       const actor = getOccupantActor();
       const input = toCreateRequestFromMaintenanceForm(rawInput, actor);
 
-      const request = await RequestService.createRequest({
-        ...input,
-        createdByUserId: context.userId || input.createdByUserId,
-        updatedByUserId: context.userId || input.updatedByUserId,
-        reportedByUserId:
-          input.reportedByUserId || context.userId || actor.id,
-      });
+      const request = await createPortalRequest(context, input);
 
       return {
         kind: "maintenance",
@@ -61,13 +97,7 @@ export async function submitOccupantIncidentReport(
       const actor = getOccupantActor();
       const input = toCreateRequestFromIncidentForm(rawInput, actor);
 
-      const request = await RequestService.createRequest({
-        ...input,
-        createdByUserId: context.userId || input.createdByUserId,
-        updatedByUserId: context.userId || input.updatedByUserId,
-        reportedByUserId:
-          input.reportedByUserId || context.userId || actor.id,
-      });
+      const request = await createPortalRequest(context, input);
 
       return {
         kind: "incident",

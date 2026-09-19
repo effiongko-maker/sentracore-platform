@@ -11,7 +11,10 @@ export type RequestType = "maintenance" | "incident";
 
 /** Canonical Request domain model — intake layer before operational treatment. */
 export interface RequestRecord {
+  /** Display reference (REQ-YYYY-######). Org-scoped, immutable. */
   id: string;
+  /** Authoritative Supabase identity (fm_requests.id). */
+  requestUuid?: string;
   title: string;
   description?: string;
   facilityId: string;
@@ -23,8 +26,11 @@ export interface RequestRecord {
   /** Optional for records created before requestType existed. */
   requestType?: RequestType;
   status: RequestStatus;
+  /** Derived: transitional Incident links (opaque Sheet ids). */
   incidentIds: string[];
+  /** Derived: Work codes whose source Request is this Request. */
   maintenanceIds: string[];
+  /** Always empty — Work Instructions derive via Work/Incident, never Request. */
   workOrderIds: string[];
   createdAt: string;
   updatedAt: string;

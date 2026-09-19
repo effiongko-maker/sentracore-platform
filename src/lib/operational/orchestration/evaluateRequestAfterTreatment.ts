@@ -16,7 +16,7 @@ import { isRequestTerminal } from "@/modules/requests/treatment/status";
 import type { RequestRecord } from "@/modules/requests/types";
 import { IncidentService } from "@/services/incidents/IncidentService";
 import { MaintenanceServerAccess as MaintenanceService } from "@/modules/maintenance/server/MaintenanceServerAccess";
-import { RequestService } from "@/services/requests/RequestService";
+import { RequestServerAccess } from "@/modules/requests/server/RequestServerAccess";
 
 export type EvaluateRequestAfterTreatmentOutcome =
   | "resolved"
@@ -106,6 +106,12 @@ export function allLinkedTreatmentsSuccessfullyTerminal(input: {
 export async function evaluateRequestAfterTreatmentCompletion(options: {
   sourceRequestId: string | null | undefined;
   context: ActionContext;
+  /**
+   * Legacy Incident that triggered this evaluation. A Sheet Incident's
+   * sourceRequestId can hold a frozen-era REQ-* string, so the trigger only
+   * counts when the Supabase link table agrees.
+   */
+  viaIncidentId?: string;
 }): Promise<EvaluateRequestAfterTreatmentResult> {
   const sourceRequestId = options.sourceRequestId?.trim();
   if (!sourceRequestId) {
@@ -113,9 +119,18 @@ export async function evaluateRequestAfterTreatmentCompletion(options: {
   }
 
   return withRequestEvalGate(sourceRequestId, async () => {
-    const request = await RequestService.getRequest(sourceRequestId);
+    const request = await RequestServerAccess.getRequest(sourceRequestId);
     if (!request) {
       return { outcome: "request_not_found", request: null };
+    }
+
+    if (
+      options.viaIncidentId &&
+      !(request.incidentIds ?? []).some(
+        (id) => id.toLowerCase() === options.viaIncidentId!.toLowerCase()
+      )
+    ) {
+      return { outcome: "skipped_no_source", request };
     }
 
     if (isRequestTerminal(request.status)) {
@@ -152,7 +167,7 @@ export async function evaluateRequestAfterTreatmentCompletion(options: {
     }
 
     // Re-read under the gate before mutate (concurrent completers / retries).
-    const fresh = await RequestService.getRequest(sourceRequestId);
+    const fresh = await RequestServerAccess.getRequest(sourceRequestId);
     if (!fresh) {
       return { outcome: "request_not_found", request: null };
     }
@@ -161,17 +176,16 @@ export async function evaluateRequestAfterTreatmentCompletion(options: {
     }
 
     const previousStatus = fresh.status;
-    const updated = await RequestService.updateRequest({
-      id: fresh.id,
-      status: "resolved",
-      updatedByUserId: options.context.userId,
-    });
+    const { request: updated } = await RequestServerAccess.transitionStatus(
+      fresh.id,
+      "resolved"
+    );
 
     try {
       await emitActionEvent(options.context, {
         eventType: OperationalEventTypes.FACILITY_REQUEST_RESOLVED,
         entityType: "request",
-        entityId: updated.id,
+        entityId: updated.requestUuid ?? updated.id,
         data: {
           requestId: updated.id,
           previousStatus,
@@ -181,7 +195,7 @@ export async function evaluateRequestAfterTreatmentCompletion(options: {
         },
       });
     } catch {
-      // non-blocking — Request status is authoritative in Sheets
+      // non-blocking — Request status is authoritative in Supabase
     }
 
     return { outcome: "resolved", request: updated };

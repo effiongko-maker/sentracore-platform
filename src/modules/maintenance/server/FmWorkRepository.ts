@@ -64,8 +64,9 @@ function asRow(value: unknown): FmWorkRow {
     priority: String(rec.priority ?? "medium"),
     status: String(rec.status ?? "requested"),
     asset_ref: rec.asset_ref != null ? String(rec.asset_ref) : null,
-    source_request_ref:
-      rec.source_request_ref != null ? String(rec.source_request_ref) : null,
+    source_request_id:
+      rec.source_request_id != null ? String(rec.source_request_id) : null,
+    source_request_code: null,
     incident_ref: rec.incident_ref != null ? String(rec.incident_ref) : null,
     assigned_to_profile_id:
       rec.assigned_to_profile_id != null
@@ -126,7 +127,7 @@ export class FmWorkRepository {
       if (error) throwDb(error, "Unable to load work.");
       const batch = (data ?? []).map(asRow);
       rows.push(...batch);
-      if (batch.length < batchSize) return rows;
+      if (batch.length < batchSize) return this.withRequestCodes(rows);
     }
   }
 
@@ -159,7 +160,7 @@ export class FmWorkRepository {
         .eq("id", target)
         .maybeSingle();
       if (error) throwDb(error, "Unable to load work.");
-      if (data) return asRow(data);
+      if (data) return (await this.withRequestCodes([asRow(data)]))[0]!;
     }
 
     const { data, error } = await this.admin
@@ -169,7 +170,58 @@ export class FmWorkRepository {
       .ilike("code", target)
       .maybeSingle();
     if (error) throwDb(error, "Unable to load work.");
-    return data ? asRow(data) : null;
+    return data ? (await this.withRequestCodes([asRow(data)]))[0]! : null;
+  }
+
+
+  /** Attach the display code of each row's source Request (single query). */
+  private async withRequestCodes(rows: FmWorkRow[]): Promise<FmWorkRow[]> {
+    const ids = [
+      ...new Set(
+        rows.map((row) => row.source_request_id).filter((id): id is string => !!id)
+      ),
+    ];
+    if (ids.length === 0) return rows;
+    const { data, error } = await this.admin
+      .from("fm_requests")
+      .select("id, code")
+      .eq("organisation_id", this.organisationId)
+      .in("id", ids);
+    if (error) throwDb(error, "Unable to load source requests.");
+    const codes = new Map(
+      (data ?? []).map((row) => [
+        String((row as { id: string }).id),
+        String((row as { code: string }).code),
+      ])
+    );
+    return rows.map((row) => ({
+      ...row,
+      source_request_code: row.source_request_id
+        ? (codes.get(row.source_request_id) ?? null)
+        : null,
+    }));
+  }
+
+  /**
+   * Resolve a Request reference (REQ code or UUID) inside this organisation.
+   * Work may only cite a Request that exists in Supabase.
+   */
+  async resolveRequestId(requestIdOrCode: string): Promise<string> {
+    const target = requestIdOrCode.trim();
+    const query = this.admin
+      .from("fm_requests")
+      .select("id")
+      .eq("organisation_id", this.organisationId);
+    const { data, error } = UUID_RE.test(target)
+      ? await query.eq("id", target).maybeSingle()
+      : await query.eq("code", target.toUpperCase()).maybeSingle();
+    if (error) throwDb(error, "Unable to resolve source request.");
+    if (!data) {
+      throw new FmWorkValidationError(
+        `Request ${target} not found in this organisation.`
+      );
+    }
+    return String((data as { id: string }).id);
   }
 
   async resolveFacilityId(facilityIdOrCode: string): Promise<string> {
@@ -260,6 +312,10 @@ export class FmWorkRepository {
       );
     }
 
+    const sourceRequestId = input.sourceRequestRef
+      ? await this.resolveRequestId(input.sourceRequestRef)
+      : null;
+
     const codes = await this.listCodes();
     const code = generateNextWorkCode(codes);
 
@@ -274,7 +330,7 @@ export class FmWorkRepository {
       priority: input.priority,
       status: input.status,
       asset_ref: input.assetRef ?? null,
-      source_request_ref: input.sourceRequestRef ?? null,
+      source_request_id: sourceRequestId,
       incident_ref: input.incidentRef ?? null,
       assigned_to_profile_id: input.assignedToProfileId ?? null,
       reported_by_profile_id: input.reportedByProfileId ?? null,
@@ -302,7 +358,7 @@ export class FmWorkRepository {
 
     if (error) throwDb(error, "Unable to create work.");
     if (!data) throw new FmWorkUnavailableError("Work create returned no row.");
-    return asRow(data);
+    return (await this.withRequestCodes([asRow(data)]))[0]!;
   }
 
   async update(
@@ -358,7 +414,9 @@ export class FmWorkRepository {
     if (input.facilityId !== undefined) patch.facility_id = facilityId;
     if (input.assetRef !== undefined) patch.asset_ref = input.assetRef ?? null;
     if (input.sourceRequestRef !== undefined) {
-      patch.source_request_ref = input.sourceRequestRef ?? null;
+      patch.source_request_id = input.sourceRequestRef
+        ? await this.resolveRequestId(input.sourceRequestRef)
+        : null;
     }
     if (input.incidentRef !== undefined) {
       patch.incident_ref = input.incidentRef ?? null;
@@ -408,7 +466,10 @@ export class FmWorkRepository {
 
     if (error) throwDb(error, "Unable to update work.");
     if (!data) throw new FmWorkNotFoundError(`Work ${idOrCode} not found.`);
-    return { row: asRow(data), previousStatus: existing.status };
+    return {
+      row: (await this.withRequestCodes([asRow(data)]))[0]!,
+      previousStatus: existing.status,
+    };
   }
 
   async deactivate(

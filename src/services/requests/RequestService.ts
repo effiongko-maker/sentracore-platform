@@ -1,10 +1,5 @@
 import { parseIdList } from "@/lib/operational/idLists";
 import type { PaginatedResult } from "@/types";
-import type { CreateIncidentInput, Incident } from "@/modules/incidents/types";
-import type {
-  CreateMaintenanceInput,
-  Maintenance,
-} from "@/modules/maintenance/types";
 import type {
   CreateRequestInput,
   RequestListParams,
@@ -16,34 +11,19 @@ import type {
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
 import {
-  postToAppsScript,
-  postToAppsScriptData,
-} from "@/services/api/appsScriptProxy";
-import {
   CacheNamespaces,
-  onIncidentMutation,
-  onMaintenanceMutation,
   onRequestMutation,
 } from "@/services/cache/domainCache";
 import {
   sharedRequest,
   stableRequestKey,
 } from "@/services/cache/sharedRequest";
-import { IncidentService } from "@/services/incidents/IncidentService";
-import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 
-export type CreateTreatmentKind = "maintenance" | "incident";
-
-export type CreateTreatmentResult = {
-  kind: CreateTreatmentKind;
-  idempotent: boolean;
-  idempotencyKey: string;
-  request: RequestRecord;
-  maintenance?: Maintenance;
-  incident?: Incident;
-  timings?: Record<string, unknown>;
-  buildMarker?: string;
-};
+/**
+ * Browser Request client: browser → /api/requests → Supabase (fm_requests).
+ * This module must stay free of server modules. Server orchestration
+ * uses `@/modules/requests/server/RequestServerAccess`.
+ */
 
 type RemoteRequest = Record<string, unknown>;
 
@@ -93,6 +73,7 @@ function mapRemoteRequest(raw: RemoteRequest): RequestRecord {
 
   return {
     id: String(pickField(raw, "id", "Request ID") ?? ""),
+    requestUuid: optionalMappedString(raw, "requestUuid"),
     title: String(pickField(raw, "title", "Title") ?? ""),
     description: optionalMappedString(raw, "description", "Description"),
     facilityId: String(pickField(raw, "facilityId", "Facility ID") ?? ""),
@@ -175,23 +156,11 @@ function toPaginatedRequests(
   };
 }
 
-function unwrapCreateEnvelope(raw: unknown): RemoteRequest {
-  const envelope = raw as {
-    data?: unknown;
-    success?: boolean;
-    message?: string;
-  };
-  if (envelope && typeof envelope === "object" && envelope.success === false) {
-    throw new ApiError(
-      envelope.message ?? "Failed to create request",
-      400,
-      envelope
-    );
+function unwrap(response: { data: unknown }): RemoteRequest {
+  const row = response.data;
+  if (!row || typeof row !== "object") {
+    throw new ApiError("Request response was empty", 502, response);
   }
-  const row =
-    envelope && typeof envelope === "object" && "data" in envelope
-      ? envelope.data
-      : raw;
   return row as RemoteRequest;
 }
 
@@ -207,18 +176,6 @@ export const RequestService = {
       facilityId: params.facilityId ?? "all",
     });
     return sharedRequest(key, async () => {
-      if (typeof window === "undefined") {
-        const data = await postToAppsScriptData(
-          {
-            resource: "requests",
-            action: "getAll",
-            payload: params,
-          },
-          { resource: "requests", action: "getAll" },
-          "RequestService.listRequests"
-        );
-        return toPaginatedRequests(data, params);
-      }
       const response = await apiClient.post<unknown>("/requests", {
         resource: "requests",
         action: "getAll",
@@ -229,273 +186,61 @@ export const RequestService = {
   },
 
   async getRequest(id: string): Promise<RequestRecord | null> {
-    if (typeof window === "undefined") {
-      const row = await postToAppsScriptData(
-        {
-          resource: "requests",
-          action: "getById",
-          payload: { id },
-        },
-        { resource: "requests", action: "getById" },
-        "RequestService.getRequest"
-      );
-      if (!row || typeof row !== "object") return null;
-      return mapRemoteRequest(row as RemoteRequest);
+    try {
+      const response = await apiClient.post<unknown>("/requests", {
+        resource: "requests",
+        action: "getById",
+        payload: { id },
+      });
+      if (!response.data || typeof response.data !== "object") return null;
+      return mapRemoteRequest(response.data as RemoteRequest);
+    } catch (error) {
+      // A missing Request is a normal outcome; failures and 403s are not.
+      if (error instanceof ApiError && error.status === 404) return null;
+      throw error;
     }
-    const response = await apiClient.post<unknown>("/requests", {
-      resource: "requests",
-      action: "getById",
-      payload: { id },
-    });
-    if (!response.data || typeof response.data !== "object") return null;
-    return mapRemoteRequest(response.data as RemoteRequest);
   },
 
   async createRequest(input: CreateRequestInput): Promise<RequestRecord> {
-    if (typeof window === "undefined") {
-      const raw = await postToAppsScript(
-        {
-          resource: "requests",
-          action: "create",
-          payload: input,
-        },
-        { resource: "requests", action: "create" },
-        "RequestService.createRequest"
-      );
-      const created = mapRemoteRequest(unwrapCreateEnvelope(raw));
-      onRequestMutation();
-      return created;
-    }
-
     const response = await apiClient.post<unknown>("/requests", {
       resource: "requests",
       action: "create",
       payload: input,
     });
     onRequestMutation();
-    return mapRemoteRequest(response.data as RemoteRequest);
+    return mapRemoteRequest(unwrap(response));
   },
 
   async updateRequest(input: UpdateRequestInput): Promise<RequestRecord> {
-    // Defense in depth: relationship/status treatment writes belong on server actions.
-    // Browser callers may update report metadata only — strip link arrays.
-    const clientSafeInput: UpdateRequestInput =
-      typeof window === "undefined"
-        ? input
-        : {
-            id: input.id,
-            title: input.title,
-            description: input.description,
-            facilityId: input.facilityId,
-            occurredAt: input.occurredAt,
-            locationDetail: input.locationDetail,
-            reporterName: input.reporterName,
-            reporterContact: input.reporterContact,
-            reportedByUserId: input.reportedByUserId,
-            requestType: input.requestType,
-            // Status / relationship mutations must use treatRequest server actions.
-          };
-
-    if (typeof window === "undefined") {
-      const row = await postToAppsScriptData(
-        {
-          resource: "requests",
-          action: "update",
-          payload: clientSafeInput,
-        },
-        { resource: "requests", action: "update" },
-        "RequestService.updateRequest"
-      );
-      const updated = mapRemoteRequest(row as RemoteRequest);
-      onRequestMutation();
-      return updated;
-    }
-
+    // Descriptive fields only. Status and treatment links are server-owned
+    // (request.treatment.* actions) and are never sent from the browser.
     const response = await apiClient.post<unknown>("/requests", {
       resource: "requests",
       action: "update",
-      payload: clientSafeInput,
+      payload: {
+        id: input.id,
+        title: input.title,
+        description: input.description,
+        facilityId: input.facilityId,
+        occurredAt: input.occurredAt,
+        locationDetail: input.locationDetail,
+        reporterName: input.reporterName,
+        reporterContact: input.reporterContact,
+        reportedByUserId: input.reportedByUserId,
+        requestType: input.requestType,
+      },
     });
     onRequestMutation();
-    return mapRemoteRequest(response.data as RemoteRequest);
+    return mapRemoteRequest(unwrap(response));
   },
 
   async deactivateRequest(id: string): Promise<RequestRecord> {
-    if (typeof window === "undefined") {
-      const row = await postToAppsScriptData(
-        {
-          resource: "requests",
-          action: "deactivate",
-          payload: { id },
-        },
-        { resource: "requests", action: "deactivate" },
-        "RequestService.deactivateRequest"
-      );
-      const deactivated = mapRemoteRequest(row as RemoteRequest);
-      onRequestMutation();
-      return deactivated;
-    }
-
     const response = await apiClient.post<unknown>("/requests", {
       resource: "requests",
       action: "deactivate",
       payload: { id },
     });
     onRequestMutation();
-    return mapRemoteRequest(response.data as RemoteRequest);
-  },
-
-  /**
-   * Consolidated Create-from-Request mutation (1 Apps Script invocation).
-   * Server-only — auth/lease/events stay in Next.js orchestration.
-   */
-  async createTreatment(input: {
-    kind: CreateTreatmentKind;
-    requestId: string;
-    childInput: CreateMaintenanceInput | CreateIncidentInput;
-    idempotencyKey: string;
-    actorUserId?: string;
-  }): Promise<CreateTreatmentResult> {
-    if (typeof window !== "undefined") {
-      throw new ApiError(
-        "createTreatment is server-only.",
-        403
-      );
-    }
-
-    const row = await postToAppsScriptData(
-      {
-        resource: "requests",
-        action: "createTreatment",
-        payload: {
-          kind: input.kind,
-          requestId: input.requestId,
-          childInput: input.childInput,
-          idempotencyKey: input.idempotencyKey,
-          actorUserId: input.actorUserId,
-        },
-      },
-      { resource: "requests", action: "createTreatment" },
-      "RequestService.createTreatment"
-    );
-
-    if (!row || typeof row !== "object") {
-      throw new ApiError("createTreatment returned empty data", 500, row);
-    }
-
-    const data = row as Record<string, unknown>;
-    const requestRaw = data.request;
-    if (!requestRaw || typeof requestRaw !== "object") {
-      throw new ApiError("createTreatment missing request", 500, row);
-    }
-
-    const request = mapRemoteRequest(requestRaw as RemoteRequest);
-    const kind = (String(data.kind || input.kind) as CreateTreatmentKind);
-    const result: CreateTreatmentResult = {
-      kind,
-      idempotent: data.idempotent === true,
-      idempotencyKey: String(data.idempotencyKey ?? input.idempotencyKey),
-      request,
-      timings:
-        data.timings && typeof data.timings === "object"
-          ? (data.timings as Record<string, unknown>)
-          : undefined,
-      buildMarker:
-        data.buildMarker != null ? String(data.buildMarker) : undefined,
-    };
-
-    if (kind === "maintenance") {
-      if (!data.maintenance || typeof data.maintenance !== "object") {
-        throw new ApiError("createTreatment missing maintenance", 500, row);
-      }
-      result.maintenance = MaintenanceService.fromAppsScriptRow(
-        data.maintenance
-      );
-      onMaintenanceMutation();
-    } else {
-      if (!data.incident || typeof data.incident !== "object") {
-        throw new ApiError("createTreatment missing incident", 500, row);
-      }
-      result.incident = IncidentService.fromAppsScriptRow(data.incident);
-      onIncidentMutation();
-    }
-
-    onRequestMutation();
-    return result;
-  },
-
-  /**
-   * Consolidated Link-to-Request mutation (1 Apps Script invocation).
-   * Server-only — auth/lease/events stay in Next.js orchestration.
-   * Idempotency is state-based in Apps Script (sourceRequestId + appendUnique).
-   */
-  async linkTreatment(input: {
-    kind: CreateTreatmentKind;
-    requestId: string;
-    childId: string;
-    actorUserId?: string;
-  }): Promise<CreateTreatmentResult> {
-    if (typeof window !== "undefined") {
-      throw new ApiError("linkTreatment is server-only.", 403);
-    }
-
-    const row = await postToAppsScriptData(
-      {
-        resource: "requests",
-        action: "linkTreatment",
-        payload: {
-          kind: input.kind,
-          requestId: input.requestId,
-          childId: input.childId,
-          actorUserId: input.actorUserId,
-        },
-      },
-      { resource: "requests", action: "linkTreatment" },
-      "RequestService.linkTreatment"
-    );
-
-    if (!row || typeof row !== "object") {
-      throw new ApiError("linkTreatment returned empty data", 500, row);
-    }
-
-    const data = row as Record<string, unknown>;
-    const requestRaw = data.request;
-    if (!requestRaw || typeof requestRaw !== "object") {
-      throw new ApiError("linkTreatment missing request", 500, row);
-    }
-
-    const request = mapRemoteRequest(requestRaw as RemoteRequest);
-    const kind = String(data.kind || input.kind) as CreateTreatmentKind;
-    const result: CreateTreatmentResult = {
-      kind,
-      idempotent: data.idempotent === true,
-      idempotencyKey: String(data.idempotencyKey ?? ""),
-      request,
-      timings:
-        data.timings && typeof data.timings === "object"
-          ? (data.timings as Record<string, unknown>)
-          : undefined,
-      buildMarker:
-        data.buildMarker != null ? String(data.buildMarker) : undefined,
-    };
-
-    if (kind === "maintenance") {
-      if (!data.maintenance || typeof data.maintenance !== "object") {
-        throw new ApiError("linkTreatment missing maintenance", 500, row);
-      }
-      result.maintenance = MaintenanceService.fromAppsScriptRow(
-        data.maintenance
-      );
-      onMaintenanceMutation();
-    } else {
-      if (!data.incident || typeof data.incident !== "object") {
-        throw new ApiError("linkTreatment missing incident", 500, row);
-      }
-      result.incident = IncidentService.fromAppsScriptRow(data.incident);
-      onIncidentMutation();
-    }
-
-    onRequestMutation();
-    return result;
+    return mapRemoteRequest(unwrap(response));
   },
 };

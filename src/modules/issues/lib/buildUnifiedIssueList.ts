@@ -27,8 +27,26 @@ export function buildUnifiedIssueList(input: {
   requests: RequestRecord[];
   maintenances: Maintenance[];
   incidents: Incident[];
+  /**
+   * True when `requests` is the complete Request register (not a truncated
+   * page). Only then can an Incident's Request link be judged against the
+   * Supabase Requests: a legacy Sheet Incident whose sourceRequestId names a
+   * frozen-era REQ-* that does not exist here is a standalone root, not a
+   * child of a Request.
+   */
+  requestsComplete?: boolean;
 }): UnifiedIssueListItem[] {
   const items: UnifiedIssueListItem[] = [];
+
+  const linkedIncidentIds = new Set(
+    input.requests.flatMap((request) =>
+      (request.incidentIds ?? []).map((id) => id.toLowerCase())
+    )
+  );
+  const isRequestLinkedIncident = (incident: Incident): boolean =>
+    input.requestsComplete
+      ? linkedIncidentIds.has(incident.id.toLowerCase())
+      : !isStandaloneRoot(incident.sourceRequestId);
 
   for (const request of input.requests) {
     const issue = composeIssueFromRequest({
@@ -79,7 +97,7 @@ export function buildUnifiedIssueList(input: {
   }
 
   for (const incident of input.incidents) {
-    if (!isStandaloneRoot(incident.sourceRequestId)) continue;
+    if (isRequestLinkedIncident(incident)) continue;
     const issue = composeIssueFromIncident({
       incident: {
         id: incident.id,
@@ -96,7 +114,10 @@ export function buildUnifiedIssueList(input: {
         workOrderId: incident.workOrderId,
         workOrderIds: incident.workOrderIds,
         maintenanceIds: incident.maintenanceIds,
-        sourceRequestId: incident.sourceRequestId,
+        // A standalone root has no parent Request (drop any stale legacy ref).
+        sourceRequestId: input.requestsComplete
+          ? undefined
+          : incident.sourceRequestId,
         createdAt: incident.createdAt,
         updatedAt: incident.updatedAt,
         reportedByUserId: incident.reportedByUserId,

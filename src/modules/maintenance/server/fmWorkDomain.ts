@@ -89,7 +89,10 @@ export type FmWorkRow = {
   priority: string;
   status: string;
   asset_ref: string | null;
-  source_request_ref: string | null;
+  /** fm_requests.id — tenant-safe provenance FK. */
+  source_request_id: string | null;
+  /** Display code of the source Request; hydrated by the repository (not a column). */
+  source_request_code: string | null;
   incident_ref: string | null;
   assigned_to_profile_id: string | null;
   reported_by_profile_id: string | null;
@@ -112,7 +115,7 @@ export type FmWorkRow = {
 };
 
 export const FM_WORK_SELECT =
-  "id, organisation_id, code, facility_id, title, description, work_kind, source, priority, status, asset_ref, source_request_ref, incident_ref, assigned_to_profile_id, reported_by_profile_id, hold_reason, requires_work_instruction, operational_event_id, reported_at, due_at, scheduled_start_at, scheduled_end_at, started_at, completed_at, completion_notes, category_id, department, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
+  "id, organisation_id, code, facility_id, title, description, work_kind, source, priority, status, asset_ref, source_request_id, incident_ref, assigned_to_profile_id, reported_by_profile_id, hold_reason, requires_work_instruction, operational_event_id, reported_at, due_at, scheduled_start_at, scheduled_end_at, started_at, completed_at, completion_notes, category_id, department, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -246,7 +249,7 @@ export function mapFmWorkRowToMaintenance(row: FmWorkRow): Maintenance {
     incidentId: row.incident_ref ?? undefined,
     workOrderId: undefined,
     workOrderIds: [],
-    sourceRequestId: row.source_request_ref ?? undefined,
+    sourceRequestId: row.source_request_code ?? undefined,
     priority: row.priority as MaintenancePriority,
     status: row.status as MaintenanceStatus,
     holdReason: row.hold_reason ?? undefined,

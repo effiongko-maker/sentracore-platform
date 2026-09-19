@@ -128,6 +128,7 @@ export async function transitionIncident(options: {
       await evaluateRequestAfterTreatmentCompletion({
         sourceRequestId: entity.sourceRequestId,
         context: options.context,
+        viaIncidentId: entity.id,
       });
     } catch (evalError) {
       console.error(

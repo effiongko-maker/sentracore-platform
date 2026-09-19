@@ -1,17 +1,26 @@
 import { NextResponse } from "next/server";
 import { gateApiCapability } from "@/lib/access/gateApi";
 import { capabilityForRequestsProxyAction } from "@/lib/access/operationalApiGate";
+import { isActionError } from "@/lib/actions/errors";
 import {
-  postToAppsScript,
-  type AppsScriptProxyBody,
-} from "@/services/api/appsScriptProxy";
+  FmRequestNotFoundError,
+  FmRequestUnavailableError,
+  FmRequestValidationError,
+} from "@/modules/requests/server/fmRequestDomain";
+import {
+  FmRequestServerService,
+  resolveFmRequestOrganisation,
+} from "@/modules/requests/server/FmRequestServerService";
+import type { AppsScriptProxyBody } from "@/services/api/appsScriptProxy";
 
 /**
- * Server-only proxy: browser → /api/requests → Apps Script.
+ * Request persistence is Supabase (fm_requests).
+ * Compatibility route: /api/requests. No Apps Script call. No dual-write.
+ * Sheet Requests are frozen legacy.
  *
  * Reads: requests.view. Creates: ops.create. Updates: ops.edit.
- * Treatment mutations (status / relationship arrays) must use
- * request.treatment.* server actions — blocked here for client proxies.
+ * Status transitions and treatment links are NOT writable here — they belong
+ * to request.treatment.* server actions.
  */
 
 const BLOCKED_UPDATE_KEYS = [
@@ -25,10 +34,40 @@ const BLOCKED_UPDATE_KEYS = [
   "Status",
 ] as const;
 
+const SERVED_ACTIONS = new Set([
+  "getAll",
+  "getById",
+  "create",
+  "update",
+  "deactivate",
+]);
+
+function fail(
+  status: number,
+  message: string,
+  extra?: { errorClass?: string }
+) {
+  return NextResponse.json(
+    {
+      success: false,
+      message,
+      data: null,
+      ...(extra?.errorClass ? { meta: { errorClass: extra.errorClass } } : {}),
+    },
+    { status, headers: { "Cache-Control": "no-store" } }
+  );
+}
+
+function ok(data: unknown) {
+  return NextResponse.json(
+    { success: true, message: "", data },
+    { status: 200, headers: { "Cache-Control": "no-store" } }
+  );
+}
+
 export async function POST(request: Request) {
   try {
     let body: AppsScriptProxyBody = {};
-
     try {
       body = (await request.json()) as AppsScriptProxyBody;
     } catch {
@@ -40,86 +79,87 @@ export async function POST(request: Request) {
     const gate = await gateApiCapability(capability);
     if (!gate.ok) return gate.response;
 
-    if (action === "update" || action === "create" || action === "deactivate") {
-      const payload =
-        body.payload && typeof body.payload === "object"
-          ? (body.payload as Record<string, unknown>)
-          : {};
+    // Treatment actions (createTreatment / linkTreatment) were Apps Script
+    // Request writers. They are retired: fail closed, never proxy.
+    if (!SERVED_ACTIONS.has(action)) {
+      return fail(400, `Unknown requests action: ${action}`, {
+        errorClass: "validation",
+      });
+    }
 
-      if (action === "update") {
-        for (const key of BLOCKED_UPDATE_KEYS) {
-          if (key in payload && payload[key] !== undefined) {
-            return NextResponse.json(
-              {
-                success: false,
-                message:
-                  "Request status and treatment links must be updated via server actions.",
-                data: null,
-              },
-              { status: 403 }
-            );
-          }
-        }
-      }
+    const payload =
+      body.payload && typeof body.payload === "object"
+        ? (body.payload as Record<string, unknown>)
+        : {};
 
-      if (action === "deactivate") {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Cancel Request via the Request treatment server action.",
-            data: null,
-          },
-          { status: 403 }
-        );
-      }
-
-      if (action === "create") {
-        // Queue create is retired; intake is /occupant-requests.
-        // Allow only if no relationship arrays are being seeded.
-        for (const key of [
-          "maintenanceIds",
-          "incidentIds",
-          "workOrderIds",
-        ] as const) {
-          const value = payload[key];
-          if (Array.isArray(value) && value.length > 0) {
-            return NextResponse.json(
-              {
-                success: false,
-                message:
-                  "Cannot seed treatment links on Request create via API proxy.",
-                data: null,
-              },
-              { status: 403 }
-            );
-          }
+    if (action === "update") {
+      for (const key of BLOCKED_UPDATE_KEYS) {
+        if (key in payload && payload[key] !== undefined) {
+          return fail(
+            403,
+            "Request status and treatment links must be updated via server actions."
+          );
         }
       }
     }
 
-    const data = await postToAppsScript(
-      body,
-      { resource: "requests", action: "getAll" },
-      "api/requests"
+    if (action === "deactivate") {
+      return fail(403, "Cancel Request via the Request treatment server action.");
+    }
+
+    if (action === "create") {
+      // Queue create is retired; intake is /occupant-requests.
+      // Status may not be seeded and treatment links are derived, never written.
+      for (const key of [
+        "maintenanceIds",
+        "incidentIds",
+        "workOrderIds",
+      ] as const) {
+        const value = payload[key];
+        if (Array.isArray(value) && value.length > 0) {
+          return fail(
+            403,
+            "Cannot seed treatment links on Request create via API proxy."
+          );
+        }
+      }
+    }
+
+    const { organisationId, profileId } = resolveFmRequestOrganisation(
+      gate.session
     );
-
-    return NextResponse.json(data, {
-      status: 200,
-      headers: { "Cache-Control": "no-store" },
+    const service = new FmRequestServerService({
+      organisationId,
+      profileId,
+      session: gate.session,
+      access: gate.access,
     });
-  } catch (error) {
-    console.error("[api/requests] proxy error:", error);
 
-    return NextResponse.json(
-      {
-        success: false,
-        message:
-          error instanceof Error
-            ? error.message
-            : "Unable to reach Apps Script.",
-        data: null,
-      },
-      { status: 502 }
+    return ok(await service.dispatch(action, body.payload));
+  } catch (error) {
+    if (error instanceof FmRequestValidationError) {
+      return fail(400, error.message, { errorClass: "validation" });
+    }
+    if (error instanceof FmRequestNotFoundError) {
+      return fail(404, error.message, { errorClass: "validation" });
+    }
+    if (error instanceof FmRequestUnavailableError) {
+      console.error("[api/requests] storage unavailable:", error);
+      return fail(503, error.message);
+    }
+    if (isActionError(error)) {
+      const status =
+        error.code === "UNAUTHENTICATED"
+          ? 401
+          : error.code === "VALIDATION_ERROR"
+            ? 400
+            : 403;
+      return fail(status, error.message);
+    }
+    console.error("[api/requests] error:", error);
+    return fail(
+      502,
+      error instanceof Error ? error.message : "Request storage is unavailable."
     );
   }
 }
