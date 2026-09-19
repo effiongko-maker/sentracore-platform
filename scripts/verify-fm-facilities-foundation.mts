@@ -137,10 +137,10 @@ function runStatic(results: CheckResult[]) {
 
     const master = readSrc(MASTER);
     assert(master.includes("FmLocationServerService"), "1D location service");
-    assert(master.includes('entity === "vendors"'), "vendors stay Apps Script");
-    assert(master.includes("postToAppsScript"), "vendor Apps Script path");
+    assert(master.includes("isVendorPayload") && master.includes("FmVendorServerService"), "vendors served by Supabase (Phase 2J)");
+    assert(!master.includes("postToAppsScript"), "Phase 2J: no Apps Script call in master-data");
     assert(!master.includes("postGatedOperationalProxy"), "master-data is not the all-Apps-Script proxy");
-    push(results, "master-data split (location Supabase, vendors Apps Script)", "PASS");
+    push(results, "master-data is Supabase-only (locations + vendors, Phase 2J)", "PASS");
 
     const occupant = readSrc(OCCUPANT);
     // Phase 2C cut the occupant writer over: the portal facility is the real

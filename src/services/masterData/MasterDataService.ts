@@ -252,7 +252,7 @@ function mapLocationCatalog(payload: unknown): LocationCatalog {
  *
  * Persistence (server split; this client still uses one /api/master-data):
  *   buildings/floors/rooms/departments + getLocationCatalog → Supabase
- *   vendors → Apps Script
+ *   vendors → Supabase (fm_vendors)
  *
  * Relationship cascade (Facility → Building → Floor → Room) is applied on the
  * normalized client model so live aliases (facility/building/floor) still work.

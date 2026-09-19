@@ -224,7 +224,7 @@ export function parseLocationEntity(payload: unknown): LocationMasterDataEntity 
   }
   if (entity === "vendors") {
     throw new FmLocationValidationError(
-      "Vendors remain on the Apps Script master-data path."
+      "Vendors are served by the FM Vendor service, not the location service."
     );
   }
   if (!isLocationMasterDataEntity(entity)) {

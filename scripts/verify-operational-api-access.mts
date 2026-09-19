@@ -295,8 +295,8 @@ function main() {
         "master-data location entities use Supabase server service"
       );
       assert(
-        src.includes("postToAppsScript"),
-        "master-data vendors still call Apps Script"
+        src.includes("FmVendorServerService") && !src.includes("postToAppsScript"),
+        "Phase 2J: master-data vendors are Supabase-backed; no Apps Script call"
       );
       assert(
         src.includes('entity === "vendors"') || src.includes("vendors"),

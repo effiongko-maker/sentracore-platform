@@ -9,7 +9,7 @@ type ValueMode = "id" | "name";
 
 /**
  * Single-select backed by MasterDataService
- * (location entities → Supabase; vendors → Apps Script).
+ * (location entities and vendors → Supabase).
  */
 export function MasterDataSelect({
   entity,

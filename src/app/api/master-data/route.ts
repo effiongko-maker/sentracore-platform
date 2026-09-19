@@ -10,16 +10,19 @@ import {
 } from "@/modules/master-data/server/fmLocationDomain";
 import { FmLocationServerService } from "@/modules/master-data/server/FmLocationServerService";
 import {
-  postToAppsScript,
-  type AppsScriptProxyBody,
-} from "@/services/api/appsScriptProxy";
+  FmVendorNotFoundError,
+  FmVendorUnavailableError,
+  FmVendorValidationError,
+  isVendorPayload,
+} from "@/modules/master-data/server/fmVendorDomain";
+import { FmVendorServerService } from "@/modules/master-data/server/FmVendorServerService";
 
 /**
- * Master-data split (Phase 1D):
- *   Supabase: facilities (via location catalog), buildings, floors, rooms, departments
- *   Apps Script: vendors only
+ * Master data is Supabase-only (Phase 2J):
+ *   locations: facilities (via location catalog), buildings, floors, rooms, departments
+ *   fm_vendors: FM Vendors (bounded FM master data — not Platform Finance counterparties)
  *
- * No dual-write. A failed source is unavailable, not a healthy empty collection.
+ * No Apps Script call. No dual-write. A failed source is unavailable, not a healthy empty collection.
  * Reads: ops.view. Creates: ops.create. Updates/deactivates: ops.edit.
  */
 
@@ -54,9 +57,9 @@ function payloadEntity(payload: unknown): string | undefined {
 
 export async function POST(request: Request) {
   try {
-    let body: AppsScriptProxyBody = {};
+    let body: { action?: unknown; payload?: unknown } = {};
     try {
-      body = (await request.json()) as AppsScriptProxyBody;
+      body = (await request.json()) as { action?: unknown; payload?: unknown };
     } catch {
       body = {};
     }
@@ -85,16 +88,15 @@ export async function POST(request: Request) {
       return ok(data);
     }
 
-    if (entity === "vendors") {
-      const data = await postToAppsScript(
-        body,
-        { resource: "master-data", action },
-        "api/master-data"
+    if (isVendorPayload(body.payload)) {
+      const { organisationId, profileId } = resolveFmFacilitiesOrganisation(
+        gate.session
       );
-      return NextResponse.json(data, {
-        status: 200,
-        headers: { "Cache-Control": "no-store" },
-      });
+      const data = await new FmVendorServerService({
+        organisationId,
+        profileId,
+      }).dispatch(action, body.payload);
+      return ok(data);
     }
 
     if (FmLocationServerService.isLocationEntity(entity)) {
@@ -119,6 +121,16 @@ export async function POST(request: Request) {
       { errorClass: "validation" }
     );
   } catch (error) {
+    if (error instanceof FmVendorValidationError) {
+      return fail(400, error.message, { errorClass: "validation" });
+    }
+    if (error instanceof FmVendorNotFoundError) {
+      return fail(404, error.message, { errorClass: "validation" });
+    }
+    if (error instanceof FmVendorUnavailableError) {
+      console.error("[api/master-data] vendor storage unavailable:", error);
+      return fail(503, error.message);
+    }
     if (error instanceof FmLocationValidationError) {
       return fail(400, error.message, { errorClass: "validation" });
     }

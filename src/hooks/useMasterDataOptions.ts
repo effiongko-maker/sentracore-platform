@@ -17,8 +17,7 @@ export type MasterDataOptionFilters = {
 
 /**
  * Lookup hook for master-data selectors across the app.
- * Location entities (buildings/floors/rooms/departments) are Supabase-backed.
- * Vendors remain Apps Script-backed.
+ * Location entities (buildings/floors/rooms/departments) and Vendors are Supabase-backed.
  *
  * Cascade filters (facility → building → floor) are applied in
  * MasterDataService against the normalized facilityId/buildingId/floorId model.

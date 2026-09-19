@@ -127,8 +127,8 @@ function runStatic(results: CheckResult[]) {
     assert(route.includes("FmLocationServerService"), "location server service");
     assert(route.includes("resolveFmFacilitiesOrganisation"), "reuses facility org resolver");
     assert(route.includes("gateApiCapability"), "capability gate");
-    assert(route.includes('entity === "vendors"'), "vendor split");
-    assert(route.includes("postToAppsScript"), "vendors still Apps Script");
+    assert(route.includes("isVendorPayload") && route.includes("FmVendorServerService"), "vendor branch (Phase 2J: Supabase fm_vendors)");
+    assert(!route.includes("postToAppsScript"), "Phase 2J: master-data makes no Apps Script call");
     assert(!route.includes("postGatedOperationalProxy"), "not the monolithic proxy");
     assert(route.includes("getLocationCatalog"), "catalog on Supabase path");
     assert(route.includes("503"), "location failure is 503");
@@ -190,7 +190,7 @@ function runStatic(results: CheckResult[]) {
       throw new Error("vendors must not parse as a location entity");
     } catch (error) {
       assert(
-        error instanceof Error && /vendors remain/i.test(error.message),
+        error instanceof Error && /vendors are served/i.test(error.message),
         "vendors rejected by location parser"
       );
     }
