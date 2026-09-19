@@ -312,17 +312,19 @@ function main() {
     }
     const evalSrc = readSrc("src/lib/operational/orchestration/evaluateRequestAfterTreatment.ts");
     assert(evalSrc.includes("allLinkedTreatmentsSuccessfullyTerminal"), "auto-resolve rule retained");
-    assert(evalSrc.includes("viaIncidentId"), "Incident trigger must agree with the Supabase link");
+    // Phase 2D: Request↔Incident is one FK (fm_incidents.source_request_id), so
+    // the Phase 2C Sheet-ghost trigger guard no longer has a source condition.
+    assert(!evalSrc.includes("viaIncidentId"), "obsolete ghost-Request trigger guard removed");
   });
 
-  check(results, "Issues: legacy orphan Incident is standalone, linked Incident is not", () => {
+  check(results, "Issues: an Incident with a source Request is not a standalone Issue", () => {
     const req = mapFmRequestRowToRecord(sampleRow(), { maintenanceIds: [], incidentIds: ["INC-LINKED"] });
     const incident = (id: string, sourceRequestId?: string) =>
       ({
         id,
         title: id,
         description: "d",
-        facilityId: "FAC-0001",
+        facilityId: FAC,
         status: "reported",
         type: "other",
         severity: "low",
@@ -333,12 +335,11 @@ function main() {
     const list = buildUnifiedIssueList({
       requests: [req],
       maintenances: [],
-      incidents: [incident("INC-LINKED", "REQ-2026-000001"), incident("INC-GHOST", "REQ-2026-000005")],
-      requestsComplete: true,
+      incidents: [incident("INC-LINKED", "REQ-2026-000001"), incident("INC-STANDALONE")],
     });
     const ids = list.map((item) => item.issue.id);
     assert(ids.some((id) => id.includes("REQ-2026-000001")), "Request-backed Issue present");
-    assert(ids.some((id) => id.includes("INC-GHOST")), "ghost-linked Incident surfaces as standalone");
+    assert(ids.some((id) => id.includes("INC-STANDALONE")), "unlinked Incident is a standalone root");
     assert(!ids.some((id) => id.includes("INC-LINKED")), "linked Incident not duplicated");
   });
 

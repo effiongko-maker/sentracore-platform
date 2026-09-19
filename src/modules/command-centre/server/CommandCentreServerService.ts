@@ -131,9 +131,9 @@ function financeModuleEnabled(session: PlatformSession): boolean {
 }
 
 /**
- * Transitional Sheet WO/INC assignee lookup only.
- * NOT FM authorization. Work (fm_work) uses profile UUID directly.
- * Retained until Work Instructions / Incidents cut over to profile UUID.
+ * Transitional Sheet Work Order assignee lookup only.
+ * NOT FM authorization. Work and Incidents use the profile UUID directly.
+ * Retained until Work Instructions cut over to profile UUID.
  */
 async function loadTransitionalSheetAssigneeId(
   session: PlatformSession
@@ -661,8 +661,21 @@ export class CommandCentreServerService {
         workSource = { state: "unavailable" };
       }
 
-      let workOrdersSource: DomainSource = { state: "unavailable" };
+      // Phase 2D: Incidents are Supabase — profile UUID, no identity-link hop.
       let incidentsSource: DomainSource = { state: "unavailable" };
+      try {
+        const { FmIncidentRepository } = await import(
+          "@/modules/incidents/server/FmIncidentRepository"
+        );
+        const count = await new FmIncidentRepository(
+          access.organisationId
+        ).countActiveForProfile(access.profileId);
+        incidentsSource = { state: "healthy", active: count };
+      } catch {
+        incidentsSource = { state: "unavailable" };
+      }
+
+      let workOrdersSource: DomainSource = { state: "unavailable" };
       const sheetAssigneeId = await loadTransitionalSheetAssigneeId(
         access.session
       );
@@ -670,10 +683,8 @@ export class CommandCentreServerService {
         try {
           const summary = await loadAssignmentSummary(sheetAssigneeId);
           workOrdersSource = summary.workOrders;
-          incidentsSource = summary.incidents;
         } catch {
           workOrdersSource = { state: "unavailable" };
-          incidentsSource = { state: "unavailable" };
         }
       }
 
@@ -728,7 +739,7 @@ export class CommandCentreServerService {
         state: assigned.length === 0 ? "empty" : "healthy",
         message: assigned.length === 0 ? "You have no active assignments." : "",
         detail:
-          "Work uses your profile identity. Work Orders and Incidents still use transitional Sheet assignee mapping when available.",
+          "Work and Incidents use your profile identity. Work Orders still use transitional Sheet assignee mapping when available.",
         items: assigned,
       };
     } catch {

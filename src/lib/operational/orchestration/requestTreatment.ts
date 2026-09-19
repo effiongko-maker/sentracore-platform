@@ -24,7 +24,7 @@ import type {
   Maintenance,
 } from "@/modules/maintenance/types";
 import type { RequestRecord } from "@/modules/requests/types";
-import { IncidentService } from "@/services/incidents/IncidentService";
+import { IncidentServerAccess } from "@/modules/incidents/server/IncidentServerAccess";
 import { MaintenanceServerAccess as MaintenanceService } from "@/modules/maintenance/server/MaintenanceServerAccess";
 import { RequestServerAccess } from "@/modules/requests/server/RequestServerAccess";
 import { isRequestTerminal } from "@/modules/requests/treatment/status";
@@ -377,9 +377,6 @@ export async function orchestrateLinkIncidentToRequest(options: {
     throw new ActionError("VALIDATION_ERROR", "Incident id is required.");
   }
 
-  /** Legacy Sheet calls made by this orchestration (Incident read + mirror). */
-  let legacyCalls = 0;
-
   type Bundle = {
     request: RequestRecord;
     incident: Incident;
@@ -387,17 +384,15 @@ export async function orchestrateLinkIncidentToRequest(options: {
   };
 
   /**
-   * Phase 2C: Incident remains a Sheet domain. The Request↔Incident link is
-   * stored in Supabase (fm_request_incident_links, opaque incident_ref).
-   * Ownership is decided by that table — NOT by the Sheet's sourceRequestId,
-   * which may hold a frozen-era REQ-* code that never existed here.
+   * Phase 2D: Request and Incident are both Supabase. The link is the
+   * Incident row's source_request_id (tenant-safe FK) — one write, no bridge
+   * table, no Sheet mirror. Ownership conflict and facility rules are preserved.
    */
   const invokeLinkTreatment = async (): Promise<Bundle> => {
     const request = await loadRequestOrThrow(options.requestId);
     assertRequestTreatable(request);
 
-    legacyCalls += 1;
-    const incident = await IncidentService.getIncident(incidentId);
+    const incident = await IncidentServerAccess.getIncident(incidentId);
     if (!incident) {
       throw new ActionError("VALIDATION_ERROR", `Incident ${incidentId} not found.`);
     }
@@ -407,44 +402,23 @@ export async function orchestrateLinkIncidentToRequest(options: {
       await RequestServerAccess.facilityCode(request)
     );
 
-    const owner = await RequestServerAccess.findRequestForIncident(incident.id);
-    if (owner && !sameIdentity(owner.id, request.id)) {
+    const owner = incident.sourceRequestId?.trim();
+    if (owner && !sameIdentity(owner, request.id)) {
       throw new ActionError(
         "VALIDATION_ERROR",
-        `${incident.id} is already linked to ${owner.id} and cannot be reassigned.`
+        `${incident.id} is already linked to ${owner} and cannot be reassigned.`
       );
     }
-
-    const { created } = await RequestServerAccess.linkIncident(
-      request.id,
-      incident.id
-    );
-
-    // Incident's own back-reference for legacy Incident consumers.
-    // The Supabase link is authoritative; a failed mirror never fails the link.
-    if (!sameIdentity(incident.sourceRequestId, request.id)) {
-      legacyCalls += 1;
-      try {
-        await IncidentService.updateIncident(incident.id, {
-          sourceRequestId: request.id,
-        });
-      } catch (mirrorError) {
-        console.error("[requestTreatment] incident back-reference mirror failed", {
-          incidentId: incident.id,
-          error:
-            mirrorError instanceof Error
-              ? mirrorError.message
-              : String(mirrorError),
-        });
-      }
+    if (owner) {
+      const advanced = await advanceRequestAfterTreatment(request.id);
+      return { request: advanced, incident, idempotent: true };
     }
 
+    const linked = await IncidentServerAccess.updateIncident(incident.id, {
+      sourceRequestId: request.id,
+    });
     const advanced = await advanceRequestAfterTreatment(request.id);
-    return {
-      request: advanced,
-      incident: { ...incident, sourceRequestId: request.id },
-      idempotent: !created,
-    };
+    return { request: advanced, incident: linked, idempotent: false };
   };
 
   const bundle = await runExclusiveOperationalAction({
@@ -453,9 +427,15 @@ export async function orchestrateLinkIncidentToRequest(options: {
     actorProfileId: options.context.userId,
     entityType: "incident",
     recoverExisting: async () => null,
-    loadByEntityId: async () => {
-      const recovered = await invokeLinkTreatment();
-      return { entityId: recovered.incident.id, value: recovered };
+    loadByEntityId: async (entityId) => {
+      const incident = await IncidentServerAccess.getIncident(entityId);
+      if (!incident) return null;
+      // Repairs an interrupted status transition; never links twice.
+      const request = await advanceRequestAfterTreatment(options.requestId);
+      return {
+        entityId: incident.id,
+        value: { request, incident, idempotent: true },
+      };
     },
     create: async () => {
       const created = await invokeLinkTreatment();
@@ -483,7 +463,7 @@ export async function orchestrateLinkIncidentToRequest(options: {
   return {
     request: bundle.request,
     incident: bundle.incident,
-    _appsScriptCalls: legacyCalls,
+    _appsScriptCalls: 0,
   };
 }
 
@@ -592,7 +572,7 @@ export async function loadRequestTreatmentDetail(
 
   const incidents = (
     await Promise.all(
-      (request.incidentIds ?? []).map((id) => IncidentService.getIncident(id))
+      (request.incidentIds ?? []).map((id) => IncidentServerAccess.getIncident(id))
     )
   ).filter((row): row is Incident => row != null);
 
@@ -683,28 +663,19 @@ export async function searchLinkableIncidents(options: {
   const request = await loadRequestOrThrow(options.requestId);
   const pageSize = Math.min(Math.max(options.pageSize ?? 200, 1), 500);
 
-  // Legacy Sheet Incidents key facilities by display code, not Supabase UUID.
-  const facilityCode = await RequestServerAccess.facilityCode(request);
-  const listed = await IncidentService.listIncidents({
+  const listed = await IncidentServerAccess.listIncidents({
     page: 1,
     pageSize,
-    facilityId: facilityCode ?? request.facilityId,
+    facilityId: request.facilityId,
     status: "all",
   });
 
-  // Ownership is the Supabase link table — not the Sheet's sourceRequestId.
-  const owners = await RequestServerAccess.incidentOwners(
-    listed.data.map((row) => row.id)
-  );
-
   const linkable = listed.data
-    .filter(
-      (row) => row.status !== "cancelled" && row.status !== "closed"
-    )
+    .filter((row) => row.status !== "cancelled" && row.status !== "closed")
     .filter((row) => {
-      const owner = owners.get(row.id.toLowerCase());
-      if (!owner) return true;
-      return sameIdentity(owner, request.id);
+      const src = row.sourceRequestId?.trim();
+      if (!src) return true;
+      return sameIdentity(src, request.id);
     })
     .map((row) => ({
       id: row.id,
@@ -712,12 +683,8 @@ export async function searchLinkableIncidents(options: {
       status: row.status,
       facilityId: row.facilityId,
       date: row.reportedAt || row.createdAt,
-      sourceRequestId: owners.get(row.id.toLowerCase()),
+      sourceRequestId: row.sourceRequestId,
     }));
 
-  return {
-    data: linkable,
-    total: linkable.length,
-    page: 1,
-  };
+  return { data: linkable, total: linkable.length, page: 1 };
 }

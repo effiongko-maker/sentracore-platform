@@ -1,5 +1,6 @@
 import { AssetService } from "@/services/assets/AssetService";
 import { FacilityService } from "@/services/facilities/FacilityService";
+import type { Incident } from "@/modules/incidents/types";
 import { IncidentService } from "@/services/incidents/IncidentService";
 import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 import { EntityResolver } from "@/services/entityResolver";
@@ -10,7 +11,10 @@ import { loadAllPages } from "./loadAllPages";
 import { ageInSeconds, toIsoUtc } from "./normalize";
 import { normalizeReportingEntities } from "./normalizeEntities";
 import { computeReportingProjections } from "./projections";
-import { tryLoadSheetsReportingSnapshot } from "./sheetsSnapshot";
+import {
+  hydrateReportingSnapshot,
+  tryLoadSheetsReportingSnapshot,
+} from "./sheetsSnapshot";
 import { SnapshotService } from "./SnapshotService";
 import type { ReportingQuery, ReportingSnapshot } from "./types";
 
@@ -35,6 +39,44 @@ function snapshotCacheKey(params: ReportingQuery): string {
 }
 
 /**
+ * Incidents are Supabase-authoritative (Phase 2D). A failed or unauthorized
+ * Incident source is reported as UNAVAILABLE — never as zero incidents.
+ */
+async function loadAuthoritativeIncidents(): Promise<{
+  incidents: Incident[];
+  ok: boolean;
+}> {
+  try {
+    const incidents = await loadAllPages((page, pageSize) =>
+      IncidentService.listIncidents({ page, pageSize })
+    );
+    return { incidents, ok: true };
+  } catch {
+    return { incidents: [], ok: false };
+  }
+}
+
+/** Mark a snapshot whose Incident source failed: honest summary, never "healthy". */
+function withIncidentSourceHealth(
+  snapshot: ReportingSnapshot,
+  ok: boolean
+): ReportingSnapshot {
+  if (ok) return snapshot;
+  const meta = snapshot._snapshotMeta;
+  return {
+    ...snapshot,
+    health: {
+      ...snapshot.health,
+      band: snapshot.health.band === "critical" ? "critical" : "watch",
+      summary: `Incident data is unavailable; figures exclude Incidents. ${snapshot.health.summary}`.trim(),
+    },
+    _snapshotMeta: meta
+      ? { ...meta, unavailableSources: ["incidents"] }
+      : meta,
+  };
+}
+
+/**
  * Domain fan-out fallback when REPORTING_SNAPSHOT is missing/empty/corrupt.
  * KPIs are always computed via computeReportingKpis (authoritative).
  */
@@ -48,7 +90,7 @@ async function buildReportingSnapshotFromDomain(
     users,
     facilities,
     assets,
-    incidents,
+    incidentSource,
     maintenance,
     workOrders,
     currentUser,
@@ -62,9 +104,7 @@ async function buildReportingSnapshotFromDomain(
     loadAllPages((page, pageSize) =>
       AssetService.listAssetsCatalog({ page, pageSize })
     ),
-    loadAllPages((page, pageSize) =>
-      IncidentService.listIncidents({ page, pageSize })
-    ).catch(() => []),
+    loadAuthoritativeIncidents(),
     loadAllPages((page, pageSize) =>
       MaintenanceService.listMaintenance({ page, pageSize })
     ).catch(() => []),
@@ -78,7 +118,7 @@ async function buildReportingSnapshotFromDomain(
     ? facilities.filter((facility) => facility.id === facilityId)
     : facilities;
   const scopedAssets = filterByFacilityId(assets, facilityId);
-  const scopedIncidents = filterByFacilityId(incidents, facilityId);
+  const scopedIncidents = filterByFacilityId(incidentSource.incidents, facilityId);
   const scopedMaintenance = filterByFacilityId(maintenance, facilityId);
   const scopedWorkOrders = filterByFacilityId(workOrders, facilityId);
 
@@ -148,7 +188,7 @@ async function buildReportingSnapshotFromDomain(
   const health = computeReportingHealth(kpis);
   const generatedAt = asOf;
 
-  return {
+  return withIncidentSourceHealth({
     ...normalized,
     asOf,
     kpis,
@@ -161,7 +201,7 @@ async function buildReportingSnapshotFromDomain(
       snapshotVersion: generatedAt,
       scope: facilityId || "__portfolio__",
     },
-  };
+  }, incidentSource.ok);
 }
 
 async function buildReportingSnapshot(
@@ -169,7 +209,20 @@ async function buildReportingSnapshot(
 ): Promise<ReportingSnapshot> {
   try {
     const fromSheets = await tryLoadSheetsReportingSnapshot(params);
-    if (fromSheets) return fromSheets;
+    if (fromSheets) {
+      // The Sheets REPORTING_SNAPSHOT still carries Sheet Incidents. Replace
+      // that domain with the authoritative Supabase Incidents and re-derive.
+      const authoritative = await loadAuthoritativeIncidents();
+      const scoped = filterByFacilityId(
+        authoritative.incidents,
+        params.facilityId
+      );
+      const rehydrated = hydrateReportingSnapshot({
+        ...fromSheets,
+        incidents: scoped,
+      });
+      return withIncidentSourceHealth(rehydrated, authoritative.ok);
+    }
   } catch (error) {
     console.warn(
       "[reporting] sheet snapshot path failed — using domain fallback",

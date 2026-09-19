@@ -18,7 +18,6 @@ import {
   transitionWorkOrder,
 } from "@/lib/operational/lifecycle";
 import {
-  linkMaintenanceToIncident,
   linkWorkOrderToIncident,
   normalizeIncidentRelationships,
 } from "@/lib/operational/relationships";
@@ -28,7 +27,7 @@ import {
   mapIntakeToMaintenanceSource,
 } from "@/lib/operational/intake";
 import { assertNewIncidentCreateAllowed } from "@/lib/operational/work/incidentWriteFreeze";
-import { IncidentService } from "@/services/incidents/IncidentService";
+import { IncidentServerAccess } from "@/modules/incidents/server/IncidentServerAccess";
 import { MaintenanceServerAccess as MaintenanceService } from "@/modules/maintenance/server/MaintenanceServerAccess";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
 import type {
@@ -61,7 +60,7 @@ async function persistOperationalEventId(
 ): Promise<void> {
   try {
     if (entity === "incident") {
-      await IncidentService.updateIncident(id, { operationalEventId: eventId });
+      await IncidentServerAccess.updateIncident(id, { operationalEventId: eventId });
     } else if (entity === "maintenance") {
       await MaintenanceService.updateMaintenance(id, {
         operationalEventId: eventId,
@@ -136,7 +135,7 @@ export async function orchestrateReportIncident(options: {
       options.input.source ?? mapIntakeToIncidentSource(options.intake),
   };
 
-  const incident = await IncidentService.createIncident(writeInput);
+  const incident = await IncidentServerAccess.createIncident(writeInput);
   const mode = options.sideEffectMode ?? "await";
 
   await runOperationalSideEffects({
@@ -146,7 +145,7 @@ export async function orchestrateReportIncident(options: {
       const event = await emitActionEvent(options.context, {
         eventType: OperationalEventTypes.FACILITY_INCIDENT_REPORTED,
         entityType: "incident",
-        entityId: incident.id,
+        entityId: incident.incidentUuid ?? incident.id,
         data: withIntakeMetadata(
           incidentEventData(incident, {
             actor: options.context.userId,
@@ -231,13 +230,13 @@ export async function orchestrateCreateWorkOrder(options: {
   let linkedMaintenance: Maintenance | undefined;
 
   if (options.input.incidentId) {
-    const incident = await IncidentService.getIncident(options.input.incidentId);
+    const incident = await IncidentServerAccess.getIncident(options.input.incidentId);
     if (incident) {
       const rel = linkWorkOrderToIncident(
         normalizeIncidentRelationships(incident),
         workOrder.id
       );
-      await IncidentService.updateIncident(incident.id, {
+      await IncidentServerAccess.updateIncident(incident.id, {
         workOrderIds: rel.workOrderIds,
         workOrderId: rel.workOrderId,
         requiresWorkOrder: true,
@@ -481,7 +480,7 @@ export async function orchestrateTriageIncident(options: {
   input: TriageIncidentInput;
   context: ActionContext;
 }): Promise<TriageIncidentResult> {
-  const incident = await IncidentService.getIncident(options.input.incidentId);
+  const incident = await IncidentServerAccess.getIncident(options.input.incidentId);
   if (!incident) {
     throw new Error("Incident not found");
   }
@@ -521,7 +520,7 @@ export async function orchestrateTriageIncident(options: {
       await emitActionEvent(options.context, {
         eventType: OperationalEventTypes.FACILITY_INCIDENT_TRIAGED,
         entityType: "incident",
-        entityId: incident.id,
+        entityId: incident.incidentUuid ?? incident.id,
         data: incidentEventData(current, {
           triageResponse: options.input.response,
           previousStatus,
@@ -553,7 +552,7 @@ export async function orchestrateTriageIncident(options: {
       actorProfileId: options.context.profile.id,
       entityType: "maintenance",
       recoverExisting: async () => {
-        const fresh = await IncidentService.getIncident(current.id);
+        const fresh = await IncidentServerAccess.getIncident(current.id);
         if (!fresh) return null;
         current = fresh;
         const existingId = fresh.maintenanceIds?.[0];
@@ -575,15 +574,10 @@ export async function orchestrateTriageIncident(options: {
             `Maintenance: ${current.title}`.slice(0, 200),
           context: options.context,
         });
-        const fresh = await IncidentService.getIncident(current.id);
+        // Phase 2D: Work carries fm_work.incident_id (FK); Incident
+        // maintenanceIds are derived — never written. Re-read to reflect them.
+        const fresh = await IncidentServerAccess.getIncident(current.id);
         if (fresh) current = fresh;
-        const rel = linkMaintenanceToIncident(
-          normalizeIncidentRelationships(current),
-          created.id
-        );
-        current = await IncidentService.updateIncident(current.id, {
-          maintenanceIds: rel.maintenanceIds,
-        });
         return { entityId: created.id, value: created };
       },
     });
@@ -596,7 +590,7 @@ export async function orchestrateTriageIncident(options: {
       actorProfileId: options.context.profile.id,
       entityType: "work_order",
       recoverExisting: async () => {
-        const fresh = await IncidentService.getIncident(current.id);
+        const fresh = await IncidentServerAccess.getIncident(current.id);
         if (!fresh) return null;
         current = fresh;
         const existingId = fresh.workOrderIds?.[0] ?? fresh.workOrderId;
@@ -637,13 +631,13 @@ export async function orchestrateTriageIncident(options: {
           maintenanceSnapshot: maintenance ?? undefined,
           sideEffectMode: "after",
         });
-        const fresh = await IncidentService.getIncident(current.id);
+        const fresh = await IncidentServerAccess.getIncident(current.id);
         if (fresh) current = fresh;
         const rel = linkWorkOrderToIncident(
           normalizeIncidentRelationships(current),
           created.workOrder.id
         );
-        current = await IncidentService.updateIncident(current.id, {
+        current = await IncidentServerAccess.updateIncident(current.id, {
           workOrderIds: rel.workOrderIds,
           workOrderId: rel.workOrderId,
           requiresWorkOrder: true,
@@ -801,7 +795,7 @@ export async function orchestrateResolveIncident(options: {
   context: ActionContext;
   resolutionNotes?: string;
 }): Promise<Incident> {
-  const incident = await IncidentService.getIncident(options.incidentId);
+  const incident = await IncidentServerAccess.getIncident(options.incidentId);
   if (!incident) {
     throw new Error("Incident not found");
   }
@@ -831,7 +825,7 @@ export async function orchestrateResolveIncident(options: {
     await emitActionEvent(options.context, {
       eventType: OperationalEventTypes.FACILITY_INCIDENT_RESOLVED,
       entityType: "incident",
-      entityId: resolved.id,
+      entityId: resolved.incidentUuid ?? resolved.id,
       data: incidentEventData(resolved, {
         previousStatus,
         nextStatus: resolved.status,

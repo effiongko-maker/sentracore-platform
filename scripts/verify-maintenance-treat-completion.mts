@@ -14,6 +14,19 @@ import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 import { RequestService } from "@/services/requests/RequestService";
 import { postToAppsScriptData } from "@/services/api/appsScriptProxy";
 
+
+/**
+ * RETIRED (Phase 2D). This verifier drives the Apps Script `requests`
+ * createTreatment/linkTreatment handlers and Sheet Maintenance/Incident rows.
+ * Requests (Phase 2C), Work (Phase 2B) and Incidents (Phase 2D) are Supabase-
+ * authoritative, so it can neither validate nor safely exercise the live
+ * architecture — and running it would write Sheet test rows. Current coverage:
+ * verify-fm-requests-foundation / verify-fm-work-foundation /
+ * verify-fm-incidents-foundation and the rollback-only SQL probes.
+ */
+console.error("RETIRED: Maintenance treatment verifier targets the retired Apps Script paths. See header.");
+process.exit(2);
+
 function loadEnvLocal() {
   const path = resolve(process.cwd(), ".env.local");
   for (const line of readFileSync(path, "utf8").split("\n")) {

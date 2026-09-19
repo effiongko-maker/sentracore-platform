@@ -77,9 +77,7 @@ async function main() {
   );
   const links = await requests.linksFor(["00000000-0000-4000-8000-000000000001"]);
   assert(links.get("00000000-0000-4000-8000-000000000001")?.maintenanceIds.length === 0, "links shape");
-  assert((await requests.incidentOwners(["INC-NOPE"])).size === 0, "incident owners shape");
   assert((await requests.facilityCodeById("e1a5f579-8bb1-42fb-9fdf-56faaaa1e9e0")) === "FAC-0001", "facility code");
-  assert((await requests.requestIdForIncident("INC-NOPE")) === null, "no owner");
 
   const work = new FmWorkRepository(orgId, admin);
   const rows = await work.listRows();

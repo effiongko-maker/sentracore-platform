@@ -334,6 +334,14 @@ function main() {
       assert(!src.includes("postGatedOperationalProxy"), "maintenance no longer uses Apps Script proxy");
       continue;
     }
+    if (resource === "incidents") {
+      assert(src.includes("gateApiCapability"), "incidents route uses gateApiCapability");
+      assert(src.includes("capabilityForOperationalProxyAction"), "incidents maps action → capability");
+      assert(src.includes("FmIncidentServerService"), "incidents uses Supabase Incident service");
+      assert(!src.includes("postGatedOperationalProxy"), "incidents no longer uses Apps Script proxy");
+      assert(!src.includes("postToAppsScript("), "incidents route makes no Apps Script call");
+      continue;
+    }
     assert(
       src.includes("postGatedOperationalProxy"),
       `${resource} route uses gated proxy`

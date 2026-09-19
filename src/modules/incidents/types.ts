@@ -42,7 +42,10 @@ export type IncidentChannel =
 
 /** Canonical Incident domain model — frozen. Do not modify. */
 export interface Incident {
+  /** Display reference (INC-YYYY-######). Org-scoped, immutable. */
   id: string;
+  /** Authoritative Supabase identity (fm_incidents.id). */
+  incidentUuid?: string;
 
   title: string;
   description?: string;

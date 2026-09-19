@@ -8,7 +8,7 @@ import {
   type RelatedOperationalContext,
 } from "@/lib/operational/context/types";
 import { queryOperationalTimeline } from "@/lib/operational/timeline";
-import { IncidentService } from "@/services/incidents/IncidentService";
+import { IncidentServerAccess } from "@/modules/incidents/server/IncidentServerAccess";
 import { MaintenanceServerAccess as MaintenanceService } from "@/modules/maintenance/server/MaintenanceServerAccess";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
 import { createClient } from "@/utils/supabase/server";
@@ -22,7 +22,7 @@ export async function getIncidentOperationalContext(
     throw new ActionError("ORGANISATION_NOT_FOUND");
   }
 
-  const incident = await IncidentService.getIncident(incidentId);
+  const incident = await IncidentServerAccess.getIncident(incidentId);
   if (!incident) return null;
 
   const maintenanceIds = incident.maintenanceIds ?? [];

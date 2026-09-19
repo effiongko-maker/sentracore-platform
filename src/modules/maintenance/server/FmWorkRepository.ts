@@ -67,7 +67,8 @@ function asRow(value: unknown): FmWorkRow {
     source_request_id:
       rec.source_request_id != null ? String(rec.source_request_id) : null,
     source_request_code: null,
-    incident_ref: rec.incident_ref != null ? String(rec.incident_ref) : null,
+    incident_id: rec.incident_id != null ? String(rec.incident_id) : null,
+    incident_code: null,
     assigned_to_profile_id:
       rec.assigned_to_profile_id != null
         ? String(rec.assigned_to_profile_id)
@@ -174,30 +175,45 @@ export class FmWorkRepository {
   }
 
 
-  /** Attach the display code of each row's source Request (single query). */
+  /** Attach display codes of each row's source Request and treated Incident. */
   private async withRequestCodes(rows: FmWorkRow[]): Promise<FmWorkRow[]> {
-    const ids = [
+    const requestIds = [
       ...new Set(
         rows.map((row) => row.source_request_id).filter((id): id is string => !!id)
       ),
     ];
-    if (ids.length === 0) return rows;
-    const { data, error } = await this.admin
-      .from("fm_requests")
-      .select("id, code")
-      .eq("organisation_id", this.organisationId)
-      .in("id", ids);
-    if (error) throwDb(error, "Unable to load source requests.");
-    const codes = new Map(
-      (data ?? []).map((row) => [
-        String((row as { id: string }).id),
-        String((row as { code: string }).code),
-      ])
-    );
+    const incidentIds = [
+      ...new Set(
+        rows.map((row) => row.incident_id).filter((id): id is string => !!id)
+      ),
+    ];
+    if (requestIds.length === 0 && incidentIds.length === 0) return rows;
+
+    const lookup = async (table: "fm_requests" | "fm_incidents", ids: string[]) => {
+      const codes = new Map<string, string>();
+      if (ids.length === 0) return codes;
+      const { data, error } = await this.admin
+        .from(table)
+        .select("id, code")
+        .eq("organisation_id", this.organisationId)
+        .in("id", ids);
+      if (error) throwDb(error, "Unable to load Work provenance.");
+      for (const row of data ?? []) {
+        codes.set(String((row as { id: string }).id), String((row as { code: string }).code));
+      }
+      return codes;
+    };
+    const [requestCodes, incidentCodes] = await Promise.all([
+      lookup("fm_requests", requestIds),
+      lookup("fm_incidents", incidentIds),
+    ]);
     return rows.map((row) => ({
       ...row,
       source_request_code: row.source_request_id
-        ? (codes.get(row.source_request_id) ?? null)
+        ? (requestCodes.get(row.source_request_id) ?? null)
+        : null,
+      incident_code: row.incident_id
+        ? (incidentCodes.get(row.incident_id) ?? null)
         : null,
     }));
   }
@@ -219,6 +235,25 @@ export class FmWorkRepository {
     if (!data) {
       throw new FmWorkValidationError(
         `Request ${target} not found in this organisation.`
+      );
+    }
+    return String((data as { id: string }).id);
+  }
+
+  /** Resolve an Incident reference (INC code or UUID) inside this organisation. */
+  async resolveIncidentId(incidentIdOrCode: string): Promise<string> {
+    const target = incidentIdOrCode.trim();
+    const query = this.admin
+      .from("fm_incidents")
+      .select("id")
+      .eq("organisation_id", this.organisationId);
+    const { data, error } = UUID_RE.test(target)
+      ? await query.eq("id", target).maybeSingle()
+      : await query.eq("code", target.toUpperCase()).maybeSingle();
+    if (error) throwDb(error, "Unable to resolve source incident.");
+    if (!data) {
+      throw new FmWorkValidationError(
+        `Incident ${target} not found in this organisation.`
       );
     }
     return String((data as { id: string }).id);
@@ -316,6 +351,10 @@ export class FmWorkRepository {
       ? await this.resolveRequestId(input.sourceRequestRef)
       : null;
 
+    const incidentId = input.incidentRef
+      ? await this.resolveIncidentId(input.incidentRef)
+      : null;
+
     const codes = await this.listCodes();
     const code = generateNextWorkCode(codes);
 
@@ -331,7 +370,7 @@ export class FmWorkRepository {
       status: input.status,
       asset_ref: input.assetRef ?? null,
       source_request_id: sourceRequestId,
-      incident_ref: input.incidentRef ?? null,
+      incident_id: incidentId,
       assigned_to_profile_id: input.assignedToProfileId ?? null,
       reported_by_profile_id: input.reportedByProfileId ?? null,
       hold_reason: input.holdReason ?? null,
@@ -419,7 +458,9 @@ export class FmWorkRepository {
         : null;
     }
     if (input.incidentRef !== undefined) {
-      patch.incident_ref = input.incidentRef ?? null;
+      patch.incident_id = input.incidentRef
+        ? await this.resolveIncidentId(input.incidentRef)
+        : null;
     }
     if (input.assignedToProfileId !== undefined) {
       patch.assigned_to_profile_id = input.assignedToProfileId ?? null;

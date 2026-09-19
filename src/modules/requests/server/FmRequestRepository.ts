@@ -192,7 +192,7 @@ export class FmRequestRepository {
     }
   }
 
-  /** Derive Work + Incident links for a set of Requests (two queries, no N+1). */
+  /** Derive Work + Incident links (both FKs point at the Request) for a set of Requests (two queries, no N+1). */
   async linksFor(requestIds: string[]): Promise<Map<string, FmRequestLinks>> {
     const result = new Map<string, FmRequestLinks>();
     if (requestIds.length === 0) return result;
@@ -208,11 +208,11 @@ export class FmRequestRepository {
         .in("source_request_id", requestIds)
         .order("code", { ascending: true }),
       this.admin
-        .from("fm_request_incident_links")
-        .select("request_id, incident_ref")
+        .from("fm_incidents")
+        .select("code, source_request_id")
         .eq("organisation_id", this.organisationId)
-        .in("request_id", requestIds)
-        .order("created_at", { ascending: true }),
+        .in("source_request_id", requestIds)
+        .order("code", { ascending: true }),
     ]);
     if (work.error) throwDb(work.error, "Unable to load request Work links.");
     if (incidents.error) {
@@ -224,8 +224,8 @@ export class FmRequestRepository {
       result.get(rec.source_request_id)?.maintenanceIds.push(String(rec.code));
     }
     for (const row of incidents.data ?? []) {
-      const rec = row as { request_id: string; incident_ref: string };
-      result.get(rec.request_id)?.incidentIds.push(String(rec.incident_ref));
+      const rec = row as { code: string; source_request_id: string };
+      result.get(rec.source_request_id)?.incidentIds.push(String(rec.code));
     }
     return result;
   }
@@ -366,57 +366,6 @@ export class FmRequestRepository {
     return asRow(data);
   }
 
-  /** Request that already owns this Incident, if any (transitional link). */
-  async requestIdForIncident(incidentRef: string): Promise<string | null> {
-    const { data, error } = await this.admin
-      .from("fm_request_incident_links")
-      .select("request_id")
-      .eq("organisation_id", this.organisationId)
-      .ilike("incident_ref", incidentRef.trim())
-      .maybeSingle();
-    if (error) throwDb(error, "Unable to load incident link.");
-    return data ? String((data as { request_id: string }).request_id) : null;
-  }
-
-  /**
-   * Idempotent: linking the same Incident to the same Request is a no-op.
-   * An Incident already owned by another Request is a validation error.
-   */
-  async linkIncident(
-    requestId: string,
-    incidentRef: string,
-    actorProfileId: string
-  ): Promise<{ created: boolean }> {
-    const ref = incidentRef.trim();
-    if (!ref) throw new FmRequestValidationError("Incident id is required.");
-
-    const owner = await this.requestIdForIncident(ref);
-    if (owner) {
-      if (owner === requestId) return { created: false };
-      throw new FmRequestValidationError(
-        `Incident ${ref} is already linked to another Request.`
-      );
-    }
-
-    const { error } = await this.admin.from("fm_request_incident_links").insert({
-      organisation_id: this.organisationId,
-      request_id: requestId,
-      incident_ref: ref,
-      linked_by_profile_id: actorProfileId,
-    });
-    if (error) {
-      if (isUniqueViolation(error)) {
-        const raced = await this.requestIdForIncident(ref);
-        if (raced === requestId) return { created: false };
-        throw new FmRequestValidationError(
-          `Incident ${ref} is already linked to another Request.`
-        );
-      }
-      throwDb(error, "Unable to link incident.");
-    }
-    return { created: true };
-  }
-
   /** Display code of a facility (legacy Sheet domains still key on it). */
   async facilityCodeById(facilityId: string): Promise<string | null> {
     const { data, error } = await this.admin
@@ -427,40 +376,5 @@ export class FmRequestRepository {
       .maybeSingle();
     if (error) throwDb(error, "Unable to resolve facility.");
     return data ? String((data as { code: string }).code) : null;
-  }
-
-  /** Incident ref (lower-cased) → owning Request code, for the given refs. */
-  async incidentOwners(refs: string[]): Promise<Map<string, string>> {
-    const owners = new Map<string, string>();
-    const wanted = [...new Set(refs.map((ref) => ref.trim()).filter(Boolean))];
-    if (wanted.length === 0) return owners;
-    const { data: links, error } = await this.admin
-      .from("fm_request_incident_links")
-      .select("incident_ref, request_id")
-      .eq("organisation_id", this.organisationId)
-      .in("incident_ref", wanted);
-    if (error) throwDb(error, "Unable to load incident links.");
-    const requestIds = [
-      ...new Set((links ?? []).map((row) => String((row as { request_id: string }).request_id))),
-    ];
-    if (requestIds.length === 0) return owners;
-    const { data: requests, error: reqError } = await this.admin
-      .from("fm_requests")
-      .select("id, code")
-      .eq("organisation_id", this.organisationId)
-      .in("id", requestIds);
-    if (reqError) throwDb(reqError, "Unable to load incident link owners.");
-    const codeById = new Map(
-      (requests ?? []).map((row) => [
-        String((row as { id: string }).id),
-        String((row as { code: string }).code),
-      ])
-    );
-    for (const row of links ?? []) {
-      const rec = row as { incident_ref: string; request_id: string };
-      const code = codeById.get(rec.request_id);
-      if (code) owners.set(String(rec.incident_ref).toLowerCase(), code);
-    }
-    return owners;
   }
 }

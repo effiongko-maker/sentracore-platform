@@ -75,7 +75,7 @@ export const FM_REQUEST_SELECT =
 export type FmRequestLinks = {
   /** Work codes (WRK-*) whose source_request_id is this Request. */
   maintenanceIds: string[];
-  /** Transitional opaque Incident refs from fm_request_incident_links. */
+  /** Incident codes (INC-*) whose source_request_id is this Request. */
   incidentIds: string[];
 };
 

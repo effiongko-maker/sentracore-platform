@@ -35,33 +35,9 @@ export const RequestServerAccess = {
     return cancelled;
   },
 
-  /** Transitional Incident link (Incident remains a Sheet domain). */
-  async linkIncident(
-    requestIdOrCode: string,
-    incidentRef: string
-  ): Promise<{ request: RequestRecord; created: boolean }> {
-    const service = await getFmRequestServerService();
-    const result = await service.linkIncident(requestIdOrCode, incidentRef);
-    onRequestMutation();
-    return result;
-  },
-
-  /** Owning Request for a legacy Incident id, if linked in Supabase. */
-  async findRequestForIncident(
-    incidentRef: string
-  ): Promise<RequestRecord | null> {
-    const service = await getFmRequestServerService();
-    return service.findByIncidentRef(incidentRef);
-  },
-
   async facilityCode(request: RequestRecord): Promise<string | null> {
     const service = await getFmRequestServerService();
     return service.facilityCode(request);
-  },
-
-  async incidentOwners(refs: string[]): Promise<Map<string, string>> {
-    const service = await getFmRequestServerService();
-    return service.incidentOwners(refs);
   },
 
   isNotFound(error: unknown): boolean {

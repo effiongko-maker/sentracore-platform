@@ -10,7 +10,7 @@ import {
   type LifecycleEntityType,
 } from "@/lib/operational/lifecycle/mapStatusTransition";
 import { evaluateRequestAfterTreatmentCompletion } from "@/lib/operational/orchestration/evaluateRequestAfterTreatment";
-import { IncidentService } from "@/services/incidents/IncidentService";
+import { IncidentServerAccess } from "@/modules/incidents/server/IncidentServerAccess";
 import { MaintenanceServerAccess as MaintenanceService } from "@/modules/maintenance/server/MaintenanceServerAccess";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
 import type {
@@ -84,7 +84,7 @@ export async function transitionIncident(options: {
   context: ActionContext;
   options?: TransitionOptions;
 }): Promise<TransitionOperationalEntityResult<Incident>> {
-  const existing = await IncidentService.getIncident(options.entityId);
+  const existing = await IncidentServerAccess.getIncident(options.entityId);
   if (!existing) {
     throw new Error("Incident not found");
   }
@@ -104,7 +104,7 @@ export async function transitionIncident(options: {
     mapped != null &&
     options.options?.suppressLifecycleEvent !== true;
 
-  const entity = await IncidentService.updateIncident(
+  const entity = await IncidentServerAccess.updateIncident(
     options.entityId,
     options.update
   );
@@ -114,7 +114,7 @@ export async function transitionIncident(options: {
     eventEmitted = await emitLifecycleSafely({
       context: options.context,
       entityType: "incident",
-      entityId: entity.id,
+      entityId: entity.incidentUuid ?? entity.id,
       eventType: mapped,
       data: incidentEventData(
         entity,
@@ -128,7 +128,6 @@ export async function transitionIncident(options: {
       await evaluateRequestAfterTreatmentCompletion({
         sourceRequestId: entity.sourceRequestId,
         context: options.context,
-        viaIncidentId: entity.id,
       });
     } catch (evalError) {
       console.error(

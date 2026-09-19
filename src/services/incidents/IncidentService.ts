@@ -22,10 +22,6 @@ import {
   sharedRequest,
   stableRequestKey,
 } from "@/services/cache/sharedRequest";
-import {
-  postToAppsScript,
-  postToAppsScriptData,
-} from "@/services/api/appsScriptProxy";
 
 type RemoteIncident = Record<string, unknown>;
 
@@ -161,6 +157,7 @@ function mapRemoteIncident(raw: RemoteIncident): Incident {
     id: String(
       pickField(raw, "id", "Incident ID", "Event ID", "Event Id") ?? ""
     ),
+    incidentUuid: optionalMappedString(raw, "incidentUuid"),
     title,
     description: optionalMappedString(raw, "description", "Description"),
     type: type || "other",
@@ -321,15 +318,11 @@ function toPaginatedIncidents(
 }
 
 /**
- * Incidents domain service.
- * Talks only to ApiClient. Mirrors WorkOrderService.
+ * Browser Incident client: browser → /api/incidents → Supabase (fm_incidents).
+ * This module must stay free of server modules. Server orchestration uses
+ * `@/modules/incidents/server/IncidentServerAccess`.
  */
 export const IncidentService = {
-  /** Map an Apps Script incident row (shared by createTreatment). */
-  fromAppsScriptRow(raw: unknown): Incident {
-    return mapRemoteIncident(raw as RemoteIncident);
-  },
-
   async listIncidents(
     params: IncidentListParams = {},
     options?: { signal?: AbortSignal }
@@ -345,25 +338,9 @@ export const IncidentService = {
       requiresWorkOrder: params.requiresWorkOrder ?? "all",
     });
     return sharedRequest(key, async () => {
-      if (typeof window === "undefined") {
-        const data = await postToAppsScriptData(
-          {
-            resource: "incidents",
-            action: "getAll",
-            payload: params,
-          },
-          { resource: "incidents", action: "getAll" },
-          "IncidentService.listIncidents"
-        );
-        return toPaginatedIncidents(data, params);
-      }
       const response = await apiClient.post<unknown>(
         "/incidents",
-        {
-          resource: "incidents",
-          action: "getAll",
-          payload: params,
-        },
+        { resource: "incidents", action: "getAll", payload: params },
         { signal: options?.signal }
       );
       return toPaginatedIncidents(response.data, params);
@@ -372,19 +349,6 @@ export const IncidentService = {
 
   async getIncident(id: string): Promise<Incident | null> {
     try {
-      if (typeof window === "undefined") {
-        const row = await postToAppsScriptData(
-          {
-            resource: "incidents",
-            action: "getById",
-            payload: { id },
-          },
-          { resource: "incidents", action: "getById" },
-          "IncidentService.getIncident"
-        );
-        return mapRemoteIncident(row as RemoteIncident);
-      }
-
       const response = await apiClient.post<Incident>("/incidents", {
         resource: "incidents",
         action: "getById",
@@ -392,93 +356,31 @@ export const IncidentService = {
       });
       return mapRemoteIncident(response.data as unknown as RemoteIncident);
     } catch (error) {
+      // A missing Incident is a normal outcome; failures and 403s are not.
       if (error instanceof ApiError && error.status === 404) return null;
-      if (
-        error instanceof Error &&
-        (error as Error & { status?: number }).status === 404
-      ) {
-        return null;
-      }
       throw error;
     }
   },
 
+  /** Creation is frozen (Phase 18): the server rejects it. Kept for contract stability. */
   async createIncident(input: CreateIncidentInput): Promise<Incident> {
-    const payload = applyWorkOrderRule(input);
-
-    // Server Actions / Action Engine: write directly via Apps Script (same path as API route).
-    // Browser: keep using /api/incidents proxy.
-    if (typeof window === "undefined") {
-      const raw = await postToAppsScript(
-        {
-          resource: "incidents",
-          action: "create",
-          payload,
-        },
-        { resource: "incidents", action: "create" },
-        "IncidentService.createIncident"
-      );
-
-      const envelope = raw as { data?: unknown; success?: boolean; message?: string };
-      if (envelope && typeof envelope === "object" && envelope.success === false) {
-        throw new ApiError(
-          envelope.message ?? "Failed to create incident",
-          400,
-          envelope
-        );
-      }
-
-      const row =
-        envelope && typeof envelope === "object" && "data" in envelope
-          ? envelope.data
-          : raw;
-
-      const created = mapRemoteIncident(row as RemoteIncident);
-      onIncidentMutation();
-      return created;
-    }
-
     const response = await apiClient.post<Incident>("/incidents", {
       resource: "incidents",
       action: "create",
-      payload,
+      payload: applyWorkOrderRule(input),
     });
-    const created = mapRemoteIncident(
-      response.data as unknown as RemoteIncident
-    );
+    const created = mapRemoteIncident(response.data as unknown as RemoteIncident);
     onIncidentMutation();
     return created;
   },
 
-  async updateIncident(
-    id: string,
-    input: UpdateIncidentInput
-  ): Promise<Incident> {
-    const payload = applyWorkOrderRule({ ...input, id });
-
-    if (typeof window === "undefined") {
-      const row = await postToAppsScriptData(
-        {
-          resource: "incidents",
-          action: "update",
-          payload,
-        },
-        { resource: "incidents", action: "update" },
-        "IncidentService.updateIncident"
-      );
-      const updated = mapRemoteIncident(row as RemoteIncident);
-      onIncidentMutation();
-      return updated;
-    }
-
+  async updateIncident(id: string, input: UpdateIncidentInput): Promise<Incident> {
     const response = await apiClient.post<Incident>("/incidents", {
       resource: "incidents",
       action: "update",
-      payload,
+      payload: applyWorkOrderRule({ ...input, id }),
     });
-    const updated = mapRemoteIncident(
-      response.data as unknown as RemoteIncident
-    );
+    const updated = mapRemoteIncident(response.data as unknown as RemoteIncident);
     onIncidentMutation();
     return updated;
   },
@@ -490,9 +392,7 @@ export const IncidentService = {
       action: "deactivate",
       payload: { id },
     });
-    const deactivated = mapRemoteIncident(
-      response.data as unknown as RemoteIncident
-    );
+    const deactivated = mapRemoteIncident(response.data as unknown as RemoteIncident);
     onIncidentMutation();
     return deactivated;
   },

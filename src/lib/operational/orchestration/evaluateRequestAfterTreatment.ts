@@ -14,7 +14,7 @@ import { emitActionEvent, type ActionContext } from "@/lib/actions";
 import { OperationalEventTypes } from "@/lib/events/taxonomy";
 import { isRequestTerminal } from "@/modules/requests/treatment/status";
 import type { RequestRecord } from "@/modules/requests/types";
-import { IncidentService } from "@/services/incidents/IncidentService";
+import { IncidentServerAccess } from "@/modules/incidents/server/IncidentServerAccess";
 import { MaintenanceServerAccess as MaintenanceService } from "@/modules/maintenance/server/MaintenanceServerAccess";
 import { RequestServerAccess } from "@/modules/requests/server/RequestServerAccess";
 
@@ -106,12 +106,6 @@ export function allLinkedTreatmentsSuccessfullyTerminal(input: {
 export async function evaluateRequestAfterTreatmentCompletion(options: {
   sourceRequestId: string | null | undefined;
   context: ActionContext;
-  /**
-   * Legacy Incident that triggered this evaluation. A Sheet Incident's
-   * sourceRequestId can hold a frozen-era REQ-* string, so the trigger only
-   * counts when the Supabase link table agrees.
-   */
-  viaIncidentId?: string;
 }): Promise<EvaluateRequestAfterTreatmentResult> {
   const sourceRequestId = options.sourceRequestId?.trim();
   if (!sourceRequestId) {
@@ -122,15 +116,6 @@ export async function evaluateRequestAfterTreatmentCompletion(options: {
     const request = await RequestServerAccess.getRequest(sourceRequestId);
     if (!request) {
       return { outcome: "request_not_found", request: null };
-    }
-
-    if (
-      options.viaIncidentId &&
-      !(request.incidentIds ?? []).some(
-        (id) => id.toLowerCase() === options.viaIncidentId!.toLowerCase()
-      )
-    ) {
-      return { outcome: "skipped_no_source", request };
     }
 
     if (isRequestTerminal(request.status)) {
@@ -148,7 +133,7 @@ export async function evaluateRequestAfterTreatmentCompletion(options: {
       maintenanceIds.map((id) => MaintenanceService.getMaintenance(id))
     );
     const incidents = await Promise.all(
-      incidentIds.map((id) => IncidentService.getIncident(id))
+      incidentIds.map((id) => IncidentServerAccess.getIncident(id))
     );
 
     const eligible = allLinkedTreatmentsSuccessfullyTerminal({

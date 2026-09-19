@@ -130,34 +130,9 @@ export class FmRequestServerService {
     return (await this.transitionStatus(id, "cancelled")).request;
   }
 
-  /** Transitional Request↔Incident link (Incident is still a Sheet domain). */
-  async linkIncident(
-    requestIdOrCode: string,
-    incidentRef: string
-  ): Promise<{ request: RequestRecord; created: boolean }> {
-    const actor = this.requireActor();
-    const row = await this.repo().getByIdOrCode(requestIdOrCode);
-    if (!row) {
-      throw new FmRequestNotFoundError(`Request ${requestIdOrCode} not found.`);
-    }
-    const { created } = await this.repo().linkIncident(row.id, incidentRef, actor);
-    return { request: (await this.hydrate([row]))[0]!, created };
-  }
-
-  /** Request that owns an Incident link, or null. */
-  async findByIncidentRef(incidentRef: string): Promise<RequestRecord | null> {
-    const requestId = await this.repo().requestIdForIncident(incidentRef);
-    return requestId ? this.findById(requestId) : null;
-  }
-
   /** Facility display code for a Request — legacy domains still key on it. */
   async facilityCode(request: RequestRecord): Promise<string | null> {
     return this.repo().facilityCodeById(request.facilityId);
-  }
-
-  /** Incident ref (lower-cased) → owning Request code. */
-  async incidentOwners(refs: string[]): Promise<Map<string, string>> {
-    return this.repo().incidentOwners(refs);
   }
 
   async dispatch(action: string, payload: unknown): Promise<unknown> {
