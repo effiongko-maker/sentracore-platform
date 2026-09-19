@@ -124,23 +124,6 @@ const EVIDENCE_MIME_TYPES = new Set([
   "image/png",
 ]);
 
-async function toEvidenceUpload(file: File) {
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("The evidence file could not be read."));
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.readAsDataURL(file);
-  });
-  const base64 = dataUrl.split(",", 2)[1];
-  if (!base64) throw new Error("The evidence file could not be encoded.");
-  return {
-    fileName: file.name,
-    mimeType: file.type as "application/pdf" | "image/jpeg" | "image/png",
-    sizeBytes: file.size,
-    base64,
-  };
-}
-
 export function CostRecordFormModal({
   open,
   onClose,
@@ -340,8 +323,8 @@ export function CostRecordFormModal({
     if (form.budgetedAmount.trim() && (budgeted == null || budgeted < 0)) {
       next.budgetedAmount = "Budgeted amount must be zero or greater";
     }
-    if (!form.evidenceFile && !form.evidenceReference.trim()) {
-      next.evidenceReference = "Upload a receipt or invoice, or enter its reference";
+    if (!form.evidenceReference.trim()) {
+      next.evidenceReference = "Enter the receipt or invoice reference";
     }
     if (form.evidenceFile) {
       if (!EVIDENCE_MIME_TYPES.has(form.evidenceFile.type)) {
@@ -398,9 +381,8 @@ export function CostRecordFormModal({
 
     setSaving(true);
     try {
-      if (form.evidenceFile) {
-        payload.evidence.upload = await toEvidenceUpload(form.evidenceFile);
-      }
+      // Receipt file upload is unavailable until evidence storage moves to
+      // SentraCore™ — the receipt / invoice reference is the evidence.
       const created = await CostRecordService.createCostRecord(payload);
       setCreatedRecord(created);
       setPhase("success");
@@ -576,7 +558,7 @@ export function CostRecordFormModal({
             label="Receipt or invoice"
             htmlFor="cost-evidence"
             required
-            hint="Upload a PDF, JPEG, or PNG (up to 5 MB), or enter a reference."
+            hint="Receipt file upload is unavailable until evidence storage moves to SentraCore™. Enter the receipt or invoice reference."
             error={errors.evidenceReference}
             className="sm:col-span-2"
           >
@@ -587,7 +569,7 @@ export function CostRecordFormModal({
                 type="file"
                 accept="application/pdf,image/jpeg,image/png"
                 className={inputClassName}
-                disabled={saving}
+                disabled
                 onChange={(event) =>
                   updateField("evidenceFile", event.target.files?.[0] ?? null)
                 }
@@ -603,7 +585,7 @@ export function CostRecordFormModal({
                 className={`${inputClassName} mt-2`}
                 value={form.evidenceReference}
                 disabled={saving}
-                placeholder="Or enter the invoice / receipt reference"
+                placeholder="Invoice / receipt reference"
                 onChange={(event) =>
                   updateField("evidenceReference", event.target.value)
                 }

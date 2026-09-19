@@ -11,7 +11,6 @@ import {
 import type { ReimbursementPayment } from "@/lib/operational/finance/types";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
-import { postToAppsScriptData } from "@/services/api/appsScriptProxy";
 import { mergeProtectedProof } from "@/lib/access/protectedMutationProof";
 import type { ProtectedMutationProof } from "@/lib/access/protectedMutationProof";
 import {
@@ -111,15 +110,9 @@ async function postPayments<T>(
   options?: { signal?: AbortSignal }
 ): Promise<T> {
   if (typeof window === "undefined") {
-    return postToAppsScriptData(
-      {
-        resource: "reimbursement-payments",
-        action,
-        payload,
-      },
-      { resource: "reimbursement-payments", action },
-      "ReimbursementPaymentService"
-    ) as Promise<T>;
+    // FM Costs live in Supabase behind the API route — server code must use
+    // getFmCostServerService (@/modules/finance/server), never a browser client.
+    throw new Error("Cost services are browser clients; server code must use getFmCostServerService.");
   }
 
   const response = await apiClient.post<T>(

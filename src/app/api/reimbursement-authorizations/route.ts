@@ -1,18 +1,13 @@
-import { postFinanceProxyWithProtection } from "@/lib/access/postFinanceProxyWithProtection";
+import { handleFmCostRoute } from "@/modules/finance/server/fmCostRoute";
 
 /**
- * Writes require finance.authorize.
- * Updates (revise) require finance.authorization.revise.
+ * FM Reimbursement Authorizations persistence is Supabase. Compatibility route: /api/reimbursement-authorizations.
+ * No Apps Script call. Reads: finance.view. Writes: finance.authorize.
  */
-
 export async function POST(request: Request) {
-  return postFinanceProxyWithProtection({
+  return handleFmCostRoute({
     request,
     resource: "reimbursement-authorizations",
-    logPrefix: "api/reimbursement-authorizations",
     writeCapability: "finance.authorize",
-    requireProtectedForActions: {
-      update: "finance.authorization.revise",
-    },
   });
 }

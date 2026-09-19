@@ -246,6 +246,14 @@ function staticChecks() {
 }
 
 async function liveChecks(): Promise<"passed" | "skipped"> {
+  // Phase 2G: FM Costs are Supabase-authoritative (/api/cost-* via getFmCostServerService).
+  // The Apps Script round-trip would exercise the frozen legacy Sheet, so it is retired.
+  // Live DB integrity: scripts/verify-fm-phase-2g-rollback.sql + verify-fm-costs-live-read.mts.
+  const legacyRoundTripRetired: boolean = true;
+  if (legacyRoundTripRetired) {
+    console.log("\nSKIP live GAS round-trip — superseded by Supabase FM Costs (Phase 2G)");
+    return "skipped";
+  }
   const url =
     process.env.APPS_SCRIPT_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "";
   if (!url.trim()) {

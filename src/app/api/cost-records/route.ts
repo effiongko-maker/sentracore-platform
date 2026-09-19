@@ -1,16 +1,13 @@
-import { postFinanceProxyWithProtection } from "@/lib/access/postFinanceProxyWithProtection";
+import { handleFmCostRoute } from "@/modules/finance/server/fmCostRoute";
 
 /**
- * Server-only proxy: browser → /api/cost-records → Apps Script.
- * Writes require finance.create.
- * Locked-cost unlock requires finance.cost.unlock_edit (+ FM step-up / SA override).
+ * FM Cost Records (operational, not Platform Finance) persistence is Supabase. Compatibility route: /api/cost-records.
+ * No Apps Script call. Reads: finance.view. Writes: finance.create.
  */
-
 export async function POST(request: Request) {
-  return postFinanceProxyWithProtection({
+  return handleFmCostRoute({
     request,
     resource: "cost-records",
-    logPrefix: "api/cost-records",
     writeCapability: "finance.create",
   });
 }
