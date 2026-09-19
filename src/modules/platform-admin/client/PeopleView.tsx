@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { UserPlus } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ChevronRight, Search, UserPlus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Modal } from "@/components/modals/Modal";
 import { useToast } from "@/components/ui/Toast";
@@ -10,7 +10,8 @@ import type { ProfileStatus } from "@/lib/auth/types";
 import { v1OperatingRoleLabel } from "@/lib/access/roles";
 import type { AdminPersonSummary, InviteAttachResult, OrganisationAdminRecord } from "../types";
 import { AdminApiError, adminCall } from "./adminApi";
-import { ContextStrip, DataBoundary, OrgGate, PageHead, StatusMark, displayName, useAdminData } from "./ui";
+import { ContextStrip, DataBoundary, OrgGate, PageHead, displayName, useAdminData } from "./ui";
+import { Avatar, Panel, Pill, StatusPill } from "./kit";
 
 const STATUS_FILTERS: Array<{ value: "all" | ProfileStatus; label: string }> = [
   { value: "all", label: "All statuses" },
@@ -35,6 +36,7 @@ const LEDE = "Platform identities in this organisation. Identity, access and ope
 
 function PeopleBody({ organisation }: { organisation: OrganisationAdminRecord }) {
   const params = useSearchParams();
+  const router = useRouter();
   const initial = params.get("status");
   const [status, setStatus] = useState<"all" | ProfileStatus>(
     STATUS_FILTERS.some((f) => f.value === initial) ? (initial as ProfileStatus) : "all"
@@ -68,94 +70,106 @@ function PeopleBody({ organisation }: { organisation: OrganisationAdminRecord })
           </button>
         }
       />
-      {(
-        <DataBoundary state={state} onRetry={state.reload} what="people" isEmpty={(d) => d.length === 0} empty={
+      <DataBoundary
+        state={state}
+        onRetry={state.reload}
+        what="people"
+        isEmpty={(d) => d.length === 0}
+        empty={
           <>
             <p className="ac-state-title">No people are attached to this organisation</p>
             <p>Invite the first person to begin. They receive an email invitation and are attached to {organisation.name}.</p>
           </>
-        }>
-          {() => (
-            <>
-              <div className="ac-toolbar">
-                <input
-                  type="search"
-                  className="ac-input"
-                  style={{ width: "18rem" }}
-                  placeholder="Search name, email or job title"
-                  aria-label="Search people"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-                <select className="ac-select" aria-label="Filter by status" value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
-                  {STATUS_FILTERS.map((f) => (
-                    <option key={f.value} value={f.value}>
-                      {f.label}
-                    </option>
-                  ))}
-                </select>
-                <span className="ac-secondary" role="status">
-                  {rows.length} of {state.data?.length ?? 0}
-                </span>
+        }
+      >
+        {() => (
+          <Panel flush>
+            <div className="ac-toolbar">
+              <label className="ac-search">
+                <Search className="h-3.5 w-3.5" aria-hidden />
+                <input type="search" className="ac-input" placeholder="Search name, email or job title" aria-label="Search people" value={query} onChange={(e) => setQuery(e.target.value)} />
+              </label>
+              <select className="ac-select" aria-label="Filter by status" value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
+                {STATUS_FILTERS.map((f) => (
+                  <option key={f.value} value={f.value}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+              <span className="ac-toolbar-spacer" />
+              <span className="ac-secondary" role="status">
+                {rows.length} of {state.data?.length ?? 0} {(state.data?.length ?? 0) === 1 ? "person" : "people"}
+              </span>
+            </div>
+            {rows.length === 0 ? (
+              <div className="ac-state">No one matches these filters.</div>
+            ) : (
+              <div className="ac-table-wrap">
+                <table className="ac-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Person</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Access</th>
+                      <th scope="col">Operating context</th>
+                      <th scope="col"><span className="sr-only">Open</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((p) => {
+                      const active = p.facilityAssignments.filter((a) => a.status === "active");
+                      const href = `/admin/people/${p.profileId}${q}`;
+                      return (
+                        <tr key={p.profileId} className="ac-row-link" onClick={() => router.push(href)}>
+                          <td>
+                            <div className="ac-person">
+                              <Avatar name={displayName(p)} platform={p.isPlatformSuperAdmin} muted={p.status !== "active"} />
+                              <div className="ac-person-text">
+                                <Link href={href} onClick={(e) => e.stopPropagation()}>{displayName(p)}</Link>
+                                <div className="ac-secondary">{p.email ?? "No email on record"}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                              <StatusPill status={p.status} />
+                              {p.isPlatformSuperAdmin ? <Pill tone="platform" title="Administers the platform; carries no business capability">Super Admin</Pill> : null}
+                            </div>
+                          </td>
+                          <td>
+                            {p.capabilities.length === 0 ? (
+                              <span className="ac-secondary">No explicit grants</span>
+                            ) : (
+                              <span><b className="ac-num">{p.capabilities.length}</b> <span className="ac-secondary">explicit {p.capabilities.length === 1 ? "grant" : "grants"}</span></span>
+                            )}
+                            {p.financeAccessPresent ? <div className="ac-secondary">+ Platform Finance access</div> : null}
+                          </td>
+                          <td>
+                            {active.length === 0 ? (
+                              <span className="ac-secondary">No active assignment</span>
+                            ) : (
+                              <>
+                                {active[0].facilityName}
+                                <div className="ac-secondary">
+                                  {v1OperatingRoleLabel(active[0].operationalRole as never)}
+                                  {active.length > 1 ? ` · +${active.length - 1} more` : ""}
+                                </div>
+                              </>
+                            )}
+                          </td>
+                          <td style={{ width: "2rem", textAlign: "right" }}>
+                            <ChevronRight className="ac-chev h-4 w-4" aria-hidden />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-              {rows.length === 0 ? (
-                <div className="ac-state">No one matches these filters.</div>
-              ) : (
-                <div className="ac-table-wrap">
-                  <table className="ac-table">
-                    <thead>
-                      <tr>
-                        <th scope="col">Person</th>
-                        <th scope="col">Status</th>
-                        <th scope="col">Platform</th>
-                        <th scope="col">Access</th>
-                        <th scope="col">Operating context</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((p) => {
-                        const active = p.facilityAssignments.filter((a) => a.status === "active");
-                        return (
-                          <tr key={p.profileId}>
-                            <td>
-                              <Link className="ac-primary" href={`/admin/people/${p.profileId}${q}`}>
-                                {displayName(p)}
-                              </Link>
-                              <div className="ac-secondary">{p.email ?? "No email on record"}</div>
-                            </td>
-                            <td>
-                              <StatusMark status={p.status} />
-                            </td>
-                            <td>{p.isPlatformSuperAdmin ? <span className="ac-tag ac-tag-platform">Super Admin</span> : <span className="ac-secondary">—</span>}</td>
-                            <td>
-                              <span className="ac-num">{p.capabilities.length}</span>{" "}
-                              <span className="ac-secondary">{p.capabilities.length === 1 ? "explicit grant" : "explicit grants"}</span>
-                              {p.financeAccessPresent ? <div className="ac-secondary">+ Platform Finance access</div> : null}
-                            </td>
-                            <td>
-                              {active.length === 0 ? (
-                                <span className="ac-secondary">No active assignment</span>
-                              ) : (
-                                <>
-                                  {active[0].facilityName}
-                                  <div className="ac-secondary">
-                                    {v1OperatingRoleLabel(active[0].operationalRole as never)}
-                                    {active.length > 1 ? ` · +${active.length - 1} more` : ""}
-                                  </div>
-                                </>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
-          )}
-        </DataBoundary>
-      )}
+            )}
+          </Panel>
+        )}
+      </DataBoundary>
       <InviteDialog
         open={inviting}
         organisationId={organisation.id}

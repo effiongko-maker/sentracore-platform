@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Activity, Building2, KeyRound, UserRound } from "lucide-react";
 import { useState } from "react";
 import { Modal } from "@/components/modals/Modal";
 import { useToast } from "@/components/ui/Toast";
@@ -12,7 +13,8 @@ import { AdminApiError, adminCall } from "./adminApi";
 import { useAdminConsole } from "./AdminConsoleContext";
 import { AuditFeed } from "./AuditFeed";
 import { FinanceAccess } from "./FinanceAccess";
-import { ContextStrip, DataBoundary, Note, OrgGate, PageHead, Section, StatusMark, displayName, useAdminData } from "./ui";
+import { ContextStrip, DataBoundary, Note, OrgGate, PageHead, displayName, useAdminData } from "./ui";
+import { Avatar, Panel, Pill, StatusPill } from "./kit";
 
 type StatusAction = { to: Exclude<ProfileStatus, "invited">; label: string; title: string; consequence: string; danger?: boolean };
 
@@ -69,52 +71,55 @@ function PersonBody({ organisation, profileId }: { organisation: OrganisationAdm
   };
 
   return (
-    <>
-      {(
-        <DataBoundary state={person} onRetry={person.reload} what="this person">
-          {(p) => (
-            <>
-              <PageHead
-                back={{ href: `/admin/people${q}`, label: "People" }}
-                title={displayName(p)}
-                lede={p.email ?? undefined}
-                actions={
-                  <>
-                    {STATUS_ACTIONS[p.status].map((a) => (
-                      <button key={a.to} type="button" className="ac-btn ac-btn-secondary" disabled={isSelf} onClick={() => setPending(a)}>
-                        {a.label}
-                      </button>
-                    ))}
-                  </>
-                }
-              />
-              {isSelf ? <Note>This is your own identity. You cannot suspend, deactivate or offboard yourself.</Note> : null}
+    <DataBoundary state={person} onRetry={person.reload} what="this person">
+      {(p) => {
+        const activeAssignments = p.facilityAssignments.filter((a) => a.status === "active").length;
+        return (
+          <>
+            <PageHead back={{ href: `/admin/people${q}`, label: "People" }} title={displayName(p)} lede={LEDE} />
+            <Panel className="ac-hero-panel">
+              <div className="ac-hero">
+                <Avatar name={displayName(p)} size="lg" platform={p.isPlatformSuperAdmin} muted={p.status !== "active"} />
+                <div className="ac-hero-text">
+                  <h2 className="ac-hero-name">{displayName(p)}</h2>
+                  <div className="ac-hero-sub">
+                    <span>{p.email ?? "No email on record"}</span>
+                    {p.jobTitle ? <span>· {p.jobTitle}</span> : null}
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+                    <StatusPill status={p.status} />
+                    {p.isPlatformSuperAdmin ? <Pill tone="platform" title="Administers the platform; carries no business capability">Super Admin</Pill> : null}
+                    <Pill tone="plain">{p.capabilities.length} explicit {p.capabilities.length === 1 ? "grant" : "grants"}</Pill>
+                    <Pill tone="plain">{activeAssignments} active {activeAssignments === 1 ? "assignment" : "assignments"}</Pill>
+                  </div>
+                </div>
+                <div className="ac-actions">
+                  <Link href={`/admin/access${q}&person=${p.profileId}`} className="ac-btn ac-btn-secondary">
+                    Manage access
+                  </Link>
+                  {STATUS_ACTIONS[p.status].map((a) => (
+                    <button key={a.to} type="button" className="ac-btn ac-btn-secondary" disabled={isSelf} onClick={() => setPending(a)}>
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </Panel>
+            {isSelf ? (
+              <div style={{ marginTop: 12 }}>
+                <Note>This is your own identity. You cannot suspend, deactivate or offboard yourself.</Note>
+              </div>
+            ) : null}
 
-              <div className="ac-person-grid" style={{ marginTop: isSelf ? 24 : 0 }}>
-                <Section title="Identity">
-                  <dl className="ac-kv">
-                    <dt>Status</dt>
-                    <dd><StatusMark status={p.status} /></dd>
-                    <dt>Email</dt>
-                    <dd>{p.email ?? "No email on record"}</dd>
-                    <dt>Job title</dt>
-                    <dd>{p.jobTitle ?? "—"} <span className="ac-secondary">(descriptive)</span></dd>
-                    <dt>Organisation</dt>
-                    <dd>{p.organisationName}</dd>
-                    <dt>Organisation role</dt>
-                    <dd>{p.organisationRoles.length ? p.organisationRoles.join(", ") : "—"} <span className="ac-secondary">(descriptive, not permission)</span></dd>
-                    <dt>Platform identity id</dt>
-                    <dd className="ac-secondary" style={{ fontFamily: "var(--font-mono, monospace)" }}>{p.profileId}</dd>
-                  </dl>
-                </Section>
-
-                <Section title="Access" aside={<Link href={`/admin/access${q}${q ? "&" : "?"}person=${p.profileId}`}>Manage access</Link>}>
+            <div className="ac-cols ac-cols-detail" style={{ marginTop: 16 }}>
+              <div className="ac-stack">
+                <Panel title="Access" icon={KeyRound} aside={<Link href={`/admin/access${q}&person=${p.profileId}`}>Manage access</Link>}>
                   <dl className="ac-kv">
                     <dt>Platform authority</dt>
                     <dd>
                       {p.isPlatformSuperAdmin ? (
                         <>
-                          <span className="ac-tag ac-tag-platform">Super Admin</span>{" "}
+                          <Pill tone="platform">Super Admin</Pill>{" "}
                           <span className="ac-secondary">administers the platform; carries no business capability</span>
                         </>
                       ) : (
@@ -131,16 +136,17 @@ function PersonBody({ organisation, profileId }: { organisation: OrganisationAdm
                     </dd>
                   </dl>
                   {p.capabilities.length > 0 ? <GrantSummary capabilities={p.capabilities} /> : null}
-                  <div style={{ marginTop: 16 }}>
-                    <p className="ac-section-title" style={{ marginBottom: 4 }}>Platform Finance access · read-only</p>
+                  <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--ac-rule)" }}>
+                    <p className="ac-secondary" style={{ margin: "0 0 6px", fontWeight: 600 }}>Platform Finance access · read-only</p>
                     <FinanceAccess access={p.financeAccess} />
                     <p className="ac-secondary" style={{ marginTop: 6 }}>Finance access is managed within Platform Finance, not here.</p>
                   </div>
-                </Section>
+                </Panel>
 
-                <Section
-                  className="ac-wide"
+                <Panel
                   title="Operating context"
+                  icon={Building2}
+                  flush
                   aside={
                     p.status === "active" ? (
                       <button type="button" className="ac-btn ac-btn-secondary ac-btn-sm" onClick={() => setAssigning({})}>
@@ -149,13 +155,15 @@ function PersonBody({ organisation, profileId }: { organisation: OrganisationAdm
                     ) : undefined
                   }
                 >
-                  <Note>
-                    Where and in what capacity this person works. An operating role such as “Facility Manager” describes context — <strong>it grants no access</strong>. Access comes only from explicit capability grants.
-                  </Note>
+                  <div style={{ padding: "12px 16px" }}>
+                    <Note>
+                      Where and in what capacity this person works. An operating role such as “Facility Manager” describes context — <strong>it grants no access</strong>. Access comes only from explicit capability grants.
+                    </Note>
+                  </div>
                   {p.facilityAssignments.length === 0 ? (
                     <div className="ac-state">No facility assignments.</div>
                   ) : (
-                    <div className="ac-table-wrap" style={{ marginTop: 8 }}>
+                    <div className="ac-table-wrap">
                       <table className="ac-table">
                         <thead>
                           <tr>
@@ -168,9 +176,9 @@ function PersonBody({ organisation, profileId }: { organisation: OrganisationAdm
                         <tbody>
                           {p.facilityAssignments.map((a) => (
                             <tr key={a.assignmentId}>
-                              <td>{a.facilityName}</td>
+                              <td><b>{a.facilityName}</b></td>
                               <td>{v1OperatingRoleLabel(a.operationalRole as never)}</td>
-                              <td><span className={a.status === "active" ? "ac-mark ac-mark-ok" : "ac-mark ac-mark-neutral"}>{a.status === "active" ? "Active" : "Inactive"}</span></td>
+                              <td><Pill tone={a.status === "active" ? "ok" : "neutral"}>{a.status === "active" ? "Active" : "Inactive"}</Pill></td>
                               <td style={{ textAlign: "right" }}>
                                 <button type="button" className="ac-btn ac-btn-quiet ac-btn-sm" onClick={() => setAssigning({ assignment: a })}>
                                   Edit
@@ -182,9 +190,9 @@ function PersonBody({ organisation, profileId }: { organisation: OrganisationAdm
                       </table>
                     </div>
                   )}
-                </Section>
+                </Panel>
 
-                <Section className="ac-wide" title="Administrative history" aside={<Link href={`/admin/audit${q}${q ? "&" : "?"}person=${p.profileId}`}>All history for this person</Link>}>
+                <Panel title="Administrative history" icon={Activity} flush aside={<Link href={`/admin/audit${q}&person=${p.profileId}`}>All history for this person</Link>}>
                   <DataBoundary
                     state={history}
                     onRetry={history.reload}
@@ -194,35 +202,42 @@ function PersonBody({ organisation, profileId }: { organisation: OrganisationAdm
                   >
                     {(d) => <AuditFeed events={d.events} orgParam={q} />}
                   </DataBoundary>
-                </Section>
+                </Panel>
               </div>
 
-              {!isSelf && p.status !== "inactive" ? (
-                <div className="ac-danger-zone">
-                  <p className="ac-section-title">Offboarding</p>
-                  <p className="ac-secondary" style={{ maxWidth: "60ch", margin: "6px 0 12px" }}>
-                    Ends this person’s platform access: revokes every capability and finance grant, deactivates their facility assignments, and disables sign-in. It is not the same as deactivating.
-                  </p>
-                  <button type="button" className="ac-btn ac-btn-danger-quiet" onClick={() => setOffboarding(true)}>
-                    Offboard {displayName(p)}…
-                  </button>
-                </div>
-              ) : null}
+              <div className="ac-stack">
+                <Panel title="Identity" icon={UserRound}>
+                  <dl className="ac-kv" style={{ gridTemplateColumns: "1fr" }}>
+                    <div><dt className="ac-secondary">Status</dt><dd><StatusPill status={p.status} /></dd></div>
+                    <div><dt className="ac-secondary">Email</dt><dd>{p.email ?? "No email on record"}</dd></div>
+                    <div><dt className="ac-secondary">Job title <span>(descriptive)</span></dt><dd>{p.jobTitle ?? "—"}</dd></div>
+                    <div><dt className="ac-secondary">Organisation</dt><dd>{p.organisationName}</dd></div>
+                    <div><dt className="ac-secondary">Organisation role <span>(descriptive, not permission)</span></dt><dd>{p.organisationRoles.length ? p.organisationRoles.join(", ") : "—"}</dd></div>
+                    <div><dt className="ac-secondary">Platform identity id</dt><dd className="ac-mono">{p.profileId}</dd></div>
+                  </dl>
+                </Panel>
+              </div>
+            </div>
 
-              <StatusDialog action={pending} person={p} organisationId={organisation.id} onClose={() => setPending(null)} onDone={refresh} />
-              <OffboardDialog open={offboarding} person={p} onClose={() => setOffboarding(false)} onDone={refresh} />
-              <AssignmentDialog
-                state={assigning}
-                person={p}
-                organisationId={organisation.id}
-                onClose={() => setAssigning(null)}
-                onDone={refresh}
-              />
-            </>
-          )}
-        </DataBoundary>
-      )}
-    </>
+            {!isSelf && p.status !== "inactive" ? (
+              <div className="ac-danger">
+                <div>
+                  <p className="ac-danger-title">Offboarding</p>
+                  <p>Ends this person’s platform access: revokes every capability and finance grant, deactivates their facility assignments, and disables sign-in. It is not the same as deactivating.</p>
+                </div>
+                <button type="button" className="ac-btn ac-btn-danger-quiet" onClick={() => setOffboarding(true)}>
+                  Offboard {displayName(p)}…
+                </button>
+              </div>
+            ) : null}
+
+            <StatusDialog action={pending} person={p} organisationId={organisation.id} onClose={() => setPending(null)} onDone={refresh} />
+            <OffboardDialog open={offboarding} person={p} onClose={() => setOffboarding(false)} onDone={refresh} />
+            <AssignmentDialog state={assigning} person={p} organisationId={organisation.id} onClose={() => setAssigning(null)} onDone={refresh} />
+          </>
+        );
+      }}
+    </DataBoundary>
   );
 }
 

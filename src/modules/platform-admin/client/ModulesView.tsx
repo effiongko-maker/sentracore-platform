@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Blocks } from "lucide-react";
 import { useState } from "react";
 import { Modal } from "@/components/modals/Modal";
 import { useToast } from "@/components/ui/Toast";
@@ -8,6 +9,7 @@ import { cn } from "@/lib/utils";
 import type { AdminModuleRecord, OrganisationAdminRecord, OrganisationModuleResult } from "../types";
 import { AdminApiError, adminCall } from "./adminApi";
 import { ContextStrip, DataBoundary, Note, OrgGate, PageHead, moduleStatusMark, useAdminData } from "./ui";
+import { Panel, Pill } from "./kit";
 
 export function ModulesView() {
   return (
@@ -62,55 +64,59 @@ function ModulesBody({ organisation }: { organisation: OrganisationAdminRecord }
     <>
       <PageHead title="Modules" lede={LEDE} />
       <Note tone="strong">
-        <strong>Enabling a module does not give anyone access to it.</strong> Availability is set here for the whole organisation; access is granted person by person in{" "}
-        <Link href={`/admin/access${q}`} style={{ color: "var(--ac-accent)" }}>Access</Link>.
+        <span>
+          <strong>Enabling a module does not give anyone access to it.</strong> Availability is set here for the whole organisation; access is granted person by person in{" "}
+          <Link href={`/admin/access${q}`} style={{ color: "var(--ac-accent-ink)", fontWeight: 500 }}>Access</Link>.
+        </span>
       </Note>
-      {(
+      <div style={{ marginTop: 16 }}>
         <DataBoundary state={state} onRetry={state.reload} what="modules" isEmpty={(d) => d.length === 0} empty={<p>The module catalogue is empty.</p>}>
           {(modules) => (
-            <div className="ac-table-wrap" style={{ marginTop: 16 }}>
-              <table className="ac-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Module</th>
-                    <th scope="col">Availability</th>
-                    <th scope="col">Explicit grants</th>
-                    <th scope="col"><span className="sr-only">Action</span></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {modules.map((m) => {
-                    const mark = moduleStatusMark(m.status);
-                    return (
-                      <tr key={m.slug}>
-                        <td>
-                          <span className="ac-primary" style={{ fontWeight: 600 }}>{m.name}</span>
-                          {m.description ? <div className="ac-secondary" style={{ maxWidth: "48ch" }}>{m.description}</div> : null}
-                        </td>
-                        <td><span className={cn("ac-mark", mark.tone)}>{mark.label}</span></td>
-                        <td>
-                          {m.peopleWithGrants === null ? (
-                            <span className="ac-secondary">Not tracked here</span>
-                          ) : (
-                            <><span className="ac-num">{m.peopleWithGrants}</span> <span className="ac-secondary">{m.peopleWithGrants === 1 ? "person" : "people"}</span></>
-                          )}
-                        </td>
-                        <td style={{ textAlign: "right" }}>
-                          {m.status === "enabled" ? (
-                            <button type="button" className="ac-btn ac-btn-danger-quiet ac-btn-sm" onClick={() => setPending({ module: m, to: "disabled" })}>Disable</button>
-                          ) : (
-                            <button type="button" className="ac-btn ac-btn-secondary ac-btn-sm" onClick={() => setPending({ module: m, to: "enabled" })}>Enable</button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <Panel
+              title="Module catalogue"
+              icon={Blocks}
+              flush
+              aside={<span className="ac-num">{modules.filter((m) => m.status === "enabled").length} of {modules.length} enabled</span>}
+            >
+              {[...modules]
+                .sort((a, b) => Number(b.status === "enabled") - Number(a.status === "enabled"))
+                .map((m) => {
+                  const mark = moduleStatusMark(m.status);
+                  const on = m.status === "enabled";
+                  return (
+                    <div key={m.slug} className={cn("ac-module", on ? "ac-module-on" : "ac-module-off")}>
+                      <span className="ac-module-icon" aria-hidden>
+                        <Blocks className="h-4 w-4" />
+                      </span>
+                      <div>
+                        <div className="ac-module-name">{m.name}</div>
+                        {m.description ? <div className="ac-module-desc">{m.description}</div> : null}
+                      </div>
+                      <div className="ac-module-grants">
+                        {m.peopleWithGrants === null ? (
+                          <span>Grants not tracked here</span>
+                        ) : (
+                          <>
+                            <b>{m.peopleWithGrants}</b>
+                            {m.peopleWithGrants === 1 ? "person with explicit grants" : "people with explicit grants"}
+                          </>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <Pill tone={mark.pill}>{mark.label}</Pill>
+                        {on ? (
+                          <button type="button" className="ac-btn ac-btn-danger-quiet ac-btn-sm" onClick={() => setPending({ module: m, to: "disabled" })}>Disable</button>
+                        ) : (
+                          <button type="button" className="ac-btn ac-btn-secondary ac-btn-sm" onClick={() => setPending({ module: m, to: "enabled" })}>Enable</button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+            </Panel>
           )}
         </DataBoundary>
-      )}
+      </div>
       <Modal
         open={pending !== null}
         onClose={close}

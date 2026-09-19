@@ -1,24 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { Building2, ChevronLeft } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import type { OrganisationAdminRecord, OrganisationModuleAdminStatus } from "../types";
 import type { ProfileStatus } from "@/lib/auth/types";
 import { useAdminConsole } from "./AdminConsoleContext";
+import { Pill, StatusPill } from "./kit";
 
-/** Organisation context strip — shown on every surface. */
+/** Organisation context surface — the console is always "about" one organisation. */
 export function ContextStrip() {
   const { organisation, organisations, selectOrganisation, loading } = useAdminConsole();
+  const enabled = organisation ? organisation.modules.filter((m) => m.status === "enabled").length : 0;
   return (
-    <div className="ac-context" role="region" aria-label="Organisation context">
-      <span className="ac-context-label">Administering</span>
-      {loading ? (
-        <span>Loading organisation…</span>
-      ) : organisation ? (
-        <>
-          {organisations && organisations.length > 1 ? (
+    <div className="ac-org" role="region" aria-label="Organisation context">
+      <span className="ac-org-tile" aria-hidden>
+        <Building2 className="h-4 w-4" />
+      </span>
+      <div className="ac-org-meta">
+        <span className="ac-org-label">Administering</span>
+        {loading ? (
+          <span className="ac-org-name">Loading organisation…</span>
+        ) : organisation ? (
+          organisations && organisations.length > 1 ? (
             <select aria-label="Organisation" value={organisation.id} onChange={(e) => selectOrganisation(e.target.value)}>
               {organisations.map((o) => (
                 <option key={o.id} value={o.id}>
@@ -27,17 +32,23 @@ export function ContextStrip() {
               ))}
             </select>
           ) : (
-            <span className="ac-context-name">{organisation.name}</span>
-          )}
-          <span className="ac-secondary">{organisation.slug}</span>
-          <span className={cn("ac-mark", organisation.status === "active" ? "ac-mark-ok" : "ac-mark-warn")}>
-            {organisation.status === "active" ? "Active" : organisation.status}
-          </span>
+            <span className="ac-org-name">{organisation.name}</span>
+          )
+        ) : (
+          <span className="ac-org-name">No organisation</span>
+        )}
+      </div>
+      {organisation ? (
+        <>
+          <span className="ac-mono">{organisation.slug}</span>
+          <Pill tone={organisation.status === "active" ? "ok" : "warn"}>{organisation.status === "active" ? "Active" : organisation.status}</Pill>
+          <div className="ac-org-facts">
+            <span>
+              <b>{enabled}</b> of <b>{organisation.modules.length}</b> modules enabled
+            </span>
+          </div>
         </>
-      ) : (
-        <span>No organisation</span>
-      )}
-      <span className="ac-context-spacer" />
+      ) : null}
     </div>
   );
 }
@@ -237,14 +248,13 @@ export function profileStatusMark(status: ProfileStatus): { label: string; tone:
   }
 }
 export function StatusMark({ status }: { status: ProfileStatus }) {
-  const { label, tone } = profileStatusMark(status);
-  return <span className={cn("ac-mark", tone)}>{label}</span>;
+  return <StatusPill status={status} />;
 }
 
-export function moduleStatusMark(status: OrganisationModuleAdminStatus): { label: string; tone: string } {
-  if (status === "enabled") return { label: "Enabled", tone: "ac-mark-ok" };
-  if (status === "preparing") return { label: "Preparing", tone: "ac-mark-warn" };
-  return { label: "Disabled", tone: "ac-mark-neutral" };
+export function moduleStatusMark(status: OrganisationModuleAdminStatus): { label: string; tone: string; pill: "ok" | "warn" | "neutral" } {
+  if (status === "enabled") return { label: "Enabled", tone: "ac-mark-ok", pill: "ok" };
+  if (status === "preparing") return { label: "Preparing", tone: "ac-mark-warn", pill: "warn" };
+  return { label: "Disabled", tone: "ac-mark-neutral", pill: "neutral" };
 }
 
 export function formatWhen(iso: string): { relative: string; absolute: string } {
