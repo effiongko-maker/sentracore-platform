@@ -8,10 +8,9 @@ import { Modal } from "@/components/modals/Modal";
 import { useToast } from "@/components/ui/Toast";
 import type { ProfileStatus } from "@/lib/auth/types";
 import { v1OperatingRoleLabel } from "@/lib/access/roles";
-import type { AdminPersonSummary, InviteAttachResult } from "../types";
+import type { AdminPersonSummary, InviteAttachResult, OrganisationAdminRecord } from "../types";
 import { AdminApiError, adminCall } from "./adminApi";
-import { useAdminConsole } from "./AdminConsoleContext";
-import { ContextStrip, DataBoundary, PageHead, StatusMark, displayName, useAdminData } from "./ui";
+import { ContextStrip, DataBoundary, OrgGate, PageHead, StatusMark, displayName, useAdminData } from "./ui";
 
 const STATUS_FILTERS: Array<{ value: "all" | ProfileStatus; label: string }> = [
   { value: "all", label: "All statuses" },
@@ -22,7 +21,19 @@ const STATUS_FILTERS: Array<{ value: "all" | ProfileStatus; label: string }> = [
 ];
 
 export function PeopleView() {
-  const { organisation } = useAdminConsole();
+  return (
+    <div className="ac-page">
+      <ContextStrip />
+      <OrgGate title="People" lede={LEDE}>
+        {(organisation) => <PeopleBody organisation={organisation} />}
+      </OrgGate>
+    </div>
+  );
+}
+
+const LEDE = "Platform identities in this organisation. Identity, access and operating context are administered separately.";
+
+function PeopleBody({ organisation }: { organisation: OrganisationAdminRecord }) {
   const params = useSearchParams();
   const initial = params.get("status");
   const [status, setStatus] = useState<"all" | ProfileStatus>(
@@ -31,10 +42,10 @@ export function PeopleView() {
   const [query, setQuery] = useState("");
   const [inviting, setInviting] = useState(false);
   const state = useAdminData<AdminPersonSummary[]>(
-    (signal) => adminCall<AdminPersonSummary[]>("listPeople", { organisationId: organisation!.id }, signal),
-    [organisation?.id]
+    (signal) => adminCall<AdminPersonSummary[]>("listPeople", { organisationId: organisation.id }, signal),
+    [organisation.id]
   );
-  const q = organisation ? `?org=${organisation.id}` : "";
+  const q = `?org=${organisation.id}`;
 
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -46,21 +57,18 @@ export function PeopleView() {
   }, [state.data, status, query]);
 
   return (
-    <div className="ac-page">
-      <ContextStrip />
+    <>
       <PageHead
         title="People"
-        lede="Platform identities in this organisation. Identity, access and operating context are administered separately."
+        lede={LEDE}
         actions={
-          <button type="button" className="ac-btn ac-btn-primary" disabled={!organisation} onClick={() => setInviting(true)}>
+          <button type="button" className="ac-btn ac-btn-primary" onClick={() => setInviting(true)}>
             <UserPlus className="h-4 w-4" aria-hidden />
             Invite person
           </button>
         }
       />
-      {!organisation ? (
-        <div className="ac-state">Select an organisation to see its people.</div>
-      ) : (
+      {(
         <DataBoundary state={state} onRetry={state.reload} what="people" isEmpty={(d) => d.length === 0} empty={
           <>
             <p className="ac-state-title">No people are attached to this organisation</p>
@@ -148,16 +156,14 @@ export function PeopleView() {
           )}
         </DataBoundary>
       )}
-      {organisation ? (
-        <InviteDialog
-          open={inviting}
-          organisationId={organisation.id}
-          organisationName={organisation.name}
-          onClose={() => setInviting(false)}
-          onDone={() => state.reload()}
-        />
-      ) : null}
-    </div>
+      <InviteDialog
+        open={inviting}
+        organisationId={organisation.id}
+        organisationName={organisation.name}
+        onClose={() => setInviting(false)}
+        onDone={() => state.reload()}
+      />
+    </>
   );
 }
 

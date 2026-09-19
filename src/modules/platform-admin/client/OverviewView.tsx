@@ -2,42 +2,30 @@
 
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import type { AdminOverview } from "../types";
+import type { AdminOverview, OrganisationAdminRecord } from "../types";
 import { adminCall } from "./adminApi";
-import { useAdminConsole } from "./AdminConsoleContext";
 import { AuditFeed } from "./AuditFeed";
-import { ContextStrip, DataBoundary, Note, PageHead, Section, moduleStatusMark, useAdminData } from "./ui";
+import { ContextStrip, DataBoundary, Note, OrgGate, PageHead, Section, moduleStatusMark, useAdminData } from "./ui";
 
 export function OverviewView() {
-  const { organisation, loading: orgLoading, error: orgError, reload } = useAdminConsole();
-  const q = organisation ? `?org=${organisation.id}` : "";
-  const state = useAdminData<AdminOverview>(
-    (signal) => adminCall<AdminOverview>("getOverview", { organisationId: organisation!.id }, signal),
-    [organisation?.id]
-  );
   return (
     <div className="ac-page">
       <ContextStrip />
-      <PageHead
-        title="Overview"
-        lede="The platform control plane for this organisation: who is here, which modules are available, and what has changed."
-      />
-      {orgError ? (
-        <div className="ac-state ac-state-error" role="alert">
-          <p className="ac-state-title">Couldn’t load organisations</p>
-          <p>{orgError}</p>
-          <button type="button" className="ac-btn ac-btn-secondary" onClick={reload}>
-            Retry
-          </button>
-        </div>
-      ) : orgLoading ? (
-        <div className="ac-state" role="status">Loading organisation…</div>
-      ) : !organisation ? (
-        <div className="ac-state">
-          <p className="ac-state-title">No organisation exists yet</p>
-          <p>Organisations are created during platform bootstrap. There is nothing to administer until one exists.</p>
-        </div>
-      ) : (
+      <OrgGate title="Overview" lede={LEDE}>
+        {(organisation) => <OverviewBody organisation={organisation} />}
+      </OrgGate>
+    </div>
+  );
+}
+
+const LEDE = "The platform control plane for this organisation: who is here, which modules are available, and what has changed.";
+
+function OverviewBody({ organisation }: { organisation: OrganisationAdminRecord }) {
+  const q = `?org=${organisation.id}`;
+  const state = useAdminData<AdminOverview>((signal) => adminCall<AdminOverview>("getOverview", { organisationId: organisation.id }, signal), [organisation.id]);
+  return (
+    <>
+      <PageHead title="Overview" lede={LEDE} />
         <DataBoundary state={state} onRetry={state.reload} what="the overview">
           {(o) => (
             <div className="ac-overview-grid">
@@ -94,7 +82,6 @@ export function OverviewView() {
             </div>
           )}
         </DataBoundary>
-      )}
-    </div>
+    </>
   );
 }

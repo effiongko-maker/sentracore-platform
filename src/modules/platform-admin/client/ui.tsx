@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import type { OrganisationModuleAdminStatus } from "../types";
+import type { OrganisationAdminRecord, OrganisationModuleAdminStatus } from "../types";
 import type { ProfileStatus } from "@/lib/auth/types";
 import { useAdminConsole } from "./AdminConsoleContext";
 
@@ -96,6 +96,62 @@ export function Section({
 
 export function Note({ children, tone }: { children: ReactNode; tone?: "strong" | "critical" }) {
   return <p className={cn("ac-note", tone === "strong" && "ac-note-strong", tone === "critical" && "ac-note-critical")}>{children}</p>;
+}
+
+/**
+ * Resolves the Admin Console organisation context BEFORE any surface renders
+ * data. Body components receive a real organisation — never null — so no
+ * loader can fire (or dereference) before the context exists.
+ *   resolving  → intentional loading state
+ *   failed     → explicit error with retry (never an empty console)
+ *   none exist → truthful "nothing to administer" state
+ */
+export function OrgGate({
+  title,
+  lede,
+  children,
+}: {
+  title: string;
+  lede?: string;
+  children: (organisation: OrganisationAdminRecord) => ReactNode;
+}) {
+  const { organisation, organisations, loading, error, reload } = useAdminConsole();
+  if (error) {
+    return (
+      <>
+        <PageHead title={title} lede={lede} />
+        <div className="ac-state ac-state-error" role="alert">
+          <p className="ac-state-title">Couldn’t load organisations</p>
+          <p>{error} The console cannot show anything until the organisation context loads.</p>
+          <button type="button" className="ac-btn ac-btn-secondary" onClick={reload}>
+            Retry
+          </button>
+        </div>
+      </>
+    );
+  }
+  if (loading || organisations === null) {
+    return (
+      <>
+        <PageHead title={title} lede={lede} />
+        <div className="ac-state" role="status" aria-live="polite">
+          Loading organisation…
+        </div>
+      </>
+    );
+  }
+  if (!organisation) {
+    return (
+      <>
+        <PageHead title={title} lede={lede} />
+        <div className="ac-state">
+          <p className="ac-state-title">No organisation to administer</p>
+          <p>No organisation exists on this platform yet. Organisations are created during platform bootstrap; there is nothing to show until one exists.</p>
+        </div>
+      </>
+    );
+  }
+  return <>{children(organisation)}</>;
 }
 
 /** Renders loading / failure / empty honestly. A failed load is never an empty list. */

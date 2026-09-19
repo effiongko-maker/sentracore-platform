@@ -3,14 +3,25 @@
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { AUDIT_CATEGORY_LABELS, type AuditCategory } from "../auditDescribe";
-import type { AdminAuditEntry, AdminAuditPage, AdminPersonSummary } from "../types";
+import type { AdminAuditEntry, AdminAuditPage, AdminPersonSummary, OrganisationAdminRecord } from "../types";
 import { AdminApiError, adminCall } from "./adminApi";
-import { useAdminConsole } from "./AdminConsoleContext";
 import { AuditFeed } from "./AuditFeed";
-import { ContextStrip, PageHead, displayName, useAdminData } from "./ui";
+import { ContextStrip, OrgGate, PageHead, displayName, useAdminData } from "./ui";
 
 export function AuditView() {
-  const { organisation } = useAdminConsole();
+  return (
+    <div className="ac-page">
+      <ContextStrip />
+      <OrgGate title="Audit" lede={LEDE}>
+        {(organisation) => <AuditBody organisation={organisation} />}
+      </OrgGate>
+    </div>
+  );
+}
+
+const LEDE = "The administrative history of this organisation: who changed what, for whom, and when. Operational activity is not shown here.";
+
+function AuditBody({ organisation }: { organisation: OrganisationAdminRecord }) {
   const params = useSearchParams();
   const [category, setCategory] = useState<"" | AuditCategory>("");
   const [profileId, setProfileId] = useState(params.get("person") ?? "");
@@ -18,22 +29,22 @@ export function AuditView() {
   const [moreError, setMoreError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const people = useAdminData<AdminPersonSummary[]>(
-    (signal) => adminCall<AdminPersonSummary[]>("listPeople", { organisationId: organisation!.id }, signal),
-    [organisation?.id]
+    (signal) => adminCall<AdminPersonSummary[]>("listPeople", { organisationId: organisation.id }, signal),
+    [organisation.id]
   );
-  const key = `${organisation?.id}|${category}|${profileId}`;
+  const key = `${organisation.id}|${category}|${profileId}`;
   const first = useAdminData<AdminAuditPage>(
-    (signal) => adminCall<AdminAuditPage>("listAudit", { organisationId: organisation!.id, category: category || undefined, profileId: profileId || undefined }, signal),
-    [organisation?.id, category, profileId]
+    (signal) => adminCall<AdminAuditPage>("listAudit", { organisationId: organisation.id, category: category || undefined, profileId: profileId || undefined }, signal),
+    [organisation.id, category, profileId]
   );
-  const q = organisation ? `?org=${organisation.id}` : "";
+  const q = `?org=${organisation.id}`;
   const olderHere = older && older.key === key ? older : null;
   const events = first.data ? [...first.data.events, ...(olderHere?.events ?? [])] : null;
   const next = olderHere ? olderHere.next : first.data?.nextBefore ?? null;
   const error = first.error;
 
   async function more() {
-    if (!organisation || !next || loadingMore) return;
+    if (!next || loadingMore) return;
     setLoadingMore(true);
     setMoreError(null);
     try {
@@ -47,12 +58,8 @@ export function AuditView() {
   }
 
   return (
-    <div className="ac-page">
-      <ContextStrip />
-      <PageHead
-        title="Audit"
-        lede="The administrative history of this organisation: who changed what, for whom, and when. Operational activity is not shown here."
-      />
+    <>
+      <PageHead title="Audit" lede={LEDE} />
       <div className="ac-toolbar">
         <select className="ac-select" aria-label="Filter by kind of change" value={category} onChange={(e) => setCategory(e.target.value as "" | AuditCategory)}>
           <option value="">All changes</option>
@@ -98,6 +105,6 @@ export function AuditView() {
           )}
         </>
       )}
-    </div>
+    </>
   );
 }

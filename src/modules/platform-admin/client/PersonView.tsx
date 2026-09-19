@@ -7,12 +7,12 @@ import { useToast } from "@/components/ui/Toast";
 import { V1_OPERATING_ROLES, v1OperatingRoleLabel } from "@/lib/access/roles";
 import type { ProfileStatus } from "@/lib/auth/types";
 import { CAPABILITY_DOMAINS, describeCapability } from "../capabilityCatalog";
-import type { AdminAuditPage, AdminFacilityAssignment, AdminPersonDetail, OffboardResult, ProfileStatusResult } from "../types";
+import type { AdminAuditPage, AdminFacilityAssignment, AdminPersonDetail, OffboardResult, OrganisationAdminRecord, ProfileStatusResult } from "../types";
 import { AdminApiError, adminCall } from "./adminApi";
 import { useAdminConsole } from "./AdminConsoleContext";
 import { AuditFeed } from "./AuditFeed";
 import { FinanceAccess } from "./FinanceAccess";
-import { ContextStrip, DataBoundary, Note, PageHead, Section, StatusMark, displayName, useAdminData } from "./ui";
+import { ContextStrip, DataBoundary, Note, OrgGate, PageHead, Section, StatusMark, displayName, useAdminData } from "./ui";
 
 type StatusAction = { to: Exclude<ProfileStatus, "invited">; label: string; title: string; consequence: string; danger?: boolean };
 
@@ -36,15 +36,28 @@ const STATUS_ACTIONS: Record<ProfileStatus, StatusAction[]> = {
 };
 
 export function PersonView({ profileId }: { profileId: string }) {
-  const { organisation, actorProfileId } = useAdminConsole();
-  const q = organisation ? `?org=${organisation.id}` : "";
+  return (
+    <div className="ac-page">
+      <ContextStrip />
+      <OrgGate title="Person" lede={LEDE}>
+        {(organisation) => <PersonBody organisation={organisation} profileId={profileId} />}
+      </OrgGate>
+    </div>
+  );
+}
+
+const LEDE = "Identity, access and operating context — administered separately.";
+
+function PersonBody({ organisation, profileId }: { organisation: OrganisationAdminRecord; profileId: string }) {
+  const { actorProfileId } = useAdminConsole();
+  const q = `?org=${organisation.id}`;
   const person = useAdminData<AdminPersonDetail>(
-    (signal) => adminCall<AdminPersonDetail>("getPerson", { organisationId: organisation!.id, profileId }, signal),
-    [organisation?.id, profileId]
+    (signal) => adminCall<AdminPersonDetail>("getPerson", { organisationId: organisation.id, profileId }, signal),
+    [organisation.id, profileId]
   );
   const history = useAdminData<AdminAuditPage>(
-    (signal) => adminCall<AdminAuditPage>("listAudit", { organisationId: organisation!.id, profileId, limit: 6 }, signal),
-    [organisation?.id, profileId]
+    (signal) => adminCall<AdminAuditPage>("listAudit", { organisationId: organisation.id, profileId, limit: 6 }, signal),
+    [organisation.id, profileId]
   );
   const [pending, setPending] = useState<StatusAction | null>(null);
   const [offboarding, setOffboarding] = useState(false);
@@ -56,11 +69,8 @@ export function PersonView({ profileId }: { profileId: string }) {
   };
 
   return (
-    <div className="ac-page">
-      <ContextStrip />
-      {!organisation ? (
-        <div className="ac-state">Select an organisation.</div>
-      ) : (
+    <>
+      {(
         <DataBoundary state={person} onRetry={person.reload} what="this person">
           {(p) => (
             <>
@@ -212,7 +222,7 @@ export function PersonView({ profileId }: { profileId: string }) {
           )}
         </DataBoundary>
       )}
-    </div>
+    </>
   );
 }
 

@@ -7,20 +7,32 @@ import { useToast } from "@/components/ui/Toast";
 import { v1OperatingRoleLabel } from "@/lib/access/roles";
 import { cn } from "@/lib/utils";
 import { CAPABILITY_DOMAINS, type CapabilityDomain } from "../capabilityCatalog";
-import type { AdminModuleRecord, AdminPersonDetail, AdminPersonSummary, PlatformCapabilityGrantResult } from "../types";
+import type { AdminModuleRecord, AdminPersonDetail, AdminPersonSummary, OrganisationAdminRecord, PlatformCapabilityGrantResult } from "../types";
 import { AdminApiError, adminCall } from "./adminApi";
-import { useAdminConsole } from "./AdminConsoleContext";
 import { FinanceAccess } from "./FinanceAccess";
-import { ContextStrip, DataBoundary, Note, PageHead, Section, StatusMark, displayName, moduleStatusMark, useAdminData } from "./ui";
+import { ContextStrip, DataBoundary, Note, OrgGate, PageHead, Section, StatusMark, displayName, moduleStatusMark, useAdminData } from "./ui";
 
 export function AccessView() {
-  const { organisation } = useAdminConsole();
+  return (
+    <div className="ac-page">
+      <ContextStrip />
+      <OrgGate title="Access" lede={LEDE}>
+        {(organisation) => <AccessBody organisation={organisation} />}
+      </OrgGate>
+    </div>
+  );
+}
+
+const LEDE =
+  "Access is explicit. A person can do only what has been granted to them — never what their title, operating role, facility or administrative authority might suggest.";
+
+function AccessBody({ organisation }: { organisation: OrganisationAdminRecord }) {
   const router = useRouter();
   const params = useSearchParams();
   const selected = params.get("person");
   const people = useAdminData<AdminPersonSummary[]>(
-    (signal) => adminCall<AdminPersonSummary[]>("listPeople", { organisationId: organisation!.id }, signal),
-    [organisation?.id]
+    (signal) => adminCall<AdminPersonSummary[]>("listPeople", { organisationId: organisation.id }, signal),
+    [organisation.id]
   );
   function pick(id: string) {
     const next = new URLSearchParams(params.toString());
@@ -29,15 +41,9 @@ export function AccessView() {
   }
 
   return (
-    <div className="ac-page">
-      <ContextStrip />
-      <PageHead
-        title="Access"
-        lede="Access is explicit. A person can do only what has been granted to them — never what their title, operating role, facility or administrative authority might suggest."
-      />
-      {!organisation ? (
-        <div className="ac-state">Select an organisation.</div>
-      ) : (
+    <>
+      <PageHead title="Access" lede={LEDE} />
+      {(
         <DataBoundary
           state={people}
           onRetry={people.reload}
@@ -67,7 +73,7 @@ export function AccessView() {
           }}
         </DataBoundary>
       )}
-    </div>
+    </>
   );
 }
 

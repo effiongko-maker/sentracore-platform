@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { OrganisationAdminRecord } from "../types";
 import { adminCall } from "./adminApi";
 
-type AdminConsoleState = {
+export type AdminConsoleState = {
   actorProfileId: string;
   organisations: OrganisationAdminRecord[] | null;
   organisation: OrganisationAdminRecord | null;
@@ -15,7 +15,9 @@ type AdminConsoleState = {
   selectOrganisation: (id: string) => void;
 };
 
-const Ctx = createContext<AdminConsoleState | null>(null);
+/** Exported so the initial-state regression test can render surfaces in each lifecycle state. */
+export const AdminConsoleStateContext = createContext<AdminConsoleState | null>(null);
+const Ctx = AdminConsoleStateContext;
 
 export function AdminConsoleProvider({
   actorProfileId,

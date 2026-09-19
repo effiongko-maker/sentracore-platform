@@ -5,22 +5,33 @@ import { useState } from "react";
 import { Modal } from "@/components/modals/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
-import type { AdminModuleRecord, OrganisationModuleResult } from "../types";
+import type { AdminModuleRecord, OrganisationAdminRecord, OrganisationModuleResult } from "../types";
 import { AdminApiError, adminCall } from "./adminApi";
-import { useAdminConsole } from "./AdminConsoleContext";
-import { ContextStrip, DataBoundary, Note, PageHead, moduleStatusMark, useAdminData } from "./ui";
+import { ContextStrip, DataBoundary, Note, OrgGate, PageHead, moduleStatusMark, useAdminData } from "./ui";
 
 export function ModulesView() {
-  const { organisation } = useAdminConsole();
+  return (
+    <div className="ac-page">
+      <ContextStrip />
+      <OrgGate title="Modules" lede={LEDE}>
+        {(organisation) => <ModulesBody organisation={organisation} />}
+      </OrgGate>
+    </div>
+  );
+}
+
+const LEDE = "Which parts of SentraCore™ this organisation has available.";
+
+function ModulesBody({ organisation }: { organisation: OrganisationAdminRecord }) {
   const { toast } = useToast();
   const state = useAdminData<AdminModuleRecord[]>(
-    (signal) => adminCall<AdminModuleRecord[]>("listModules", { organisationId: organisation!.id }, signal),
-    [organisation?.id]
+    (signal) => adminCall<AdminModuleRecord[]>("listModules", { organisationId: organisation.id }, signal),
+    [organisation.id]
   );
   const [pending, setPending] = useState<{ module: AdminModuleRecord; to: "enabled" | "disabled" } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const q = organisation ? `?org=${organisation.id}` : "";
+  const q = `?org=${organisation.id}`;
 
   function close() {
     if (busy) return;
@@ -28,7 +39,7 @@ export function ModulesView() {
     setError(null);
   }
   async function apply() {
-    if (!pending || !organisation || busy) return;
+    if (!pending || busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -48,16 +59,13 @@ export function ModulesView() {
   }
 
   return (
-    <div className="ac-page">
-      <ContextStrip />
-      <PageHead title="Modules" lede="Which parts of SentraCore™ this organisation has available." />
+    <>
+      <PageHead title="Modules" lede={LEDE} />
       <Note tone="strong">
         <strong>Enabling a module does not give anyone access to it.</strong> Availability is set here for the whole organisation; access is granted person by person in{" "}
         <Link href={`/admin/access${q}`} style={{ color: "var(--ac-accent)" }}>Access</Link>.
       </Note>
-      {!organisation ? (
-        <div className="ac-state">Select an organisation.</div>
-      ) : (
+      {(
         <DataBoundary state={state} onRetry={state.reload} what="modules" isEmpty={(d) => d.length === 0} empty={<p>The module catalogue is empty.</p>}>
           {(modules) => (
             <div className="ac-table-wrap" style={{ marginTop: 16 }}>
@@ -108,7 +116,7 @@ export function ModulesView() {
         onClose={close}
         size="md"
         title={pending ? `${pending.to === "enabled" ? "Enable" : "Disable"} ${pending.module.name}?` : ""}
-        description={organisation?.name}
+        description={organisation.name}
         footer={
           <>
             <button type="button" className="ac-btn ac-btn-secondary" onClick={close} disabled={busy}>Cancel</button>
@@ -125,6 +133,6 @@ export function ModulesView() {
         )}
         {error ? <p className="ac-form-error" role="alert">{error}</p> : null}
       </Modal>
-    </div>
+    </>
   );
 }
