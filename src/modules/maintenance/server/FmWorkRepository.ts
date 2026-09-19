@@ -69,6 +69,7 @@ function asRow(value: unknown): FmWorkRow {
     source_request_code: null,
     incident_id: rec.incident_id != null ? String(rec.incident_id) : null,
     incident_code: null,
+    work_instruction_codes: [],
     assigned_to_profile_id:
       rec.assigned_to_profile_id != null
         ? String(rec.assigned_to_profile_id)
@@ -187,7 +188,21 @@ export class FmWorkRepository {
         rows.map((row) => row.incident_id).filter((id): id is string => !!id)
       ),
     ];
-    if (requestIds.length === 0 && incidentIds.length === 0) return rows;
+    if (rows.length === 0) return rows;
+
+    // Work Instructions that belong to these Works (derived — never stored on Work).
+    const instructions = await this.admin
+      .from("fm_work_instructions")
+      .select("code, work_id")
+      .eq("organisation_id", this.organisationId)
+      .in("work_id", rows.map((row) => row.id))
+      .order("code", { ascending: true });
+    if (instructions.error) throwDb(instructions.error, "Unable to load Work Instructions.");
+    const instructionCodes = new Map<string, string[]>();
+    for (const entry of instructions.data ?? []) {
+      const rec = entry as { code: string; work_id: string };
+      instructionCodes.set(rec.work_id, [...(instructionCodes.get(rec.work_id) ?? []), String(rec.code)]);
+    }
 
     const lookup = async (table: "fm_requests" | "fm_incidents", ids: string[]) => {
       const codes = new Map<string, string>();
@@ -215,6 +230,7 @@ export class FmWorkRepository {
       incident_code: row.incident_id
         ? (incidentCodes.get(row.incident_id) ?? null)
         : null,
+      work_instruction_codes: instructionCodes.get(row.id) ?? [],
     }));
   }
 
@@ -523,5 +539,25 @@ export class FmWorkRepository {
       actorProfileId
     );
     return row;
+  }
+
+  /** Active Work codes per (transitional Sheet) asset ref — asset workload. */
+  async activeByAssetRefs(assetRefs: string[]): Promise<Map<string, string[]>> {
+    const out = new Map<string, string[]>();
+    const refs = [...new Set(assetRefs.map((r) => r.trim()).filter(Boolean))];
+    if (refs.length === 0) return out;
+    const { data, error } = await this.admin
+      .from("fm_work")
+      .select("code, asset_ref")
+      .eq("organisation_id", this.organisationId)
+      .in("asset_ref", refs)
+      .in("status", ["requested", "triaged", "scheduled", "in_progress", "on_hold"])
+      .order("code", { ascending: true });
+    if (error) throwDb(error, "Unable to load asset Work workload.");
+    for (const row of data ?? []) {
+      const rec = row as { code: string; asset_ref: string };
+      out.set(rec.asset_ref, [...(out.get(rec.asset_ref) ?? []), String(rec.code)]);
+    }
+    return out;
   }
 }

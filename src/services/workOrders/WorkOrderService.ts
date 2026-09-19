@@ -1,6 +1,4 @@
-import { parseIdList, primaryId } from "@/lib/operational/idLists";
 import type { PaginatedResult } from "@/types";
-import type { Maintenance } from "@/modules/maintenance/types";
 import type {
   CreateWorkOrderInput,
   UpdateWorkOrderInput,
@@ -13,22 +11,16 @@ import type {
   WorkOrderStatus,
   WorkOrderType,
 } from "@/modules/work-orders/types";
-import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
 import {
   CacheNamespaces,
-  onMaintenanceMutation,
   onWorkOrderMutation,
 } from "@/services/cache/domainCache";
 import {
   sharedRequest,
   stableRequestKey,
 } from "@/services/cache/sharedRequest";
-import {
-  postToAppsScript,
-  postToAppsScriptData,
-} from "@/services/api/appsScriptProxy";
 type RemoteWorkOrder = Record<string, unknown>;
 
 function pickField(raw: RemoteWorkOrder, ...keys: string[]): unknown {
@@ -139,6 +131,7 @@ function mapRemoteWorkOrder(raw: RemoteWorkOrder): WorkOrder {
 
   return {
     id: String(pickField(raw, "id", "Work Order ID") ?? ""),
+    workOrderUuid: optionalMappedString(raw, "workOrderUuid"),
     title: (() => {
       const explicit = optionalMappedString(raw, "title", "Title");
       const description = optionalMappedString(
@@ -298,8 +291,10 @@ function toPaginatedWorkOrders(
 }
 
 /**
- * Work Orders domain service.
- * Talks only to ApiClient. Mirrors FacilityService / AssetService.
+ * Browser Work Instruction (Work Order / Job Order) client:
+ * browser → /api/work-orders → Supabase (fm_work_instructions).
+ * This module must stay free of server modules. Server orchestration uses
+ * `@/modules/work-orders/server/WorkInstructionServerAccess`.
  */
 export const WorkOrderService = {
   async listWorkOrders(
@@ -322,97 +317,42 @@ export const WorkOrderService = {
       asOf: params.asOf ?? "",
     });
     return sharedRequest(key, async () => {
-      if (typeof window === "undefined") {
-        const data = await postToAppsScriptData(
-          {
-            resource: "work-orders",
-            action: "getAll",
-            payload: params,
-          },
-          { resource: "work-orders", action: "getAll" },
-          "WorkOrderService.listWorkOrders"
-        );
-        return toPaginatedWorkOrders(data, params);
-      }
       const response = await apiClient.post<unknown>(
         "/work-orders",
-        {
-          resource: "work-orders",
-          action: "getAll",
-          payload: params,
-        },
+        { resource: "work-orders", action: "getAll", payload: params },
         { signal: options?.signal }
       );
       return toPaginatedWorkOrders(response.data, params);
     });
   },
 
-  /** Consolidated WO filter catalogs — one Apps Script invocation. */
+  /**
+   * Filter dropdown catalogs, composed from the authoritative registers
+   * (Facilities and People are Supabase; Assets are still legacy).
+   * A failing catalog is an error, never an empty dropdown.
+   */
   async getFilterCatalog(): Promise<WorkOrderFilterCatalog> {
-    const response = await apiClient.post<unknown>("/work-orders", {
-      resource: "work-orders",
-      action: "getFilterCatalog",
-      payload: { _auditTiming: true },
-    });
-    const raw = response.data;
-    if (!raw || typeof raw !== "object") {
-      return { facilities: [], users: [], assets: [] };
-    }
-    const data = raw as Record<string, unknown>;
-    const mapRow = (row: unknown, fields: string[]) => {
-      if (!row || typeof row !== "object") return null;
-      const obj = row as Record<string, unknown>;
-      const out: Record<string, string> = {};
-      for (const field of fields) {
-        out[field] = String(obj[field] ?? "").trim();
-      }
-      return out;
-    };
-    const facilities = Array.isArray(data.facilities)
-      ? data.facilities
-          .map((row) => mapRow(row, ["id", "name"]))
-          .filter((row): row is { id: string; name: string } => !!row?.id)
-      : [];
-    const users = Array.isArray(data.users)
-      ? data.users
-          .map((row) => mapRow(row, ["id", "name"]))
-          .filter((row): row is { id: string; name: string } => !!row?.id)
-      : [];
-    const assets = Array.isArray(data.assets)
-      ? data.assets
-          .map((row) => mapRow(row, ["id", "name", "facility"]))
-          .filter(
-            (row): row is { id: string; name: string; facility: string } =>
-              !!row?.id
-          )
-      : [];
-    const cacheDiagnostics = data._cacheDiagnostics;
+    const [{ FacilityService }, { UserService }, { AssetService }, { loadAllPages }] =
+      await Promise.all([
+        import("@/services/facilities/FacilityService"),
+        import("@/services/users/UserService"),
+        import("@/services/assets/AssetService"),
+        import("@/services/reporting/loadAllPages"),
+      ]);
+    const [facilities, users, assets] = await Promise.all([
+      loadAllPages((page, pageSize) => FacilityService.listFacilities({ page, pageSize })),
+      loadAllPages((page, pageSize) => UserService.listUsersCatalog({ page, pageSize })),
+      loadAllPages((page, pageSize) => AssetService.listAssetsCatalog({ page, pageSize })),
+    ]);
     return {
-      facilities,
-      users,
-      assets,
-      cacheDiagnostics:
-        cacheDiagnostics && typeof cacheDiagnostics === "object"
-          ? (cacheDiagnostics as WorkOrderFilterCatalog["cacheDiagnostics"])
-          : undefined,
+      facilities: facilities.map((f) => ({ id: f.id, name: f.name })),
+      users: users.map((u) => ({ id: u.id, name: u.name })),
+      assets: assets.map((a) => ({ id: a.id, name: a.name, facility: a.facility })),
     };
   },
 
   async getWorkOrder(id: string): Promise<WorkOrder | null> {
     try {
-      if (typeof window === "undefined") {
-        const row = await postToAppsScriptData(
-          {
-            resource: "work-orders",
-            action: "getById",
-            payload: { id },
-          },
-          { resource: "work-orders", action: "getById" },
-          "WorkOrderService.getWorkOrder"
-        );
-        return mapRemoteWorkOrder(row as RemoteWorkOrder);
-      }
-
       const response = await apiClient.post<WorkOrder>("/work-orders", {
         resource: "work-orders",
         action: "getById",
@@ -420,91 +360,30 @@ export const WorkOrderService = {
       });
       return mapRemoteWorkOrder(response.data as unknown as RemoteWorkOrder);
     } catch (error) {
+      // A missing Work Instruction is a normal outcome; failures and 403s are not.
       if (error instanceof ApiError && error.status === 404) return null;
-      if (
-        error instanceof Error &&
-        (error as Error & { status?: number }).status === 404
-      ) {
-        return null;
-      }
       throw error;
     }
   },
 
   async createWorkOrder(input: CreateWorkOrderInput): Promise<WorkOrder> {
-    if (typeof window === "undefined") {
-      const raw = await postToAppsScript(
-        {
-          resource: "work-orders",
-          action: "create",
-          payload: input,
-        },
-        { resource: "work-orders", action: "create" },
-        "WorkOrderService.createWorkOrder"
-      );
-
-      const envelope = raw as {
-        data?: unknown;
-        success?: boolean;
-        message?: string;
-      };
-      if (envelope && typeof envelope === "object" && envelope.success === false) {
-        throw new ApiError(
-          envelope.message ?? "Failed to create work order",
-          400,
-          envelope
-        );
-      }
-
-      const row =
-        envelope && typeof envelope === "object" && "data" in envelope
-          ? envelope.data
-          : raw;
-
-      const created = mapRemoteWorkOrder(row as RemoteWorkOrder);
-      onWorkOrderMutation();
-      return created;
-    }
-
     const response = await apiClient.post<WorkOrder>("/work-orders", {
       resource: "work-orders",
       action: "create",
       payload: input,
     });
-    const created = mapRemoteWorkOrder(
-      response.data as unknown as RemoteWorkOrder
-    );
+    const created = mapRemoteWorkOrder(response.data as unknown as RemoteWorkOrder);
     onWorkOrderMutation();
     return created;
   },
 
-  async updateWorkOrder(
-    id: string,
-    input: UpdateWorkOrderInput
-  ): Promise<WorkOrder> {
-    if (typeof window === "undefined") {
-      const row = await postToAppsScriptData(
-        {
-          resource: "work-orders",
-          action: "update",
-          payload: { id, ...input },
-        },
-        { resource: "work-orders", action: "update" },
-        "WorkOrderService.updateWorkOrder"
-      );
-      const updated = mapRemoteWorkOrder(row as RemoteWorkOrder);
-      onWorkOrderMutation();
-      return updated;
-    }
-
+  async updateWorkOrder(id: string, input: UpdateWorkOrderInput): Promise<WorkOrder> {
     const response = await apiClient.post<WorkOrder>("/work-orders", {
       resource: "work-orders",
       action: "update",
       payload: { id, ...input },
     });
-    const updated = mapRemoteWorkOrder(
-      response.data as unknown as RemoteWorkOrder
-    );
+    const updated = mapRemoteWorkOrder(response.data as unknown as RemoteWorkOrder);
     onWorkOrderMutation();
     return updated;
   },
@@ -521,89 +400,6 @@ export const WorkOrderService = {
     );
     onWorkOrderMutation();
     return deactivated;
-  },
-
-  /**
-   * Consolidated Create-from-Maintenance mutation (1 Apps Script invocation).
-   * Server-only — auth/lease/events stay in Next.js orchestration.
-   */
-  async createWorkOrderFromMaintenance(input: {
-    maintenanceId: string;
-    title?: string;
-    requestedAt?: string;
-    createdByUserId?: string;
-    updatedByUserId?: string;
-    actorUserId?: string;
-  }): Promise<{
-    maintenance: Maintenance;
-    workOrder: WorkOrder;
-    created: boolean;
-    timings?: Record<string, unknown>;
-    buildMarker?: string;
-  }> {
-    if (typeof window !== "undefined") {
-      throw new ApiError(
-        "createWorkOrderFromMaintenance is server-only.",
-        403
-      );
-    }
-
-    const row = await postToAppsScriptData(
-      {
-        resource: "work-orders",
-        action: "createFromMaintenance",
-        payload: {
-          maintenanceId: input.maintenanceId,
-          title: input.title,
-          requestedAt: input.requestedAt,
-          createdByUserId: input.createdByUserId,
-          updatedByUserId: input.updatedByUserId,
-          actorUserId: input.actorUserId,
-        },
-      },
-      { resource: "work-orders", action: "createFromMaintenance" },
-      "WorkOrderService.createWorkOrderFromMaintenance"
-    );
-
-    if (!row || typeof row !== "object") {
-      throw new ApiError(
-        "createWorkOrderFromMaintenance returned empty data",
-        500,
-        row
-      );
-    }
-
-    const data = row as Record<string, unknown>;
-    if (!data.maintenance || typeof data.maintenance !== "object") {
-      throw new ApiError(
-        "createWorkOrderFromMaintenance missing maintenance",
-        500,
-        row
-      );
-    }
-    if (!data.workOrder || typeof data.workOrder !== "object") {
-      throw new ApiError(
-        "createWorkOrderFromMaintenance missing workOrder",
-        500,
-        row
-      );
-    }
-
-    const result = {
-      maintenance: MaintenanceService.fromAppsScriptRow(data.maintenance),
-      workOrder: mapRemoteWorkOrder(data.workOrder as RemoteWorkOrder),
-      created: data.created === true,
-      timings:
-        data.timings && typeof data.timings === "object"
-          ? (data.timings as Record<string, unknown>)
-          : undefined,
-      buildMarker:
-        data.buildMarker != null ? String(data.buildMarker) : undefined,
-    };
-
-    onWorkOrderMutation();
-    onMaintenanceMutation();
-    return result;
   },
 
   async getOpenWorkOrders(): Promise<WorkOrder[]> {

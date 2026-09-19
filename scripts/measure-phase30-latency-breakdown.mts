@@ -197,6 +197,7 @@ async function measureCreateWoPath(context: ActionContext, maintenanceId: string
   t0 = performance.now();
   await orchestrateCreateWorkOrderFromMaintenance({
     maintenanceId,
+    orderType: "work_order",
     context,
   });
   mark(stages, "orchestrate_full_including_lease_events", t0);

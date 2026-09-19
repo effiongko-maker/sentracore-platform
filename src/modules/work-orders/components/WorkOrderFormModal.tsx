@@ -277,7 +277,11 @@ export function WorkOrderFormModal({
   function validate() {
     const next: Partial<Record<keyof WorkOrderFormValues, string>> = {};
     if (!form.title.trim()) next.title = "Title is required";
-    if (!form.facilityId.trim()) next.facilityId = "Facility is required";
+    // A Work Instruction belongs to Work; facility is inherited from it.
+    if (!(form.maintenanceId ?? "").trim()) {
+      next.maintenanceId = "Select the Work this instruction belongs to";
+    }
+    if (!form.facilityId.trim()) next.facilityId = "Facility comes from the selected Work";
 
     const orderTypeCheck = validateOrderTypeSelection(form.orderType);
     if (!orderTypeCheck.ok) {
@@ -661,19 +665,23 @@ export function WorkOrderFormModal({
         </FormField>
 
         <FormField
-          label="Source maintenance"
+          label="Work"
           htmlFor="wo-maintenance-id"
           className="sm:col-span-2"
-          hint="Optional. Link to an existing maintenance record."
+          required
+          error={errors.maintenanceId}
+          hint="Every Work Instruction belongs to Work. Facility is inherited from it."
         >
           <SearchableSelect
             id="wo-maintenance-id"
-            aria-label="Source maintenance"
+            aria-label="Work"
             value={form.maintenanceId ?? ""}
-            onChange={(value) => updateField("maintenanceId", value)}
+            onChange={(value) => {
+              updateField("maintenanceId", value);
+              const work = maintenanceRows.find((row) => row.id === value);
+              if (work?.facilityId) updateField("facilityId", work.facilityId);
+            }}
             options={maintenanceOptions}
-            allowEmpty
-            emptyOptionLabel="Not linked to maintenance"
             searchPlaceholder="Search by reference, title, or facility…"
             loading={maintenanceLoading}
             disabled={saving}

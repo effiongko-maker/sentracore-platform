@@ -1,21 +1,18 @@
 import { NextResponse } from "next/server";
 import { gateApiCapability } from "@/lib/access/gateApi";
-import {
-  postToAppsScript,
-  type AppsScriptProxyBody,
-} from "@/services/api/appsScriptProxy";
-import { overlayIncidentWorkload } from "@/lib/operational/workload/overlayIncidentWorkload";
+import type { AppsScriptProxyBody } from "@/services/api/appsScriptProxy";
+import { composeWorkloadSummary } from "@/lib/operational/workload/composeWorkloadSummary";
 import { FmIncidentRepository } from "@/modules/incidents/server/FmIncidentRepository";
 import { resolveFmIncidentOrganisation } from "@/modules/incidents/server/FmIncidentServerService";
+import { FmWorkRepository } from "@/modules/maintenance/server/FmWorkRepository";
+import { FmWorkInstructionRepository } from "@/modules/work-orders/server/FmWorkInstructionRepository";
 
 /**
- * Server-only proxy: bounded People / Asset workload summaries.
- * Requires ops.view (operational register context).
+ * Server-only bounded People / Asset workload summaries. Requires ops.view.
  *
- * Phase 2D: the Incident component of the asset summary is Supabase-
- * authoritative. Apps Script still counts Sheet Incidents (it is frozen), so
- * that component is replaced here. If the Incident source fails the request
- * FAILS — an asset workload is never reported with a silent zero.
+ * Phase 2E: composed entirely from Supabase — Work Instructions (people +
+ * assets), Work and Incidents (assets). No Apps Script call. If ANY source
+ * fails the request FAILS: a workload is never reported with a silent zero.
  */
 export async function POST(request: Request) {
   try {
@@ -23,56 +20,42 @@ export async function POST(request: Request) {
     if (!gate.ok) return gate.response;
 
     let body: AppsScriptProxyBody = {};
-
     try {
       body = (await request.json()) as AppsScriptProxyBody;
     } catch {
       body = {};
     }
-
-    const data = await postToAppsScript(
-      body,
-      { resource: "operational-workload", action: "getEntitySummary" },
-      "api/operational-workload"
-    );
-
     const payload =
       body.payload && typeof body.payload === "object"
         ? (body.payload as Record<string, unknown>)
         : {};
-    const assetIds = Array.isArray(payload.assetIds)
-      ? payload.assetIds.map((id) => String(id))
-      : [];
-    if (assetIds.length > 0 && data && typeof data === "object") {
-      const { organisationId } = resolveFmIncidentOrganisation(gate.session);
-      const incidentsByAsset = await new FmIncidentRepository(
-        organisationId
-      ).activeByAssetRefs(assetIds);
-      const envelope = data as { data?: unknown };
-      envelope.data = overlayIncidentWorkload(
-        envelope.data as Parameters<typeof overlayIncidentWorkload>[0],
-        assetIds,
-        incidentsByAsset
-      );
-    }
+    const strings = (value: unknown) =>
+      Array.isArray(value) ? value.map((v) => String(v).trim()).filter(Boolean) : [];
+    const assetIds = strings(payload.assetIds);
+    const userIds = strings(payload.userIds);
 
-    return NextResponse.json(data, {
-      status: 200,
-      headers: { "Cache-Control": "no-store" },
+    const { organisationId } = resolveFmIncidentOrganisation(gate.session);
+    const [instructions, workByAsset, incidentsByAsset] = await Promise.all([
+      new FmWorkInstructionRepository(organisationId).activeWorkload({ userIds, assetRefs: assetIds }),
+      assetIds.length ? new FmWorkRepository(organisationId).activeByAssetRefs(assetIds) : new Map<string, string[]>(),
+      assetIds.length ? new FmIncidentRepository(organisationId).activeByAssetRefs(assetIds) : new Map<string, string[]>(),
+    ]);
+
+    const summary = composeWorkloadSummary({
+      instructionsByUser: instructions.byUser,
+      instructionsByAsset: instructions.byAsset,
+      workByAsset,
+      incidentsByAsset,
     });
-  } catch (error) {
-    console.error("[api/operational-workload] proxy error:", error);
-
     return NextResponse.json(
-      {
-        success: false,
-        message:
-          error instanceof Error
-            ? error.message
-            : "Unable to reach Apps Script.",
-        data: null,
-      },
-      { status: 502 }
+      { success: true, message: "", data: summary },
+      { status: 200, headers: { "Cache-Control": "no-store" } }
+    );
+  } catch (error) {
+    console.error("[api/operational-workload] error:", error);
+    return NextResponse.json(
+      { success: false, message: "Workload sources are unavailable.", data: null },
+      { status: 503, headers: { "Cache-Control": "no-store" } }
     );
   }
 }

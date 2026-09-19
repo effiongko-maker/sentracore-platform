@@ -36,7 +36,10 @@ export type WorkOrderOrderType = "work_order" | "job_order";
 
 /** Canonical WorkOrder domain model. */
 export interface WorkOrder {
+  /** Display reference (WO-YYYY-######). Org-scoped, immutable. */
   id: string;
+  /** Authoritative Supabase identity (fm_work_instructions.id). */
+  workOrderUuid?: string;
 
   title: string;
   description?: string;

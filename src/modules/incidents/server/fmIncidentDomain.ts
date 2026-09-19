@@ -107,7 +107,6 @@ export type FmIncidentRow = {
   source_request_id: string | null;
   parent_incident_id: string | null;
   asset_ref: string | null;
-  work_order_ref: string | null;
   reported_by_profile_id: string | null;
   assigned_to_profile_id: string | null;
   operational_event_id: string | null;
@@ -130,7 +129,7 @@ export type FmIncidentRow = {
 };
 
 export const FM_INCIDENT_SELECT =
-  "id, organisation_id, code, facility_id, title, description, location_detail, incident_type, source, category_id, severity, status, reported_via, is_emergency, people_affected, hold_reason, requires_work_instruction, source_request_id, parent_incident_id, asset_ref, work_order_ref, reported_by_profile_id, assigned_to_profile_id, operational_event_id, reported_at, discovered_at, acknowledged_at, response_due_at, contained_at, resolved_at, closed_at, immediate_actions, root_cause, corrective_actions, preventive_actions, resolution_notes, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
+  "id, organisation_id, code, facility_id, title, description, location_detail, incident_type, source, category_id, severity, status, reported_via, is_emergency, people_affected, hold_reason, requires_work_instruction, source_request_id, parent_incident_id, asset_ref, reported_by_profile_id, assigned_to_profile_id, operational_event_id, reported_at, discovered_at, acknowledged_at, response_due_at, contained_at, resolved_at, closed_at, immediate_actions, root_cause, corrective_actions, preventive_actions, resolution_notes, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
 
 /** Relationships derived at read time — never stored on the Incident row. */
 export type FmIncidentRelations = {
@@ -140,6 +139,8 @@ export type FmIncidentRelations = {
   sourceRequestCode?: string;
   /** Display code of the parent Incident, if any. */
   parentIncidentCode?: string;
+  /** Work Instruction codes derived through this Incident's Work (Incident → Work → Work Instruction). */
+  workOrderIds?: string[];
 };
 
 export const EMPTY_INCIDENT_RELATIONS: FmIncidentRelations = {
@@ -238,18 +239,6 @@ function assertNoMaintenanceArrays(raw: Record<string, unknown>): void {
   }
 }
 
-/** Primary legacy Work Order ref (scalar). The array form collapses to its first id. */
-function primaryWorkOrderRef(raw: Record<string, unknown>): string | undefined {
-  const explicit = optionalTrimmed(raw.workOrderId);
-  if (explicit) return explicit;
-  const ids = raw.workOrderIds;
-  if (Array.isArray(ids)) {
-    const first = ids.map((id) => String(id).trim()).find(Boolean);
-    if (first) return first;
-  }
-  return undefined;
-}
-
 export type IncidentFields = {
   title?: string;
   description?: string | null;
@@ -267,7 +256,6 @@ export type IncidentFields = {
   sourceRequestRef?: string | null;
   parentIncidentRef?: string | null;
   assetRef?: string | null;
-  workOrderRef?: string | null;
   reportedByProfileId?: string | null;
   assignedToProfileId?: string | null;
   operationalEventId?: string | null;
@@ -356,11 +344,6 @@ function parseFields(raw: Record<string, unknown>): IncidentFields {
   if (raw.sourceRequestId !== undefined) out.sourceRequestRef = nullable(raw.sourceRequestId);
   if (raw.parentIncidentId !== undefined) out.parentIncidentRef = nullable(raw.parentIncidentId);
   if (raw.assetId !== undefined) out.assetRef = nullable(raw.assetId);
-
-  const workOrderRef = primaryWorkOrderRef(raw);
-  if (workOrderRef !== undefined) out.workOrderRef = workOrderRef;
-  // requiresWorkOrder=false ⇒ no linked Work Order (existing product rule).
-  if (out.requiresWorkInstruction === false) out.workOrderRef = null;
 
   if (raw.reportedByUserId !== undefined) {
     out.reportedByProfileId =
@@ -452,7 +435,7 @@ export function mapFmIncidentRowToIncident(
   row: FmIncidentRow,
   relations: FmIncidentRelations = EMPTY_INCIDENT_RELATIONS
 ): Incident {
-  const workOrderIds = row.work_order_ref ? [row.work_order_ref] : [];
+  const workOrderIds = relations.workOrderIds ?? [];
   return {
     id: row.code,
     incidentUuid: row.id,

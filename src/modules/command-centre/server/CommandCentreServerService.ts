@@ -29,7 +29,6 @@ import { PlatformFinanceRequestsServerService } from "@/modules/platform-finance
 import { PlatformFinancePayablesServerService } from "@/modules/platform-finance/server/PlatformFinancePayablesServerService";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
-  loadAssignmentSummary,
   loadOperationalPictureSummary,
   type OperationalPictureSummary,
 } from "@/services/workspace/CommandCentreFmSummaryService";
@@ -128,31 +127,6 @@ function financeModuleEnabled(session: PlatformSession): boolean {
   return (
     isSuperAdmin || hasModule(session.enabledModules, PLATFORM_FINANCE_MODULE_SLUG)
   );
-}
-
-/**
- * Transitional Sheet Work Order assignee lookup only.
- * NOT FM authorization. Work and Incidents use the profile UUID directly.
- * Retained until Work Instructions cut over to profile UUID.
- */
-async function loadTransitionalSheetAssigneeId(
-  session: PlatformSession
-): Promise<string | null> {
-  const organisationId =
-    session.organisation?.id ?? session.profile.organisationId;
-  if (!organisationId) return null;
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("operational_identity_links")
-    .select("external_identity_id, status")
-    .eq("organisation_id", organisationId)
-    .eq("profile_id", session.userId)
-    .eq("identity_domain", "facility_management")
-    .maybeSingle();
-  if (error || !data) return null;
-  if (String(data.status) !== "active") return null;
-  const id = String(data.external_identity_id ?? "").trim();
-  return id || null;
 }
 
 export class CommandCentreServerService {
@@ -675,17 +649,18 @@ export class CommandCentreServerService {
         incidentsSource = { state: "unavailable" };
       }
 
+      // Phase 2E: Work Instructions are Supabase — profile UUID, no identity-link hop.
       let workOrdersSource: DomainSource = { state: "unavailable" };
-      const sheetAssigneeId = await loadTransitionalSheetAssigneeId(
-        access.session
-      );
-      if (sheetAssigneeId) {
-        try {
-          const summary = await loadAssignmentSummary(sheetAssigneeId);
-          workOrdersSource = summary.workOrders;
-        } catch {
-          workOrdersSource = { state: "unavailable" };
-        }
+      try {
+        const { FmWorkInstructionRepository } = await import(
+          "@/modules/work-orders/server/FmWorkInstructionRepository"
+        );
+        const count = await new FmWorkInstructionRepository(
+          access.organisationId
+        ).countAssignedForProfile(access.profileId);
+        workOrdersSource = { state: "healthy", active: count };
+      } catch {
+        workOrdersSource = { state: "unavailable" };
       }
 
       const domains = [
@@ -739,7 +714,7 @@ export class CommandCentreServerService {
         state: assigned.length === 0 ? "empty" : "healthy",
         message: assigned.length === 0 ? "You have no active assignments." : "",
         detail:
-          "Work and Incidents use your profile identity. Work Orders still use transitional Sheet assignee mapping when available.",
+          "Work, Work Instructions and Incidents all use your profile identity.",
         items: assigned,
       };
     } catch {

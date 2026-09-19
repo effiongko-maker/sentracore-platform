@@ -28,7 +28,7 @@ import { IncidentServerAccess } from "@/modules/incidents/server/IncidentServerA
 import { MaintenanceServerAccess as MaintenanceService } from "@/modules/maintenance/server/MaintenanceServerAccess";
 import { RequestServerAccess } from "@/modules/requests/server/RequestServerAccess";
 import { isRequestTerminal } from "@/modules/requests/treatment/status";
-import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
+import { WorkInstructionServerAccess as WorkOrderService } from "@/modules/work-orders/server/WorkInstructionServerAccess";
 import {
   maintenanceEventData,
   withIntakeMetadata,

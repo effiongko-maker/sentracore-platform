@@ -87,6 +87,7 @@ function sampleRow(overrides: Partial<FmWorkRow> = {}): FmWorkRow {
     source_request_code: null,
     incident_id: null,
     incident_code: null,
+    work_instruction_codes: [],
     assigned_to_profile_id: null,
     reported_by_profile_id: null,
     hold_reason: null,
@@ -206,7 +207,7 @@ function runStatic(results: CheckResult[]) {
   try {
     const cc = readSrc(CC);
     assert(cc.includes("MaintenanceServerAccess"), "CC Work from Supabase");
-    assert(cc.includes("Replace Apps Script Maintenance"), "CC replaces MNT");
+    assert(cc.includes("Maintenance (Work, Phase 2B)") && cc.includes("MaintenanceServerAccess"), "CC replaces MNT with Supabase Work");
     const people = readSrc(PEOPLE);
     assert(people.includes("FmWorkRepository"), "people workload from fm_work");
     push(results, "derived consumers", "PASS");

@@ -1,4 +1,5 @@
 import { emitActionEvent, type ActionContext } from "@/lib/actions";
+import { ActionError } from "@/lib/actions/errors";
 import { OperationalEventTypes } from "@/lib/events/taxonomy";
 import {
   incidentEventData,
@@ -18,8 +19,6 @@ import {
   transitionWorkOrder,
 } from "@/lib/operational/lifecycle";
 import {
-  linkWorkOrderToIncident,
-  normalizeIncidentRelationships,
 } from "@/lib/operational/relationships";
 import type { OperationalIntakeSource } from "@/lib/operational/intake";
 import {
@@ -28,8 +27,9 @@ import {
 } from "@/lib/operational/intake";
 import { assertNewIncidentCreateAllowed } from "@/lib/operational/work/incidentWriteFreeze";
 import { IncidentServerAccess } from "@/modules/incidents/server/IncidentServerAccess";
+import { validateOrderTypeSelection } from "@/modules/work-orders/instructionKind";
 import { MaintenanceServerAccess as MaintenanceService } from "@/modules/maintenance/server/MaintenanceServerAccess";
-import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
+import { WorkInstructionServerAccess as WorkOrderService } from "@/modules/work-orders/server/WorkInstructionServerAccess";
 import type {
   CreateIncidentInput,
   Incident,
@@ -44,6 +44,7 @@ import type {
   CreateWorkOrderInput,
   UpdateWorkOrderInput,
   WorkOrder,
+  WorkOrderOrderType,
 } from "@/modules/work-orders/types";
 
 /**
@@ -229,21 +230,8 @@ export async function orchestrateCreateWorkOrder(options: {
   const workOrder = await WorkOrderService.createWorkOrder(options.input);
   let linkedMaintenance: Maintenance | undefined;
 
-  if (options.input.incidentId) {
-    const incident = await IncidentServerAccess.getIncident(options.input.incidentId);
-    if (incident) {
-      const rel = linkWorkOrderToIncident(
-        normalizeIncidentRelationships(incident),
-        workOrder.id
-      );
-      await IncidentServerAccess.updateIncident(incident.id, {
-        workOrderIds: rel.workOrderIds,
-        workOrderId: rel.workOrderId,
-        requiresWorkOrder: true,
-      });
-    }
-  }
-
+  // Phase 2E: Incident → Work → Work Instruction is fully relational. The
+  // Incident carries no Work Order reference; it is derived through the Work.
   if (options.input.maintenanceId) {
     const maintenance =
       options.maintenanceSnapshot ??
@@ -272,7 +260,7 @@ export async function orchestrateCreateWorkOrder(options: {
         const event = await emitActionEvent(options.context, {
           eventType: OperationalEventTypes.FACILITY_WORK_ORDER_CREATED,
           entityType: "work_order",
-          entityId: workOrder.id,
+          entityId: workOrder.workOrderUuid ?? workOrder.id,
           data: withIntakeMetadata(
             workOrderEventData(workOrder, {
               actor: options.context.userId,
@@ -305,6 +293,8 @@ export async function orchestrateCreateWorkOrder(options: {
  */
 export async function orchestrateCreateWorkOrderFromMaintenance(options: {
   maintenanceId: string;
+  /** Explicit manual selection (Work Order | Job Order). Never inferred. */
+  orderType: WorkOrderOrderType;
   context: ActionContext;
   title?: string;
 }): Promise<{ maintenance: Maintenance; workOrder: WorkOrder }> {
@@ -391,7 +381,7 @@ export async function orchestrateCreateWorkOrderFromMaintenance(options: {
         reportedByUserId: maintenance.reportedByUserId,
         assignedToUserId: maintenance.assignedToUserId,
         priority: maintenance.priority || "medium",
-        orderType: "work_order",
+        orderType: options.orderType,
         status: "open",
         requestedAt: options.context.now,
         createdByUserId: options.context.userId,
@@ -427,7 +417,7 @@ export async function orchestrateCreateWorkOrderFromMaintenance(options: {
         const event = await emitActionEvent(options.context, {
           eventType: OperationalEventTypes.FACILITY_WORK_ORDER_CREATED,
           entityType: "work_order",
-          entityId: workOrder.id,
+          entityId: workOrder.workOrderUuid ?? workOrder.id,
           data: withIntakeMetadata(
             workOrderEventData(workOrder, {
               actor: options.context.userId,
@@ -466,6 +456,8 @@ export type TriageIncidentInput = {
   response: TriageResponse;
   maintenanceTitle?: string;
   workOrderTitle?: string;
+  /** Explicit manual selection — required for create_work_order / create_both. */
+  orderType?: WorkOrderOrderType;
   assignedToUserId?: string;
   resolveIncident?: boolean;
 };
@@ -483,6 +475,19 @@ export async function orchestrateTriageIncident(options: {
   const incident = await IncidentServerAccess.getIncident(options.input.incidentId);
   if (!incident) {
     throw new Error("Incident not found");
+  }
+
+  const wantsWorkOrder =
+    options.input.response === "create_work_order" ||
+    options.input.response === "create_both";
+  // Order Type is a manual selection — validated before anything is written.
+  let triageOrderType: WorkOrderOrderType | undefined;
+  if (wantsWorkOrder) {
+    const selection = validateOrderTypeSelection(options.input.orderType);
+    if (!selection.ok) {
+      throw new ActionError("VALIDATION_ERROR", selection.message);
+    }
+    triageOrderType = selection.kind;
   }
 
   // Idempotent resolve: do not re-triage a terminal incident (would recreate resolve events).
@@ -583,6 +588,21 @@ export async function orchestrateTriageIncident(options: {
     });
   }
 
+  if (needsWorkOrder && !maintenance) {
+    // A Work Instruction belongs to Work: reuse this Incident's Work.
+    const existingWorkId = current.maintenanceIds?.[0];
+    const existingWork = existingWorkId
+      ? await MaintenanceService.getMaintenance(existingWorkId)
+      : null;
+    if (!existingWork) {
+      throw new ActionError(
+        "VALIDATION_ERROR",
+        "A Work Instruction belongs to Work — create Work for this Incident first (create both)."
+      );
+    }
+    maintenance = existingWork;
+  }
+
   if (needsWorkOrder) {
     workOrder = await runExclusiveOperationalAction({
       organisationId: options.context.organisation.id,
@@ -612,7 +632,7 @@ export async function orchestrateTriageIncident(options: {
               `Work order: ${current.title}`.slice(0, 200),
             description: current.description,
             type: "corrective",
-            orderType: "work_order",
+            orderType: triageOrderType!,
             source: "incident",
             facilityId: current.facilityId,
             assetId: current.assetId,
@@ -633,13 +653,9 @@ export async function orchestrateTriageIncident(options: {
         });
         const fresh = await IncidentServerAccess.getIncident(current.id);
         if (fresh) current = fresh;
-        const rel = linkWorkOrderToIncident(
-          normalizeIncidentRelationships(current),
-          created.workOrder.id
-        );
+        // Work Order links are derived (Incident → Work → Work Instruction);
+        // only the declared requirement is recorded on the Incident.
         current = await IncidentServerAccess.updateIncident(current.id, {
-          workOrderIds: rel.workOrderIds,
-          workOrderId: rel.workOrderId,
           requiresWorkOrder: true,
         });
         return { entityId: created.workOrder.id, value: created.workOrder };
@@ -733,7 +749,7 @@ export async function orchestrateCompleteWorkOrder(options: {
       await emitActionEvent(options.context, {
         eventType: OperationalEventTypes.FACILITY_WORK_ORDER_COMPLETED,
         entityType: "work_order",
-        entityId: completed.id,
+        entityId: completed.workOrderUuid ?? completed.id,
         data: workOrderEventData(completed, {
           previousStatus,
           nextStatus: completed.status,

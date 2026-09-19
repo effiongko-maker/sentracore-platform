@@ -97,6 +97,8 @@ export type FmWorkRow = {
   incident_id: string | null;
   /** Display code of the treated Incident; hydrated by the repository (not a column). */
   incident_code: string | null;
+  /** Codes of the Work Instructions whose work_id is this Work (derived, not a column). */
+  work_instruction_codes: string[];
   assigned_to_profile_id: string | null;
   reported_by_profile_id: string | null;
   hold_reason: string | null;
@@ -250,8 +252,8 @@ export function mapFmWorkRowToMaintenance(row: FmWorkRow): Maintenance {
     operationalEventId: row.operational_event_id ?? undefined,
     eventId: row.operational_event_id ?? undefined,
     incidentId: row.incident_code ?? undefined,
-    workOrderId: undefined,
-    workOrderIds: [],
+    workOrderId: row.work_instruction_codes[0],
+    workOrderIds: [...row.work_instruction_codes],
     sourceRequestId: row.source_request_code ?? undefined,
     priority: row.priority as MaintenancePriority,
     status: row.status as MaintenanceStatus,

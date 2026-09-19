@@ -112,7 +112,8 @@ async function main() {
   assert.match(access, /platform_capability_grants/);
   assert.match(api, /operationalUserId: operatingAccess\.sheetUserId/);
   assert.match(workspace, /currentUser\?\.operationalUserId/);
-  assert.match(commandCentre, /loadTransitionalSheetAssigneeId/);
+  // Phase 2E: no runtime Command Centre dependency on operational_identity_links remains.
+  assert.doesNotMatch(commandCentre, /loadTransitionalSheetAssigneeId|operational_identity_links/);
   assert.doesNotMatch(commandCentre, /loadAssignmentSummary\(operatingAccess\.sheetUserId\)/);
   assert.doesNotMatch(maintenance, /reportedByUserId:\s*validated\.reportedByUserId \|\| context\.userId/);
   assert.doesNotMatch(issue, /reportedByUserId:\s*context\.userId/);

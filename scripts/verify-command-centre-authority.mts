@@ -223,8 +223,8 @@ function runStatic(results: CheckResult[]) {
     assert(service.includes("composeAssignments"), "assignment composition");
     assert(
       service.includes("loadOperationalPictureSummary") &&
-        service.includes("loadAssignmentSummary"),
-      "authoritative versioned FM summary contracts"
+        !service.includes("loadAssignmentSummary"),
+      "Operational Picture contract retained; Apps Script Assignment Summary retired (Phase 2E)"
     );
     assert(
       service.includes("getCommandCentreOverview"),

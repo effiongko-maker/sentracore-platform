@@ -11,6 +11,8 @@ import {
   useUserName,
   useWorkOrderTitle,
 } from "@/hooks/useEntityLabel";
+import { OrderTypePicker } from "@/modules/work-orders/components/OrderTypePicker";
+import type { WorkInstructionKind } from "@/modules/work-orders/instructionKind";
 import { createWorkOrderFromMaintenance } from "@/modules/work-orders/actions/createWorkOrderFromMaintenance";
 import { useToast } from "@/components/ui/Toast";
 import {
@@ -56,6 +58,7 @@ export function ViewMaintenanceModal({
 }: ViewMaintenanceModalProps) {
   const { toast } = useToast();
   const [creatingWorkOrder, setCreatingWorkOrder] = useState(false);
+  const [newOrderType, setNewOrderType] = useState<WorkInstructionKind | "">("");
   const facilityName = useFacilityName(maintenance?.facilityId);
   const assetName = useAssetName(maintenance?.assetId);
   const assigneeName = useUserName(maintenance?.assignedToUserId);
@@ -78,7 +81,7 @@ export function ViewMaintenanceModal({
     if (!maintenance) return;
     setCreatingWorkOrder(true);
     try {
-      const result = await createWorkOrderFromMaintenance(maintenance.id);
+      const result = await createWorkOrderFromMaintenance(maintenance.id, newOrderType);
       if (!result.success) {
         throw new Error(result.error.message);
       }
@@ -219,13 +222,15 @@ export function ViewMaintenanceModal({
               <div className="space-y-2">
                 <p className="text-sm text-muted">No work order linked yet</p>
                 <div className="flex flex-wrap gap-2">
+                  <OrderTypePicker value={newOrderType} onChange={setNewOrderType} disabled={creatingWorkOrder} />
                   <Button
                     type="button"
                     size="sm"
                     loading={creatingWorkOrder}
+                    disabled={!newOrderType}
                     onClick={() => void handleCreateWorkOrder()}
                   >
-                    Create new work order
+                    Create Work Instruction
                   </Button>
                   {onEdit ? (
                     <Button

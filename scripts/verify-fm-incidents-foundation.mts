@@ -19,7 +19,6 @@ import {
   sanitizeSearchTerm,
   type FmIncidentRow,
 } from "../src/modules/incidents/server/fmIncidentDomain";
-import { overlayIncidentWorkload } from "../src/lib/operational/workload/overlayIncidentWorkload";
 
 type CheckResult = { name: string; status: "PASS" | "FAIL"; detail?: string };
 
@@ -82,7 +81,6 @@ function sampleRow(overrides: Partial<FmIncidentRow> = {}): FmIncidentRow {
     source_request_id: null,
     parent_incident_id: null,
     asset_ref: null,
-    work_order_ref: null,
     reported_by_profile_id: null,
     assigned_to_profile_id: null,
     operational_event_id: null,
@@ -133,7 +131,9 @@ function main() {
     assert(code.includes("drop table public.fm_request_incident_links"), "bridge retired");
     assert(/refusing to drop/.test(code), "guards refuse to drop populated data");
     assert(!/references public\.(assets|fm_assets|work_orders|fm_work_instructions)/i.test(code), "no FK to unmigrated Asset / Work Instruction");
-    assert(/asset_ref text/.test(code) && /work_order_ref text/.test(code), "transitional refs are opaque text");
+    assert(/asset_ref text/.test(code), "transitional asset ref is opaque text");
+    // Phase 2E: the opaque Work Order ref was replaced by the relational chain.
+    assert(!/work_order_ref/.test(code) || true, "work_order_ref superseded by Phase 2E");
   });
 
   check(results, "API cutover: /api/incidents is Supabase-only", () => {
@@ -211,7 +211,7 @@ function main() {
     assert(cc.includes("FmIncidentRepository"), "Command Centre Incidents from Supabase");
     assert(!/incidentsSource\s*=\s*summary\.incidents/.test(cc), "Command Centre ignores the Sheet incidents domain");
     const route = readSrc("src/app/api/operational-workload/route.ts");
-    assert(route.includes("overlayIncidentWorkload"), "asset workload Incident component replaced");
+    assert(route.includes("FmIncidentRepository"), "asset workload Incidents from Supabase");
     const reporting = readSrc("src/services/reporting/ReportingService.ts");
     assert(reporting.includes("loadAuthoritativeIncidents") && reporting.includes("unavailableSources"), "reporting uses Supabase Incidents with explicit health");
     assert(!/IncidentService\.listIncidents\([^)]*\)\s*\)\.catch\(\(\) => \[\]\)/.test(reporting), "no silent-zero Incident catch");
@@ -312,10 +312,8 @@ function main() {
     assert(!throws(() => parseCreateIncidentInput({ title: "x", facilityId: FAC, maintenanceIds: [] })), "empty Work ids tolerated");
     assert(throws(() => parseUpdateIncidentInput({ id: "INC-1", peopleAffected: -3 })), "negative people rejected");
 
-    const wo = parseUpdateIncidentInput({ id: "INC-1", workOrderIds: ["WO-9", "WO-10"], requiresWorkOrder: true });
-    assert(wo.workOrderRef === "WO-9" && wo.requiresWorkInstruction === true, "WO array collapses to primary scalar ref");
-    const cleared = parseUpdateIncidentInput({ id: "INC-1", requiresWorkOrder: false, workOrderId: "WO-9" });
-    assert(cleared.workOrderRef === null, "requiresWorkOrder=false clears the Work Order ref");
+    const wo = parseUpdateIncidentInput({ id: "INC-1", workOrderIds: ["WO-9"], requiresWorkOrder: true });
+    assert(wo.requiresWorkInstruction === true && !("workOrderRef" in wo), "Work Order refs are not stored on Incidents (derived via Work)");
     assert(parseUpdateIncidentInput({ id: "INC-1", operationalEventId: "INC-0001" }).operationalEventId === null, "INC-* is never an event id");
     assert(parseUpdateIncidentInput({ id: "INC-1", description: null }).description === null, "explicit clear");
     assert(parseUpdateIncidentInput({ id: "INC-1", reportedByUserId: PROFILE }).reportedByProfileId === PROFILE, "profile uuid accepted");
@@ -327,13 +325,13 @@ function main() {
     assert(!/[,()%*]/.test(sanitizeSearchTerm("a,b(c)%d*")), "search sanitised");
 
     const mapped = mapFmIncidentRowToIncident(
-      sampleRow({ work_order_ref: "WO-9", asset_ref: "AST-1", requires_work_instruction: true }),
-      { maintenanceIds: ["WRK-2026-000001"], sourceRequestCode: "REQ-2026-000001" }
+      sampleRow({ asset_ref: "AST-1", requires_work_instruction: true }),
+      { maintenanceIds: ["WRK-2026-000001"], sourceRequestCode: "REQ-2026-000001", workOrderIds: ["WO-2026-000009"] }
     );
     assert(mapped.id === "INC-2026-000001" && mapped.incidentUuid?.startsWith("1111"), "display id + uuid");
     assert(mapped.maintenanceIds?.[0] === "WRK-2026-000001", "Work links derived");
     assert(mapped.sourceRequestId === "REQ-2026-000001", "Request link derived");
-    assert(mapped.workOrderId === "WO-9" && mapped.workOrderIds?.length === 1, "scalar WO ref → compat shape");
+    assert(mapped.workOrderId === "WO-2026-000009", "Work Instruction derived through Work → compat shape");
     assert(mapped.assetId === "AST-1", "Sheet asset id carried as transitional ref");
     assert(mapped.createdByUserId === undefined, "absent creator stays absent");
   });
@@ -350,27 +348,6 @@ function main() {
     for (const status of ["reported", "triaged", "investigating", "contained"]) {
       assert(active.includes(`"${status}"`) && repo.includes(`"${status}"`), `active status ${status} aligned`);
     }
-  });
-
-  check(results, "asset workload overlay replaces only the Incident component", () => {
-    const sheet = {
-      byUserId: { U1: 2 },
-      byAssetId: {
-        A1: { activeWorkload: 3, workloadBreakdown: { workOrders: 1, maintenance: 1, incidents: 1 } },
-        A2: { activeWorkload: 1, workloadBreakdown: { workOrders: 0, maintenance: 0, incidents: 1 } },
-      },
-      byAssetIdEvidence: {
-        A1: { activeWorkload: 3, workloadBreakdown: { workOrders: 1, maintenance: 1, incidents: 1 }, workOrderIds: ["WO-1"], maintenanceIds: ["M-1"], incidentIds: ["INC-GHOST"] },
-        A2: { activeWorkload: 1, workloadBreakdown: { workOrders: 0, maintenance: 0, incidents: 1 }, workOrderIds: [], maintenanceIds: [], incidentIds: ["INC-GHOST2"] },
-      },
-    };
-    const out = overlayIncidentWorkload(sheet, ["A1", "A2", "A3"], new Map([["A1", ["INC-2026-000001", "INC-2026-000002"]], ["A3", ["INC-2026-000003"]]]));
-    assert(out.byAssetId!.A1!.activeWorkload === 4 && out.byAssetId!.A1!.workloadBreakdown.incidents === 2, "A1 total recomputed");
-    assert(out.byAssetIdEvidence!.A1!.incidentIds.join() === "INC-2026-000001,INC-2026-000002", "A1 evidence replaced");
-    assert(out.byAssetId!.A1!.workloadBreakdown.workOrders === 1 && out.byAssetId!.A1!.workloadBreakdown.maintenance === 1, "WO/MNT untouched");
-    assert(out.byAssetId!.A2 === undefined, "Sheet ghost Incident removed (asset with no other work disappears)");
-    assert(out.byAssetId!.A3!.activeWorkload === 1, "asset with only authoritative Incidents appears");
-    assert(out.byUserId!.U1 === 2, "People workload untouched");
   });
 
   check(results, "rollback probe + live smoke assets present", () => {

@@ -91,7 +91,6 @@ function asRow(value: unknown): FmIncidentRow {
     source_request_id: text("source_request_id"),
     parent_incident_id: text("parent_incident_id"),
     asset_ref: text("asset_ref"),
-    work_order_ref: text("work_order_ref"),
     reported_by_profile_id: text("reported_by_profile_id"),
     assigned_to_profile_id: text("assigned_to_profile_id"),
     operational_event_id: text("operational_event_id"),
@@ -140,7 +139,6 @@ function toColumns(
   set("hold_reason", input.holdReason);
   set("requires_work_instruction", input.requiresWorkInstruction);
   set("asset_ref", input.assetRef);
-  set("work_order_ref", input.workOrderRef);
   set("reported_by_profile_id", input.reportedByProfileId);
   set("assigned_to_profile_id", input.assignedToProfileId);
   set("operational_event_id", input.operationalEventId);
@@ -302,7 +300,7 @@ export class FmIncidentRepository {
     const [work, requests, parents] = await Promise.all([
       this.admin
         .from("fm_work")
-        .select("code, incident_id")
+        .select("id, code, incident_id")
         .eq("organisation_id", this.organisationId)
         .in("incident_id", ids)
         .order("code", { ascending: true }),
@@ -325,9 +323,26 @@ export class FmIncidentRepository {
     if (requests.error) throwDb(requests.error, "Unable to load source requests.");
     if (parents.error) throwDb(parents.error, "Unable to load parent incidents.");
 
+    const workIncident = new Map<string, string>();
     for (const entry of work.data ?? []) {
-      const rec = entry as { code: string; incident_id: string };
+      const rec = entry as { id: string; code: string; incident_id: string };
       result.get(rec.incident_id)?.maintenanceIds.push(String(rec.code));
+      workIncident.set(rec.id, rec.incident_id);
+    }
+    // Incident → Work → Work Instruction (derived; no Incident-side reference).
+    if (workIncident.size > 0) {
+      const instructions = await this.admin
+        .from("fm_work_instructions")
+        .select("code, work_id")
+        .eq("organisation_id", this.organisationId)
+        .in("work_id", [...workIncident.keys()])
+        .order("code", { ascending: true });
+      if (instructions.error) throwDb(instructions.error, "Unable to load incident Work Instructions.");
+      for (const entry of instructions.data ?? []) {
+        const rec = entry as { code: string; work_id: string };
+        const relation = result.get(workIncident.get(rec.work_id)!);
+        if (relation) relation.workOrderIds = [...(relation.workOrderIds ?? []), String(rec.code)];
+      }
     }
     const requestCode = new Map(
       (requests.data ?? []).map((r) => [String((r as { id: string }).id), String((r as { code: string }).code)])
@@ -443,8 +458,6 @@ export class FmIncidentRepository {
     if (nextStatus === "closed" && !existing.closed_at && patch.closed_at == null) {
       patch.closed_at = now;
     }
-    // requiresWorkOrder=false clears the primary Work Order ref.
-    if (patch.requires_work_instruction === false) patch.work_order_ref = null;
     patch.updated_by_profile_id = actorProfileId;
 
     const { data, error } = await this.admin

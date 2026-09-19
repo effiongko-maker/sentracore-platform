@@ -231,6 +231,7 @@ async function verifyLiveContracts(context: ActionContext): Promise<{
   const t0 = performance.now();
   const created = await orchestrateCreateWorkOrderFromMaintenance({
     maintenanceId: maintenance.id,
+    orderType: "work_order",
     context,
   });
   const elapsedMs = Math.round(performance.now() - t0);
@@ -259,6 +260,7 @@ async function verifyLiveContracts(context: ActionContext): Promise<{
 
   const again = await orchestrateCreateWorkOrderFromMaintenance({
     maintenanceId: maintenance.id,
+    orderType: "work_order",
     context,
   });
   assert(again.workOrder.id === created.workOrder.id, "idempotent WO id");

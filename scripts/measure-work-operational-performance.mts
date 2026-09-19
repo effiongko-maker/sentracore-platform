@@ -178,6 +178,7 @@ async function main() {
   const createWo = await time("create_wo_from_work_detail", async () =>
     orchestrateCreateWorkOrderFromMaintenance({
       maintenanceId: woMaintenance.id,
+    orderType: "work_order",
       context,
     })
   );
@@ -195,6 +196,7 @@ async function main() {
     });
     return orchestrateCreateWorkOrderFromMaintenance({
       maintenanceId: m.id,
+    orderType: "work_order",
       context,
     });
   });
@@ -223,6 +225,7 @@ async function main() {
     });
     return orchestrateCreateWorkOrderFromMaintenance({
       maintenanceId: m.id,
+    orderType: "work_order",
       context,
     });
   });

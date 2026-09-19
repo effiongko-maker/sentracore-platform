@@ -8,7 +8,6 @@ import {
 } from "../src/modules/workspace/operationalPicture";
 import { buildAssignedWorkDomains } from "../src/services/workspace/WorkspaceService";
 import {
-  parseAssignmentSummary,
   parseOperationalPictureSummary,
 } from "../src/services/workspace/CommandCentreFmSummaryService";
 import type { Approval } from "../src/modules/approvals/types";
@@ -176,11 +175,7 @@ assert.throws(() =>
     asOf
   )
 );
-assert.throws(() =>
-  parseAssignmentSummary(
-    { contractVersion: "assignment-summary.v1", operationalUserId: actor },
-    actor
-  )
-);
+// Phase 2E: the Apps Script Assignment Summary contract is retired. Work, Work
+// Instructions and Incidents are all Supabase (profile UUID); no summary parser remains.
 
 console.log("Command Centre FM aggregate golden contract verification passed.");

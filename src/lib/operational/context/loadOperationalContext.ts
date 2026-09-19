@@ -10,7 +10,7 @@ import {
 import { queryOperationalTimeline } from "@/lib/operational/timeline";
 import { IncidentServerAccess } from "@/modules/incidents/server/IncidentServerAccess";
 import { MaintenanceServerAccess as MaintenanceService } from "@/modules/maintenance/server/MaintenanceServerAccess";
-import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
+import { WorkInstructionServerAccess as WorkOrderService } from "@/modules/work-orders/server/WorkInstructionServerAccess";
 import { createClient } from "@/utils/supabase/server";
 import { cookies } from "next/headers";
 

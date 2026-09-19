@@ -13,6 +13,8 @@ import {
   useUserName,
   useWorkOrderTitle,
 } from "@/hooks/useEntityLabel";
+import { OrderTypePicker } from "@/modules/work-orders/components/OrderTypePicker";
+import type { WorkInstructionKind } from "@/modules/work-orders/instructionKind";
 import { triageIncident } from "../actions/triageIncident";
 import type { TriageResponse } from "@/lib/operational/orchestration";
 import {
@@ -117,6 +119,9 @@ export function ViewIncidentModal({
   const [nextStep, setNextStep] =
     useState<TriageResponse>("create_maintenance");
   const [applying, setApplying] = useState(false);
+  const [orderType, setOrderType] = useState<WorkInstructionKind | "">("");
+  const needsOrderType =
+    nextStep === "create_work_order" || nextStep === "create_both";
   const [contextRefreshKey, setContextRefreshKey] = useState(0);
   const submittingRef = useRef(false);
 
@@ -155,6 +160,7 @@ export function ViewIncidentModal({
       const result = await triageIncident({
         incidentId: displayIncident.id,
         response: nextStep,
+        ...(needsOrderType && orderType ? { orderType } : {}),
       });
 
       if (!result.success) {
@@ -355,10 +361,13 @@ export function ViewIncidentModal({
               </label>
             ))}
           </div>
+          {needsOrderType ? (
+            <OrderTypePicker value={orderType} onChange={setOrderType} disabled={applying} />
+          ) : null}
           <Button
             type="button"
             onClick={handleApplyNextStep}
-            disabled={applying}
+            disabled={applying || (needsOrderType && !orderType)}
             loading={applying}
           >
             {applying ? "Applying..." : "Apply next step"}

@@ -12,7 +12,7 @@ import {
 import { evaluateRequestAfterTreatmentCompletion } from "@/lib/operational/orchestration/evaluateRequestAfterTreatment";
 import { IncidentServerAccess } from "@/modules/incidents/server/IncidentServerAccess";
 import { MaintenanceServerAccess as MaintenanceService } from "@/modules/maintenance/server/MaintenanceServerAccess";
-import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
+import { WorkInstructionServerAccess as WorkOrderService } from "@/modules/work-orders/server/WorkInstructionServerAccess";
 import type {
   Incident,
   UpdateIncidentInput,
@@ -258,7 +258,7 @@ export async function transitionWorkOrder(options: {
     eventEmitted = await emitLifecycleSafely({
       context: options.context,
       entityType: "work_order",
-      entityId: entity.id,
+      entityId: entity.workOrderUuid ?? entity.id,
       eventType: mapped,
       data: workOrderEventData(
         entity,

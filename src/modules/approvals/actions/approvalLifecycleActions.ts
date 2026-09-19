@@ -4,7 +4,7 @@ import { ActionError, executeAction, type ActionResult } from "@/lib/actions";
 import { emitActionEvent } from "@/lib/actions/events";
 import { OperationalEventTypes } from "@/lib/events/taxonomy";
 import { ApprovalService } from "@/services/approvals/ApprovalService";
-import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
+import { WorkInstructionServerAccess as WorkOrderService } from "@/modules/work-orders/server/WorkInstructionServerAccess";
 import {
   appendApprovalActivity,
   isAwaitingResponse,

@@ -247,6 +247,7 @@ async function verifyLiveContracts(context: ActionContext): Promise<string[]> {
 
   const created = await orchestrateCreateWorkOrderFromMaintenance({
     maintenanceId: maintenance.id,
+    orderType: "work_order",
     context,
   });
 
@@ -272,6 +273,7 @@ async function verifyLiveContracts(context: ActionContext): Promise<string[]> {
   // H — idempotency
   const again = await orchestrateCreateWorkOrderFromMaintenance({
     maintenanceId: maintenance.id,
+    orderType: "work_order",
     context,
   });
   assert(again.workOrder.id === created.workOrder.id, "idempotent WO id");

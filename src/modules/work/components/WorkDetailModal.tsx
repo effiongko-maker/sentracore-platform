@@ -16,6 +16,8 @@ import {
   useFacilityName,
   useUserName,
 } from "@/hooks/useEntityLabel";
+import { OrderTypePicker } from "@/modules/work-orders/components/OrderTypePicker";
+import type { WorkInstructionKind } from "@/modules/work-orders/instructionKind";
 import { createWorkOrderFromMaintenance } from "@/modules/work-orders/actions/createWorkOrderFromMaintenance";
 import { useToast } from "@/components/ui/Toast";
 import {
@@ -83,6 +85,7 @@ export function WorkDetailModal({
 }: WorkDetailModalProps) {
   const { toast } = useToast();
   const [creatingWorkOrder, setCreatingWorkOrder] = useState(false);
+  const [newOrderType, setNewOrderType] = useState<WorkInstructionKind | "">("");
   const facilityName = useFacilityName(work?.facilityId);
   const assetName = useAssetName(work?.assetId);
   const assigneeName = useUserName(work?.assignedToUserId);
@@ -106,7 +109,7 @@ export function WorkDetailModal({
     if (!work) return;
     setCreatingWorkOrder(true);
     try {
-      const result = await createWorkOrderFromMaintenance(work.id);
+      const result = await createWorkOrderFromMaintenance(work.id, newOrderType);
       if (!result.success) {
         throw new Error(result.error.message);
       }
@@ -261,14 +264,18 @@ export function WorkDetailModal({
                     <p className="text-sm text-muted">No work order linked yet</p>
                     <div className="flex flex-wrap gap-2">
                       {canCreateWorkOrder ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          loading={creatingWorkOrder}
-                          onClick={() => void handleCreateWorkOrder()}
-                        >
-                          Create Work Order
-                        </Button>
+                        <>
+                          <OrderTypePicker value={newOrderType} onChange={setNewOrderType} disabled={creatingWorkOrder} />
+                          <Button
+                            type="button"
+                            size="sm"
+                            loading={creatingWorkOrder}
+                            disabled={!newOrderType}
+                            onClick={() => void handleCreateWorkOrder()}
+                          >
+                            Create Work Instruction
+                          </Button>
+                        </>
                       ) : null}
                       {onTreat ? (
                         <Button

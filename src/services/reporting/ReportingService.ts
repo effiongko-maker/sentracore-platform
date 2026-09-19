@@ -1,6 +1,7 @@
 import { AssetService } from "@/services/assets/AssetService";
 import { FacilityService } from "@/services/facilities/FacilityService";
 import type { Incident } from "@/modules/incidents/types";
+import type { WorkOrder } from "@/modules/work-orders/types";
 import { IncidentService } from "@/services/incidents/IncidentService";
 import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 import { EntityResolver } from "@/services/entityResolver";
@@ -39,40 +40,51 @@ function snapshotCacheKey(params: ReportingQuery): string {
 }
 
 /**
- * Incidents are Supabase-authoritative (Phase 2D). A failed or unauthorized
- * Incident source is reported as UNAVAILABLE — never as zero incidents.
+ * Incidents (Phase 2D) and Work Instructions (Phase 2E) are Supabase-
+ * authoritative. A failed or unauthorized source is reported as UNAVAILABLE —
+ * never as zero rows.
  */
-async function loadAuthoritativeIncidents(): Promise<{
-  incidents: Incident[];
-  ok: boolean;
-}> {
+async function loadAuthoritative<T>(
+  load: () => Promise<T[]>
+): Promise<{ rows: T[]; ok: boolean }> {
   try {
-    const incidents = await loadAllPages((page, pageSize) =>
-      IncidentService.listIncidents({ page, pageSize })
-    );
-    return { incidents, ok: true };
+    return { rows: await load(), ok: true };
   } catch {
-    return { incidents: [], ok: false };
+    return { rows: [], ok: false };
   }
 }
 
-/** Mark a snapshot whose Incident source failed: honest summary, never "healthy". */
-function withIncidentSourceHealth(
+async function loadAuthoritativeIncidents(): Promise<{ rows: Incident[]; ok: boolean }> {
+  return loadAuthoritative(() =>
+    loadAllPages((page, pageSize) => IncidentService.listIncidents({ page, pageSize }))
+  );
+}
+
+async function loadAuthoritativeWorkOrders(): Promise<{ rows: WorkOrder[]; ok: boolean }> {
+  return loadAuthoritative(() =>
+    loadAllPages((page, pageSize) => WorkOrderService.listWorkOrders({ page, pageSize }))
+  );
+}
+
+/** Mark a snapshot whose authoritative source failed: honest summary, never "healthy". */
+function withSourceHealth(
   snapshot: ReportingSnapshot,
-  ok: boolean
+  sources: { incidents: boolean; workOrders: boolean }
 ): ReportingSnapshot {
-  if (ok) return snapshot;
+  const unavailable: Array<"incidents" | "workOrders"> = [];
+  if (!sources.incidents) unavailable.push("incidents");
+  if (!sources.workOrders) unavailable.push("workOrders");
+  if (unavailable.length === 0) return snapshot;
+  const label = unavailable.map((u) => (u === "incidents" ? "Incident" : "Work Instruction")).join(" and ");
   const meta = snapshot._snapshotMeta;
   return {
     ...snapshot,
     health: {
       ...snapshot.health,
       band: snapshot.health.band === "critical" ? "critical" : "watch",
-      summary: `Incident data is unavailable; figures exclude Incidents. ${snapshot.health.summary}`.trim(),
+      summary: `${label} data is unavailable; figures exclude it. ${snapshot.health.summary}`.trim(),
     },
-    _snapshotMeta: meta
-      ? { ...meta, unavailableSources: ["incidents"] }
-      : meta,
+    _snapshotMeta: meta ? { ...meta, unavailableSources: unavailable } : meta,
   };
 }
 
@@ -92,7 +104,7 @@ async function buildReportingSnapshotFromDomain(
     assets,
     incidentSource,
     maintenance,
-    workOrders,
+    workOrderSource,
     currentUser,
   ] = await Promise.all([
     loadAllPages((page, pageSize) =>
@@ -108,9 +120,7 @@ async function buildReportingSnapshotFromDomain(
     loadAllPages((page, pageSize) =>
       MaintenanceService.listMaintenance({ page, pageSize })
     ).catch(() => []),
-    loadAllPages((page, pageSize) =>
-      WorkOrderService.listWorkOrders({ page, pageSize })
-    ).catch(() => []),
+    loadAuthoritativeWorkOrders(),
     UserService.getCurrentUser().catch(() => null),
   ]);
 
@@ -118,9 +128,9 @@ async function buildReportingSnapshotFromDomain(
     ? facilities.filter((facility) => facility.id === facilityId)
     : facilities;
   const scopedAssets = filterByFacilityId(assets, facilityId);
-  const scopedIncidents = filterByFacilityId(incidentSource.incidents, facilityId);
+  const scopedIncidents = filterByFacilityId(incidentSource.rows, facilityId);
   const scopedMaintenance = filterByFacilityId(maintenance, facilityId);
-  const scopedWorkOrders = filterByFacilityId(workOrders, facilityId);
+  const scopedWorkOrders = filterByFacilityId(workOrderSource.rows, facilityId);
 
   const draft: ReportingSnapshot = {
     asOf,
@@ -188,7 +198,7 @@ async function buildReportingSnapshotFromDomain(
   const health = computeReportingHealth(kpis);
   const generatedAt = asOf;
 
-  return withIncidentSourceHealth({
+  return withSourceHealth({
     ...normalized,
     asOf,
     kpis,
@@ -201,7 +211,7 @@ async function buildReportingSnapshotFromDomain(
       snapshotVersion: generatedAt,
       scope: facilityId || "__portfolio__",
     },
-  }, incidentSource.ok);
+  }, { incidents: incidentSource.ok, workOrders: workOrderSource.ok });
 }
 
 async function buildReportingSnapshot(
@@ -210,18 +220,21 @@ async function buildReportingSnapshot(
   try {
     const fromSheets = await tryLoadSheetsReportingSnapshot(params);
     if (fromSheets) {
-      // The Sheets REPORTING_SNAPSHOT still carries Sheet Incidents. Replace
-      // that domain with the authoritative Supabase Incidents and re-derive.
-      const authoritative = await loadAuthoritativeIncidents();
-      const scoped = filterByFacilityId(
-        authoritative.incidents,
-        params.facilityId
-      );
+      // The Sheets REPORTING_SNAPSHOT still carries Sheet Incidents and Work
+      // Orders. Replace those domains with the authoritative Supabase rows.
+      const [incidents, workOrders] = await Promise.all([
+        loadAuthoritativeIncidents(),
+        loadAuthoritativeWorkOrders(),
+      ]);
       const rehydrated = hydrateReportingSnapshot({
         ...fromSheets,
-        incidents: scoped,
+        incidents: filterByFacilityId(incidents.rows, params.facilityId),
+        workOrders: filterByFacilityId(workOrders.rows, params.facilityId),
       });
-      return withIncidentSourceHealth(rehydrated, authoritative.ok);
+      return withSourceHealth(rehydrated, {
+        incidents: incidents.ok,
+        workOrders: workOrders.ok,
+      });
     }
   } catch (error) {
     console.warn(

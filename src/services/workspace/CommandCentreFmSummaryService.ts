@@ -3,25 +3,10 @@ import { postToAppsScriptData } from "@/services/api/appsScriptProxy";
 
 export const OPERATIONAL_PICTURE_CONTRACT_VERSION =
   "operational-picture.v1" as const;
-export const ASSIGNMENT_SUMMARY_CONTRACT_VERSION =
-  "assignment-summary.v1" as const;
-
-type UnavailableDomain = { state: "unavailable" };
-export type AssignmentSummaryDomain =
-  | { state: "healthy"; active: number }
-  | UnavailableDomain;
 
 export type OperationalPictureSummary = OperationalPictureAggregate & {
   contractVersion: typeof OPERATIONAL_PICTURE_CONTRACT_VERSION;
   asOf: string;
-};
-
-export type AssignmentSummary = {
-  contractVersion: typeof ASSIGNMENT_SUMMARY_CONTRACT_VERSION;
-  operationalUserId: string;
-  maintenance: AssignmentSummaryDomain;
-  workOrders: AssignmentSummaryDomain;
-  incidents: AssignmentSummaryDomain;
 };
 
 function record(value: unknown, label: string): Record<string, unknown> {
@@ -85,14 +70,6 @@ function approvalDomain(value: unknown) {
   };
 }
 
-function assignmentDomain(value: unknown, label: string): AssignmentSummaryDomain {
-  const domain = record(value, label);
-  if (state(domain.state, label) === "unavailable") {
-    return { state: "unavailable" };
-  }
-  return { state: "healthy", active: count(domain.active, `${label}.active`) };
-}
-
 export function parseOperationalPictureSummary(
   value: unknown,
   expectedAsOf: string
@@ -113,26 +90,12 @@ export function parseOperationalPictureSummary(
   };
 }
 
-export function parseAssignmentSummary(
-  value: unknown,
-  expectedOperationalUserId: string
-): AssignmentSummary {
-  const payload = record(value, "Assignment Summary payload");
-  if (payload.contractVersion !== ASSIGNMENT_SUMMARY_CONTRACT_VERSION) {
-    throw new Error("Unsupported Assignment Summary contract version.");
-  }
-  if (payload.operationalUserId !== expectedOperationalUserId) {
-    throw new Error("Assignment Summary operational identity mismatch.");
-  }
-  return {
-    contractVersion: ASSIGNMENT_SUMMARY_CONTRACT_VERSION,
-    operationalUserId: expectedOperationalUserId,
-    maintenance: assignmentDomain(payload.maintenance, "maintenance"),
-    workOrders: assignmentDomain(payload.workOrders, "workOrders"),
-    incidents: assignmentDomain(payload.incidents, "incidents"),
-  };
-}
-
+/**
+ * Operational Picture. Maintenance (Work, Phase 2B) and Work Orders (Work
+ * Instructions, Phase 2E) come from Supabase. The Apps Script mirror is now
+ * consulted ONLY for Approvals — the one domain still on Sheets. A failed
+ * domain is `unavailable`, never zero.
+ */
 export async function loadOperationalPictureSummary(
   asOf: string
 ): Promise<OperationalPictureSummary> {
@@ -147,52 +110,56 @@ export async function loadOperationalPictureSummary(
   );
   const parsed = parseOperationalPictureSummary(data, asOf);
 
-  // Phase 2B: Work SoT is fm_work. Replace Apps Script Maintenance domain.
-  try {
-    const { MaintenanceServerAccess } = await import(
-      "@/modules/maintenance/server/MaintenanceServerAccess"
-    );
-    const page = await MaintenanceServerAccess.listMaintenance({
-      page: 1,
-      pageSize: 1,
-      includeOperationalPictureTotals: true,
-      asOf,
-    });
-    const picture = page.operationalPictureMaintenance;
-    if (
-      picture &&
-      typeof picture === "object" &&
-      (picture as { state?: string }).state === "healthy"
-    ) {
-      return {
-        ...parsed,
-        maintenance: picture as Extract<
-          OperationalPictureAggregate["maintenance"],
-          { state: "healthy" }
-        >,
-      };
-    }
-    return { ...parsed, maintenance: { state: "unavailable" } };
-  } catch (error) {
-    console.error(
-      "[CommandCentreFmSummaryService] Work operational picture unavailable",
-      error
-    );
-    return { ...parsed, maintenance: { state: "unavailable" } };
-  }
-}
+  const [maintenance, workOrders] = await Promise.all([
+    (async (): Promise<OperationalPictureAggregate["maintenance"]> => {
+      try {
+        const { MaintenanceServerAccess } = await import(
+          "@/modules/maintenance/server/MaintenanceServerAccess"
+        );
+        const page = await MaintenanceServerAccess.listMaintenance({
+          page: 1,
+          pageSize: 1,
+          includeOperationalPictureTotals: true,
+          asOf,
+        });
+        const picture = page.operationalPictureMaintenance;
+        if (picture && (picture as { state?: string }).state === "healthy") {
+          return picture as Extract<
+            OperationalPictureAggregate["maintenance"],
+            { state: "healthy" }
+          >;
+        }
+        return { state: "unavailable" };
+      } catch (error) {
+        console.error("[CommandCentreFmSummaryService] Work picture unavailable", error);
+        return { state: "unavailable" };
+      }
+    })(),
+    (async (): Promise<OperationalPictureAggregate["workOrders"]> => {
+      try {
+        const { WorkInstructionServerAccess } = await import(
+          "@/modules/work-orders/server/WorkInstructionServerAccess"
+        );
+        const page = await WorkInstructionServerAccess.listWorkOrders({
+          page: 1,
+          pageSize: 1,
+          includeOperationalPictureTotals: true,
+          asOf,
+        });
+        const picture = page.operationalPictureWorkOrders as { state?: string } | undefined;
+        if (picture && picture.state === "healthy") {
+          return picture as Extract<
+            OperationalPictureAggregate["workOrders"],
+            { state: "healthy" }
+          >;
+        }
+        return { state: "unavailable" };
+      } catch (error) {
+        console.error("[CommandCentreFmSummaryService] Work Instruction picture unavailable", error);
+        return { state: "unavailable" };
+      }
+    })(),
+  ]);
 
-export async function loadAssignmentSummary(
-  operationalUserId: string
-): Promise<AssignmentSummary> {
-  const data = await postToAppsScriptData(
-    {
-      resource: "command-centre-fm",
-      action: "getAssignmentSummary",
-      payload: { operationalUserId },
-    },
-    { resource: "command-centre-fm", action: "getAssignmentSummary" },
-    "CommandCentreFmSummaryService.getAssignmentSummary"
-  );
-  return parseAssignmentSummary(data, operationalUserId);
+  return { ...parsed, maintenance, workOrders };
 }

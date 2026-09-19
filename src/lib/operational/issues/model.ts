@@ -51,23 +51,23 @@ export const ISSUE_TREATMENT_IMPLEMENTATIONS = {
 
 /**
  * Execution implementations.
- * Work Order / Job Order = operational instructions (Order Type).
- * Both use the existing work-order register; Job Order is value-classified (≥ ₦1m),
- * not a separate persistence product.
+ * Work Order / Job Order = operational instructions (Order Type), ONE register
+ * (fm_work_instructions). Order Type is an explicit manual selection —
+ * there is no cost threshold and cost never classifies it.
  */
 export const ISSUE_EXECUTION_IMPLEMENTATIONS = {
   work_order: {
     kind: "work_order" as const,
     implemented: true,
     isTreatment: false,
-    note: "Work Order is EXECUTION (verbal, below ₦1m), not Work/Treatment.",
+    note: "Work Order is EXECUTION, selected manually as the Order Type. Not Work/Treatment.",
   },
   job_order: {
     kind: "job_order" as const,
-    /** No separate JO entity — classified on work-order records by value. */
+    /** `false` = no SEPARATE Job Order entity/table: same register as Work Order, explicit Order Type. */
     implemented: false,
     isTreatment: false,
-    note: "Job Order is EXECUTION (written/formal, ≥ ₦1m), classified on the work-order register.",
+    note: "Job Order is EXECUTION, selected manually as the Order Type, on the same Work Instruction register.",
   },
 } as const;
 

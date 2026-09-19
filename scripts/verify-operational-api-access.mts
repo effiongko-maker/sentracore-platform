@@ -334,6 +334,14 @@ function main() {
       assert(!src.includes("postGatedOperationalProxy"), "maintenance no longer uses Apps Script proxy");
       continue;
     }
+    if (resource === "work-orders") {
+      assert(src.includes("gateApiCapability"), "work-orders route uses gateApiCapability");
+      assert(src.includes("capabilityForOperationalProxyAction"), "work-orders maps action → capability");
+      assert(src.includes("FmWorkInstructionServerService"), "work-orders uses Supabase Work Instruction service");
+      assert(!src.includes("postGatedOperationalProxy"), "work-orders no longer uses Apps Script proxy");
+      assert(!src.includes("postToAppsScript("), "work-orders route makes no Apps Script call");
+      continue;
+    }
     if (resource === "incidents") {
       assert(src.includes("gateApiCapability"), "incidents route uses gateApiCapability");
       assert(src.includes("capabilityForOperationalProxyAction"), "incidents maps action → capability");

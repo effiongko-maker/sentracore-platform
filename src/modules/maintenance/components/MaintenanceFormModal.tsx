@@ -35,6 +35,8 @@ import {
   unlinkWorkOrderFromMaintenance,
 } from "@/lib/operational/relationships";
 import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
+import { OrderTypePicker } from "@/modules/work-orders/components/OrderTypePicker";
+import type { WorkInstructionKind } from "@/modules/work-orders/instructionKind";
 import { createWorkOrderFromMaintenance } from "@/modules/work-orders/actions/createWorkOrderFromMaintenance";
 import {
   applyWorkOrderRule,
@@ -85,6 +87,7 @@ export function MaintenanceFormModal({
   const [users, setUsers] = useState<User[]>([]);
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [creatingWorkOrder, setCreatingWorkOrder] = useState(false);
+  const [newOrderType, setNewOrderType] = useState<WorkInstructionKind | "">("");
   const [linkMode, setLinkMode] = useState<"choose" | "link">("choose");
   const [completing, setCompleting] = useState(false);
 
@@ -517,7 +520,7 @@ export function MaintenanceFormModal({
         }
       }
 
-      const result = await createWorkOrderFromMaintenance(maintenance.id);
+      const result = await createWorkOrderFromMaintenance(maintenance.id, newOrderType);
       if (!result.success) {
         throw new Error(result.error.message);
       }
@@ -869,6 +872,7 @@ export function MaintenanceFormModal({
                 No work order linked yet
               </p>
               <div className="flex flex-col gap-2 sm:flex-row">
+                <OrderTypePicker value={newOrderType} onChange={setNewOrderType} disabled={creatingWorkOrder} />
                 <Button
                   type="button"
                   size="sm"
@@ -876,6 +880,7 @@ export function MaintenanceFormModal({
                   loading={creatingWorkOrder}
                   disabled={
                     !isEdit ||
+                    !newOrderType ||
                     creatingWorkOrder ||
                     busy ||
                     isTerminalLifecycle

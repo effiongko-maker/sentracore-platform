@@ -189,6 +189,7 @@ async function main() {
   t0 = performance.now();
   await orchestrateCreateWorkOrderFromMaintenance({
     maintenanceId: woMaint.id,
+    orderType: "work_order",
     context,
   });
   report.create_wo_from_work_ms = Math.round(performance.now() - t0);
