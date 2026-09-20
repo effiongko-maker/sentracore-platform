@@ -922,14 +922,23 @@ export function EccPeoplePage() {
                                   ? ` · ${formatEccWhen(row.signedInAt)}`
                                   : ""}
                               </span>
-                              <button
-                                type="button"
-                                className="ecc-btn ecc-btn-secondary ecc-btn-sm"
-                                disabled={saving}
-                                onClick={() => void onSignOut(row.person.id)}
-                              >
-                                Sign out
-                              </button>
+                              {row.staleOpenAttendance ? (
+                                // A historical sign-in cannot be truthfully closed as a normal
+                                // sign-out (it would stamp today's time on an old shift).
+                                // Correction is a separate administrative workflow — deferred.
+                                <span className="ecc-people-signin-copy">
+                                  Historical · needs correction
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="ecc-btn ecc-btn-secondary ecc-btn-sm"
+                                  disabled={saving}
+                                  onClick={() => void onSignOut(row.person.id)}
+                                >
+                                  Sign out
+                                </button>
+                              )}
                             </>
                           ) : (
                             <button

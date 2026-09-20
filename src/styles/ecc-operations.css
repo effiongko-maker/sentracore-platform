@@ -569,10 +569,60 @@
   min-height: 2.5rem;
   padding: 0.55rem 0.7rem;
   border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--os-border) 80%, transparent);
-  background: #fff;
+  /* Defined tokens only: --os-border is not a defined token, so the previous border
+     declaration was invalid and controls rendered borderless on white. */
+  border: 1px solid color-mix(in srgb, var(--os-ink) 24%, transparent);
+  background-color: var(--os-surface-interactive);
   color: var(--os-ink);
   font-size: 0.875rem;
+  line-height: 1.4;
+  transition:
+    border-color 0.12s ease,
+    background-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.ecc-field input::placeholder,
+.ecc-field textarea::placeholder {
+  color: var(--os-ink-muted);
+  opacity: 0.8;
+}
+
+.ecc-field input:hover:not(:disabled),
+.ecc-field select:hover:not(:disabled),
+.ecc-field textarea:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--os-ink) 40%, transparent);
+}
+
+.ecc-field input:focus,
+.ecc-field select:focus,
+.ecc-field textarea:focus {
+  outline: none;
+  background-color: var(--os-surface);
+  border-color: var(--os-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--os-accent) 16%, transparent);
+}
+
+.ecc-field input:disabled,
+.ecc-field select:disabled,
+.ecc-field textarea:disabled {
+  background-color: var(--os-canvas);
+  border-color: var(--os-rule-strong);
+  color: var(--os-ink-faint);
+  cursor: not-allowed;
+}
+
+/* Selects: native arrow removed, one explicit chevron so they never read as plain text. */
+.ecc-field select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 2.25rem;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23667085' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 0.875rem;
 }
 
 .ecc-field textarea {
