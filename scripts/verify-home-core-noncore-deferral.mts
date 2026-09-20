@@ -108,7 +108,7 @@ results.push("PASS core does not await Approvals/Facilities");
 
 // 2) Core paint path uses empty non-core — LoadingGate can open without them.
 assert(
-  /corePromise\.then\(\(coreLists\)\s*=>\s*composeWorkspaceSnapshot\([\s\S]*?\.\.\.coreLists[\s\S]*?\.\.\.emptyNonCoreDomainLists\(\)/.test(
+  /corePromise\.then\(\(coreLists\)\s*=>\s*\(\{\s*\.\.\.composeWorkspaceSnapshot\([\s\S]*?\.\.\.coreLists[\s\S]*?\.\.\.emptyNonCoreDomainLists\(\)/.test(
     ws
   ),
   "core snapshot uses emptyNonCoreDomainLists (paint without Approvals/Facilities)"

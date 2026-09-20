@@ -1,4 +1,4 @@
-import { UserService } from "@/services/users/UserService";
+import { AssignablePeopleService } from "@/services/assignablePeople/AssignablePeopleService";
 import { FacilityService } from "@/services/facilities/FacilityService";
 import { AssetService } from "@/services/assets/AssetService";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
@@ -56,7 +56,7 @@ export function registerDefaultEntityResolvers(): void {
     // Lightweight catalog — never trigger People workload enrichment.
     loadDirectory: () =>
       loadDirectoryFromCatalog({
-        loadAll: () => UserService.fetchUsersCatalog(),
+        loadAll: () => AssignablePeopleService.list(),
         getId: (user) => user.id,
         getName: (user) => user.name,
       }),

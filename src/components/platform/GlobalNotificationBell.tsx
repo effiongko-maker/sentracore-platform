@@ -20,6 +20,7 @@ import {
   markNotificationRead,
   NOTIFICATION_READ_STATE_EVENT,
 } from "@/modules/workspace/utils/notificationReadState";
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { OperationalNotificationService } from "@/services/workspace/OperationalNotificationService";
 
 const EMPTY_FEED: OperationalNotificationFeed = {
@@ -42,6 +43,8 @@ const OPERATIONS_BELL_FALLBACK_MS = 35_000;
  */
 export function GlobalNotificationBell() {
   const pathname = usePathname();
+  const { can } = useOperatingAccess();
+  const canReadRequests = can("requests.view");
   const [open, setOpen] = useState(false);
   const [feed, setFeed] = useState<OperationalNotificationFeed>(EMPTY_FEED);
   const [loading, setLoading] = useState(false);
@@ -52,7 +55,9 @@ export function GlobalNotificationBell() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const next = await OperationalNotificationService.getFeed();
+      const next = await OperationalNotificationService.getFeed({
+        canReadRequests,
+      });
       setFeed(next);
       setReadIds(loadReadNotificationIds());
     } catch {
@@ -60,7 +65,7 @@ export function GlobalNotificationBell() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canReadRequests]);
 
   const startInitialLoad = useCallback(() => {
     if (initialLoadStarted.current) return;

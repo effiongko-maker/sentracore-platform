@@ -500,7 +500,13 @@ function RequiresAttention({
   );
 }
 
-function OperationalPicture({ pulse }: { pulse: OrganisationalPulse }) {
+function OperationalPicture({
+  pulse,
+  enriching = false,
+}: {
+  pulse: OrganisationalPulse;
+  enriching?: boolean;
+}) {
   const picture = pulse.picture;
   const rows = [
     {
@@ -530,7 +536,9 @@ function OperationalPicture({ pulse }: { pulse: OrganisationalPulse }) {
       label: "Awaiting Action",
       detail:
         picture.awaitingAction == null
-          ? "Temporarily unavailable"
+          ? enriching
+            ? "Loading…"
+            : "Temporarily unavailable"
           : "Waiting on action or decision",
       href: "/approvals",
       tone: "amber" as const,
@@ -711,7 +719,7 @@ export function CommandSurface({ snapshot }: { snapshot: WorkspaceSnapshot }) {
             />
             {showFinance ? <FinancialPositionSection /> : null}
             <div className="sc-fm-main">
-              <OperationalPicture pulse={snapshot.pulse} />
+              <OperationalPicture pulse={snapshot.pulse} enriching={snapshot.enriching === true} />
             </div>
             {visibility ? <OversightLinks visibility={visibility} /> : null}
           </>
@@ -723,7 +731,7 @@ export function CommandSurface({ snapshot }: { snapshot: WorkspaceSnapshot }) {
                 attention={snapshot.attention}
                 oversight={false}
               />
-              <OperationalPicture pulse={snapshot.pulse} />
+              <OperationalPicture pulse={snapshot.pulse} enriching={snapshot.enriching === true} />
             </div>
             <NextActions actions={snapshot.quickActions} />
           </>

@@ -13,7 +13,9 @@ import { useToast } from "@/components/ui/Toast";
 import { FacilityService } from "@/services/facilities/FacilityService";
 import { AssetService } from "@/services/assets/AssetService";
 import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
-import { UserService } from "@/services/users/UserService";
+import { AssignablePeopleService } from "@/services/assignablePeople/AssignablePeopleService";
+import { CatalogFailureNotice } from "@/components/ui/CatalogFailureNotice";
+import { useReferenceCatalog } from "@/hooks/useReferenceCatalog";
 import {
   facilityDisplayName,
 } from "@/lib/platform/scopedFacility";
@@ -22,7 +24,7 @@ import type { Facility } from "@/modules/facilities/types";
 import type { Asset } from "@/modules/assets/types";
 import type { Maintenance } from "@/modules/maintenance/types";
 import { displayMaintenanceTitle } from "@/modules/maintenance/utils";
-import type { User } from "@/modules/users/types";
+import type { AssignablePerson } from "@/modules/users/types";
 import {
   WORK_ORDER_MAINTENANCE_TYPES,
   WORK_ORDER_PRIORITIES,
@@ -112,11 +114,28 @@ export function WorkOrderFormModal({
     workOrder?.approvalId
   );
   const [saving, setSaving] = useState(false);
-  const [facilities, setFacilities] = useState<Facility[]>([]);
-  const [assets, setAssets] = useState<Asset[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [maintenanceRows, setMaintenanceRows] = useState<Maintenance[]>([]);
-  const [maintenanceLoading, setMaintenanceLoading] = useState(false);
+  // Independent reference catalogs: one failure never erases the others.
+  const facilitiesCatalog = useReferenceCatalog(open, () =>
+    FacilityService.listFacilities({ page: 1, pageSize: 200 }).then((page) => page.data)
+  );
+  const assetsCatalog = useReferenceCatalog(open, () =>
+    AssetService.listAssetsCatalog({ page: 1, pageSize: 200 }).then((page) => page.data)
+  );
+  const peopleCatalog = useReferenceCatalog(open, () => AssignablePeopleService.list());
+  const workCatalog = useReferenceCatalog(open, () =>
+    MaintenanceService.listMaintenance({ page: 1, pageSize: 200 }).then((page) => page.data)
+  );
+  const facilities: Facility[] = facilitiesCatalog.items;
+  const assets: Asset[] = assetsCatalog.items;
+  const users: AssignablePerson[] = peopleCatalog.items;
+  const maintenanceRows: Maintenance[] = workCatalog.items;
+  const maintenanceLoading = workCatalog.loading;
+  const failedCatalogs = [
+    facilitiesCatalog.failed && { label: "Facility", retry: facilitiesCatalog.retry },
+    assetsCatalog.failed && { label: "Assets", retry: assetsCatalog.retry },
+    peopleCatalog.failed && { label: "People", retry: peopleCatalog.retry },
+    workCatalog.failed && { label: "Work", retry: workCatalog.retry },
+  ].filter((item): item is { label: string; retry: () => void } => Boolean(item));
 
   useEffect(() => {
     if (!open) return;
@@ -133,38 +152,6 @@ export function WorkOrderFormModal({
     setLinkedApprovalId(workOrder?.approvalId);
     setErrors({});
   }, [open, mode, workOrder, initialOrderType]);
-
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    setMaintenanceLoading(true);
-    Promise.all([
-      FacilityService.listFacilities({ page: 1, pageSize: 200 }),
-      AssetService.listAssetsCatalog({ page: 1, pageSize: 200 }),
-      UserService.listUsersCatalog({ page: 1, pageSize: 200 }),
-      MaintenanceService.listMaintenance({ page: 1, pageSize: 200 }),
-    ])
-      .then(([facilityPage, assetPage, userPage, maintenancePage]) => {
-        if (cancelled) return;
-        setFacilities(facilityPage.data);
-        setAssets(assetPage.data);
-        setUsers(userPage.data);
-        setMaintenanceRows(maintenancePage.data);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setFacilities([]);
-        setAssets([]);
-        setUsers([]);
-        setMaintenanceRows([]);
-      })
-      .finally(() => {
-        if (!cancelled) setMaintenanceLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
 
   const resolveScoped = useScopedFacilityResolver();
   useEffect(() => {
@@ -219,18 +206,7 @@ export function WorkOrderFormModal({
       if (!id) return;
       if (next.some((row) => row.id === id)) return;
       next = [
-        {
-          id,
-          name: id,
-          email: "",
-          role: "",
-          specialization: "",
-          facility: "",
-          activeWorkOrders: 0,
-          status: "active" as const,
-          lastActive: "",
-          createdAt: "",
-        },
+        { id, name: id, role: "", facilityId: "" },
         ...next,
       ];
     };
@@ -477,7 +453,12 @@ export function WorkOrderFormModal({
           <Button variant="outline" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button type="submit" form="work-order-form" loading={saving}>
+          <Button
+            type="submit"
+            form="work-order-form"
+            loading={saving}
+            disabled={facilitiesCatalog.failed}
+          >
             {isEdit ? "Save changes" : "Create work order"}
           </Button>
         </>
@@ -488,6 +469,9 @@ export function WorkOrderFormModal({
         onSubmit={handleSubmit}
         className="grid gap-4 sm:grid-cols-2"
       >
+        <div className="sm:col-span-2 empty:hidden">
+          <CatalogFailureNotice failed={failedCatalogs} />
+        </div>
         <FormField
           label="Title"
           htmlFor="wo-title"

@@ -17,7 +17,11 @@ import type {
   ReportSectionId,
   ReportTable,
 } from "../types";
-import { formatReportDateTime } from "../utils";
+import {
+  formatReportDateTime,
+  reportAvailabilityNotice,
+  reportHealthLabel,
+} from "../utils";
 import { downloadBlob, reportFilename } from "./filename";
 
 function heading(text: string, level = HeadingLevel.HEADING_1) {
@@ -156,7 +160,10 @@ export async function downloadReportWord(
     body(`Prepared by: ${report.cover.preparedBy}`),
     body(`Reporting period: ${report.periodLabel}`),
     body(`Generated: ${formatReportDateTime(report.generatedAt)}`),
-    body(`Health score: ${report.healthScore}/100 · ${report.healthBand}`),
+    body(`Health score: ${reportHealthLabel(report)}`),
+    ...(reportAvailabilityNotice(report)
+      ? [body(reportAvailabilityNotice(report) as string)]
+      : []),
     body(report.cover.confidentiality),
   ];
 

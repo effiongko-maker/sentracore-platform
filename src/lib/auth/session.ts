@@ -47,43 +47,22 @@ export async function getPlatformSession(): Promise<PlatformSession | null> {
 
   if (!user) return null;
 
-  const { data: profileRow, error: profileError } = await supabase
-    .from("profiles")
-    .select(
-      "id, first_name, last_name, full_name, avatar_url, job_title, organisation_id, status"
-    )
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (profileError || !profileRow) {
-    // Auth user exists but profile missing — treat as incomplete session.
-    return null;
-  }
-
-  const profile = mapProfile(profileRow as Record<string, unknown>);
-
-  let organisation: AuthOrganisation | null = null;
-  if (profile.organisationId) {
-    const { data: orgRow } = await supabase
-      .from("organisations")
-      .select("id, name, slug, status")
-      .eq("id", profile.organisationId)
-      .maybeSingle();
-
-    if (orgRow) {
-      organisation = {
-        id: String(orgRow.id),
-        name: String(orgRow.name),
-        slug: String(orgRow.slug),
-        status: String(orgRow.status),
-      };
-    }
-  }
-
-  const { data: assignmentRows } = await supabase
-    .from("user_role_assignments")
-    .select(
-      `
+  // Stage 2: profile and role assignments depend only on the auth user id.
+  const [
+    { data: profileRow, error: profileError },
+    { data: assignmentRows },
+  ] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select(
+        "id, first_name, last_name, full_name, avatar_url, job_title, organisation_id, status"
+      )
+      .eq("id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("user_role_assignments")
+      .select(
+        `
       id,
       role_id,
       organisation_id,
@@ -96,8 +75,55 @@ export async function getPlatformSession(): Promise<PlatformSession | null> {
         status
       )
     `
-    )
-    .eq("profile_id", user.id);
+      )
+      .eq("profile_id", user.id),
+  ]);
+
+  if (profileError || !profileRow) {
+    // Auth user exists but profile missing — treat as incomplete session.
+    return null;
+  }
+
+  const profile = mapProfile(profileRow as Record<string, unknown>);
+
+  // Stage 3: organisation and enabled modules depend only on the profile's organisation.
+  let organisation: AuthOrganisation | null = null;
+  let moduleRows: Array<Record<string, unknown>> = [];
+  if (profile.organisationId) {
+    const [{ data: orgRow }, { data: modules }] = await Promise.all([
+      supabase
+        .from("organisations")
+        .select("id, name, slug, status")
+        .eq("id", profile.organisationId)
+        .maybeSingle(),
+      supabase
+        .from("organisation_modules")
+        .select(
+          `
+        id,
+        module_id,
+        status,
+        modules (
+          id,
+          name,
+          slug,
+          status
+        )
+      `
+        )
+        .eq("organisation_id", profile.organisationId)
+        .eq("status", "enabled"),
+    ]);
+    if (orgRow) {
+      organisation = {
+        id: String(orgRow.id),
+        name: String(orgRow.name),
+        slug: String(orgRow.slug),
+        status: String(orgRow.status),
+      };
+    }
+    moduleRows = (modules ?? []) as unknown as Array<Record<string, unknown>>;
+  }
 
   const roleAssignments: AuthRoleAssignment[] = (assignmentRows ?? [])
     .map((row) => {
@@ -122,41 +148,20 @@ export async function getPlatformSession(): Promise<PlatformSession | null> {
 
   const roleSlugs = [...new Set(roleAssignments.map((r) => r.roleSlug))];
 
-  let enabledModules: AuthEnabledModule[] = [];
-  if (profile.organisationId) {
-    const { data: moduleRows } = await supabase
-      .from("organisation_modules")
-      .select(
-        `
-        id,
-        module_id,
-        status,
-        modules (
-          id,
-          name,
-          slug,
-          status
-        )
-      `
-      )
-      .eq("organisation_id", profile.organisationId)
-      .eq("status", "enabled");
-
-    enabledModules = [];
-    for (const row of moduleRows ?? []) {
-      const modRaw = row.modules;
-      const mod = Array.isArray(modRaw) ? modRaw[0] : modRaw;
-      if (!mod || typeof mod !== "object") continue;
-      const m = mod as Record<string, unknown>;
-      if (String(m.status) !== "active") continue;
-      enabledModules.push({
-        id: String(row.id),
-        moduleId: String(row.module_id),
-        slug: String(m.slug),
-        name: String(m.name),
-        status: "enabled",
-      });
-    }
+  const enabledModules: AuthEnabledModule[] = [];
+  for (const row of moduleRows) {
+    const modRaw = row.modules;
+    const mod = Array.isArray(modRaw) ? modRaw[0] : modRaw;
+    if (!mod || typeof mod !== "object") continue;
+    const m = mod as Record<string, unknown>;
+    if (String(m.status) !== "active") continue;
+    enabledModules.push({
+      id: String(row.id),
+      moduleId: String(row.module_id),
+      slug: String(m.slug),
+      name: String(m.name),
+      status: "enabled",
+    });
   }
 
   return {

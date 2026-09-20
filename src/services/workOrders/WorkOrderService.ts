@@ -332,22 +332,38 @@ export const WorkOrderService = {
    * A failing catalog is an error, never an empty dropdown.
    */
   async getFilterCatalog(): Promise<WorkOrderFilterCatalog> {
-    const [{ FacilityService }, { UserService }, { AssetService }, { loadAllPages }] =
+    const [{ FacilityService }, { AssignablePeopleService }, { AssetService }, { loadAllPages }] =
       await Promise.all([
         import("@/services/facilities/FacilityService"),
-        import("@/services/users/UserService"),
+        import("@/services/assignablePeople/AssignablePeopleService"),
         import("@/services/assets/AssetService"),
         import("@/services/reporting/loadAllPages"),
       ]);
-    const [facilities, users, assets] = await Promise.all([
+    // Independent catalogs: one failure never erases the others, and a failed
+    // catalog is reported in `failed` — never substituted with a healthy empty list.
+    const [facilities, users, assets] = await Promise.allSettled([
       loadAllPages((page, pageSize) => FacilityService.listFacilities({ page, pageSize })),
-      loadAllPages((page, pageSize) => UserService.listUsersCatalog({ page, pageSize })),
+      AssignablePeopleService.list(),
       loadAllPages((page, pageSize) => AssetService.listAssetsCatalog({ page, pageSize })),
     ]);
+    const failed: Array<"facilities" | "users" | "assets"> = [];
+    if (facilities.status === "rejected") failed.push("facilities");
+    if (users.status === "rejected") failed.push("users");
+    if (assets.status === "rejected") failed.push("assets");
     return {
-      facilities: facilities.map((f) => ({ id: f.id, name: f.name })),
-      users: users.map((u) => ({ id: u.id, name: u.name })),
-      assets: assets.map((a) => ({ id: a.id, name: a.name, facilityId: a.facilityId })),
+      facilities:
+        facilities.status === "fulfilled"
+          ? facilities.value.map((f) => ({ id: f.id, name: f.name }))
+          : [],
+      users:
+        users.status === "fulfilled"
+          ? users.value.map((u) => ({ id: u.id, name: u.name }))
+          : [],
+      assets:
+        assets.status === "fulfilled"
+          ? assets.value.map((a) => ({ id: a.id, name: a.name, facilityId: a.facilityId }))
+          : [],
+      failed,
     };
   },
 

@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/utils/supabase/admin";
+import { reconciledHistoryEventIds } from "./reconciledHistory";
 import {
   isRecommendationDecisionValue,
   type RecommendationDecisionValue,
@@ -274,7 +275,7 @@ export const analyzeRecommendationResponsePatternsConsumer: OperationalEventCons
 
     const { data: originEvent, error: originError } = await admin
       .from("operational_events")
-      .select("id, organisation_id, data")
+      .select("id, organisation_id, entity_type, entity_id, data")
       .eq("id", currentDecision.operational_event_id)
       .maybeSingle();
 
@@ -301,6 +302,35 @@ export const analyzeRecommendationResponsePatternsConsumer: OperationalEventCons
           actionKey,
           recommendationDecisionId: currentDecision.id,
           reason: "origin_event_org_mismatch",
+        },
+        signals: [],
+      };
+    }
+
+    // The decision must respond to a recommendation on a current authoritative
+    // entity; otherwise it is orphaned history, not operational evidence.
+    const originReconciled = await reconciledHistoryEventIds({
+      admin,
+      organisationId,
+      events: [
+        originEvent as unknown as {
+          id: string;
+          organisation_id: string;
+          entity_type: string | null;
+          entity_id: string | null;
+          data: Record<string, unknown> | null;
+        },
+      ],
+    });
+    if (!originReconciled.has(currentDecision.operational_event_id)) {
+      return {
+        status: "skipped",
+        summary:
+          "Recommendation response pattern analysis skipped: the originating event does not resolve to a current operational record.",
+        data: {
+          actionKey,
+          recommendationDecisionId: currentDecision.id,
+          reason: "origin_not_authoritative",
         },
         signals: [],
       };
@@ -358,7 +388,7 @@ export const analyzeRecommendationResponsePatternsConsumer: OperationalEventCons
     if (eventIds.length > 0) {
       const { data: events, error: eventsError } = await admin
         .from("operational_events")
-        .select("id, organisation_id, data")
+        .select("id, organisation_id, entity_type, entity_id, data")
         .eq("organisation_id", organisationId)
         .in("id", eventIds);
 
@@ -377,7 +407,24 @@ export const analyzeRecommendationResponsePatternsConsumer: OperationalEventCons
         };
       }
 
+      // Drop decisions whose originating event is orphaned history.
+      const reconciledOrigins = await reconciledHistoryEventIds({
+        admin,
+        organisationId,
+        events: (events ?? []) as unknown as Array<{
+          id: string;
+          organisation_id: string;
+          entity_type: string | null;
+          entity_id: string | null;
+          data: Record<string, unknown> | null;
+        }>,
+      });
+      history = history.filter((row) =>
+        reconciledOrigins.has(row.operational_event_id)
+      );
+
       for (const ev of (events ?? []) as EventRow[]) {
+        if (!reconciledOrigins.has(ev.id)) continue;
         facilityByEventId.set(
           ev.id,
           asNonEmptyString(ev.data?.facilityId)

@@ -1,4 +1,8 @@
-import type { ReportPeriodSelection, ReportWizardState } from "./types";
+import type {
+  ClientReportDocument,
+  ReportPeriodSelection,
+  ReportWizardState,
+} from "./types";
 import { buildPeriodLabel } from "./constants";
 
 export function withPeriodLabel(
@@ -82,4 +86,21 @@ export function displayReportValue(
     return fallback;
   }
   return text;
+}
+
+/** Health line for a report. Never states a score built from unreadable sources. */
+export function reportHealthLabel(report: ClientReportDocument): string {
+  if (!report.dataAvailability.complete) return "Incomplete — some data unavailable";
+  return `${report.healthScore}/100 · ${report.healthBand}`;
+}
+
+/** Disclosure shown by preview, Word and PDF alike; null when every source was read. */
+export function reportAvailabilityNotice(
+  report: ClientReportDocument
+): string | null {
+  if (report.dataAvailability.complete) return null;
+  const labels = report.dataAvailability.unavailable
+    .map((item) => item.label)
+    .join(", ");
+  return `Incomplete report — ${labels} data could not be read. Figures that depend on it are not stated.`;
 }

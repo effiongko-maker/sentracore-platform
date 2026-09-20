@@ -10,6 +10,7 @@ import { IncidentService } from "@/services/incidents/IncidentService";
 import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 import { EntityResolver } from "@/services/entityResolver";
 import { UserService } from "@/services/users/UserService";
+import { AssignablePeopleService } from "@/services/assignablePeople/AssignablePeopleService";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
 import { computeReportingHealth, computeReportingKpis } from "./kpis";
 import { loadAllPages } from "./loadAllPages";
@@ -62,8 +63,29 @@ async function loadAuthoritativeWorkOrders(): Promise<{ rows: WorkOrder[]; ok: b
   );
 }
 
+/**
+ * People contribute only the workforce count. That needs the operational
+ * assignment catalog (ops.view), NOT the users directory (users.view), so
+ * normal FM Reporting does not require directory authority.
+ */
 async function loadAuthoritativeUsers(): Promise<{ rows: User[]; ok: boolean }> {
-  return loadAuthoritative(() => loadAllPages((page, pageSize) => UserService.listUsersCatalog({ page, pageSize })));
+  return loadAuthoritative(async () =>
+    (await AssignablePeopleService.list()).map(
+      (person): User => ({
+        id: person.id,
+        name: person.name,
+        email: "",
+        role: person.role,
+        specialization: "",
+        facility: "",
+        facilityId: person.facilityId,
+        activeWorkOrders: 0,
+        status: "active",
+        lastActive: "",
+        createdAt: "",
+      })
+    )
+  );
 }
 
 async function loadAuthoritativeFacilities(): Promise<{ rows: Facility[]; ok: boolean }> {
@@ -261,6 +283,10 @@ export const ReportingService = {
       snapshotCacheKey(params),
       () => buildReportingSnapshot(params)
     );
+    // A degraded snapshot must not be served from cache: drop it so a retry re-reads.
+    if (snapshot._snapshotMeta?.unavailableSources?.length) {
+      SnapshotService.invalidate();
+    }
     const fresh = withFreshAge(snapshot);
     // Seed EntityResolver from snapshot rows so Dashboard/Reports avoid
     // follow-on Apps Script directory fan-out for users/facilities/assets.

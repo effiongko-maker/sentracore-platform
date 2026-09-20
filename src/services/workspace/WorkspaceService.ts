@@ -773,11 +773,20 @@ function startNonCoreDomainLists(asOf: string): Promise<NonCoreDomainLists> {
   }));
 }
 
-function emptyNonCoreDomainLists(): NonCoreDomainLists {
+/**
+ * First-wave placeholder for the deferred non-core domains.
+ * Approvals are NOT loaded yet — they must not read as a healthy empty list, or
+ * Awaiting Action is transiently understated once approvals exist. Marking them
+ * unavailable keeps Awaiting Action null until the required source is known;
+ * the enriched snapshot then supplies the real (possibly zero) value.
+ * Facilities only label attention rows, so an empty placeholder is harmless.
+ */
+/** @internal Exported for the first-wave (pre-approvals) composition verifier. */
+export function emptyNonCoreDomainLists(): NonCoreDomainLists {
   return {
-    approvals: { ok: true, data: [] },
+    approvals: { ok: false, data: [] },
     facilities: { ok: true, data: [] },
-    pictureApprovals: { present: false },
+    pictureApprovals: { present: true, healthy: false },
   };
 }
 
@@ -982,12 +991,14 @@ export const WorkspaceService = {
         return null;
       });
 
-    const core = corePromise.then((coreLists) =>
-      composeWorkspaceSnapshot(asOf, latestUser, {
+    const core = corePromise.then((coreLists) => ({
+      ...composeWorkspaceSnapshot(asOf, latestUser, {
         ...coreLists,
         ...emptyNonCoreDomainLists(),
-      })
-    );
+      }),
+      // First wave: deferred domains are still loading (not failed, not empty).
+      enriching: true as const,
+    }));
 
     const complete = Promise.all([
       corePromise,

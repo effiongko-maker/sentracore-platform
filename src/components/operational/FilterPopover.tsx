@@ -178,6 +178,7 @@ export function FilterField({
   value,
   onChange,
   onFocus,
+  disabled,
   children,
 }: {
   id: string;
@@ -185,6 +186,7 @@ export function FilterField({
   value: string;
   onChange: (value: string) => void;
   onFocus?: () => void;
+  disabled?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -197,6 +199,7 @@ export function FilterField({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onFocus={onFocus}
+          disabled={disabled}
         >
           {children}
         </select>

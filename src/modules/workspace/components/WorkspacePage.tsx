@@ -1,6 +1,6 @@
 "use client";
 
-import { Home } from "lucide-react";
+import { Home, ShieldOff } from "lucide-react";
 import {
   HOME_LOADING_STATUS,
   LoadingGate,
@@ -8,11 +8,26 @@ import {
   WorkspaceSkeleton,
 } from "@/components/loading";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { useWorkspace } from "../hooks/useWorkspace";
 import { CommandSurface } from "./CommandSurface";
 
 export function WorkspacePage() {
-  const { snapshot, loading, error, reload } = useWorkspace();
+  const { access, loading: accessLoading, can } = useOperatingAccess();
+  // Unauthorized is not unavailable: without ops.view no operational read is issued.
+  const accessKnown = !accessLoading && access != null;
+  const canViewOperations = can("ops.view");
+  const { snapshot, loading, error, reload } = useWorkspace(canViewOperations);
+
+  if (accessKnown && !canViewOperations) {
+    return (
+      <EmptyState
+        icon={ShieldOff}
+        title="Home isn't available for your access"
+        description="Your account doesn't currently have permission to view the Facility Management overview. Ask an administrator to review your access."
+      />
+    );
+  }
 
   if (error && !loading && !snapshot) {
     return (

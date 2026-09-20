@@ -9,7 +9,7 @@ import {
   selectClassName,
 } from "@/components/forms/FormField";
 import { useToast } from "@/components/ui/Toast";
-import { useFacilityOptions } from "@/hooks/useFacilityOptions";
+import { InheritedFacilityField } from "@/components/operational/InheritedFacilityField";
 import { DEEP_CLEANING_LOG_FIELD_LABELS } from "../constants";
 import { DeepCleaningLogService } from "../services/DeepCleaningLogService";
 import {
@@ -37,7 +37,6 @@ export function DeepCleaningLogFormModal({
   onSaved,
 }: DeepCleaningLogFormModalProps) {
   const { toast } = useToast();
-  const { facilities, loading: facilitiesLoading } = useFacilityOptions(open);
   const [form, setForm] = useState<FormValues>(toCreateFormValues());
   const [errors, setErrors] = useState<
     Partial<Record<keyof FormValues, string>>
@@ -110,9 +109,6 @@ export function DeepCleaningLogFormModal({
   }
 
   const isEdit = mode === "edit";
-  const facilityKnown = facilities.some(
-    (item) => item.id === form.facilityId || item.name === form.facilityId
-  );
 
   return (
     <Modal
@@ -158,32 +154,14 @@ export function DeepCleaningLogFormModal({
           />
         </FormField>
 
-        <FormField
+        <InheritedFacilityField
+          open={open}
+          id="deep-cleaning-log-facility"
           label={DEEP_CLEANING_LOG_FIELD_LABELS.facilityId}
-          htmlFor="deep-cleaning-log-facility"
-          required
+          value={form.facilityId}
           error={errors.facilityId}
-        >
-          <select
-            id="deep-cleaning-log-facility"
-            className={selectClassName}
-            value={form.facilityId}
-            onChange={(event) => updateField("facilityId", event.target.value)}
-            disabled={facilitiesLoading}
-          >
-            <option value="">
-              {facilitiesLoading ? "Loading facilities…" : "Select facility"}
-            </option>
-            {form.facilityId && !facilityKnown ? (
-              <option value={form.facilityId}>{form.facilityId}</option>
-            ) : null}
-            {facilities.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name} ({item.id})
-              </option>
-            ))}
-          </select>
-        </FormField>
+          onResolve={(facilityId) => updateField("facilityId", facilityId)}
+        />
 
         {isEdit && entry ? (
           <FormField

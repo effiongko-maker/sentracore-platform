@@ -19,6 +19,7 @@ import {
 import { IncidentService } from "@/services/incidents/IncidentService";
 import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 import { RequestService } from "@/services/requests/RequestService";
+import type { RequestRecord } from "@/modules/requests/types";
 import { getRequestTreatmentDetail } from "@/modules/requests/actions/treatRequest";
 import {
   onIncidentMutation,
@@ -74,12 +75,15 @@ function pageNumbers(current: number, totalPages: number): (number | "…")[] {
  */
 export function IssuesPage() {
   const openId = useQueryRecordId();
-  const { can } = useOperatingAccess();
+  const { can, loading: accessLoading } = useOperatingAccess();
+  const canReadRequests = can("requests.view");
   const canCreateOps = can("ops.create");
   const canMutateOps = can("ops.edit");
   const [items, setItems] = useState<UnifiedIssueListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** ok | restricted (no requests.view — not a failure) | unavailable (authorised but failed). */
+  const [requestsSource, setRequestsSource] = useState<"ok" | "restricted" | "unavailable">("ok");
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [view, setView] = useState<IssueOperationalView | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -91,8 +95,15 @@ export function IssuesPage() {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [requests, maintenances, incidents] = await Promise.all([
-        RequestService.listRequests({ page: 1, pageSize: 100, status: "all" }),
+      // FM-rooted Issues (Work + incidents) load independently of Requests.
+      // Requests are an optional augmentation: never read without requests.view,
+      // and a Request failure never erases the FM-rooted Issues.
+      const requestsRead = canReadRequests
+        ? RequestService.listRequests({ page: 1, pageSize: 100, status: "all" })
+            .then((page) => ({ ok: true as const, data: page.data }))
+            .catch(() => ({ ok: false as const, data: [] as RequestRecord[] }))
+        : Promise.resolve(null);
+      const [maintenances, incidents, requests] = await Promise.all([
         MaintenanceService.listMaintenance({
           page: 1,
           pageSize: 100,
@@ -103,9 +114,13 @@ export function IssuesPage() {
           pageSize: 100,
           status: "all",
         }),
+        requestsRead,
       ]);
+      setRequestsSource(
+        requests === null ? "restricted" : requests.ok ? "ok" : "unavailable"
+      );
       const next = buildUnifiedIssueList({
-        requests: requests.data,
+        requests: requests?.ok ? requests.data : [],
         maintenances: maintenances.data,
         incidents: incidents.data,
       });
@@ -118,7 +133,7 @@ export function IssuesPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canReadRequests]);
 
   const total = items.length;
   const totalPages = Math.max(1, Math.ceil(total / ISSUES_PAGE_SIZE));
@@ -143,6 +158,7 @@ export function IssuesPage() {
   const showPagination = total > ISSUES_PAGE_SIZE;
 
   useEffect(() => {
+    if (accessLoading) return;
     let cancelled = false;
     void reload().then((next) => {
       if (cancelled) return;
@@ -160,7 +176,7 @@ export function IssuesPage() {
     return () => {
       cancelled = true;
     };
-  }, [openId, reload]);
+  }, [openId, reload, accessLoading]);
 
   useEffect(() => {
     if (!selectedIssueId) {
@@ -330,6 +346,24 @@ export function IssuesPage() {
             onAction={() => void reload()}
           />
         ) : (
+          <>
+          {requestsSource === "unavailable" ? (
+            <div
+              role="status"
+              className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-sc border border-border/70 bg-slate-50/80 px-3 py-2 text-sm text-muted"
+            >
+              <span>
+                Requests couldn&apos;t be loaded, so Request-backed Issues are not shown. Work and other Issues are.
+              </span>
+              <button
+                type="button"
+                className="underline underline-offset-2"
+                onClick={() => void reload()}
+              >
+                Retry
+              </button>
+            </div>
+          ) : null}
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)]">
             <StreamSurface>
               <div className="overflow-x-auto">
@@ -450,6 +484,7 @@ export function IssuesPage() {
               canMutate={canMutateOps}
             />
           </div>
+          </>
         )}
       </div>
 

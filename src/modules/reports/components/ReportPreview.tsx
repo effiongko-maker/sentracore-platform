@@ -12,6 +12,8 @@ import type {
 } from "../types";
 import {
   displayReportValue,
+  reportAvailabilityNotice,
+  reportHealthLabel,
   formatReportDate,
   formatReportDateTime,
 } from "../utils";
@@ -247,11 +249,18 @@ function CoverPage({ report }: { report: ClientReportDocument }) {
             <div className="grid grid-cols-[140px_1fr] gap-3">
               <dt className="text-slate-500">Health score</dt>
               <dd className="font-medium capitalize text-[#0f1c2e]">
-                {displayReportValue(report.healthScore, "—")}/100 ·{" "}
-                {displayReportValue(report.healthBand, "—")}
+                {reportHealthLabel(report)}
               </dd>
             </div>
           </dl>
+          {reportAvailabilityNotice(report) ? (
+            <p
+              role="alert"
+              className="mt-6 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+            >
+              {reportAvailabilityNotice(report)}
+            </p>
+          ) : null}
         </div>
 
         <div className="mt-auto border-t border-slate-200 pt-5 text-xs text-slate-500">

@@ -10,8 +10,9 @@ import {
   type ActiveFilterChip,
 } from "@/components/operational";
 import { useFacilityOptions } from "@/hooks/useFacilityOptions";
-import { UserService } from "@/services/users/UserService";
-import type { User } from "@/modules/users/types";
+import { AssignablePeopleService } from "@/services/assignablePeople/AssignablePeopleService";
+import { useReferenceCatalog } from "@/hooks/useReferenceCatalog";
+
 import { WORK_STATUS_LABELS } from "@/lib/operational/work";
 import { labelize } from "@/modules/maintenance/utils";
 import type {
@@ -83,22 +84,9 @@ export function WorkToolbar({
   onClearAll,
 }: WorkToolbarProps) {
   const { facilities } = useFacilityOptions();
-  const [users, setUsers] = useState<User[]>([]);
+  const peopleCatalog = useReferenceCatalog(true, () => AssignablePeopleService.list());
+  const users = peopleCatalog.items;
   const [filterOpen, setFilterOpen] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    UserService.listUsersCatalog({ page: 1, pageSize: 200 })
-      .then((page) => {
-        if (!cancelled) setUsers(page.data);
-      })
-      .catch(() => {
-        if (!cancelled) setUsers([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const activeFilterCount = countActiveFilters({
     priority,
@@ -251,7 +239,8 @@ export function WorkToolbar({
 
             <FilterField
               id="work-filter-assignee"
-              label="Assignee"
+              label={peopleCatalog.failed ? "Assignee (unavailable)" : "Assignee"}
+              disabled={peopleCatalog.failed}
               value={assignedToUserId}
               onChange={(value) =>
                 onAssignedToUserIdChange(value as string | "all")

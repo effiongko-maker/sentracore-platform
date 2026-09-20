@@ -105,6 +105,8 @@ export function ReportsPage() {
                 <ReportWizard
                   wizard={wizard}
                   facilityOptions={home.facilityOptions}
+                  facilityOptionsFailed={home.facilityOptionsFailed === true}
+                  onRetryFacilities={() => void reload()}
                   canProceed={canProceed}
                   generating={generating}
                   error={error}

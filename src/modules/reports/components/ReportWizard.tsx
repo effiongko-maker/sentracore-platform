@@ -29,11 +29,15 @@ const selectClass = cn(toolbarSelectClassName, "w-full");
 function StepFacilities({
   wizard,
   facilityOptions,
+  facilityOptionsFailed,
+  onRetryFacilities,
   onAllFacilities,
   onToggleFacility,
 }: {
   wizard: ReportWizardState;
   facilityOptions: Array<{ id: string; name: string }>;
+  facilityOptionsFailed: boolean;
+  onRetryFacilities: () => void;
   onAllFacilities: (value: boolean) => void;
   onToggleFacility: (id: string) => void;
 }) {
@@ -87,9 +91,21 @@ function StepFacilities({
           })}
         </div>
 
-        {!facilityOptions.length ? (
+        {facilityOptionsFailed ? (
+          <p role="alert" className="mt-4 text-sm text-[var(--rp-muted)]">
+            Couldn&apos;t load the facility list, so individual facilities can&apos;t be
+            chosen right now.{" "}
+            <button
+              type="button"
+              className="underline underline-offset-2"
+              onClick={onRetryFacilities}
+            >
+              Retry
+            </button>
+          </p>
+        ) : !facilityOptions.length ? (
           <p className="mt-4 text-sm text-[var(--rp-muted)]">
-            No facilities were available to list. Portfolio mode can still be
+            No facilities have been set up yet. Portfolio mode can still be
             used.
           </p>
         ) : null}
@@ -381,6 +397,8 @@ function StepGenerate({
 export function ReportWizard({
   wizard,
   facilityOptions,
+  facilityOptionsFailed = false,
+  onRetryFacilities = () => undefined,
   canProceed,
   generating,
   error,
@@ -397,6 +415,8 @@ export function ReportWizard({
 }: {
   wizard: ReportWizardState;
   facilityOptions: Array<{ id: string; name: string }>;
+  facilityOptionsFailed?: boolean;
+  onRetryFacilities?: () => void;
   canProceed: boolean;
   generating: boolean;
   error?: string | null;
@@ -428,6 +448,8 @@ export function ReportWizard({
         <StepFacilities
           wizard={wizard}
           facilityOptions={facilityOptions}
+          facilityOptionsFailed={facilityOptionsFailed}
+          onRetryFacilities={onRetryFacilities}
           onAllFacilities={onAllFacilities}
           onToggleFacility={onToggleFacility}
         />

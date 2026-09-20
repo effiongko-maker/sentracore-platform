@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Bell } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ModeFrame, OperateHeader, StreamSurface } from "@/components/platform";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatRelativeTime } from "@/lib/utils";
@@ -15,6 +15,7 @@ import {
   markNotificationRead,
   NOTIFICATION_READ_STATE_EVENT,
 } from "@/modules/workspace/utils/notificationReadState";
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { OperationalNotificationService } from "@/services/workspace/OperationalNotificationService";
 
 const EMPTY_FEED: OperationalNotificationFeed = {
@@ -29,6 +30,8 @@ const EMPTY_FEED: OperationalNotificationFeed = {
  * Distinct from Home “Requires attention”.
  */
 export function NotificationsPage() {
+  const { can } = useOperatingAccess();
+  const canReadRequests = can("requests.view");
   const [feed, setFeed] = useState<OperationalNotificationFeed>(EMPTY_FEED);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +41,9 @@ export function NotificationsPage() {
     setLoading(true);
     setError(null);
     try {
-      const next = await OperationalNotificationService.getFeed();
+      const next = await OperationalNotificationService.getFeed({
+        canReadRequests,
+      });
       setFeed(next);
       setReadIds(loadReadNotificationIds());
     } catch (err) {
@@ -49,7 +54,7 @@ export function NotificationsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canReadRequests]);
 
   useEffect(() => {
     setReadIds(loadReadNotificationIds());

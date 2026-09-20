@@ -75,9 +75,37 @@ export type NotificationSourceLoad = {
   failedSources: RequiredNotificationSource[];
 };
 
-export async function loadNotificationSources(): Promise<NotificationSourceLoad> {
-  const pool = NOTIFICATION_SOURCE_POOL_SIZE;
+/** What the caller is actually authorised to read. Unauthorized ≠ unavailable. */
+export type NotificationAuthority = {
+  /** requests.view — Request sources are skipped (not failed) without it. */
+  canReadRequests: boolean;
+};
 
+export type NotificationSourceReaders = {
+  listRequests: (params: Parameters<typeof RequestService.listRequests>[0]) => Promise<{ data?: RequestRecord[] }>;
+  listMaintenance: (params: Parameters<typeof MaintenanceService.listMaintenance>[0]) => Promise<{ data?: Maintenance[] }>;
+  listIncidents: (params: Parameters<typeof IncidentService.listIncidents>[0]) => Promise<{ data?: Incident[] }>;
+  listWorkOrders: (params: Parameters<typeof WorkOrderService.listWorkOrders>[0]) => Promise<{ data?: WorkOrder[] }>;
+};
+
+const DEFAULT_READERS: NotificationSourceReaders = {
+  listRequests: (params) => RequestService.listRequests(params),
+  listMaintenance: (params) => MaintenanceService.listMaintenance(params),
+  listIncidents: (params) => IncidentService.listIncidents(params),
+  listWorkOrders: (params) => WorkOrderService.listWorkOrders(params),
+};
+
+export async function loadNotificationSources(
+  authority: NotificationAuthority,
+  readers: NotificationSourceReaders = DEFAULT_READERS
+): Promise<NotificationSourceLoad> {
+  const pool = NOTIFICATION_SOURCE_POOL_SIZE;
+  // Without requests.view the Request read would predictably 403. Skip it:
+  // no call, no existence leak, and the feed is NOT marked incomplete.
+  const requestSource = <T,>(loader: () => Promise<{ data?: T[] }>): Promise<SourceResult<T>> =>
+    authority.canReadRequests
+      ? settleList(loader)
+      : Promise.resolve({ ok: true, data: [] });
   const [
     requestsSubmitted,
     requestsUnderReview,
@@ -88,50 +116,30 @@ export async function loadNotificationSources(): Promise<NotificationSourceLoad>
     workOrdersRecent,
     workOrdersOverdue,
   ] = await Promise.all([
-    settleList(() =>
-      RequestService.listRequests({
-        page: 1,
-        pageSize: pool,
-        status: "submitted",
-      })
+    requestSource(() =>
+      readers.listRequests({ page: 1, pageSize: pool, status: "submitted" })
+    ),
+    requestSource(() =>
+      readers.listRequests({ page: 1, pageSize: pool, status: "under_review" })
     ),
     settleList(() =>
-      RequestService.listRequests({
-        page: 1,
-        pageSize: pool,
-        status: "under_review",
-      })
+      readers.listMaintenance({ page: 1, pageSize: pool, status: "active" })
     ),
     settleList(() =>
-      MaintenanceService.listMaintenance({
-        page: 1,
-        pageSize: pool,
-        status: "active",
-      })
-    ),
-    settleList(() =>
-      MaintenanceService.listMaintenance({
+      readers.listMaintenance({
         page: 1,
         pageSize: pool,
         status: "active",
         priority: "critical",
       })
     ),
-    settleList(() => IncidentService.listIncidents({ page: 1, pageSize: pool })),
+    settleList(() => readers.listIncidents({ page: 1, pageSize: pool })),
     settleList(() =>
-      IncidentService.listIncidents({
-        page: 1,
-        pageSize: pool,
-        severity: "critical",
-      })
+      readers.listIncidents({ page: 1, pageSize: pool, severity: "critical" })
     ),
-    settleList(() => WorkOrderService.listWorkOrders({ page: 1, pageSize: pool })),
+    settleList(() => readers.listWorkOrders({ page: 1, pageSize: pool })),
     settleList(() =>
-      WorkOrderService.listWorkOrders({
-        page: 1,
-        pageSize: pool,
-        dueDate: "overdue",
-      })
+      readers.listWorkOrders({ page: 1, pageSize: pool, dueDate: "overdue" })
     ),
   ]);
 
@@ -169,8 +177,11 @@ export function composeNotificationFeed(
   };
 }
 
-async function buildFeed(asOf: string): Promise<OperationalNotificationFeed> {
-  const sources = await loadNotificationSources();
+async function buildFeed(
+  asOf: string,
+  authority: NotificationAuthority
+): Promise<OperationalNotificationFeed> {
+  const sources = await loadNotificationSources(authority);
   return composeNotificationFeed(asOf, sources);
 }
 
@@ -181,15 +192,15 @@ export const OperationalNotificationService = {
    * Incomplete feeds are not TTL-cached so a later retry can recover.
    */
   async getFeed(
+    authority: NotificationAuthority,
     asOf = new Date().toISOString()
   ): Promise<OperationalNotificationFeed> {
-    const feed = await sharedRequest(
-      FEED_CACHE_KEY,
-      () => buildFeed(asOf),
-      { ttlMs: NOTIFICATION_FEED_TTL_MS }
-    );
+    const key = `${FEED_CACHE_KEY}:${authority.canReadRequests ? "requests" : "no-requests"}`;
+    const feed = await sharedRequest(key, () => buildFeed(asOf, authority), {
+      ttlMs: NOTIFICATION_FEED_TTL_MS,
+    });
     if (feed.incomplete) {
-      invalidateSharedRequests(FEED_CACHE_KEY);
+      invalidateSharedRequests(key);
     }
     return feed;
   },

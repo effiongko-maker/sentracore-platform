@@ -92,6 +92,8 @@ export class ApiClient {
     const liveProxy =
       path === "/users"
         ? { endpoint: "/api/users", resource: "users" }
+        : path === "/assignable-people"
+          ? { endpoint: "/api/assignable-people", resource: "assignable-people" }
         : path === "/facilities"
           ? { endpoint: "/api/facilities", resource: "facilities" }
           : path === "/assets"

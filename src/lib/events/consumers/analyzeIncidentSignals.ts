@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/utils/supabase/admin";
+import { reconciledHistoryEventIds } from "./reconciledHistory";
 import { OperationalEventTypes } from "../taxonomy";
 import {
   actionOutcomeSucceeded,
@@ -22,6 +23,8 @@ export const INCIDENT_SIGNAL_RULES = {
 
 type HistoryEventRow = {
   id: string;
+  organisation_id: string;
+  entity_type: string | null;
   entity_id: string | null;
   occurred_at: string;
   event_type: string;
@@ -93,7 +96,7 @@ async function loadFacilityHistory(options: {
 
   const { data, error } = await admin
     .from("operational_events")
-    .select("id, entity_id, occurred_at, event_type, data")
+    .select("id, organisation_id, entity_type, entity_id, occurred_at, event_type, data")
     .eq("organisation_id", options.organisationId)
     .eq("event_type", options.eventType)
     .filter("data->>facilityId", "eq", options.facilityId)
@@ -109,7 +112,15 @@ async function loadFacilityHistory(options: {
 
   const rows = (data ?? []) as HistoryEventRow[];
 
+  // Only history that resolves to a current authoritative FM record counts.
+  const reconciled = await reconciledHistoryEventIds({
+    admin,
+    organisationId: options.organisationId,
+    events: rows,
+  });
+
   return rows.filter((row) => {
+    if (!reconciled.has(row.id)) return false;
     if (row.id === options.excludeEventId) return false;
     if (
       options.excludeEntityId &&

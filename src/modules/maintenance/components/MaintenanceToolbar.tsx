@@ -12,8 +12,9 @@ import {
 } from "@/components/operational";
 import { Button } from "@/components/ui/Button";
 import { useFacilityOptions } from "@/hooks/useFacilityOptions";
-import { UserService } from "@/services/users/UserService";
-import type { User } from "@/modules/users/types";
+import { AssignablePeopleService } from "@/services/assignablePeople/AssignablePeopleService";
+import { useReferenceCatalog } from "@/hooks/useReferenceCatalog";
+
 import {
   DEFAULT_MAINTENANCE_SORT,
   MAINTENANCE_PAGE_SIZE,
@@ -96,22 +97,9 @@ export function MaintenanceToolbar({
   canCreate = true,
 }: MaintenanceToolbarProps) {
   const { facilities } = useFacilityOptions();
-  const [users, setUsers] = useState<User[]>([]);
+  const peopleCatalog = useReferenceCatalog(true, () => AssignablePeopleService.list());
+  const users = peopleCatalog.items;
   const [filterOpen, setFilterOpen] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    UserService.listUsersCatalog({ page: 1, pageSize: 200 })
-      .then((page) => {
-        if (!cancelled) setUsers(page.data);
-      })
-      .catch(() => {
-        if (!cancelled) setUsers([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const activeFilterCount = countActiveFilters({
     priority,
@@ -305,7 +293,8 @@ export function MaintenanceToolbar({
 
             <FilterField
               id="mnt-filter-assignee"
-              label="Assignee"
+              label={peopleCatalog.failed ? "Assignee (unavailable)" : "Assignee"}
+              disabled={peopleCatalog.failed}
               value={assignedToUserId}
               onChange={(value) =>
                 onAssignedToUserIdChange(value as string | "all")

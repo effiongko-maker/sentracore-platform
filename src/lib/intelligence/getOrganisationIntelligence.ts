@@ -1,6 +1,8 @@
 import { ActionError } from "@/lib/actions/errors";
 import { hasModule } from "@/lib/actions/moduleAccess";
 import { getPlatformSession } from "@/lib/auth/session";
+import { resolveOperatingAccess } from "@/lib/access/server";
+import { canReadIntelligence } from "@/lib/access/visibility";
 import {
   isActionOutcome,
   type ActionOutcome,
@@ -2060,6 +2062,12 @@ export async function getOrganisationIntelligence(): Promise<OrganisationIntelli
   }
   if (session.organisation.status !== "active") {
     throw new ActionError("ORGANISATION_INACTIVE");
+  }
+
+  // Server-side authority: never rely on client route gating for confidentiality.
+  const access = await resolveOperatingAccess(session);
+  if (!canReadIntelligence(access)) {
+    throw new ActionError("FORBIDDEN");
   }
 
   const cookieStore = await cookies();

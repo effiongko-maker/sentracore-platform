@@ -96,6 +96,13 @@ export interface ReportTable {
   emptyMessage?: string;
 }
 
+export interface ReportDataAvailability {
+  /** False when any authoritative source could not be read. */
+  complete: boolean;
+  /** Sources whose figures are NOT stated in this report. */
+  unavailable: Array<{ key: string; label: string }>;
+}
+
 export interface ClientReportDocument {
   id: string;
   reportType: ReportTypeId;
@@ -109,6 +116,8 @@ export interface ClientReportDocument {
   asOf: string;
   healthBand: "healthy" | "watch" | "critical";
   healthScore: number;
+  /** Source availability — figures for unavailable sources are never stated. */
+  dataAvailability: ReportDataAvailability;
   sections: ReportSectionId[];
   cover: {
     preparedFor: string;
@@ -156,4 +165,6 @@ export interface ReportsHomeSnapshot {
   asOf: string;
   reportTypes: ReportTypeDefinition[];
   facilityOptions: Array<{ id: string; name: string }>;
+  /** True when the facility list could not be loaded — NOT a healthy empty list. */
+  facilityOptionsFailed?: boolean;
 }

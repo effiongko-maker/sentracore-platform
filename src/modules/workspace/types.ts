@@ -152,6 +152,8 @@ export interface WorkspaceSnapshot {
   pulse: OrganisationalPulse;
   /** Core domain availability used to compose this snapshot. */
   domains: WorkspaceDomainAvailability;
+  /** True on the first-wave snapshot while deferred domains (approvals) are still loading. */
+  enriching?: boolean;
   quickActions: WorkspaceQuickAction[];
   myWork: WorkspaceWorkSummary[];
   schedule: WorkspaceScheduleItem[];

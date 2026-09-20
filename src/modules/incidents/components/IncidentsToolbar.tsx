@@ -10,9 +10,9 @@ import {
   type ActiveFilterChip,
 } from "@/components/operational";
 import { FacilityService } from "@/services/facilities/FacilityService";
-import { UserService } from "@/services/users/UserService";
+import { AssignablePeopleService } from "@/services/assignablePeople/AssignablePeopleService";
+import { useReferenceCatalog } from "@/hooks/useReferenceCatalog";
 import type { Facility } from "@/modules/facilities/types";
-import type { User } from "@/modules/users/types";
 import { INCIDENTS_PAGE_SIZE, INCIDENT_SEVERITIES, INCIDENT_STATUSES } from "../constants";
 import { labelize } from "../utils";
 import type { IncidentSeverity, IncidentStatus } from "../types";
@@ -68,8 +68,12 @@ export function IncidentsToolbar({
   total,
   loading,
 }: IncidentsToolbarProps) {
-  const [facilities, setFacilities] = useState<Facility[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const facilitiesCatalog = useReferenceCatalog(true, () =>
+    FacilityService.listFacilities({ page: 1, pageSize: 200 }).then((page) => page.data)
+  );
+  const peopleCatalog = useReferenceCatalog(true, () => AssignablePeopleService.list());
+  const facilities: Facility[] = facilitiesCatalog.items;
+  const users = peopleCatalog.items;
   const [filterOpen, setFilterOpen] = useState(false);
   const [draft, setDraft] = useState<DraftFilters>({
     severity,
@@ -78,27 +82,6 @@ export function IncidentsToolbar({
     assignedToUserId,
     requiresWorkOrder,
   });
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([
-      FacilityService.listFacilities({ page: 1, pageSize: 200 }),
-      UserService.listUsersCatalog({ page: 1, pageSize: 200 }),
-    ])
-      .then(([facilityPage, userPage]) => {
-        if (cancelled) return;
-        setFacilities(facilityPage.data);
-        setUsers(userPage.data);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setFacilities([]);
-        setUsers([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     if (filterOpen) {
@@ -284,7 +267,8 @@ export function IncidentsToolbar({
 
             <FilterField
               id="inc-filter-assignee"
-              label="Assigned to"
+              label={peopleCatalog.failed ? "Assigned to (unavailable)" : "Assigned to"}
+              disabled={peopleCatalog.failed}
               value={draft.assignedToUserId}
               onChange={(value) =>
                 setDraft((prev) => ({

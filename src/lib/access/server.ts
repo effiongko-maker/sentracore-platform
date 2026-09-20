@@ -162,29 +162,34 @@ export async function resolveOperatingAccess(
   let facility = "";
   let facilityId = "";
   let assignmentStatus: OperatingAccess["status"] = "unknown";
-  try {
-    capabilities = await loadExplicitFmGrants(organisationId, profileId);
-  } catch (error) {
+
+  // Grants and assignment context are independent (both keyed on org + profile).
+  // Each keeps its own failure semantics: grants fail closed, assignment degrades.
+  const [grantsResult, contextResult] = await Promise.allSettled([
+    loadExplicitFmGrants(organisationId, profileId),
+    loadActiveAssignmentContext(organisationId, profileId),
+  ]);
+
+  if (grantsResult.status === "fulfilled") {
+    capabilities = grantsResult.value;
+  } else {
     console.warn(
       "[access] platform capability grants unavailable; denying FM business capabilities",
-      error
+      grantsResult.reason
     );
     capabilities = [];
   }
 
-  try {
-    const context = await loadActiveAssignmentContext(
-      organisationId,
-      profileId
-    );
+  if (contextResult.status === "fulfilled") {
+    const context = contextResult.value;
     role = context.role;
     facility = context.facility;
     facilityId = context.facilityId;
     assignmentStatus = context.status;
-  } catch (error) {
+  } else {
     console.warn(
       "[access] facility assignment context unavailable; continuing with grants only",
-      error
+      contextResult.reason
     );
   }
 

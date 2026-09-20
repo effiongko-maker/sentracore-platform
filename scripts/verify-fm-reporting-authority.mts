@@ -33,7 +33,14 @@ function installFetch(mode: "healthy-empty" | "failing") {
     fetched.push(url);
     const body =
       mode === "healthy-empty"
-        ? { success: true, message: "", data: { data: [], page: 1, pageSize: 500, total: 0, totalPages: 1 } }
+        ? {
+            success: true,
+            message: "",
+            // The narrow operational catalog returns a bare array; the registers return pages.
+            data: url.includes("assignable-people")
+              ? []
+              : { data: [], page: 1, pageSize: 500, total: 0, totalPages: 1 },
+          }
         : { success: false, message: "source unavailable", data: null };
     return new Response(JSON.stringify(body), { status: mode === "healthy-empty" ? 200 : 400, headers: { "Content-Type": "application/json" } });
   };
@@ -65,7 +72,7 @@ async function main() {
     assert(offenders.length === 0, offenders.join(", "));
   });
   await check("all six Reporting sources are authoritative domain readers", () => {
-    for (const reader of ["UserService.listUsersCatalog", "FacilityService.listFacilities", "AssetService.listAssetsCatalog", "IncidentService.listIncidents", "MaintenanceService.listMaintenance", "WorkOrderService.listWorkOrders"]) {
+    for (const reader of ["AssignablePeopleService.list", "FacilityService.listFacilities", "AssetService.listAssetsCatalog", "IncidentService.listIncidents", "MaintenanceService.listMaintenance", "WorkOrderService.listWorkOrders"]) {
       assert(rs.includes(reader), `${reader} missing`);
     }
     for (const loader of ["loadAuthoritativeUsers", "loadAuthoritativeFacilities", "loadAuthoritativeAssets", "loadAuthoritativeIncidents", "loadAuthoritativeWork", "loadAuthoritativeWorkOrders"]) {

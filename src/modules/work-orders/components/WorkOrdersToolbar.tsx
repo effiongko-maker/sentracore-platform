@@ -117,6 +117,7 @@ export function WorkOrdersToolbar({
   const [users, setUsers] = useState<WorkOrderFilterCatalogUser[]>([]);
   const [assets, setAssets] = useState<WorkOrderFilterCatalogAsset[]>([]);
   const [filterCatalogLoading, setFilterCatalogLoading] = useState(false);
+  const [failedCatalogs, setFailedCatalogs] = useState<Array<"facilities" | "users" | "assets">>([]);
   const [maintenanceCatalog, setMaintenanceCatalog] = useState<
     MaintenanceCatalogEntry[]
   >([]);
@@ -155,6 +156,7 @@ export function WorkOrdersToolbar({
         setFacilities(catalog.facilities);
         setUsers(catalog.users);
         setAssets(catalog.assets);
+        setFailedCatalogs(catalog.failed ?? []);
         const elapsedMs = Math.round(
           (typeof performance !== "undefined" ? performance.now() : Date.now()) -
             t0
@@ -178,6 +180,7 @@ export function WorkOrdersToolbar({
         setFacilities([]);
         setUsers([]);
         setAssets([]);
+        setFailedCatalogs(["facilities", "users", "assets"]);
       })
       .finally(() => {
         if (!cancelled) setFilterCatalogLoading(false);
@@ -423,7 +426,8 @@ export function WorkOrdersToolbar({
 
             <FilterField
               id="wo-filter-facility"
-              label="Facility"
+              label={failedCatalogs.includes("facilities") ? "Facility (unavailable)" : "Facility"}
+              disabled={failedCatalogs.includes("facilities")}
               value={facilityId}
               onChange={(value) => {
                 onFacilityIdChange(value as string | "all");
@@ -440,7 +444,8 @@ export function WorkOrdersToolbar({
 
             <FilterField
               id="wo-filter-asset"
-              label="Asset"
+              label={failedCatalogs.includes("assets") ? "Asset (unavailable)" : "Asset"}
+              disabled={failedCatalogs.includes("assets")}
               value={assetId}
               onChange={(value) => onAssetIdChange(value as string | "all")}
             >
@@ -454,7 +459,8 @@ export function WorkOrdersToolbar({
 
             <FilterField
               id="wo-filter-assignee"
-              label="Assigned To"
+              label={failedCatalogs.includes("users") ? "Assigned To (unavailable)" : "Assigned To"}
+              disabled={failedCatalogs.includes("users")}
               value={assignedToUserId}
               onChange={(value) =>
                 onAssignedToUserIdChange(value as string | "all")

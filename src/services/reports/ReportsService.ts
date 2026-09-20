@@ -8,21 +8,18 @@ import type {
 } from "@/modules/reports/types";
 import { buildClientReport } from "./buildClientReport";
 
+/** Throws on failure — a failed load is never returned as an empty facility list. */
 async function loadFacilityOptions(): Promise<
   Array<{ id: string; name: string }>
 > {
-  try {
-    const result = await FacilityService.listFacilities({
-      page: 1,
-      pageSize: 200,
-      status: "all",
-    });
-    return result.data
-      .filter((f) => f.id && f.name)
-      .map((f) => ({ id: f.id, name: f.name }));
-  } catch {
-    return [];
-  }
+  const result = await FacilityService.listFacilities({
+    page: 1,
+    pageSize: 200,
+    status: "all",
+  });
+  return result.data
+    .filter((f) => f.id && f.name)
+    .map((f) => ({ id: f.id, name: f.name }));
 }
 
 /**
@@ -31,11 +28,18 @@ async function loadFacilityOptions(): Promise<
  */
 export const ReportsService = {
   async getHome(): Promise<ReportsHomeSnapshot> {
-    const facilityOptions = await loadFacilityOptions();
+    let facilityOptions: Array<{ id: string; name: string }> = [];
+    let facilityOptionsFailed = false;
+    try {
+      facilityOptions = await loadFacilityOptions();
+    } catch {
+      facilityOptionsFailed = true;
+    }
     return {
       asOf: new Date().toISOString(),
       reportTypes: REPORT_TYPES,
       facilityOptions,
+      facilityOptionsFailed,
     };
   },
 

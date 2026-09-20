@@ -63,3 +63,22 @@ what exists.
   authoritative source is `unavailable`, never zero.
 - Verification: `scripts/verify-intelligence-authority.mts` (in-memory) and
   `scripts/verify-intelligence-authority-live-read.mts` (read-only, linked DB).
+
+## Stakeholder-readiness rules
+
+- **Assignment does not need the directory.** Operational assignee pickers read `/api/assignable-people`
+  (`ops.view`; `{id, name, role, facilityId}` only). `/api/users` and `users.view` are directory authority
+  and are not required to assign work or to build a report.
+- **Optional domains never break authorised surfaces.** Issues load FM-rooted Work independently of Requests;
+  Request reads are issued only with `requests.view`. Unauthorized is not unavailable.
+- **Reference catalogs settle independently.** A failed catalog is explicit (`useReferenceCatalog`,
+  `CatalogFailureNotice`), never an empty list, and never erases its siblings.
+- **Emit-time consumers obey the same authority as Intelligence.** Prior events count as history only when
+  they reconcile to a current `fm_*` record (`reconciledHistory.ts`).
+- **Server-side confidentiality.** Intelligence enforces `canReadIntelligence` (ops.create | ops.edit) before
+  reading data; `AccessSurfaceGate` is not a confidentiality control.
+- **Facility is inherited** on create/edit forms (Assets and facility-scoped registers included); Generator and
+  Energy remain organisation-level. Filters may still select facilities.
+- **Reports disclose failed sources** (`maskUnavailableSources`): figures that depend on an unreadable source
+  are not stated, in preview, Word and PDF alike.
+- Verification: `scripts/verify-fm-stakeholder-readiness.mts`.

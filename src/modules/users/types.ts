@@ -11,6 +11,16 @@ export type EligibleProfile = {
   status: string;
 };
 
+/** Narrow operational assignment catalog row (ops.view). No contact/admin data. */
+export type AssignablePerson = {
+  /** Canonical identity: platform profile UUID. */
+  id: string;
+  name: string;
+  /** Descriptive operational role label — context, not authority. */
+  role: string;
+  facilityId: string;
+};
+
 export interface User {
   /** Canonical identity: platform profile UUID. */
   id: string;

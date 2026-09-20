@@ -9,9 +9,9 @@ import {
   selectClassName,
 } from "@/components/forms/FormField";
 import { useToast } from "@/components/ui/Toast";
-import { useFacilityOptions } from "@/hooks/useFacilityOptions";
-import { UserService } from "@/services/users/UserService";
-import type { User } from "@/modules/users/types";
+import { InheritedFacilityField } from "@/components/operational/InheritedFacilityField";
+import { AssignablePeopleService } from "@/services/assignablePeople/AssignablePeopleService";
+import type { AssignablePerson } from "@/modules/users/types";
 import {
   ASSET_CATEGORIES,
   ASSET_CONDITIONS,
@@ -45,7 +45,6 @@ export function AssetFormModal({
   onSaved,
 }: AssetFormModalProps) {
   const { toast } = useToast();
-  const { facilities, loading: facilitiesLoading } = useFacilityOptions(open);
   const [form, setForm] = useState<CreateAssetInput>(toCreateFormValues());
   const [errors, setErrors] = useState<
     Partial<Record<keyof CreateAssetInput, string>>
@@ -58,15 +57,15 @@ export function AssetFormModal({
     setErrors({});
   }, [open, mode, asset]);
 
-  const [people, setPeople] = useState<User[]>([]);
+  const [people, setPeople] = useState<AssignablePerson[]>([]);
   const [peopleError, setPeopleError] = useState<string | null>(null);
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    UserService.listUsersCatalog({ page: 1, pageSize: 200 })
-      .then((page) => {
+    AssignablePeopleService.list()
+      .then((rows) => {
         if (cancelled) return;
-        setPeople(page.data);
+        setPeople(rows);
         setPeopleError(null);
       })
       .catch(() => {
@@ -154,7 +153,6 @@ export function AssetFormModal({
   }
 
   const isEdit = mode === "edit";
-  const facilityKnown = facilities.some((item) => item.id === form.facilityId);
 
   return (
     <Modal
@@ -234,32 +232,14 @@ export function AssetFormModal({
           </select>
         </FormField>
 
-        <FormField
+        <InheritedFacilityField
+          open={open}
+          id="asset-facility"
           label="Facility"
-          htmlFor="asset-facility"
-          required
+          value={form.facilityId}
           error={errors.facilityId}
-        >
-          <select
-            id="asset-facility"
-            className={selectClassName}
-            value={form.facilityId}
-            onChange={(event) => updateField("facilityId", event.target.value)}
-            disabled={facilitiesLoading}
-          >
-            <option value="">
-              {facilitiesLoading ? "Loading facilities…" : "Select facility"}
-            </option>
-            {form.facilityId && !facilityKnown && !facilitiesLoading ? (
-              <option value={form.facilityId}>Unavailable facility</option>
-            ) : null}
-            {facilities.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </FormField>
+          onResolve={(facilityId) => updateField("facilityId", facilityId)}
+        />
 
         <FormField
           label="Manufacturer"

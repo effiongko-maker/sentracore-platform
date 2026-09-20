@@ -12,7 +12,7 @@ import { signalHomeWorkspaceSettled } from "../utils/homeWorkspaceReady";
  * overlap core but never blocks paint. Enrichment does not re-enter LoadingGate.
  * Bell deferral fires on core paint — not after secondary enrichment.
  */
-export function useWorkspace() {
+export function useWorkspace(enabled = true) {
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -64,13 +64,15 @@ export function useWorkspace() {
   }, [runProgressiveLoad]);
 
   useEffect(() => {
+    // No operational reads when the caller lacks the authority to view them.
+    if (!enabled) return;
     let cancelled = false;
     const id = ++requestId.current;
     runProgressiveLoad(id, () => cancelled);
     return () => {
       cancelled = true;
     };
-  }, [runProgressiveLoad]);
+  }, [runProgressiveLoad, enabled]);
 
   return {
     snapshot,

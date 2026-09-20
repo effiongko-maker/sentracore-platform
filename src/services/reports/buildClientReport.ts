@@ -9,6 +9,7 @@ import {
 import { computeReportingProjections } from "@/services/reporting/projections";
 import type { ReportingSnapshot } from "@/services/reporting/types";
 import { getReportType } from "@/modules/reports/constants";
+import { maskUnavailableSources } from "./maskUnavailableSources";
 import type {
   ClientReportDocument,
   ReportChartBar,
@@ -376,7 +377,8 @@ export function buildClientReport(input: {
   const woStatus = statusCounts(scoped.workOrders);
   const woStatusMax = Math.max(1, ...woStatus.map((s) => s.value), 1);
 
-  return {
+  const document: ClientReportDocument = {
+    dataAvailability: { complete: true, unavailable: [] },
     id: `RPT-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`,
     reportType,
     title: typeDef.title,
@@ -640,4 +642,10 @@ export function buildClientReport(input: {
       ],
     },
   };
+
+  // Failure is not zero: strip figures that depend on unreadable sources and disclose the gap.
+  return maskUnavailableSources(
+    document,
+    scoped._snapshotMeta?.unavailableSources ?? []
+  );
 }

@@ -192,6 +192,8 @@ export interface WorkOrderFilterCatalog {
   facilities: WorkOrderFilterCatalogFacility[];
   users: WorkOrderFilterCatalogUser[];
   assets: WorkOrderFilterCatalogAsset[];
+  /** Catalogs that could not be loaded. Their arrays are NOT healthy empty lists. */
+  failed?: Array<"facilities" | "users" | "assets">;
   serverTimings?: {
     facilitiesMs: number;
     usersMs: number;

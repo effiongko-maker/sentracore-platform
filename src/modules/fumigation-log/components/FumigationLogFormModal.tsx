@@ -9,7 +9,7 @@ import {
   selectClassName,
 } from "@/components/forms/FormField";
 import { useToast } from "@/components/ui/Toast";
-import { useFacilityOptions } from "@/hooks/useFacilityOptions";
+import { InheritedFacilityField } from "@/components/operational/InheritedFacilityField";
 import { FUMIGATION_LOG_FIELD_LABELS } from "../constants";
 import { FumigationLogService } from "../services/FumigationLogService";
 import {
@@ -38,7 +38,6 @@ export function FumigationLogFormModal({
   onSaved,
 }: FumigationLogFormModalProps) {
   const { toast } = useToast();
-  const { facilities, loading: facilitiesLoading } = useFacilityOptions(open);
   const [form, setForm] = useState<FormValues>(toCreateFormValues());
   const [errors, setErrors] = useState<Partial<Record<keyof FormValues, string>>>(
     {}
@@ -108,9 +107,6 @@ export function FumigationLogFormModal({
   }
 
   const isEdit = mode === "edit";
-  const facilityKnown = facilities.some(
-    (item) => item.id === form.facilityId || item.name === form.facilityId
-  );
   const duePreview = getFumigationDueStateLabel(form.nextDueDate);
 
   return (
@@ -157,32 +153,14 @@ export function FumigationLogFormModal({
           />
         </FormField>
 
-        <FormField
+        <InheritedFacilityField
+          open={open}
+          id="fumigation-log-facility"
           label={FUMIGATION_LOG_FIELD_LABELS.facilityId}
-          htmlFor="fumigation-log-facility"
-          required
+          value={form.facilityId}
           error={errors.facilityId}
-        >
-          <select
-            id="fumigation-log-facility"
-            className={selectClassName}
-            value={form.facilityId}
-            onChange={(event) => updateField("facilityId", event.target.value)}
-            disabled={facilitiesLoading}
-          >
-            <option value="">
-              {facilitiesLoading ? "Loading facilities…" : "Select facility"}
-            </option>
-            {form.facilityId && !facilityKnown ? (
-              <option value={form.facilityId}>{form.facilityId}</option>
-            ) : null}
-            {facilities.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name} ({item.id})
-              </option>
-            ))}
-          </select>
-        </FormField>
+          onResolve={(facilityId) => updateField("facilityId", facilityId)}
+        />
 
         {isEdit && entry ? (
           <FormField

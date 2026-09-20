@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { getOrganisationIntelligence } from "@/lib/intelligence";
+import { IntelligenceAccessRestricted } from "@/modules/intelligence/components/IntelligenceAccessRestricted";
+import { loadIntelligenceForRoute } from "@/lib/intelligence/loadIntelligenceForRoute";
 import {
   IntelligenceLoadError,
 } from "@/modules/intelligence";
@@ -10,10 +11,8 @@ export const metadata: Metadata = {
 };
 
 export default async function IntelligencePatternsRoute() {
-  try {
-    const intelligence = await getOrganisationIntelligence();
-    return <PatternsExplorationPage data={intelligence} />;
-  } catch {
-    return <IntelligenceLoadError />;
-  }
+  const result = await loadIntelligenceForRoute();
+  if (result.status === "forbidden") return <IntelligenceAccessRestricted />;
+  if (result.status === "error") return <IntelligenceLoadError />;
+  return <PatternsExplorationPage data={result.data} />;
 }

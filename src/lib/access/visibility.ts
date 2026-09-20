@@ -45,7 +45,8 @@ const HREF_SURFACE_RULES: Array<{ prefix: string; surface: VisibilitySurface }> 
     { prefix: "/finance", surface: "finance" },
     { prefix: "/users", surface: "users" },
     { prefix: "/occupant-requests", surface: "requests" },
-    { prefix: "/requests", surface: "operations" },
+    // The Request queue read requires requests.view, so visibility follows it.
+    { prefix: "/requests", surface: "requests" },
     { prefix: "/approvals", surface: "approvals" },
     { prefix: "/intelligence", surface: "intelligence" },
     { prefix: "/reports", surface: "reports" },
@@ -80,6 +81,16 @@ export function surfaceForHref(href: string): VisibilitySurface | null {
   return null;
 }
 
+/**
+ * Single rule for Intelligence: ops.create or ops.edit. Used by navigation
+ * visibility AND the server-side Intelligence boundary so they cannot drift.
+ */
+export function canReadIntelligence(
+  access: Pick<OperatingAccess, "capabilities" | "role" | "unassigned" | "hasAdminOverride">
+): boolean {
+  return accessCan(access, "ops.create") || accessCan(access, "ops.edit");
+}
+
 function surfacesFromCapabilities(
   access: Pick<OperatingAccess, "capabilities" | "role" | "unassigned" | "hasAdminOverride">
 ): Set<VisibilitySurface> {
@@ -101,7 +112,7 @@ function surfacesFromCapabilities(
   if (accessCan(access, "requests.view")) {
     surfaces.add("requests");
   }
-  if (accessCan(access, "ops.create") || accessCan(access, "ops.edit")) {
+  if (canReadIntelligence(access)) {
     surfaces.add("intelligence");
   }
 
