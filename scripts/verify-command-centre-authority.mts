@@ -181,8 +181,8 @@ function runStatic(results: CheckResult[]) {
       "requires both finance approve and command-centre decide"
     );
     assert(
-      !/isSuperAdmin[^\n]*composeDecisions|composeDecisions[^]*isSuperAdmin/.test(
-        service.slice(service.indexOf("private async composeDecisions"), service.indexOf("private async composeFinanceAttention"))
+      service.includes("private async loadFinanceQueue") && !/isSuperAdmin/.test(
+        service.slice(service.indexOf("private async loadFinanceQueue"), service.indexOf("private composeDecisions"))
       ),
       "decision composition has no Super Admin bypass"
     );
@@ -217,10 +217,12 @@ function runStatic(results: CheckResult[]) {
     );
     assert(
       composer.includes("FINANCE_REQUEST_TITLES") &&
-        composer.includes("OPERATION_TITLES"),
-      "whitelists meaningful executive events"
+        composer.includes("ECC_TITLES") &&
+        !composer.includes("OPERATION_TITLES") &&
+        !composer.includes("operational_events\""),
+      "whitelists meaningful Finance/ECC executive events; FM operational_events are not read"
     );
-    assert(service.includes("composeAssignments"), "assignment composition");
+    assert(!service.includes("composeAssignments"), "personal FM assignment tray is no longer part of Command Centre (executive console V1)");
     assert(
       service.includes("loadOperationalPictureSummary") &&
         !service.includes("loadAssignmentSummary"),

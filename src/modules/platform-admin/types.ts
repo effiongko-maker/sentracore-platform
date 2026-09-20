@@ -14,6 +14,7 @@ export const PLATFORM_IAM_AUDIT_ACTIONS = [
   "capability.revoked",
   "user.offboarded",
   "access_scope.changed",
+  "landing_workspace.changed",
   "facility_assignment.created",
   "facility_assignment.activated",
   "facility_assignment.deactivated",
@@ -212,6 +213,15 @@ export type AdminPersonDetail = AdminPersonSummary & {
   /** Access scope: platform (default) or bound to one operational module (upper boundary). */
   accessScope: "platform" | "module";
   homeModule: "facility_management" | "ecc_operations" | null;
+  /** UX routing preference (platform scope only); never authority. */
+  landingWorkspace: string | null;
+};
+
+export type LandingWorkspaceResult = {
+  profileId: string;
+  organisationId: string | null;
+  landingWorkspace: string | null;
+  changed: boolean;
 };
 
 export type AccessScopeResult = {

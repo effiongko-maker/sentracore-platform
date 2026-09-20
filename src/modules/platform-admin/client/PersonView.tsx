@@ -8,7 +8,8 @@ import { useToast } from "@/components/ui/Toast";
 import { V1_OPERATING_ROLES, v1OperatingRoleLabel } from "@/lib/access/roles";
 import type { ProfileStatus } from "@/lib/auth/types";
 import { CAPABILITY_DOMAINS, describeCapability } from "../capabilityCatalog";
-import type { AccessScopeResult, AdminAuditPage, AdminFacilityAssignment, AdminPersonDetail, OffboardResult, OrganisationAdminRecord, ProfileStatusResult } from "../types";
+import { LANDING_WORKSPACES, LANDING_WORKSPACE_LABEL, type LandingWorkspace } from "@/lib/access/landingWorkspace";
+import type { AccessScopeResult, LandingWorkspaceResult, AdminAuditPage, AdminFacilityAssignment, AdminPersonDetail, OffboardResult, OrganisationAdminRecord, ProfileStatusResult } from "../types";
 import { AdminApiError, adminCall } from "./adminApi";
 import { useAdminConsole } from "./AdminConsoleContext";
 import { AuditFeed } from "./AuditFeed";
@@ -64,6 +65,7 @@ function PersonBody({ organisation, profileId }: { organisation: OrganisationAdm
   const [pending, setPending] = useState<StatusAction | null>(null);
   const [offboarding, setOffboarding] = useState(false);
   const [scoping, setScoping] = useState(false);
+  const [landing, setLanding] = useState(false);
   const [assigning, setAssigning] = useState<{ assignment?: AdminFacilityAssignment } | null>(null);
   const isSelf = profileId === actorProfileId;
   const refresh = () => {
@@ -147,6 +149,22 @@ function PersonBody({ organisation, profileId }: { organisation: OrganisationAdm
                           Change
                         </button>
                       ) : null}
+                    </dd>
+                    <dt>Landing workspace</dt>
+                    <dd>
+                      {p.accessScope === "module" ? (
+                        <span className="ac-secondary">Not applicable — module-bound people always start in their home module</span>
+                      ) : (
+                        <>
+                          <span>{p.landingWorkspace && p.landingWorkspace in LANDING_WORKSPACE_LABEL ? LANDING_WORKSPACE_LABEL[p.landingWorkspace as LandingWorkspace] : "Platform Home"}</span>{" "}
+                          <span className="ac-secondary">a starting-point preference; it grants no access</span>{" "}
+                          {!isSelf ? (
+                            <button type="button" className="ac-btn ac-btn-quiet ac-btn-sm" onClick={() => setLanding(true)}>
+                              Change
+                            </button>
+                          ) : null}
+                        </>
+                      )}
                     </dd>
                     <dt>Business capabilities</dt>
                     <dd>
@@ -253,6 +271,7 @@ function PersonBody({ organisation, profileId }: { organisation: OrganisationAdm
               </div>
             ) : null}
 
+            <LandingDialog open={landing} person={p} onClose={() => setLanding(false)} onDone={refresh} />
             <ScopeDialog open={scoping} person={p} onClose={() => setScoping(false)} onDone={refresh} />
             <StatusDialog action={pending} person={p} organisationId={organisation.id} onClose={() => setPending(null)} onDone={refresh} />
             <OffboardDialog open={offboarding} person={p} onClose={() => setOffboarding(false)} onDone={refresh} />
@@ -343,6 +362,76 @@ function StatusDialog({
     >
       <p className="ac-secondary" style={{ fontSize: 13, lineHeight: 1.55 }}>{action?.consequence}</p>
       {error ? <p className="ac-form-error" role="alert">{error}</p> : null}
+    </Modal>
+  );
+}
+
+function LandingDialog({ open, person, onClose, onDone }: { open: boolean; person: AdminPersonDetail; onClose: () => void; onDone: () => void }) {
+  const { toast } = useToast();
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [seed, setSeed] = useState<boolean>(false);
+  if (open !== seed) {
+    setSeed(open);
+    setError(null);
+    setValue(person.landingWorkspace ?? "");
+  }
+
+  function close() {
+    if (busy) return;
+    onClose();
+  }
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await adminCall<LandingWorkspaceResult>("setLandingWorkspace", { profileId: person.profileId, landingWorkspace: value || null });
+      toast({ type: "success", title: `Landing workspace updated for ${displayName(person)}`, description: res.changed ? "Recorded in administrative history." : "No change was needed." });
+      onDone();
+      onClose();
+    } catch (err) {
+      setError(err instanceof AdminApiError ? err.message : "The landing workspace could not be changed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={close}
+      title="Landing workspace"
+      description={displayName(person)}
+      size="md"
+      footer={
+        <>
+          <button type="button" className="ac-btn ac-btn-secondary" onClick={close} disabled={busy}>
+            Cancel
+          </button>
+          <button type="submit" form="ac-landing-form" className="ac-btn ac-btn-primary" disabled={busy}>
+            {busy ? "Saving…" : "Save"}
+          </button>
+        </>
+      }
+    >
+      <form id="ac-landing-form" onSubmit={save}>
+        <div className="ac-field">
+          <label htmlFor="ac-landing-select">Where they start</label>
+          <select id="ac-landing-select" className="ac-select" value={value} onChange={(e) => setValue(e.target.value)}>
+            <option value="">Platform Home</option>
+            {LANDING_WORKSPACES.map((w) => (
+              <option key={w} value={w}>
+                {LANDING_WORKSPACE_LABEL[w]}
+              </option>
+            ))}
+          </select>
+          <span className="ac-hint">Only used when they can currently enter that workspace; otherwise they see Platform Home. It never grants access.</span>
+        </div>
+        {error ? <p className="ac-form-error" role="alert">{error}</p> : null}
+      </form>
     </Modal>
   );
 }

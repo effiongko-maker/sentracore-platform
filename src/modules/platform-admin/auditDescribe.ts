@@ -18,7 +18,7 @@ export const AUDIT_CATEGORY_LABELS: Record<AuditCategory, string> = {
 export function auditCategoryForAction(action: string): AuditCategory | null {
   if (action.startsWith("capability.")) return "access";
   if (action.startsWith("module.")) return "modules";
-  if (action === "access_scope.changed") return "access";
+  if (action === "access_scope.changed" || action === "landing_workspace.changed") return "access";
   if (action.startsWith("facility_assignment.")) return "operating_context";
   if (action.startsWith("user.") || action.startsWith("profile.")) return "people";
   return null;
@@ -26,7 +26,7 @@ export function auditCategoryForAction(action: string): AuditCategory | null {
 
 export const AUDIT_ACTIONS_BY_CATEGORY: Record<AuditCategory, string[]> = {
   people: ["user.invited", "user.offboarded", "profile.attached_to_organisation", "profile.activated", "profile.suspended", "profile.deactivated"],
-  access: ["capability.granted", "capability.revoked", "access_scope.changed"],
+  access: ["capability.granted", "capability.revoked", "access_scope.changed", "landing_workspace.changed"],
   modules: ["module.enabled", "module.disabled"],
   operating_context: [
     "facility_assignment.created",
@@ -88,6 +88,12 @@ export function describeAuditEvent(
         scope === "module" ? `Module-bound · ${home === "ecc_operations" ? "ECC Operations" : home === "facility_management" ? "Facility Management" : "unknown module"}` : "Platform";
       detail.push(`Access scope: ${label(str(details, "previousAccessScope"), str(details, "previousHomeModule"))} → ${label(str(details, "accessScope"), str(details, "homeModule"))}`);
       return { headline: `Changed access scope for ${person}`, category, detail };
+    }
+    case "landing_workspace.changed": {
+      const label = (v: string) =>
+        v === "command_centre" ? "Command Centre" : v === "facility_management" ? "Facility Management" : v === "ecc_operations" ? "ECC Operations" : v === "platform_finance" ? "Platform Finance" : "Platform Home";
+      detail.push(`Landing workspace: ${label(str(details, "previousLandingWorkspace"))} → ${label(str(details, "landingWorkspace"))}`);
+      return { headline: `Changed landing workspace for ${person}`, category, detail };
     }
     case "user.offboarded": {
       const revoked = (details.revoked ?? {}) as Record<string, unknown>;

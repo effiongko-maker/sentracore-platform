@@ -3,6 +3,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import type { ProfileStatus } from "@/lib/auth/types";
 import type {
   AccessScopeResult,
+  LandingWorkspaceResult,
   OrganisationAdminRecord,
   OrganisationModuleAdminStatus,
   OrganisationModuleResult,
@@ -381,6 +382,29 @@ export class PlatformAdminRepository {
       organisationId: rec.organisationId ? String(rec.organisationId) : null,
       accessScope: rec.accessScope === "module" ? "module" : "platform",
       homeModule: rec.homeModule === "facility_management" || rec.homeModule === "ecc_operations" ? rec.homeModule : null,
+      changed: Boolean(rec.changed),
+    };
+  }
+
+  async setLandingWorkspace(input: {
+    actorProfileId: string;
+    targetProfileId: string;
+    landingWorkspace: string | null;
+  }): Promise<LandingWorkspaceResult> {
+    const { data, error } = await this.admin.rpc("platform_iam_set_landing_workspace", {
+      p_actor_profile_id: input.actorProfileId,
+      p_target_profile_id: input.targetProfileId,
+      p_landing_workspace: input.landingWorkspace,
+    });
+    if (error) rpcError(error, "Unable to update landing workspace.");
+    const rec = asRecord(data);
+    if (!rec) {
+      throw new ActionError("INTERNAL_ERROR", "Landing workspace RPC returned no data.");
+    }
+    return {
+      profileId: String(rec.profileId),
+      organisationId: rec.organisationId ? String(rec.organisationId) : null,
+      landingWorkspace: rec.landingWorkspace ? String(rec.landingWorkspace) : null,
       changed: Boolean(rec.changed),
     };
   }

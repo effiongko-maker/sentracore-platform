@@ -79,7 +79,7 @@
   position: relative;
   z-index: 2;
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.85fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: clamp(1rem, 2.5vw, 2.25rem);
   align-items: center;
   min-height: inherit;
@@ -901,4 +901,27 @@ a.scc-decision-row:hover {
 
 .scc-access-denied a {
   color: var(--scc-gold);
+}
+
+/* Truthful executive states: coverage notes, scope statements, attention summary. */
+.scc-attn-summary {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  opacity: 0.75;
+}
+
+.scc-attn-coverage {
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  opacity: 0.8;
+}
+
+.scc-panel-scope {
+  margin: 0.75rem 0 0;
+  font-size: 0.68rem;
+  opacity: 0.65;
 }

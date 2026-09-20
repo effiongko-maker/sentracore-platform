@@ -65,7 +65,7 @@ export class AdminConsoleReader {
   private async peopleRows(organisationId: string, profileId?: string) {
     let query = this.admin
       .from("profiles")
-      .select("id, first_name, last_name, full_name, job_title, organisation_id, status, created_at, access_scope, home_module")
+      .select("id, first_name, last_name, full_name, job_title, organisation_id, status, created_at, access_scope, home_module, landing_workspace")
       .eq("organisation_id", organisationId)
       .order("created_at", { ascending: true });
     if (profileId) query = query.eq("id", profileId);
@@ -166,6 +166,7 @@ export class AdminConsoleReader {
       },
       accessScope: rows[0].access_scope === "module" ? "module" : "platform",
       homeModule: rows[0].home_module === "facility_management" || rows[0].home_module === "ecc_operations" ? rows[0].home_module : null,
+      landingWorkspace: rows[0].landing_workspace ? String(rows[0].landing_workspace) : null,
       operationalIdentity: link ? { domain: link.identity_domain, externalIdentityId: link.external_identity_id, status: link.status } : null,
     };
   }

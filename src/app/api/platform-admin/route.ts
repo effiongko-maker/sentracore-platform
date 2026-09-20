@@ -11,6 +11,7 @@ type PlatformAdminAction =
   | "attachProfileToOrganisation"
   | "setProfileStatus"
   | "setAccessScope"
+  | "setLandingWorkspace"
   | "setOrganisationModule"
   | "grantPlatformCapability"
   | "revokePlatformCapability"
@@ -34,6 +35,7 @@ type RequestBody = {
   status?: string;
   accessScope?: string;
   homeModule?: string | null;
+  landingWorkspace?: string | null;
   moduleSlug?: string;
   capability?: string;
   category?: string;
@@ -171,6 +173,19 @@ export async function POST(request: Request) {
           profileId: body.profileId,
           accessScope: body.accessScope,
           homeModule: body.homeModule ?? null,
+        });
+        return NextResponse.json({ success: true, data });
+      }
+      case "setLandingWorkspace": {
+        if (!body.profileId) {
+          return NextResponse.json(
+            { success: false, message: "profileId is required." },
+            { status: 400 }
+          );
+        }
+        const data = await service.setLandingWorkspace(ctx, {
+          profileId: body.profileId,
+          landingWorkspace: body.landingWorkspace ?? null,
         });
         return NextResponse.json({ success: true, data });
       }

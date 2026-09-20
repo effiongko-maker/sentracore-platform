@@ -1,41 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { OperationalEventTypes } from "@/lib/events/taxonomy";
 import type { CommandCentreChangeItem } from "@/modules/command-centre/presentationTypes";
 
 type WorkspaceEntry = {
-  facilityManagement: boolean;
   platformFinance: boolean;
   eccOperations: boolean;
 };
 
 type DomainVisibility = {
-  operations: boolean;
   finance: boolean;
   ecc: boolean;
 };
 
 type Json = Record<string, unknown>;
-
-const OPERATION_TITLES: Record<string, string> = {
-  [OperationalEventTypes.FACILITY_INCIDENT_REPORTED]: "Incident reported",
-  [OperationalEventTypes.FACILITY_INCIDENT_TRIAGED]: "Incident triaged",
-  [OperationalEventTypes.FACILITY_INCIDENT_ESCALATED]: "Critical issue escalated",
-  [OperationalEventTypes.FACILITY_INCIDENT_RESOLVED]: "Incident resolved",
-  [OperationalEventTypes.FACILITY_MAINTENANCE_REQUESTED]: "Maintenance requested",
-  [OperationalEventTypes.FACILITY_MAINTENANCE_SCHEDULED]: "Maintenance scheduled",
-  [OperationalEventTypes.FACILITY_MAINTENANCE_STARTED]: "Maintenance started",
-  [OperationalEventTypes.FACILITY_MAINTENANCE_COMPLETED]: "Maintenance completed",
-  [OperationalEventTypes.FACILITY_WORK_ORDER_CREATED]: "Work order created",
-  [OperationalEventTypes.FACILITY_WORK_ORDER_ASSIGNED]: "Work order assigned",
-  [OperationalEventTypes.FACILITY_WORK_ORDER_STARTED]: "Work order started",
-  [OperationalEventTypes.FACILITY_WORK_ORDER_COMPLETED]: "Work order completed",
-  [OperationalEventTypes.FACILITY_APPROVAL_SUBMITTED]: "Client approval submitted",
-  [OperationalEventTypes.FACILITY_APPROVAL_APPROVED]: "Client approval approved",
-  [OperationalEventTypes.FACILITY_APPROVAL_PARTIALLY_APPROVED]: "Client approval partially approved",
-  [OperationalEventTypes.FACILITY_APPROVAL_REJECTED]: "Client approval rejected",
-  [OperationalEventTypes.FACILITY_REQUEST_CREATED]: "Operational request created",
-  [OperationalEventTypes.FACILITY_REQUEST_RESOLVED]: "Operational request resolved",
-};
 
 const FINANCE_REQUEST_TITLES: Record<string, string> = {
   submitted: "Financial request submitted",
@@ -72,6 +48,10 @@ function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+/**
+ * Change composition covers Finance and ECC authoritative history only. Facility Management
+ * operational_events are intentionally NOT read here (legacy, unreconciled stream).
+ */
 function number(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
@@ -127,38 +107,6 @@ export async function composeLastVisitChanges(input: {
   const { db, organisationId, previous, asOf, visibility, workspaceEntry, timeZone } = input;
   const sourceErrors: string[] = [];
   const items: CommandCentreChangeItem[] = [];
-
-  if (visibility.operations) {
-    const { data, error } = await db
-      .from("operational_events")
-      .select("id,event_type,entity_type,entity_id,occurred_at,data")
-      .eq("organisation_id", organisationId)
-      .gt("occurred_at", previous)
-      .lte("occurred_at", asOf)
-      .in("event_type", Object.keys(OPERATION_TITLES))
-      .order("occurred_at", { ascending: false })
-      .limit(20);
-    if (error) sourceErrors.push("Operations");
-    for (const row of data ?? []) {
-      const eventData = (row.data ?? {}) as Json;
-      const entityId = text(row.entity_id);
-      const description = text(eventData.title) ?? text(eventData.description);
-      const amount = amountLabel(
-        number(eventData.approvedAmount) ?? number(eventData.approvalAmount)
-      );
-      items.push({
-        id: `operations:${row.id}`,
-        sourceId: String(row.id),
-        sourceType: "operational_event",
-        title: OPERATION_TITLES[String(row.event_type)]!,
-        detail: compact([description, amount, entityId, "Operations"]),
-        sourceLabel: "Operations",
-        occurredAt: String(row.occurred_at),
-        timeLabel: relativeTime(String(row.occurred_at), asOf, timeZone),
-        href: workspaceEntry.facilityManagement ? "/operations" : null,
-      });
-    }
-  }
 
   if (visibility.finance) {
     const { data, error } = await db

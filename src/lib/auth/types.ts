@@ -17,6 +17,8 @@ export interface AuthProfile {
   /** platform | module — module-bound identities are restricted to homeModule (see moduleBoundary.ts). */
   accessScope?: "platform" | "module";
   homeModule?: string | null;
+  /** UX routing preference for platform-scope identities only (see landingWorkspace.ts). Never authority. */
+  landingWorkspace?: string | null;
 }
 
 export interface AuthOrganisation {

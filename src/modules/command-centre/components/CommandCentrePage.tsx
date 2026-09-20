@@ -5,7 +5,6 @@ import {
   ArrowRight,
   Building2,
   ChevronRight,
-  ClipboardList,
   FileText,
   Headphones,
   HardHat,
@@ -43,6 +42,20 @@ function formatAsOfDate(iso: string, timeZone: string | null): string {
   }
 }
 
+function formatCheckedTime(iso: string, timeZone: string | null): string {
+  try {
+    const time = new Intl.DateTimeFormat("en-GB", {
+      timeZone: timeZone ?? "UTC",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(new Date(iso));
+    return timeZone ? time : `${time} UTC`;
+  } catch {
+    return "";
+  }
+}
+
 function pulseStatusClass(
   state: CommandCentreSurfaceState,
   label: string
@@ -51,8 +64,7 @@ function pulseStatusClass(
     return "scc-pulse-status--muted";
   }
   if (state === "error") return "scc-pulse-status--warn";
-  if (/attention|needs/i.test(label)) return "scc-pulse-status--warn";
-  if (/stable|on track/i.test(label)) return "scc-pulse-status--ok";
+  if (/attention|needs|partial/i.test(label)) return "scc-pulse-status--warn";
   return "scc-pulse-status--ok";
 }
 
@@ -143,7 +155,7 @@ function PulseCard({ card }: { card: CommandCentrePulseCard }) {
         ) : null}
       </div>
       <div className="scc-pulse-body">
-        {card.lines.slice(0, 2).map((line) => (
+        {card.lines.slice(0, 4).map((line) => (
           <p key={line} className="scc-pulse-line">
             {line}
           </p>
@@ -174,55 +186,74 @@ function AttentionBlock({
 }: {
   attention: CommandCentreSnapshot["attention"];
 }) {
-  if (attention.state === "healthy" && attention.items.length > 0) {
-    return (
-      <ul className="scc-attn-list">
-        {attention.items.map((item) => {
-          const inner = (
-            <>
-              <span
-                className={cn("scc-attn-tone", attentionToneClass(item.tone))}
-              >
-                {attentionToneLabel(item.tone)}
-              </span>
-              <span className="scc-attn-body">
-                <span className="scc-attn-title">{item.title}</span>
-                {item.detail ? (
-                  <span className="scc-attn-detail">{item.detail}</span>
-                ) : null}
-                <span className="scc-attn-source">{item.sourceLabel}</span>
-              </span>
-              <span className="scc-attn-go" aria-hidden>
-                <ChevronRight className="h-4 w-4" />
-              </span>
-            </>
-          );
-          return (
-            <li key={item.id}>
-              {item.href ? (
-                <Link href={item.href} className="scc-attn-row">
-                  {inner}
-                </Link>
-              ) : (
-                <div className="scc-attn-row">{inner}</div>
-              )}
-            </li>
-          );
-        })}
+  const gaps = attention.coverage.filter(
+    (c) => c.status !== "loaded" && c.status !== "not_enabled" && c.note
+  );
+  const coverageNote =
+    gaps.length > 0 ? (
+      <ul className="scc-attn-coverage" aria-label="Attention coverage">
+        {gaps.map((c) => (
+          <li key={c.domain} data-status={c.status}>
+            <strong>{c.label}</strong> · {c.status === "restricted" ? "Restricted" : c.status === "partial" ? "Partial" : "Unavailable"} — {c.note}
+          </li>
+        ))}
       </ul>
+    ) : null;
+
+  if (attention.items.length > 0) {
+    return (
+      <>
+        <p className="scc-attn-summary">{attention.summary}</p>
+        <ul className="scc-attn-list">
+          {attention.items.map((item) => {
+            const inner = (
+              <>
+                <span
+                  className={cn("scc-attn-tone", attentionToneClass(item.tone))}
+                >
+                  {attentionToneLabel(item.tone)}
+                </span>
+                <span className="scc-attn-body">
+                  <span className="scc-attn-title">{item.title}</span>
+                  {item.detail ? (
+                    <span className="scc-attn-detail">{item.detail}</span>
+                  ) : null}
+                  <span className="scc-attn-source">{item.sourceLabel}</span>
+                </span>
+                <span className="scc-attn-go" aria-hidden>
+                  <ChevronRight className="h-4 w-4" />
+                </span>
+              </>
+            );
+            return (
+              <li key={item.id}>
+                {item.href ? (
+                  <Link href={item.href} className="scc-attn-row">
+                    {inner}
+                  </Link>
+                ) : (
+                  <div className="scc-attn-row">{inner}</div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        {attention.hiddenCount > 0 ? (
+          <p className="scc-attn-summary">
+            and {attention.hiddenCount} more not shown
+          </p>
+        ) : null}
+        {coverageNote}
+      </>
     );
   }
 
-  if (attention.state === "empty") {
-    return <QuietEmpty label="Nothing requires your attention." />;
-  }
-  if (attention.state === "restricted") {
-    return <QuietEmpty label="Attention sources unavailable." />;
-  }
-  if (attention.state === "error") {
-    return <QuietEmpty label="Attention could not be loaded." />;
-  }
-  return <QuietEmpty label="Not available yet." />;
+  return (
+    <>
+      <QuietEmpty label={attention.summary} />
+      {coverageNote}
+    </>
+  );
 }
 
 function DecisionsBlock({
@@ -258,48 +289,9 @@ function DecisionsBlock({
   }
 
   if (decisions.state === "empty") {
-    return <QuietEmpty label="No decisions require your attention." />;
+    return <QuietEmpty label="No Finance decisions are waiting on you." />;
   }
-  if (decisions.state === "restricted") {
-    return <QuietEmpty label="Decision queue unavailable." />;
-  }
-  if (decisions.state === "error") {
-    return <QuietEmpty label="Decisions could not be loaded." />;
-  }
-  return <QuietEmpty label="Not available yet." />;
-}
-
-function AssignmentsBlock({
-  assignments,
-}: {
-  assignments: CommandCentreSnapshot["assignments"];
-}) {
-  if (assignments.state === "healthy" && assignments.items.length > 0) {
-    return (
-      <ul className="scc-decision-list">
-        {assignments.items.map((item) => (
-          <li key={item.id}>
-            <Link href={item.href} className="scc-decision-row">
-              <span className="scc-decision-main">
-                <span className="scc-decision-title">{item.label}</span>
-                <span className="scc-decision-meta">
-                  <span>
-                    {item.state === "unavailable"
-                      ? "Unavailable"
-                      : `${item.count} active`}
-                  </span>
-                </span>
-              </span>
-              <span className="scc-decision-aside">
-                <ChevronRight className="h-4 w-4" aria-hidden />
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-    );
-  }
-  return <QuietEmpty label={assignments.message} />;
+  return <QuietEmpty label={decisions.reason ?? "Decisions are not available."} />;
 }
 
 function LastVisitBlock({
@@ -308,10 +300,16 @@ function LastVisitBlock({
   lastVisit: CommandCentreSnapshot["lastVisit"];
 }) {
   if (lastVisit.state !== "healthy" || lastVisit.items.length === 0) {
-    return <QuietEmpty label={lastVisit.message} />;
+    return (
+      <>
+        <QuietEmpty label={lastVisit.message} />
+        <p className="scc-panel-scope">{lastVisit.scope}</p>
+      </>
+    );
   }
 
   return (
+    <>
     <ul className="scc-change-list">
       {lastVisit.items.map((item) => {
         const body = (
@@ -340,6 +338,8 @@ function LastVisitBlock({
         );
       })}
     </ul>
+    <p className="scc-panel-scope">{lastVisit.scope}</p>
+    </>
   );
 }
 
@@ -349,7 +349,8 @@ export function CommandCentrePage({
   snapshot: CommandCentreSnapshot;
 }) {
   const dateLabel = formatAsOfDate(snapshot.asOf, snapshot.timeZone);
-  const { decisions, attention, assignments, askSentraCore } = snapshot;
+  const { decisions, attention } = snapshot;
+  const checkedLabel = formatCheckedTime(snapshot.checkedAt, snapshot.timeZone);
 
   return (
     <div className="scc">
@@ -371,21 +372,6 @@ export function CommandCentrePage({
             <h1 className="scc-greeting">{snapshot.greeting}</h1>
             <p className="scc-lede">{snapshot.lede}</p>
           </div>
-          <div className="scc-hero-centre">
-            <span className="scc-hero-rule" aria-hidden />
-            <p className="scc-hero-quote">
-              Clarity today.
-              <br />
-              A stronger tomorrow.
-            </p>
-          </div>
-          <ul className="scc-hero-pillars" aria-label="Organisation pillars">
-            <li>People</li>
-            <li>Operations</li>
-            <li>Capital</li>
-            <li>Growth</li>
-            <li className="scc-hero-pillars-emphasis">A stronger tomorrow</li>
-          </ul>
         </div>
       </header>
 
@@ -396,12 +382,16 @@ export function CommandCentrePage({
               Organisational Pulse
             </h2>
             <p className="scc-section-lede">
-              A real-time snapshot of what matters most.
+              Where the organisation stands, by domain.
             </p>
           </div>
-          {dateLabel ? (
+          {dateLabel || checkedLabel ? (
             <p className="scc-pulse-meta">
-              <span>As of {dateLabel}</span>
+              <span>
+                {checkedLabel ? `Checked ${checkedLabel}` : ""}
+                {checkedLabel && dateLabel ? " · " : ""}
+                {dateLabel}
+              </span>
             </p>
           ) : null}
         </div>
@@ -414,57 +404,12 @@ export function CommandCentrePage({
 
       <section className="scc-board" aria-label="Command surfaces">
         <div className="scc-col">
-          <article className="scc-panel scc-panel--feed" aria-labelledby="scc-last-visit">
-            <PanelHead
-              id="scc-last-visit"
-              title="Since Your Last Visit"
-              actionHref={null}
-            />
-            <LastVisitBlock lastVisit={snapshot.lastVisit} />
-          </article>
-
-          <article
-            className="scc-panel scc-panel--assignments"
-            aria-labelledby="scc-assignments"
-          >
-            <PanelHead
-              id="scc-assignments"
-              title="Your Assignments"
-              trailing={
-                <ClipboardList className="h-3.5 w-3.5 scc-panel-glyph" aria-hidden />
-              }
-            />
-            <AssignmentsBlock assignments={assignments} />
-          </article>
-        </div>
-
-        <div className="scc-col">
           <article
             className="scc-panel scc-panel--attention"
             aria-labelledby="scc-attention"
           >
             <PanelHead id="scc-attention" title="Needs Your Attention" />
             <AttentionBlock attention={attention} />
-          </article>
-
-          <article className="scc-panel scc-ask" aria-labelledby="scc-ask">
-            <div className="scc-ask-glow" aria-hidden />
-            <div className="scc-panel-head">
-              <h2 id="scc-ask" className="scc-panel-title">
-                Ask SentraCore™
-              </h2>
-              <span className="scc-ask-badge">Beta</span>
-            </div>
-            <div className="scc-ask-field" aria-disabled="true">
-              <span>{askSentraCore.prompt}</span>
-            </div>
-            <div className="scc-ask-chips">
-              {askSentraCore.suggestions.map((chip) => (
-                <span key={chip} className="scc-ask-chip">
-                  {chip}
-                </span>
-              ))}
-            </div>
           </article>
         </div>
 
@@ -481,25 +426,17 @@ export function CommandCentrePage({
             />
             <DecisionsBlock decisions={decisions} />
           </article>
+        </div>
 
-          <aside className="scc-editorial" aria-label="SentraCore™ brand">
-            <div className="scc-editorial-media" aria-hidden>
-              <Image
-                src="/command-centre/editorial-mountain-sunset.png"
-                alt=""
-                fill
-                className="scc-editorial-image"
-                sizes="(max-width: 900px) 100vw, 28vw"
-              />
-            </div>
-            <div className="scc-editorial-veil" aria-hidden />
-            <p className="scc-editorial-quote">
-              Extraordinary organisations aren&apos;t found.
-              <br />
-              They&apos;re built.
-            </p>
-            <p className="scc-editorial-mark">SentraCore™</p>
-          </aside>
+        <div className="scc-col">
+          <article className="scc-panel scc-panel--feed" aria-labelledby="scc-last-visit">
+            <PanelHead
+              id="scc-last-visit"
+              title="Since Your Last Visit"
+              actionHref={null}
+            />
+            <LastVisitBlock lastVisit={snapshot.lastVisit} />
+          </article>
         </div>
       </section>
     </div>

@@ -24,19 +24,17 @@ export type CommandCentrePulseCard = {
   lines: string[];
   href: string | null;
   disabledNavigationLabel: string | null;
+  /** True when part of this domain's picture could not be evaluated (a metric/source is missing). */
+  partial?: boolean;
 };
 
 export type CommandCentreChangeItem = {
   id: string;
   sourceId: string;
-  sourceType:
-    | "operational_event"
-    | "finance_request_event"
-    | "finance_audit_event"
-    | "ecc_audit_event";
+  sourceType: "finance_request_event" | "finance_audit_event" | "ecc_audit_event";
   title: string;
   detail: string;
-  sourceLabel: "Finance" | "Operations" | "ECC";
+  sourceLabel: "Finance" | "ECC";
   occurredAt: string;
   timeLabel: string;
   href: string | null;
@@ -65,6 +63,31 @@ export type CommandCentreAttentionItem = {
   sourceLabel: string;
 };
 
+/** Domains the V1 executive-attention contract evaluates. */
+export type CommandCentreAttentionDomain = "finance" | "ecc" | "facility_management";
+
+/**
+ * How one attention domain was evaluated:
+ *  loaded      — evaluated successfully (zero items is a real zero)
+ *  partial     — some signals evaluated, others could not be
+ *  restricted  — the domain intentionally refuses this identity (NOT a failure)
+ *  unavailable — the domain could not be read (a failure)
+ *  not_enabled — the domain is not enabled for the organisation
+ */
+export type CommandCentreDomainStatus =
+  | "loaded"
+  | "partial"
+  | "restricted"
+  | "unavailable"
+  | "not_enabled";
+
+export type CommandCentreAttentionCoverage = {
+  domain: CommandCentreAttentionDomain;
+  label: string;
+  status: CommandCentreDomainStatus;
+  note: string | null;
+};
+
 export type CommandCentreProfilePresentation = {
   displayName: string;
   jobTitle: string | null;
@@ -78,38 +101,33 @@ export type CommandCentreSnapshot = {
   timeZone: string | null;
   greeting: string;
   lede: string;
+  /** Request-time evaluation instant (the same "checked at" for every live section). */
+  checkedAt: string;
   profile: CommandCentreProfilePresentation;
   pulse: CommandCentrePulseCard[];
   decisions: {
     state: CommandCentreSurfaceState;
     items: CommandCentreDecisionItem[];
     viewAllHref: string | null;
+    /** Why the queue is not shown (restricted / not enabled / failed), in user language. */
+    reason: string | null;
   };
   attention: {
     state: CommandCentreSurfaceState;
     items: CommandCentreAttentionItem[];
+    /** Qualifying items beyond the display limit. */
+    hiddenCount: number;
+    /** True only when every enabled attention domain was evaluated successfully. */
+    complete: boolean;
+    summary: string;
+    coverage: CommandCentreAttentionCoverage[];
   };
   lastVisit: {
     state: CommandCentreSurfaceState;
     message: string;
     detail: string;
+    /** Honest statement of which sources this feed covers. */
+    scope: string;
     items: CommandCentreChangeItem[];
-  };
-  assignments: {
-    state: CommandCentreSurfaceState;
-    message: string;
-    detail: string;
-    items: Array<{
-      id: string;
-      label: string;
-      count: number | null;
-      state: "healthy" | "unavailable";
-      href: string;
-    }>;
-  };
-  askSentraCore: {
-    state: "unavailable";
-    prompt: string;
-    suggestions: string[];
   };
 };

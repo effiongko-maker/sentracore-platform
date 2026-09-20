@@ -61,11 +61,7 @@ assert(queue.items.length === 2, "Finance decision semantics remain unchanged");
 const service = readFileSync(resolve("src/modules/command-centre/server/CommandCentreServerService.ts"), "utf8");
 const summaryClient = readFileSync(resolve("src/services/workspace/CommandCentreFmSummaryService.ts"), "utf8");
 const workspace = readFileSync(resolve("src/services/workspace/WorkspaceService.ts"), "utf8");
-const assignmentsComposer = service.slice(service.indexOf("private async composeAssignments"), service.indexOf("private async composeLastVisit"));
 assert(service.includes("loadOperationalPictureSummary(asOf)"), "Command Centre requests one Operational Picture summary");
-assert(!assignmentsComposer.includes("loadAssignmentSummary"), "Phase 2E: no Apps Script Assignment Summary");
-assert(assignmentsComposer.includes("FmWorkInstructionRepository") && assignmentsComposer.includes("FmIncidentRepository") && assignmentsComposer.includes("FmWorkRepository"), "Assignments from Supabase Work, Work Instructions and Incidents");
-assert(!assignmentsComposer.includes("operational_identity_links"), "no identity-link hop for assignments");
 assert(!service.includes("loadOperationalFmSnapshot"), "full-row OperationalFmSnapshot is superseded");
 assert(!service.includes("listMaintenance"), "Command Centre performs no Maintenance getAll/pagination");
 assert(!service.includes("listWorkOrders"), "Command Centre performs no Work Order getAll");
@@ -73,8 +69,7 @@ assert(!service.includes("listApprovals"), "Command Centre performs no Approval 
 assert(!service.includes("listIncidents"), "Command Centre performs no assigned Incident getAll");
 assert((summaryClient.match(/postToAppsScriptData\(/g) ?? []).length === 0, "Phase 2F: summary client makes NO Apps Script call — Maintenance, Work Orders and Approvals are Supabase");
 assert(summaryClient.includes("Unsupported Operational Picture contract version"), "Operational Picture version mismatch fails closed");
-assert(workspace.includes("buildAssignedWorkDomains"), "Workspace retains canonical assignment predicate projection");
-assert(assignmentsComposer.includes('state === "unavailable"'), "Assignment domains preserve unavailable state");
-assert(assignmentsComposer.includes("unavailable.length === domains.length"), "all assignment failures produce section error");
+assert(workspace.includes("buildAssignedWorkDomains"), "Workspace (FM) retains canonical assignment predicate projection");
+assert(!service.includes("composeAssignments") && !service.includes("FmIncidentRepository") && !service.includes("Legacy Incidents"), "Command Centre no longer composes the personal FM assignment tray");
 
 console.log("\nCommand Centre truthfulness verification passed.");

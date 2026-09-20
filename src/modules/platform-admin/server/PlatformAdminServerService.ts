@@ -18,6 +18,7 @@ import {
   type PlatformCapabilityGrantResult,
   type PlatformIdentityAdminRecord,
   type AccessScopeResult,
+  type LandingWorkspaceResult,
   type ProfileStatusResult,
 } from "../types";
 import { FmPeopleRepository } from "@/modules/users/server/FmPeopleRepository";
@@ -29,6 +30,7 @@ import {
   parseOperationalRole,
 } from "@/modules/users/server/fmPeopleDomain";
 import { isBoundModule } from "@/lib/access/moduleBoundary";
+import { isLandingWorkspace } from "@/lib/access/landingWorkspace";
 import { AdminConsoleReader } from "./AdminConsoleReader";
 import { PlatformAdminRepository } from "./PlatformAdminRepository";
 import type { PlatformAdminContext } from "./requirePlatformAdmin";
@@ -367,6 +369,26 @@ export class PlatformAdminServerService {
       targetProfileId: input.profileId,
       accessScope,
       homeModule: accessScope === "module" ? (homeModule as string) : null,
+    });
+  }
+
+  async setLandingWorkspace(
+    ctx: PlatformAdminContext,
+    input: { profileId: string; landingWorkspace: unknown }
+  ): Promise<LandingWorkspaceResult> {
+    const raw = input.landingWorkspace;
+    const value = raw == null || raw === "" ? null : raw;
+    if (value !== null && !isLandingWorkspace(value)) {
+      throw new ActionError("VALIDATION_ERROR", "Unsupported landing workspace.");
+    }
+    const current = await this.repo.getProfile(input.profileId);
+    if (!current) {
+      throw new ActionError("VALIDATION_ERROR", "Profile not found.");
+    }
+    return this.repo.setLandingWorkspace({
+      actorProfileId: ctx.actorProfileId,
+      targetProfileId: input.profileId,
+      landingWorkspace: value,
     });
   }
 

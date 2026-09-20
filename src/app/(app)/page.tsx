@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { hasModule } from "@/lib/actions/moduleAccess";
 import {
@@ -6,6 +7,13 @@ import {
   homeRouteForBoundary,
   MODULE_LABEL,
 } from "@/lib/access/moduleBoundary";
+import {
+  isEntryNavigation,
+  isLandingWorkspace,
+  resolveLandingRoute,
+} from "@/lib/access/landingWorkspace";
+import { resolveOperatingAccess } from "@/lib/access/server";
+import { resolveWorkspaceAccessChrome } from "@/lib/access/workspaceAccessChrome";
 import { getPlatformSession } from "@/lib/auth/session";
 import { PlatformHomePage } from "@/modules/platform";
 
@@ -43,6 +51,32 @@ export default async function PlatformHomeRoute() {
     // Module-bound identities land in their home module. Module routes never
     // redirect back to "/", so this cannot loop.
     redirect(home);
+  }
+
+  // Platform scope: honour a landing preference on ENTRY only, and only when the workspace is
+  // currently enterable. Anything else (unset, stale, inaccessible, in-app navigation) shows the
+  // neutral Platform Home — never a forbidden page and never a redirect loop.
+  const landing = session.profile.landingWorkspace;
+  const organisationId = session.organisation?.id ?? session.profile.organisationId ?? null;
+  if (isLandingWorkspace(landing) && organisationId && session.profile.id) {
+    const referer = (await headers()).get("referer");
+    if (isEntryNavigation(referer)) {
+      try {
+        const chrome = await resolveWorkspaceAccessChrome({
+          organisationId,
+          profileId: session.profile.id,
+          roleSlugs: session.roleSlugs,
+          enabledModules: session.enabledModules,
+          operatingAccess: await resolveOperatingAccess(session),
+          boundary,
+        });
+        const route = resolveLandingRoute({ boundary, landingWorkspace: landing, chrome });
+        if (route) redirect(route);
+      } catch (error) {
+        // redirect() signals via a thrown control-flow error — rethrow it; resolve failures fall back.
+        if (error && typeof error === "object" && "digest" in error) throw error;
+      }
+    }
   }
 
   return <PlatformHomePage />;

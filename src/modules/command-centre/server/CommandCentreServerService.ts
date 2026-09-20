@@ -5,6 +5,7 @@ import { boundaryForSession } from "@/lib/access/moduleBoundary";
  */
 import { isActionError } from "@/lib/actions/errors";
 import { isPlatformSuperAdminFromSlugs } from "@/lib/access/platformRoles";
+import { accessCan } from "@/lib/access/resolveAccess";
 import { resolveOperatingAccess } from "@/lib/access/server";
 import {
   resolveWorkspaceAccessChrome,
@@ -14,11 +15,18 @@ import { hasModule } from "@/lib/actions/moduleAccess";
 import type { PlatformSession } from "@/lib/auth/types";
 import type { CommandCentreAccessContext } from "@/modules/command-centre/server/requireCommandCentreAccess";
 import type {
-  CommandCentreAttentionItem,
   CommandCentrePulseCard,
   CommandCentreSnapshot,
-  CommandCentreSurfaceState,
 } from "@/modules/command-centre/presentationTypes";
+import {
+  composeExecutiveAttention,
+  eccCoverageAttentionItem,
+  eccCoverageGap,
+  eccIssueRequestAttentionItems,
+  financeAttentionItems,
+  fmAttentionFromPicture,
+  type DomainAttentionResult,
+} from "@/modules/command-centre/server/composeExecutiveAttention";
 import { EccOperationsServerService } from "@/modules/ecc-operations/server/EccOperationsServerService";
 import { ECC_MODULE_SLUG } from "@/modules/ecc-operations/types";
 import {
@@ -92,11 +100,12 @@ function formatAmount(amount: number, currency: string): string {
   }
 }
 
+/** true / false, or null when the grant could not be read (a failure — never "no grant"). */
 async function hasFinanceCapability(
   organisationId: string,
   profileId: string,
   capability: string
-): Promise<boolean> {
+): Promise<boolean | null> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("finance_capability_grants")
@@ -105,7 +114,7 @@ async function hasFinanceCapability(
     .eq("profile_id", profileId)
     .eq("capability", capability)
     .maybeSingle();
-  if (error) return false;
+  if (error) return null;
   return Boolean(data);
 }
 
@@ -113,7 +122,7 @@ async function hasPlatformCapability(
   organisationId: string,
   profileId: string,
   capability: string
-): Promise<boolean> {
+): Promise<boolean | null> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("platform_capability_grants")
@@ -122,7 +131,8 @@ async function hasPlatformCapability(
     .eq("profile_id", profileId)
     .eq("capability", capability)
     .maybeSingle();
-  return !error && Boolean(data);
+  if (error) return null;
+  return Boolean(data);
 }
 
 function actorFromSession(session: PlatformSession, organisationId: string) {
@@ -139,10 +149,46 @@ function financeModuleEnabled(session: PlatformSession): boolean {
   );
 }
 
+/** Request-time "checked at" label in the organisation's timezone (explicit UTC without one). */
+function checkedTimeLabel(iso: string, timeZone: string | null): string {
+  try {
+    const time = new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      ...(timeZone ? { timeZone } : { timeZone: "UTC" }),
+    }).format(new Date(iso));
+    return timeZone ? time : `${time} UTC`;
+  } catch {
+    return "";
+  }
+}
+
+function measuredFromLabel(iso: string, timeZone: string | null): string {
+  try {
+    const label = new Intl.DateTimeFormat("en-GB", {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZone: timeZone ?? "UTC",
+    }).format(new Date(iso));
+    return timeZone ? label : `${label} UTC`;
+  } catch {
+    return iso;
+  }
+}
+
+type FinanceQueueResult =
+  | { status: "not_enabled" | "restricted" | "unavailable" }
+  | { status: "loaded"; decisions: ReturnType<typeof composeFinanceDecisionQueue> };
+
 export class CommandCentreServerService {
   /**
-   * Compose Command Centre snapshot for an authorised CEO/orchestrator actor.
-   * Domain soft-failures become unavailable/restricted — never fabricated zeros.
+   * Compose the executive console for an authorised CEO/orchestrator actor.
+   * Every domain is evaluated independently and keeps its own state: a failed or restricted
+   * domain never contributes zero / "stable" / "nothing requires attention".
    */
   async load(
     access: CommandCentreAccessContext
@@ -164,36 +210,39 @@ export class CommandCentreServerService {
     const fmEnabled =
       isPlatformSuperAdminFromSlugs(access.session.roleSlugs) ||
       hasModule(access.session.enabledModules, "facility_management");
-    const operationalPicture = fmEnabled
+    // The FM domain enforces its own view authority. Command Centre never weakens that gate:
+    // without FM view access the FM projection is RESTRICTED (not "unavailable", not zero).
+    const fmViewAllowed = fmEnabled && accessCan(operatingAccess, "ops.view");
+    const operationalPicture = fmViewAllowed
       ? loadOperationalPictureSummary(asOf)
       : Promise.resolve<OperationalPictureSummary | null>(null);
 
-    const [financePulse, operationsPulse, decisions, attentionFinance, eccPulse, assignments, lastVisit] =
+    const [financePulse, operationsPulse, financeQueue, eccAttention, fmAttention, lastVisit] =
       await Promise.all([
-        this.composeFinancePulse(access, workspaceEntry),
+        this.composeFinancePulse(access, workspaceEntry, asOf, organisationTimeZone),
         this.composeOperationsPulse(
           access,
           workspaceEntry,
-          operationalPicture
+          operationalPicture,
+          { asOf, timeZone: organisationTimeZone, fmViewAllowed }
         ),
-        this.composeDecisions(access),
-        this.composeFinanceAttention(access),
-        this.composeEccPulse(access, workspaceEntry),
-        this.composeAssignments(access),
+        this.loadFinanceQueue(access),
+        this.evaluateEccAttention(access),
+        this.evaluateFmAttention(access, operationalPicture, fmViewAllowed),
         this.composeLastVisit(access, asOf, workspaceEntry),
       ]);
+    const eccPulse = await this.composeEccPulse(
+      access,
+      workspaceEntry,
+      eccAttention.coverage,
+      { asOf, timeZone: organisationTimeZone }
+    );
 
-    const attentionItems = attentionFinance.items.slice(0, 8);
-    const attentionState: CommandCentreSurfaceState =
-      attentionFinance.state === "error"
-        ? "error"
-        : attentionItems.length > 0
-          ? "healthy"
-          : attentionFinance.state === "restricted"
-            ? "restricted"
-            : attentionFinance.state === "unavailable"
-              ? "unavailable"
-              : "empty";
+    const attention = composeExecutiveAttention([
+      this.financeAttentionResult(financeQueue),
+      eccAttention.result,
+      fmAttention,
+    ]);
 
     const pulse: CommandCentrePulseCard[] = [
       financePulse,
@@ -212,9 +261,10 @@ export class CommandCentreServerService {
 
     return {
       asOf,
+      checkedAt: asOf,
       timeZone: organisationTimeZone,
       greeting,
-      lede: "Here's what's happening across your organisation today.",
+      lede: "Your executive view of the organisation.",
       profile: {
         displayName,
         jobTitle: access.session.profile.jobTitle,
@@ -222,30 +272,21 @@ export class CommandCentreServerService {
         initials: initialsFromName(displayName),
       },
       pulse,
-      decisions,
-      attention: {
-        state: attentionState,
-        items: attentionItems,
-      },
+      decisions: this.composeDecisions(financeQueue),
+      attention,
       lastVisit,
-      assignments,
-      askSentraCore: {
-        state: "unavailable",
-        prompt: "What would you like to know?",
-        suggestions: [
-          "What's changed this week?",
-          "What needs my attention?",
-          "How are operations performing?",
-          "What decisions are waiting?",
-        ],
-      },
     };
   }
 
   private async composeOperationsPulse(
     access: CommandCentreAccessContext,
     workspaceEntry: WorkspaceAccessChrome,
-    operationalPicture: Promise<OperationalPictureSummary | null>
+    operationalPicture: Promise<OperationalPictureSummary | null>,
+    context: { asOf: string; timeZone: string | null; fmViewAllowed: boolean } = {
+      asOf: new Date().toISOString(),
+      timeZone: null,
+      fmViewAllowed: true,
+    }
   ): Promise<CommandCentrePulseCard> {
     const base: CommandCentrePulseCard = {
       domain: "operations",
@@ -266,8 +307,18 @@ export class CommandCentreServerService {
       return {
         ...base,
         state: "restricted",
-        statusLabel: "No access",
-        lines: ["Facility Management is not available for your account."],
+        statusLabel: "Not enabled",
+        lines: ["Facility Management is not enabled for this organisation."],
+        href: null,
+        disabledNavigationLabel: null,
+      };
+    }
+    if (!context.fmViewAllowed) {
+      return {
+        ...base,
+        state: "restricted",
+        statusLabel: "Restricted",
+        lines: ["Facility Management figures need Facility Management access."],
         href: null,
         disabledNavigationLabel: null,
       };
@@ -290,11 +341,18 @@ export class CommandCentreServerService {
         };
       }
 
+      const partial = Object.values(picture).some((count) => count == null);
+      const exception = (picture.critical ?? 0) > 0 || (picture.overdue ?? 0) > 0;
       return {
         domain: "operations",
         label: "Operations",
         state: "healthy",
-        statusLabel: "Live data",
+        statusLabel: partial
+          ? "Partial view"
+          : exception
+            ? "Needs attention"
+            : `Checked ${checkedTimeLabel(context.asOf, context.timeZone)}`.trim(),
+        partial,
         lines: [
           `Critical ${value(picture.critical)} · In Progress ${value(picture.inProgress)}`,
           `Awaiting Action ${value(picture.awaitingAction)} · Overdue ${value(picture.overdue)}`,
@@ -316,7 +374,9 @@ export class CommandCentreServerService {
 
   private async composeFinancePulse(
     access: CommandCentreAccessContext,
-    workspaceEntry: WorkspaceAccessChrome
+    workspaceEntry: WorkspaceAccessChrome,
+    asOf: string = new Date().toISOString(),
+    timeZone: string | null = null
   ): Promise<CommandCentrePulseCard> {
     const base: CommandCentrePulseCard = {
       domain: "finance",
@@ -334,8 +394,8 @@ export class CommandCentreServerService {
       return {
         ...base,
         state: "restricted",
-        statusLabel: "No access",
-        lines: ["Platform Finance is not available for your account."],
+        statusLabel: "Not enabled",
+        lines: ["Platform Finance is not enabled for this organisation."],
         href: null,
         disabledNavigationLabel: null,
       };
@@ -347,7 +407,9 @@ export class CommandCentreServerService {
         profileId: access.profileId,
       });
 
-      let openPayablesLine: string | null = null;
+      // A failed payables read is an explicit partial state — never a silently missing line.
+      let openPayablesLine: string;
+      let payablesFailed = false;
       try {
         const payablesSvc = new PlatformFinancePayablesServerService(
           access.organisationId
@@ -364,7 +426,8 @@ export class CommandCentreServerService {
         openPayablesLine =
           open.length === 1 ? "1 open payable" : `${open.length} open payables`;
       } catch {
-        openPayablesLine = null;
+        payablesFailed = true;
+        openPayablesLine = "Open payables unavailable";
       }
 
       const pending = overview.pendingCeoDecisions.count;
@@ -379,18 +442,19 @@ export class CommandCentreServerService {
         awaiting === 1
           ? "1 awaiting Finance review"
           : `${awaiting} awaiting Finance review`;
-      lines.push(
-        openPayablesLine
-          ? `${awaitingLine} · ${openPayablesLine}`
-          : awaitingLine
-      );
+      lines.push(`${awaitingLine} · ${openPayablesLine}`);
 
       const busy = pending > 0 || awaiting > 0;
       return {
         domain: "finance",
         label: "Finance",
         state: "healthy",
-        statusLabel: busy ? "Needs attention" : "Stable",
+        statusLabel: payablesFailed
+          ? "Partial view"
+          : busy
+            ? "Needs attention"
+            : `Checked ${checkedTimeLabel(asOf, timeZone)}`.trim(),
+        partial: payablesFailed,
         lines,
         href: workspaceEntry.platformFinance ? "/platform-finance" : null,
         disabledNavigationLabel: workspaceEntry.platformFinance
@@ -402,7 +466,7 @@ export class CommandCentreServerService {
         return {
           ...base,
           state: "restricted",
-          statusLabel: "No access",
+          statusLabel: "Restricted",
           lines: ["Finance data is restricted for your account."],
           href: null,
           disabledNavigationLabel: null,
@@ -417,16 +481,11 @@ export class CommandCentreServerService {
     }
   }
 
-  private async composeDecisions(access: CommandCentreAccessContext): Promise<
-    CommandCentreSnapshot["decisions"]
-  > {
-    if (!financeModuleEnabled(access.session)) {
-      return {
-        state: "restricted",
-        items: [],
-        viewAllHref: null,
-      };
-    }
+  /** One read of the Finance CEO decision queue, shared by Decisions and Attention. */
+  private async loadFinanceQueue(
+    access: CommandCentreAccessContext
+  ): Promise<FinanceQueueResult> {
+    if (!financeModuleEnabled(access.session)) return { status: "not_enabled" };
 
     const canApprove = await hasFinanceCapability(
       access.organisationId,
@@ -438,13 +497,9 @@ export class CommandCentreServerService {
       access.profileId,
       COMMAND_CENTRE_CAPABILITIES.decide
     );
-    if (!canApprove || !canDecide) {
-      return {
-        state: "restricted",
-        items: [],
-        viewAllHref: null,
-      };
-    }
+    // null = the grant could not be read: a failure, not a denial.
+    if (canApprove === null || canDecide === null) return { status: "unavailable" };
+    if (!canApprove || !canDecide) return { status: "restricted" };
 
     try {
       const requestsSvc = new PlatformFinanceRequestsServerService(
@@ -459,94 +514,166 @@ export class CommandCentreServerService {
         vendorBillsSvc.listApprovalQueue(actor),
         requestsSvc.listCategories(actor),
       ]);
-      const { items } = composeFinanceDecisionQueue({
-        requests,
-        vendorBills,
-        categories,
-      });
-
       return {
-        state: items.length === 0 ? "empty" : "healthy",
-        items,
-        viewAllHref: null,
+        status: "loaded",
+        decisions: composeFinanceDecisionQueue({ requests, vendorBills, categories }),
       };
     } catch (error) {
       if (isActionError(error) && error.code === "FORBIDDEN") {
-        return { state: "restricted", items: [], viewAllHref: null };
+        return { status: "restricted" };
       }
-      return { state: "error", items: [], viewAllHref: null };
+      return { status: "unavailable" };
     }
   }
 
-  private async composeFinanceAttention(
-    access: CommandCentreAccessContext
-  ): Promise<{ state: CommandCentreSurfaceState; items: CommandCentreAttentionItem[] }> {
-    if (!financeModuleEnabled(access.session)) {
-      return { state: "restricted", items: [] };
+  private composeDecisions(
+    queue: FinanceQueueResult
+  ): CommandCentreSnapshot["decisions"] {
+    switch (queue.status) {
+      case "not_enabled":
+        return {
+          state: "restricted",
+          items: [],
+          viewAllHref: null,
+          reason: "Platform Finance is not enabled for this organisation.",
+        };
+      case "restricted":
+        return {
+          state: "restricted",
+          items: [],
+          viewAllHref: null,
+          reason:
+            "Finance decisions are shown to people with Finance approval authority and Command Centre decision access.",
+        };
+      case "unavailable":
+        return {
+          state: "error",
+          items: [],
+          viewAllHref: null,
+          reason: "The Finance decision queue could not be read.",
+        };
+      case "loaded":
+        return {
+          state: queue.decisions.items.length === 0 ? "empty" : "healthy",
+          items: queue.decisions.items,
+          viewAllHref: null,
+          reason: null,
+        };
     }
-    const canApprove = await hasFinanceCapability(
-      access.organisationId,
-      access.profileId,
-      FINANCIAL_REQUEST_CAPABILITIES.approve
-    );
-    const canDecide = await hasPlatformCapability(
-      access.organisationId,
-      access.profileId,
-      COMMAND_CENTRE_CAPABILITIES.decide
-    );
-    if (!canApprove || !canDecide) return { state: "restricted", items: [] };
+  }
 
-    try {
-      const requestsSvc = new PlatformFinanceRequestsServerService(
-        access.organisationId
-      );
-      const vendorBillsSvc = new PlatformFinanceVendorBillsServerService(
-        access.organisationId
-      );
-      const actor = actorFromSession(access.session, access.organisationId);
-      const [requests, vendorBills, categories] = await Promise.all([
-        requestsSvc.listApprovalQueue(actor),
-        vendorBillsSvc.listApprovalQueue(actor),
-        requestsSvc.listCategories(actor),
-      ]);
-      const decisions = composeFinanceDecisionQueue({
-        requests,
-        vendorBills,
-        categories,
-      });
-      const items: CommandCentreAttentionItem[] = [];
-
-      const pending = decisions.items.length;
-      if (pending > 0) {
-        const amountDetail = [...decisions.totalsByCurrency.entries()]
-          .sort(([left], [right]) => left.localeCompare(right))
-          .map(([currency, amount]) => formatAmount(amount, currency))
-          .join(" · ");
-        items.unshift({
-          id: "finance:pending_ceo",
-          title:
-            pending === 1
-              ? "1 decision awaiting CEO approval"
-              : `${pending} decisions awaiting CEO approval`,
-          detail: amountDetail || null,
-          tone: "high",
-          href: "/platform-finance",
-          sourceLabel: "Finance",
-        });
-      }
-
+  private financeAttentionResult(queue: FinanceQueueResult): DomainAttentionResult {
+    if (queue.status !== "loaded") {
       return {
-        state: items.length === 0 ? "empty" : "healthy",
-        items,
+        domain: "finance",
+        status: queue.status,
+        items: [],
+        note:
+          queue.status === "restricted"
+            ? "Finance decisions are restricted for your access."
+            : queue.status === "unavailable"
+              ? "Finance could not be evaluated."
+              : null,
       };
-    } catch {
-      return { state: "error", items: [] };
     }
+    const { items, totalsByCurrency } = queue.decisions;
+    const amountDetail =
+      [...totalsByCurrency.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([currency, amount]) => formatAmount(amount, currency))
+        .join(" · ") || null;
+    return {
+      domain: "finance",
+      status: "loaded",
+      items: financeAttentionItems({ pendingCount: items.length, amountDetail }),
+    };
+  }
+
+  private async evaluateFmAttention(
+    access: CommandCentreAccessContext,
+    operationalPicture: Promise<OperationalPictureSummary | null>,
+    fmViewAllowed: boolean
+  ): Promise<DomainAttentionResult> {
+    const enabled =
+      isPlatformSuperAdminFromSlugs(access.session.roleSlugs) ||
+      hasModule(access.session.enabledModules, "facility_management");
+    if (!enabled) return { domain: "facility_management", status: "not_enabled", items: [] };
+    if (!fmViewAllowed) {
+      return {
+        domain: "facility_management",
+        status: "restricted",
+        items: [],
+        note: "Facility Management attention needs Facility Management access.",
+      };
+    }
+    try {
+      const aggregate = await operationalPicture;
+      if (!aggregate) {
+        return { domain: "facility_management", status: "unavailable", items: [] };
+      }
+      const result = fmAttentionFromPicture(aggregate);
+      return { domain: "facility_management", ...result };
+    } catch {
+      return { domain: "facility_management", status: "unavailable", items: [] };
+    }
+  }
+
+  /**
+   * ECC executive exceptions from authoritative ECC state. Issues, Requests and the current
+   * shift are read independently so one failed source is a visible partial — never zero.
+   */
+  private async evaluateEccAttention(
+    access: CommandCentreAccessContext
+  ): Promise<{ result: DomainAttentionResult; coverage: "gap" | "ok" | "unknown" }> {
+    if (!hasModule(access.session.enabledModules, ECC_MODULE_SLUG)) {
+      return {
+        result: { domain: "ecc", status: "not_enabled", items: [] },
+        coverage: "unknown",
+      };
+    }
+    const ecc = new EccOperationsServerService(access.organisationId);
+    const [issues, requests, people] = await Promise.allSettled([
+      ecc.listIssues(),
+      ecc.listRequests(),
+      ecc.getPeopleSnapshot(),
+    ]);
+    const items = eccIssueRequestAttentionItems({
+      issues: issues.status === "fulfilled" ? issues.value : [],
+      requests: requests.status === "fulfilled" ? requests.value : [],
+    });
+    let coverage: "gap" | "ok" | "unknown" = "unknown";
+    if (people.status === "fulfilled") {
+      const item = eccCoverageAttentionItem(people.value);
+      coverage = eccCoverageGap(people.value) ? "gap" : "ok";
+      if (item) items.push(item);
+    }
+    const missing: string[] = [];
+    if (issues.status !== "fulfilled") missing.push("Issues");
+    if (requests.status !== "fulfilled") missing.push("Requests");
+    if (people.status !== "fulfilled") missing.push("shift coverage");
+    const loadedCount = 3 - missing.length;
+    const status =
+      missing.length === 0 ? "loaded" : loadedCount === 0 ? "unavailable" : "partial";
+    return {
+      result: {
+        domain: "ecc",
+        status,
+        items,
+        note: missing.length ? `ECC ${missing.join(", ")} could not be evaluated.` : null,
+      },
+      coverage,
+    };
   }
 
   private async composeEccPulse(
     access: CommandCentreAccessContext,
-    workspaceEntry: WorkspaceAccessChrome
+    workspaceEntry: WorkspaceAccessChrome,
+    /** Undefined when shift coverage was not evaluated for this call. */
+    coverage?: "gap" | "ok" | "unknown",
+    context: { asOf: string; timeZone: string | null } = {
+      asOf: new Date().toISOString(),
+      timeZone: null,
+    }
   ): Promise<CommandCentrePulseCard> {
     if (!hasModule(access.session.enabledModules, ECC_MODULE_SLUG)) {
       return {
@@ -563,8 +690,8 @@ export class CommandCentreServerService {
     try {
       const ecc = new EccOperationsServerService(access.organisationId);
       const overview = await ecc.getOverview();
-      // No ECC operational evidence is NOT stability: distinguish "nothing recorded"
-      // from "recorded and calm".
+      // No ECC operational evidence is NOT calm: distinguish "nothing recorded"
+      // from "recorded, no exceptions found".
       const hasEvidence =
         overview.latestDailyOps != null ||
         overview.openIssueCount > 0 ||
@@ -585,8 +712,8 @@ export class CommandCentreServerService {
         };
       }
       const lines: string[] = [];
-      if (overview.highUrgentOpenCount === 0 && overview.escalatedIssueCount === 0) {
-        lines.push("No critical alerts");
+      if (overview.escalatedIssueCount === 0 && overview.highUrgentOpenCount === 0) {
+        lines.push("No escalated or high-priority items");
       } else {
         if (overview.escalatedIssueCount > 0) {
           lines.push(
@@ -603,22 +730,32 @@ export class CommandCentreServerService {
           );
         }
       }
-      const attention = overview.attentionItems.length;
       lines.push(
-        attention === 0
-          ? "No items need attention"
-          : attention === 1
-            ? "1 item needs attention"
-            : `${attention} items need attention`
+        `${overview.openIssueCount} open ${overview.openIssueCount === 1 ? "issue" : "issues"} · ${overview.openRequestCount} open ${overview.openRequestCount === 1 ? "request" : "requests"}`
       );
+      // Staffing is shown as a recorded fact, never as a judgement.
+      const staffingUnavailable = overview.staffingSourceUnavailable === true;
+      if (staffingUnavailable) {
+        lines.push("Staffing unavailable");
+      } else if (typeof overview.staffingReadiness === "string" && overview.staffingReadiness.trim()) {
+        lines.push(`Staffing: ${overview.staffingReadiness.trim()}`);
+      }
 
+      const partial = staffingUnavailable || coverage === "unknown";
       const pressured =
-        overview.escalatedIssueCount > 0 || overview.highUrgentOpenCount > 0;
+        overview.escalatedIssueCount > 0 ||
+        overview.highUrgentOpenCount > 0 ||
+        coverage === "gap";
       return {
         domain: "ecc",
         label: "ECC",
         state: "healthy",
-        statusLabel: pressured ? "Needs attention" : "Stable",
+        statusLabel: pressured
+          ? "Needs attention"
+          : partial
+            ? "Partial view"
+            : `Checked ${checkedTimeLabel(context.asOf, context.timeZone)}`.trim(),
+        partial,
         lines,
         href: workspaceEntry.eccOperations ? "/ecc-operations" : null,
         disabledNavigationLabel: workspaceEntry.eccOperations
@@ -640,132 +777,34 @@ export class CommandCentreServerService {
     }
   }
 
-  private async composeAssignments(
-    access: CommandCentreAccessContext
-  ): Promise<CommandCentreSnapshot["assignments"]> {
-    if (!hasModule(access.session.enabledModules, "facility_management")) {
-      return {
-        state: "unavailable",
-        message: "No assignment source is enabled.",
-        detail: "Facility Management is not enabled for this organisation.",
-        items: [],
-      };
-    }
-    try {
-      type DomainSource =
-        | { state: "healthy"; active: number }
-        | { state: "unavailable" };
-
-      let workSource: DomainSource = { state: "unavailable" };
-      try {
-        const { FmWorkRepository } = await import(
-          "@/modules/maintenance/server/FmWorkRepository"
-        );
-        const count = await new FmWorkRepository(
-          access.organisationId
-        ).countActiveForProfile(access.profileId);
-        workSource = { state: "healthy", active: count };
-      } catch {
-        workSource = { state: "unavailable" };
-      }
-
-      // Phase 2D: Incidents are Supabase — profile UUID, no identity-link hop.
-      let incidentsSource: DomainSource = { state: "unavailable" };
-      try {
-        const { FmIncidentRepository } = await import(
-          "@/modules/incidents/server/FmIncidentRepository"
-        );
-        const count = await new FmIncidentRepository(
-          access.organisationId
-        ).countActiveForProfile(access.profileId);
-        incidentsSource = { state: "healthy", active: count };
-      } catch {
-        incidentsSource = { state: "unavailable" };
-      }
-
-      // Phase 2E: Work Instructions are Supabase — profile UUID, no identity-link hop.
-      let workOrdersSource: DomainSource = { state: "unavailable" };
-      try {
-        const { FmWorkInstructionRepository } = await import(
-          "@/modules/work-orders/server/FmWorkInstructionRepository"
-        );
-        const count = await new FmWorkInstructionRepository(
-          access.organisationId
-        ).countAssignedForProfile(access.profileId);
-        workOrdersSource = { state: "healthy", active: count };
-      } catch {
-        workOrdersSource = { state: "unavailable" };
-      }
-
-      const domains = [
-        {
-          id: "assigned-work",
-          label: "Assigned Work",
-          href: "/work",
-          source: workSource,
-        },
-        {
-          id: "assigned-work-orders",
-          label: "Assigned Work Orders",
-          href: "/work-orders",
-          source: workOrdersSource,
-        },
-        {
-          id: "assigned-legacy-incidents",
-          label: "Legacy Incidents Assigned",
-          href: "/incidents",
-          source: incidentsSource,
-        },
-      ];
-      const unavailable = domains.filter(
-        (item) => item.source.state === "unavailable"
-      );
-      if (unavailable.length === domains.length) {
-        return {
-          state: "error",
-          message: "Assignments could not be loaded.",
-          detail: "Facility Management assignment data is temporarily unavailable.",
-          items: [],
-        };
-      }
-      const assigned = domains
-        .filter(
-          (item) =>
-            item.source.state === "unavailable" || item.source.active > 0
-        )
-        .map((item) => ({
-          id: item.id,
-          label: item.label,
-          count:
-            item.source.state === "healthy" ? item.source.active : null,
-          state:
-            item.source.state === "healthy"
-              ? ("healthy" as const)
-              : ("unavailable" as const),
-          href: item.href,
-        }));
-      return {
-        state: assigned.length === 0 ? "empty" : "healthy",
-        message: assigned.length === 0 ? "You have no active assignments." : "",
-        detail:
-          "Work, Work Instructions and Incidents all use your profile identity.",
-        items: assigned,
-      };
-    } catch {
-      return {
-        state: "error",
-        message: "Assignments could not be loaded.",
-        detail: "Facility Management assignment data is temporarily unavailable.",
-        items: [],
-      };
-    }
-  }
-
   private async composeLastVisit(
     access: CommandCentreAccessContext,
     asOf: string,
     workspaceEntry: WorkspaceAccessChrome
   ): Promise<CommandCentreSnapshot["lastVisit"]> {
+    const timeZone = organisationTimeZoneOrNull(access.session);
+    const visibility = {
+      finance: financeModuleEnabled(access.session),
+      ecc: hasModule(access.session.enabledModules, ECC_MODULE_SLUG),
+    };
+    // Facility Management is deliberately NOT part of this feed: its only change history is the
+    // legacy operational_events stream, which is not reconciled to current FM records.
+    const covered = [visibility.finance ? "Finance" : null, visibility.ecc ? "ECC" : null].filter(
+      Boolean
+    ) as string[];
+    const scope = covered.length
+      ? `Covers ${covered.join(" and ")} activity only. Facility Management changes are not included.`
+      : "No change sources are enabled for this organisation.";
+    if (covered.length === 0) {
+      return {
+        state: "unavailable",
+        message: "No change sources are enabled.",
+        detail: "",
+        scope,
+        items: [],
+      };
+    }
+
     const admin = createAdminClient();
     const { data: marker, error: markerError } = await admin
       .from("command_centre_visits")
@@ -777,8 +816,9 @@ export class CommandCentreServerService {
     if (markerError) {
       return {
         state: "unavailable",
-        message: "Change tracking is awaiting its database migration.",
-        detail: markerError.message,
+        message: "Change tracking is unavailable.",
+        detail: "The visit marker could not be read.",
+        scope,
         items: [],
       };
     }
@@ -797,16 +837,14 @@ export class CommandCentreServerService {
         message: firstVisitError
           ? "Your visit marker could not be created."
           : "This is your first tracked Command Centre visit.",
-        detail: firstVisitError?.message ?? "Changes will be measured from this visit onward.",
+        detail: firstVisitError
+          ? "Changes cannot be measured yet."
+          : "Changes will be measured from this visit onward.",
+        scope,
         items: [],
       };
     }
 
-    const visibility = {
-      operations: hasModule(access.session.enabledModules, "facility_management"),
-      finance: financeModuleEnabled(access.session),
-      ecc: hasModule(access.session.enabledModules, ECC_MODULE_SLUG),
-    };
     const changes = await composeLastVisitChanges({
       db: admin,
       organisationId: access.organisationId,
@@ -814,17 +852,21 @@ export class CommandCentreServerService {
       asOf,
       visibility,
       workspaceEntry,
-      timeZone: organisationTimeZoneOrNull(access.session),
+      timeZone,
     });
     if (changes.sourceErrors.length > 0) {
       return {
         state: "error",
         message: "Changes could not be loaded.",
-        detail: `Unavailable sources: ${changes.sourceErrors.join(", ")}. Visit marker was not advanced.`,
+        detail: `Unavailable sources: ${changes.sourceErrors.join(", ")}. Your last-visit point was not moved.`,
+        scope,
         items: [],
       };
     }
 
+    // Contract preserved: the marker advances after each successful evaluation, so refreshing
+    // moves "since your last visit" forward. (Separating "session start" from "previous visit"
+    // would need a second stored timestamp — deliberately not introduced here.)
     const { error: writeError } = await admin
       .from("command_centre_visits")
       .update({ last_visited_at: asOf })
@@ -834,7 +876,8 @@ export class CommandCentreServerService {
       return {
         state: "error",
         message: "Your visit marker could not be updated.",
-        detail: writeError.message,
+        detail: "Changes may repeat on your next visit.",
+        scope,
         items: [],
       };
     }
@@ -844,9 +887,10 @@ export class CommandCentreServerService {
       state: total === 0 ? "empty" : "healthy",
       message:
         total === 0
-          ? "No meaningful changes since your last visit."
-          : `${total} meaningful change${total === 1 ? "" : "s"} since your last visit.`,
-      detail: `Measured from ${previous}.`,
+          ? `No ${covered.join(" or ")} changes since your last visit.`
+          : `${total} recent change${total === 1 ? "" : "s"} since your last visit.`,
+      detail: `Measured from ${measuredFromLabel(previous, timeZone)}.`,
+      scope,
       items: changes.items,
     };
   }

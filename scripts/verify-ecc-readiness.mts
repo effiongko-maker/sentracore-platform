@@ -296,10 +296,10 @@ async function main() {
     try {
       proto.getOverview = async () => base;
       const none = await compose.call({}, access, entry);
-      assert(none.state === "empty" && none.statusLabel !== "Stable" && !none.lines.some((l) => /No critical alerts/i.test(l)), "16: no ECC data must not read as Stable");
+      assert(none.state === "empty" && none.statusLabel !== "Stable" && !none.lines.some((l) => /No (critical|escalated)/i.test(l)), "16: no ECC data must not read as Stable");
       proto.getOverview = async () => ({ ...base, latestDailyOps: { id: "d" }, recentActivity: [{ id: "a" }] });
       const calm = await compose.call({}, access, entry);
-      assert(calm.state === "healthy" && calm.statusLabel === "Stable", "16: recorded-and-calm may read Stable");
+      assert(calm.state === "healthy" && calm.statusLabel !== "Stable" && /^Checked/.test(calm.statusLabel), "16: recorded, no exceptions found reads as a dated check — never an unsupported 'Stable'");
       proto.getOverview = async () => {
         throw new Error("down");
       };
@@ -308,7 +308,7 @@ async function main() {
     } finally {
       proto.getOverview = origOverview;
     }
-    pass("16 no-data ECC pulse is 'No ECC activity' (not Stable); recorded-and-calm is Stable; source failure is an error");
+    pass("16 no-data ECC pulse is 'No ECC activity'; recorded-without-exceptions is a dated check (not 'Stable'); source failure is an error");
   }
 
   // ── 17. Reporting distinguishes recorded facts from Intelligence ───────────
