@@ -282,17 +282,6 @@ export function OrganisationalCompass() {
           </Link>
 
           <WorkspaceSwitcher />
-          {isSuperAdmin && !inAdminConsole ? (
-            <Link
-              href={ADMIN_CONSOLE_HOME.href}
-              onClick={closeMobileNav}
-              className="os-compass-module"
-              style={{ marginTop: 8 }}
-            >
-              <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden />
-              <span>{ADMIN_CONSOLE_HOME.label}</span>
-            </Link>
-          ) : null}
         </div>
 
         {inAdminConsole ? (
@@ -598,6 +587,23 @@ export function OrganisationalCompass() {
             )}
           </div>
         )}
+
+        {isSuperAdmin ? (
+          <div className="os-compass-control-plane">
+            <Link
+              href={ADMIN_CONSOLE_HOME.href}
+              onClick={closeMobileNav}
+              aria-current={inAdminConsole ? "page" : undefined}
+              className={cn(
+                "os-compass-module os-compass-module-quiet",
+                inAdminConsole && "os-compass-module-active"
+              )}
+            >
+              <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden />
+              <span>{ADMIN_CONSOLE_HOME.label}</span>
+            </Link>
+          </div>
+        ) : null}
 
         <AppFooter />
       </nav>

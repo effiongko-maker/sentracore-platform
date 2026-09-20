@@ -151,7 +151,7 @@ check("Admin route: server-side Super Admin gate; unauthorised users get no cons
 check("Navigation: Admin Console entry only for Super Admin; five sections; not treated as FM", () => {
   assert(ADMIN_NAV_ITEMS.map((i) => i.label).join() === "Overview,People,Access,Modules,Audit", "sections");
   const compass = read("src/components/platform/OrganisationalCompass.tsx");
-  assert(/isSuperAdmin && !inAdminConsole/.test(compass), "entry gated by Super Admin");
+  assert(/\{isSuperAdmin \? \(\s*<div className="os-compass-control-plane">/.test(compass) && compass.indexOf("os-compass-control-plane") > compass.indexOf("</div>\n        )}") && compass.indexOf("os-compass-control-plane") < compass.indexOf("<AppFooter />"), "entry gated by Super Admin, anchored above the footer");
   assert(isAdminConsolePath("/admin/people/x") && !isAdminConsolePath("/administration") && !isOperationsPath("/admin") && resolveCurrentWorkspaceId("/admin") === null, "path helpers");
   assert(!ADMIN_NAV_ITEMS.some((i) => /facilit|system/i.test(i.label)), "no fake System / Facilities section");
 });
