@@ -372,6 +372,14 @@ export function CommandCentrePage({
             <h1 className="scc-greeting">{snapshot.greeting}</h1>
             <p className="scc-lede">{snapshot.lede}</p>
           </div>
+          <div className="scc-hero-centre">
+            <span className="scc-hero-rule" aria-hidden />
+            <p className="scc-hero-quote">
+              Clarity today.
+              <br />
+              A stronger tomorrow.
+            </p>
+          </div>
         </div>
       </header>
 
@@ -438,9 +446,9 @@ export function CommandCentrePage({
             <LastVisitBlock lastVisit={snapshot.lastVisit} />
           </article>
 
-          {/* Editorial art direction only — carries no data, claim or copy. */}
-          <aside className="scc-editorial" aria-hidden>
-            <div className="scc-editorial-media">
+          {/* Editorial brand copy and imagery — carries no data, status or claim. */}
+          <aside className="scc-editorial" aria-label="SentraCore™ brand">
+            <div className="scc-editorial-media" aria-hidden>
               <Image
                 src="/command-centre/editorial-mountain-sunset.png"
                 alt=""
@@ -449,7 +457,12 @@ export function CommandCentrePage({
                 sizes="(max-width: 900px) 100vw, 28vw"
               />
             </div>
-            <div className="scc-editorial-veil" />
+            <div className="scc-editorial-veil" aria-hidden />
+            <p className="scc-editorial-quote">
+              Extraordinary organisations aren&apos;t found.
+              <br />
+              They&apos;re built.
+            </p>
             <p className="scc-editorial-mark">SentraCore™</p>
           </aside>
         </div>

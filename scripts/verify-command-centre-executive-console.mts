@@ -184,7 +184,14 @@ async function main() {
       const t = src(f);
       assert(!/Your Assignments|Legacy Incidents Assigned|composeAssignments|countActiveForProfile|countAssignedForProfile|FmIncidentRepository|assignments:/.test(t), `D: ${f} carries no personal assignment tray`);
     }
-    assert(!/Ask SentraCore|askSentraCore/.test(src("src/modules/command-centre/components/CommandCentrePage.tsx")) && !/Clarity today|Extraordinary organisations/.test(src("src/modules/command-centre/components/CommandCentrePage.tsx")), "D/G: no placeholder AI panel and no static executive quotes/pillars");
+    const page = src("src/modules/command-centre/components/CommandCentrePage.tsx");
+    assert(!/Ask SentraCore|askSentraCore/.test(page) && !/scc-hero-pillars|Organisation pillars/.test(page), "D/G: no placeholder AI panel and no decorative pillars");
+    // Editorial brand copy is permitted, but must stay purely editorial: no data, status, timestamp or provenance attached.
+    for (const cls of ["scc-hero-quote", "scc-editorial-quote"]) {
+      const block = page.slice(page.indexOf(`className="${cls}"`), page.indexOf("</p>", page.indexOf(`className="${cls}"`)));
+      assert(block.length > 0, `D/G: ${cls} present`);
+      assert(!/snapshot\./.test(block), `D/G: ${cls} carries no data`);
+    }
     pass("D Your Assignments and Legacy Incidents Assigned are absent from Command Centre (FM data untouched)");
   }
 
