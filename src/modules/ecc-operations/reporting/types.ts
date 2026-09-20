@@ -98,11 +98,26 @@ export type EccClientReportDocument = {
     preparedBy: string;
     confidentiality: string;
   };
+  /** RECORDED FACTS only — counts and statuses read from the ECC registers. */
   executiveSummary: {
     overview: string;
     highlights: string[];
+    /** Recorded attention facts (open/escalated/high-urgent counts). */
     risks: string[];
   };
+  /**
+   * INFERRED ANALYSIS — derived by SentraCore™ Intelligence from the same
+   * records. Always presented under an explicit "not recorded fact" label,
+   * identically in preview and Word.
+   */
+  analysis: {
+    label: string;
+    summary: string;
+    highlights: string[];
+    attention: string[];
+  };
+  /** Label shown above the recommendations (they are suggestions, not recorded actions). */
+  recommendationsNote: string;
   keyMetrics: EccReportMetric[];
   dailyOperations: {
     narrative: string;

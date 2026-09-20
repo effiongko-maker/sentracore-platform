@@ -44,7 +44,7 @@ function pulseStatusClass(
   state: CommandCentreSurfaceState,
   label: string
 ): string {
-  if (state === "unavailable" || state === "restricted") {
+  if (state === "unavailable" || state === "restricted" || state === "empty") {
     return "scc-pulse-status--muted";
   }
   if (state === "error") return "scc-pulse-status--warn";

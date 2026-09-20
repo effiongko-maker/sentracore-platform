@@ -8,17 +8,32 @@ export function requireNonEmpty(value: string, label: string): string {
   return trimmed;
 }
 
+/**
+ * Explicit domain conflict: the write was NOT performed. Mapped to HTTP 409 with
+ * code CONFLICT so the client can never mistake it for a saved record.
+ */
+export class EccConflictError extends Error {
+  readonly code = "CONFLICT" as const;
+  constructor(
+    message: string,
+    readonly existingId?: string
+  ) {
+    super(message);
+    this.name = "EccConflictError";
+  }
+}
+
 /** User-facing copy when a morning/evening daily-ops slot is already filled. */
 export function dailyOpsAlreadySubmittedMessage(
   period: "morning" | "evening" | "morning_or_evening" = "morning_or_evening"
 ): string {
   if (period === "morning") {
-    return "The morning report for this centre and date has already been submitted.";
+    return "A Daily Operations record already exists for this centre, date and the morning period. Your entry was not saved.";
   }
   if (period === "evening") {
-    return "The evening report for this centre and date has already been submitted.";
+    return "A Daily Operations record already exists for this centre, date and the evening period. Your entry was not saved.";
   }
-  return "The morning or evening report for this centre and date has already been submitted.";
+  return "A Daily Operations record already exists for this centre, date and period. Your entry was not saved.";
 }
 
 /** Map common Postgres unique-violation messages to stable API errors. */

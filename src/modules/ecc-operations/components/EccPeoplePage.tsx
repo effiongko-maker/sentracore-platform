@@ -915,7 +915,9 @@ export function EccPeoplePage() {
                           {row.openAttendanceId ? (
                             <>
                               <span className="ecc-people-signin-copy">
-                                Signed in
+                                {row.staleOpenAttendance
+                                  ? "Earlier sign-in not closed"
+                                  : "Signed in"}
                                 {row.signedInAt
                                   ? ` · ${formatEccWhen(row.signedInAt)}`
                                   : ""}

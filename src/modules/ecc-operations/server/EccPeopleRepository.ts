@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/utils/supabase/admin";
+import { isAttendanceLive, isShiftEffective } from "@/modules/ecc-operations/domain/shiftWindow";
 import { newEccId } from "@/modules/ecc-operations/ids";
 import { nowIso } from "@/modules/ecc-operations/domain/rules";
 import { mapUniqueViolation } from "@/modules/ecc-operations/server/validation";
@@ -186,8 +187,54 @@ export class EccPeopleRepository {
       .maybeSingle();
     if (error) throwDb(error, "Failed to load current shift.");
     if (!data) return null;
+    // is_current is an administrative flag; only an in-window shift is operationally current.
+    if (
+      !isShiftEffective({
+        startsAt: String((data as ShiftRow).starts_at),
+        endsAt: String((data as ShiftRow).ends_at),
+      })
+    ) {
+      return null;
+    }
     const assigned = await this.listShiftAssignments(data.id);
     return shiftToDto(data as ShiftRow, assigned);
+  }
+
+  /** The shift still flagged current whose window has ended (historical context only). */
+  async getExpiredCurrentShift(
+    centreId = DEFAULT_ECC_CENTRE.id
+  ): Promise<EccShift | null> {
+    const { data, error } = await db()
+      .from("ecc_shifts")
+      .select("*")
+      .eq("organisation_id", this.organisationId)
+      .eq("centre_id", centreId)
+      .eq("is_current", true)
+      .maybeSingle();
+    if (error) throwDb(error, "Failed to load last shift.");
+    if (!data) return null;
+    const row = data as ShiftRow;
+    if (isShiftEffective({ startsAt: String(row.starts_at), endsAt: String(row.ends_at) })) {
+      return null;
+    }
+    return shiftToDto(row, await this.listShiftAssignments(row.id));
+  }
+
+  /** Open attendance rows that reconcile to the given effective shift. */
+  private liveOpenAttendance(
+    open: AttendanceRow[],
+    shift: EccShift | null
+  ): AttendanceRow[] {
+    return open.filter((row) =>
+      isAttendanceLive(
+        {
+          shiftId: row.shift_id,
+          signedInAt: row.signed_in_at,
+          signedOutAt: row.signed_out_at,
+        },
+        shift
+      )
+    );
   }
 
   async listShiftAssignments(shiftId: string): Promise<string[]> {
@@ -206,15 +253,6 @@ export class EccPeopleRepository {
     const centreId = input.centreId ?? DEFAULT_ECC_CENTRE.id;
     const stamp = nowIso();
 
-    // Clear previous current flag for this centre.
-    const { error: clearError } = await db()
-      .from("ecc_shifts")
-      .update({ is_current: false, updated_at: stamp })
-      .eq("organisation_id", this.organisationId)
-      .eq("centre_id", centreId)
-      .eq("is_current", true);
-    if (clearError) throwDb(clearError, "Failed to clear current shift.");
-
     const startsAt = new Date(input.startsAt);
     const endsAt = new Date(input.endsAt);
     if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
@@ -223,6 +261,18 @@ export class EccPeopleRepository {
     if (endsAt.getTime() <= startsAt.getTime()) {
       throw new Error("Shift end must be after shift start.");
     }
+    if (endsAt.getTime() <= Date.now()) {
+      throw new Error("That shift has already ended. Set a shift that is in effect now.");
+    }
+
+    // Clear previous current flag for this centre.
+    const { error: clearError } = await db()
+      .from("ecc_shifts")
+      .update({ is_current: false, updated_at: stamp })
+      .eq("organisation_id", this.organisationId)
+      .eq("centre_id", centreId)
+      .eq("is_current", true);
+    if (clearError) throwDb(clearError, "Failed to clear current shift.");
 
     const assignedPersonIds = await this.resolveAgentAssignmentIds(
       centreId,
@@ -270,7 +320,7 @@ export class EccPeopleRepository {
     const centreId = input.centreId ?? DEFAULT_ECC_CENTRE.id;
     const current = await this.getCurrentShift(centreId);
     if (!current) {
-      throw new Error("No current shift is set. Set a current shift first.");
+      throw new Error("No shift is in effect right now. Set the current shift first.");
     }
 
     const assignedPersonIds = await this.resolveAgentAssignmentIds(
@@ -279,7 +329,7 @@ export class EccPeopleRepository {
     );
     await this.replaceShiftAssignments(current.id, assignedPersonIds);
 
-    const open = await this.listOpenAttendance();
+    const open = this.liveOpenAttendance(await this.listOpenAttendance(), current);
     const signedIn = open.filter((row) =>
       assignedPersonIds.includes(row.person_id)
     ).length;
@@ -428,17 +478,27 @@ export class EccPeopleRepository {
       throw new Error("Only agents can sign in for shift attendance.");
     }
 
-    const open = await this.listOpenAttendance();
-    if (open.some((row) => row.person_id === person.id)) {
-      throw new Error("Agent is already signed in.");
-    }
-
     const current = await this.getCurrentShift(person.centreId);
-    const shiftId = input.shiftId ?? current?.id ?? null;
+    if (!current) {
+      throw new Error(
+        "No shift is in effect right now. Set the current shift before signing agents in."
+      );
+    }
+    const open = await this.listOpenAttendance();
+    const existing = open.find((row) => row.person_id === person.id);
+    if (existing) {
+      const live = this.liveOpenAttendance([existing], current).length > 0;
+      throw new Error(
+        live
+          ? "Agent is already signed in."
+          : "An earlier sign-in for this agent was never closed. Sign that out first, then sign in."
+      );
+    }
+    const shiftId = input.shiftId ?? current.id;
     const stamp = nowIso();
     const recordId = newEccId("ECC-ATT");
     const status: EccAgentDutyStatus =
-      current && shiftId === current.id ? "on_duty" : "signed_in";
+      shiftId === current.id ? "on_duty" : "signed_in";
 
     const { error } = await db().from("ecc_attendance").insert({
       organisation_id: this.organisationId,
@@ -455,10 +515,11 @@ export class EccPeopleRepository {
     });
     if (error) throwDb(error, "Failed to sign in.");
 
-    if (current) {
-      const signedIn = (await this.listOpenAttendance()).filter((row) =>
-        current.assignedPersonIds.includes(row.person_id)
-      ).length;
+    {
+      const signedIn = this.liveOpenAttendance(
+        await this.listOpenAttendance(),
+        current
+      ).filter((row) => current.assignedPersonIds.includes(row.person_id)).length;
       await this.updateShiftCoverage(
         current.id,
         computeCoverage(current.assignedPersonIds.length, signedIn)
@@ -471,7 +532,7 @@ export class EccPeopleRepository {
       personId: person.id,
       personName: person.name,
       shiftId: shiftId ?? undefined,
-      shiftLabel: current && shiftId === current.id ? current.label : undefined,
+      shiftLabel: shiftId === current.id ? current.label : undefined,
       attendanceDate: stamp.slice(0, 10),
       signedInAt: stamp,
       status,
@@ -503,9 +564,10 @@ export class EccPeopleRepository {
 
     const current = await this.getCurrentShift(person.centreId);
     if (current) {
-      const signedIn = (await this.listOpenAttendance()).filter((row) =>
-        current.assignedPersonIds.includes(row.person_id)
-      ).length;
+      const signedIn = this.liveOpenAttendance(
+        await this.listOpenAttendance(),
+        current
+      ).filter((row) => current.assignedPersonIds.includes(row.person_id)).length;
       await this.updateShiftCoverage(
         current.id,
         computeCoverage(current.assignedPersonIds.length, signedIn)
@@ -545,16 +607,20 @@ export class EccPeopleRepository {
   async getPeopleSnapshot(
     centreId = DEFAULT_ECC_CENTRE.id
   ): Promise<EccPeopleSnapshot> {
-    const [people, currentShift, openAttendance, recentAttendance] =
+    const [people, currentShift, lastShift, allOpenAttendance, recentAttendance] =
       await Promise.all([
         this.listPeople(centreId),
         this.getCurrentShift(centreId),
+        this.getExpiredCurrentShift(centreId),
         this.listOpenAttendance(),
         this.listRecentAttendance(centreId, 20),
       ]);
 
+    // Present tense: only attendance that reconciles to the effective shift is "on duty".
+    const openAttendance = this.liveOpenAttendance(allOpenAttendance, currentShift);
+    const liveOpenIds = new Set(openAttendance.map((row) => row.id));
     const openByPerson = new Map(
-      openAttendance.map((row) => [row.person_id, row])
+      allOpenAttendance.map((row) => [row.person_id, row])
     );
     const assignedSet = new Set(currentShift?.assignedPersonIds ?? []);
 
@@ -564,8 +630,11 @@ export class EccPeopleRepository {
         const open = openByPerson.get(person.id);
         const onCurrentShift = assignedSet.has(person.id);
         let dutyStatus: EccAgentDutyStatus = "off_duty";
-        if (open) {
+        const staleOpen = Boolean(open && !liveOpenIds.has(open.id));
+        if (open && !staleOpen) {
           dutyStatus = onCurrentShift ? "on_duty" : "signed_in";
+        } else if (staleOpen) {
+          dutyStatus = "off_duty";
         } else {
           const latest = recentAttendance.find(
             (row) => row.personId === person.id
@@ -586,6 +655,7 @@ export class EccPeopleRepository {
           signedInAt: open?.signed_in_at ?? undefined,
           signedOutAt: undefined,
           openAttendanceId: open?.id,
+          staleOpenAttendance: staleOpen || undefined,
         };
       });
 
@@ -600,6 +670,7 @@ export class EccPeopleRepository {
 
     const current: EccCurrentShiftSummary = {
       shift: currentShift,
+      lastShift: currentShift ? null : lastShift,
       agentsAssigned,
       agentsSignedIn: currentShift
         ? openAttendance.filter((row) =>

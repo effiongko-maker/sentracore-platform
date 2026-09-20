@@ -19,8 +19,18 @@ export const ECC_WORKSPACE_ID = "ecc-operations" as const;
  * Super Admin does not auto-receive these grants.
  */
 export const ECC_CAPABILITIES = {
-  /** Enter and use ECC Operations workspace surfaces. */
+  /** Enter the workspace and read Overview, Intelligence, Reporting, Daily Ops, Issues, Requests, People. */
   view: "platform.ecc_operations.view",
+  /** Create Daily Ops, Issues and Requests. */
+  create: "platform.ecc_operations.create",
+  /** Progress / update Issues and Requests (status, follow-up actions, links). */
+  edit: "platform.ecc_operations.edit",
+  /** ECC roster people, shifts, assignments and attendance. Not platform users.manage. */
+  managePeople: "platform.ecc_operations.manage_people",
+  /** ECC-specific budget, commitment and transaction writes. Not Platform Finance. */
+  manageFinance: "platform.ecc_operations.manage_finance",
+  /** Hard-delete of ECC records (Issues). Deliberately separate from edit. */
+  delete: "platform.ecc_operations.delete",
 } as const;
 
 export type EccCapability =
@@ -156,6 +166,8 @@ export type EccDailyOpsRecord = {
   /** Submission timestamp (ISO). */
   recordedAt: string;
   recordedByName: string;
+  /** Authenticated platform profile that recorded this snapshot (server-stamped; absent on historical rows). */
+  recordedByProfileId?: string;
   overallStatus: EccCentreOverallStatus;
   centreOperations: EccCentreOperationsSection;
   callOperations: EccCallOperationsSection;
@@ -195,6 +207,8 @@ export type EccIssueHistoryEntry = {
   id: string;
   at: string;
   byName: string;
+  /** Authenticated actor (server-stamped; absent on historical rows). */
+  byProfileId?: string;
   kind: EccIssueHistoryKind;
   fromStatus: EccIssueStatus | null;
   toStatus: EccIssueStatus | null;
@@ -211,11 +225,13 @@ export type EccIssue = {
   description: string;
   status: EccIssueStatus;
   reporterName: string;
+  reporterProfileId?: string;
   currentOwnerName?: string;
   history: EccIssueHistoryEntry[];
   resolutionNotes?: string;
   closedAt?: string;
   closedByName?: string;
+  closedByProfileId?: string;
   relatedEccRequestId?: string;
   /** Daily ops snapshot this issue was raised from (if any). */
   sourceDailyOpsId?: string;
@@ -252,6 +268,7 @@ export type EccRequestHistoryEntry = {
   id: string;
   at: string;
   byName: string;
+  byProfileId?: string;
   kind: EccRequestHistoryKind;
   fromStatus: EccRequestStatus | null;
   toStatus: EccRequestStatus | null;
@@ -269,12 +286,14 @@ export type EccRequest = {
   priority: EccPriority;
   status: EccRequestStatus;
   requestingManagerName: string;
+  requestingProfileId?: string;
   currentOwnerName?: string;
   history: EccRequestHistoryEntry[];
   evidenceNotes?: string;
   resolutionNotes?: string;
   closedAt?: string;
   closedByName?: string;
+  closedByProfileId?: string;
   relatedEccIssueId?: string;
   /** Daily ops snapshot this request was raised from (if any). */
   sourceDailyOpsId?: string;
@@ -314,6 +333,8 @@ export type EccOverviewSnapshot = {
   centreSectionStatus: EccSectionCondition | "unknown";
   staffingStatus: EccStaffingStatus;
   staffingReadiness: string;
+  /** True when People/shift data could not be read — staffing is then unavailable, not derived. */
+  staffingSourceUnavailable?: boolean;
   callActivitySummary: string;
   /** Issues linked from recent daily ops snapshots. */
   issuesFromRecentOps: Array<{
@@ -485,9 +506,13 @@ export type EccCreateDailyOpsInput = Omit<
   | "linkedRequestIds"
   | "centreId"
   | "recordedAt"
+  | "recordedByName"
+  | "recordedByProfileId"
 > & {
   centreId?: string;
   recordedAt?: string;
+  /** Ignored: the server stamps the authenticated actor. */
+  recordedByName?: string;
 };
 
 export type EccRaiseIssueFromDailyOpsInput = {
@@ -497,7 +522,8 @@ export type EccRaiseIssueFromDailyOpsInput = {
   severity: EccSeverity;
   title: string;
   description: string;
-  reporterName: string;
+  /** Ignored: the server stamps the authenticated actor. */
+  reporterName?: string;
   currentOwnerName?: string;
 };
 
@@ -510,14 +536,16 @@ export type EccRaiseRequestFromDailyOpsInput = {
   origin: EccRequestOrigin;
   responsibility: EccRequestResponsibility;
   priority: EccPriority;
-  requestingManagerName: string;
+  /** Ignored: the server stamps the authenticated actor. */
+  requestingManagerName?: string;
   currentOwnerName?: string;
 };
 
 export type EccLinkIssueRequestInput = {
   issueId: string;
   requestId: string;
-  byName: string;
+  /** Ignored: the server stamps the authenticated actor. */
+  byName?: string;
   note?: string;
 };
 
@@ -536,7 +564,8 @@ export type EccCreateIssueInput = {
   severity: EccSeverity;
   title: string;
   description: string;
-  reporterName: string;
+  /** Ignored: the server stamps the authenticated actor. */
+  reporterName?: string;
   currentOwnerName?: string;
   occurredAt?: string;
   relatedEccRequestId?: string;
@@ -551,7 +580,8 @@ export type EccCreateIssueInput = {
 export type EccTransitionIssueInput = {
   id: string;
   toStatus: EccIssueStatus;
-  byName: string;
+  /** Ignored: the server stamps the authenticated actor. */
+  byName?: string;
   note?: string;
   currentOwnerName?: string;
   resolutionNotes?: string;
@@ -559,7 +589,8 @@ export type EccTransitionIssueInput = {
 
 export type EccAppendIssueActionInput = {
   id: string;
-  byName: string;
+  /** Ignored: the server stamps the authenticated actor. */
+  byName?: string;
   note: string;
   kind?: Extract<EccIssueHistoryKind, "action" | "note" | "escalation">;
   currentOwnerName?: string;
@@ -572,7 +603,8 @@ export type EccCreateRequestInput = {
   origin: EccRequestOrigin;
   responsibility: EccRequestResponsibility;
   priority: EccPriority;
-  requestingManagerName: string;
+  /** Ignored: the server stamps the authenticated actor. */
+  requestingManagerName?: string;
   currentOwnerName?: string;
   evidenceNotes?: string;
   relatedEccIssueId?: string;
@@ -587,7 +619,8 @@ export type EccCreateRequestInput = {
 export type EccTransitionRequestInput = {
   id: string;
   toStatus: EccRequestStatus;
-  byName: string;
+  /** Ignored: the server stamps the authenticated actor. */
+  byName?: string;
   note?: string;
   currentOwnerName?: string;
   resolutionNotes?: string;
@@ -595,7 +628,8 @@ export type EccTransitionRequestInput = {
 
 export type EccAppendRequestActionInput = {
   id: string;
-  byName: string;
+  /** Ignored: the server stamps the authenticated actor. */
+  byName?: string;
   note: string;
   kind?: Extract<EccRequestHistoryKind, "action" | "note">;
   currentOwnerName?: string;
@@ -672,10 +706,18 @@ export type EccAgentRow = {
   signedInAt?: string;
   signedOutAt?: string;
   openAttendanceId?: string;
+  /**
+   * An earlier sign-in that was never closed and no longer reconciles to an
+   * effective shift. Historical — NOT currently on duty.
+   */
+  staleOpenAttendance?: boolean;
 };
 
 export type EccCurrentShiftSummary = {
+  /** Only a shift whose window contains 'now'. Null means no shift is in effect. */
   shift: EccShift | null;
+  /** The most recent shift flagged current whose window has ended (historical context). */
+  lastShift?: EccShift | null;
   agentsAssigned: number;
   agentsSignedIn: number;
   coverageStatus: EccShiftCoverageStatus;

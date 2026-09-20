@@ -28,6 +28,11 @@ export type PlatformIamAuditAction = (typeof PLATFORM_IAM_AUDIT_ACTIONS)[number]
  */
 export const PLATFORM_ADMINISTRABLE_CAPABILITIES = [
   ECC_CAPABILITIES.view,
+  ECC_CAPABILITIES.create,
+  ECC_CAPABILITIES.edit,
+  ECC_CAPABILITIES.managePeople,
+  ECC_CAPABILITIES.manageFinance,
+  ECC_CAPABILITIES.delete,
   COMMAND_CENTRE_CAPABILITIES.view,
   COMMAND_CENTRE_CAPABILITIES.decide,
   "ops.view",

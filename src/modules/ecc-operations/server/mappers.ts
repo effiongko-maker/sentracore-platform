@@ -36,6 +36,7 @@ export type EccDailyOpsRow = {
   reporting_date: string;
   recorded_at: string;
   recorded_by_name: string;
+  recorded_by_profile_id?: string | null;
   overall_status: string;
   centre_operations: EccCentreOperationsSection;
   call_operations: EccCallOperationsSection;
@@ -55,10 +56,12 @@ export type EccIssueRow = {
   description: string;
   status: string;
   reporter_name: string;
+  reporter_profile_id?: string | null;
   current_owner_name: string | null;
   resolution_notes: string | null;
   closed_at: string | null;
   closed_by_name: string | null;
+  closed_by_profile_id?: string | null;
   related_ecc_request_id: string | null;
   source_daily_ops_id: string | null;
   source_daily_ops_section: string | null;
@@ -74,6 +77,7 @@ export type EccIssueHistoryRow = {
   issue_id: string;
   at: string;
   by_name: string;
+  by_profile_id?: string | null;
   kind: string;
   from_status: string | null;
   to_status: string | null;
@@ -93,11 +97,13 @@ export type EccRequestRow = {
   priority: string;
   status: string;
   requesting_manager_name: string;
+  requesting_profile_id?: string | null;
   current_owner_name: string | null;
   evidence_notes: string | null;
   resolution_notes: string | null;
   closed_at: string | null;
   closed_by_name: string | null;
+  closed_by_profile_id?: string | null;
   related_ecc_issue_id: string | null;
   source_daily_ops_id: string | null;
   source_daily_ops_section: string | null;
@@ -113,6 +119,7 @@ export type EccRequestHistoryRow = {
   request_id: string;
   at: string;
   by_name: string;
+  by_profile_id?: string | null;
   kind: string;
   from_status: string | null;
   to_status: string | null;
@@ -159,6 +166,7 @@ export function dailyOpsToDto(
     reportingDate,
     recordedAt: row.recorded_at,
     recordedByName: row.recorded_by_name,
+    recordedByProfileId: row.recorded_by_profile_id ?? undefined,
     overallStatus: row.overall_status as EccCentreOverallStatus,
     centreOperations: row.centre_operations,
     callOperations: row.call_operations,
@@ -182,6 +190,7 @@ export function dailyOpsToRow(
     reporting_date: record.reportingDate,
     recorded_at: record.recordedAt,
     recorded_by_name: record.recordedByName,
+    recorded_by_profile_id: record.recordedByProfileId ?? null,
     overall_status: record.overallStatus,
     centre_operations: record.centreOperations,
     call_operations: record.callOperations,
@@ -196,6 +205,7 @@ export function issueHistoryToDto(row: EccIssueHistoryRow): EccIssueHistoryEntry
     id: row.id,
     at: row.at,
     byName: row.by_name,
+    byProfileId: row.by_profile_id ?? undefined,
     kind: row.kind as EccIssueHistoryKind,
     fromStatus: (row.from_status as EccIssueStatus | null) ?? null,
     toStatus: (row.to_status as EccIssueStatus | null) ?? null,
@@ -214,6 +224,7 @@ export function issueHistoryToRow(
     issue_id: issueId,
     at: entry.at,
     by_name: entry.byName,
+    by_profile_id: entry.byProfileId ?? null,
     kind: entry.kind,
     from_status: entry.fromStatus,
     to_status: entry.toStatus,
@@ -235,11 +246,13 @@ export function issueToDto(
     description: row.description,
     status: row.status as EccIssueStatus,
     reporterName: row.reporter_name,
+    reporterProfileId: row.reporter_profile_id ?? undefined,
     currentOwnerName: row.current_owner_name ?? undefined,
     history,
     resolutionNotes: row.resolution_notes ?? undefined,
     closedAt: row.closed_at ?? undefined,
     closedByName: row.closed_by_name ?? undefined,
+    closedByProfileId: row.closed_by_profile_id ?? undefined,
     relatedEccRequestId: row.related_ecc_request_id ?? undefined,
     sourceDailyOpsId: row.source_daily_ops_id ?? undefined,
     sourceDailyOpsSection: (row.source_daily_ops_section ?? undefined) as
@@ -264,10 +277,12 @@ export function issueToRow(organisationId: string, issue: EccIssue): EccIssueRow
     description: issue.description,
     status: issue.status,
     reporter_name: issue.reporterName,
+    reporter_profile_id: issue.reporterProfileId ?? null,
     current_owner_name: issue.currentOwnerName ?? null,
     resolution_notes: issue.resolutionNotes ?? null,
     closed_at: issue.closedAt ?? null,
     closed_by_name: issue.closedByName ?? null,
+    closed_by_profile_id: issue.closedByProfileId ?? null,
     related_ecc_request_id: issue.relatedEccRequestId ?? null,
     source_daily_ops_id: issue.sourceDailyOpsId ?? null,
     source_daily_ops_section: issue.sourceDailyOpsSection ?? null,
@@ -285,6 +300,7 @@ export function requestHistoryToDto(
     id: row.id,
     at: row.at,
     byName: row.by_name,
+    byProfileId: row.by_profile_id ?? undefined,
     kind: row.kind as EccRequestHistoryKind,
     fromStatus: (row.from_status as EccRequestStatus | null) ?? null,
     toStatus: (row.to_status as EccRequestStatus | null) ?? null,
@@ -303,6 +319,7 @@ export function requestHistoryToRow(
     request_id: requestId,
     at: entry.at,
     by_name: entry.byName,
+    by_profile_id: entry.byProfileId ?? null,
     kind: entry.kind,
     from_status: entry.fromStatus,
     to_status: entry.toStatus,
@@ -325,12 +342,14 @@ export function requestToDto(
     priority: row.priority as EccRequest["priority"],
     status: row.status as EccRequestStatus,
     requestingManagerName: row.requesting_manager_name,
+    requestingProfileId: row.requesting_profile_id ?? undefined,
     currentOwnerName: row.current_owner_name ?? undefined,
     history,
     evidenceNotes: row.evidence_notes ?? undefined,
     resolutionNotes: row.resolution_notes ?? undefined,
     closedAt: row.closed_at ?? undefined,
     closedByName: row.closed_by_name ?? undefined,
+    closedByProfileId: row.closed_by_profile_id ?? undefined,
     relatedEccIssueId: row.related_ecc_issue_id ?? undefined,
     sourceDailyOpsId: row.source_daily_ops_id ?? undefined,
     sourceDailyOpsSection: (row.source_daily_ops_section ?? undefined) as
@@ -359,11 +378,13 @@ export function requestToRow(
     priority: request.priority,
     status: request.status,
     requesting_manager_name: request.requestingManagerName,
+    requesting_profile_id: request.requestingProfileId ?? null,
     current_owner_name: request.currentOwnerName ?? null,
     evidence_notes: request.evidenceNotes ?? null,
     resolution_notes: request.resolutionNotes ?? null,
     closed_at: request.closedAt ?? null,
     closed_by_name: request.closedByName ?? null,
+    closed_by_profile_id: request.closedByProfileId ?? null,
     related_ecc_issue_id: request.relatedEccIssueId ?? null,
     source_daily_ops_id: request.sourceDailyOpsId ?? null,
     source_daily_ops_section: request.sourceDailyOpsSection ?? null,

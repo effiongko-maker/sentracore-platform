@@ -333,23 +333,3 @@ export const ECC_REGISTER_VIEW_LABELS: Record<EccRegisterView, string> = {
   resolved: "Resolved",
   all: "All",
 };
-
-const ACTING_AS_KEY = "sentracore.ecc.actingAs";
-
-export function readEccActingAs(): string {
-  if (typeof window === "undefined") return "";
-  try {
-    return localStorage.getItem(ACTING_AS_KEY) ?? "";
-  } catch {
-    return "";
-  }
-}
-
-export function writeEccActingAs(name: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(ACTING_AS_KEY, name.trim());
-  } catch {
-    /* ignore */
-  }
-}

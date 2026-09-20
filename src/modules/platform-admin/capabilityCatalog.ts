@@ -4,7 +4,7 @@ import {
 } from "./types";
 
 /**
- * How the 17 administrable capabilities are presented in the Admin Console.
+ * How the administrable capabilities are presented in the Admin Console.
  * Grouping and labels follow how each capability is actually enforced in the
  * platform (route gates / workspace gates) — this catalog adds NO capability
  * and NO authority. Explicit grants are the only authority.
@@ -90,10 +90,15 @@ export const CAPABILITY_DOMAINS: readonly CapabilityDomain[] = [
   {
     id: "ecc",
     label: "ECC Operations",
-    summary: "The ECC Operations workspace.",
+    summary: "The ECC Operations workspace. Each write needs its own grant in addition to view.",
     moduleSlug: "ecc_operations",
     capabilities: [
-      { key: "platform.ecc_operations.view", label: "Enter ECC Operations", detail: "Open and use the ECC Operations workspace." },
+      { key: "platform.ecc_operations.view", label: "Enter ECC Operations", detail: "Open the workspace and read Overview, Intelligence, Reporting, Daily Ops, Issues, Requests and People." },
+      { key: "platform.ecc_operations.create", label: "Record ECC operations", detail: "Submit Daily Operations and raise Issues and Requests." },
+      { key: "platform.ecc_operations.edit", label: "Progress ECC issues and requests", detail: "Change status, add follow-up actions and link Issues and Requests." },
+      { key: "platform.ecc_operations.manage_people", label: "Manage ECC roster and shifts", detail: "Add roster people, set shifts and assignments, record attendance. Not platform user management." },
+      { key: "platform.ecc_operations.manage_finance", label: "Manage ECC finance", detail: "ECC budgets, commitments and transactions. Separate from Platform Finance." },
+      { key: "platform.ecc_operations.delete", label: "Delete ECC records", detail: "Permanently delete ECC Issues. Separate from edit." },
     ],
   },
   {

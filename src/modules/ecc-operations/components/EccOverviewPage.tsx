@@ -240,7 +240,9 @@ export function EccOverviewPage() {
           </div>
           <p className="ecc-ov-state-label">Staffing</p>
           <p className="ecc-ov-state-value">
-            {ECC_STAFFING_STATUS_LABELS[snapshot.staffingStatus]}
+            {snapshot.staffingSourceUnavailable
+              ? "Unavailable"
+              : ECC_STAFFING_STATUS_LABELS[snapshot.staffingStatus]}
           </p>
           {snapshot.staffingReadiness ? (
             <p className="ecc-ov-state-meta">{snapshot.staffingReadiness}</p>

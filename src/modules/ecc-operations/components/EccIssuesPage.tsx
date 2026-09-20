@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { OperateHeader } from "@/components/platform";
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { EccOperationsService } from "../services/EccOperationsService";
 import type {
   EccIssue,
@@ -24,8 +25,6 @@ import {
   applyEccIssueFilters,
   ECC_ISSUE_FILTER_DEFAULTS,
   eccIssueFiltersAreActive,
-  readEccActingAs,
-  writeEccActingAs,
   type EccIssueFilterState,
 } from "../registerFilters";
 import {
@@ -60,7 +59,9 @@ export function EccIssuesPage() {
   const [filters, setFilters] = useState<EccIssueFilterState>(
     ECC_ISSUE_FILTER_DEFAULTS
   );
-  const [actingAs, setActingAs] = useState("");
+  // "Assigned to me" matches the authenticated user's display name — never a typed identity.
+  const { access: eccAccess } = useOperatingAccess();
+  const actingAs = eccAccess?.name ?? "";
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panel, setPanel] = useState<IssuePanel>("register");
   const [loading, setLoading] = useState(true);
@@ -94,7 +95,6 @@ export function EccIssuesPage() {
   }
 
   useEffect(() => {
-    setActingAs(readEccActingAs());
     void reload()
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : "Unable to load issues.");
@@ -193,7 +193,7 @@ export function EccIssuesPage() {
 
   async function onTreat(event: React.FormEvent) {
     event.preventDefault();
-    if (!selected || !treat.byName.trim()) return;
+    if (!selected) return;
     if (!treat.toStatus && !treat.actionNote.trim()) {
       setError("Choose a next step or record an action note.");
       return;
@@ -392,18 +392,6 @@ export function EccIssuesPage() {
             </option>
           </select>
         </div>
-        <div className="ecc-filter-field ecc-filter-field--acting">
-          <label htmlFor="ecc-iss-acting">Acting as</label>
-          <input
-            id="ecc-iss-acting"
-            value={actingAs}
-            onChange={(e) => {
-              setActingAs(e.target.value);
-              writeEccActingAs(e.target.value);
-            }}
-            placeholder="Name for assignment filters"
-          />
-        </div>
       </div>
       <div className="ecc-filter-bar-meta">
         <span className="ecc-muted">
@@ -528,20 +516,6 @@ export function EccIssuesPage() {
                 />
               </div>
               <div className="ecc-form-grid">
-                <div className="ecc-field">
-                  <label htmlFor="ecc-iss-by">Reporter</label>
-                  <input
-                    id="ecc-iss-by"
-                    required
-                    value={form.reporterName}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        reporterName: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
                 <div className="ecc-field">
                   <label htmlFor="ecc-iss-owner">Current owner (optional)</label>
                   <input
@@ -951,20 +925,6 @@ export function EccIssuesPage() {
                       }))
                     }
                     placeholder={selected.currentOwnerName || "Assign owner"}
-                  />
-                </div>
-                <div className="ecc-field">
-                  <label htmlFor="ecc-iss-treat-by">Recorded by</label>
-                  <input
-                    id="ecc-iss-treat-by"
-                    required
-                    value={treat.byName}
-                    onChange={(e) =>
-                      setTreat((prev) => ({
-                        ...prev,
-                        byName: e.target.value,
-                      }))
-                    }
                   />
                 </div>
               </div>

@@ -1,10 +1,3 @@
-import {
-  clearEccLocalDomainData,
-  hasEccLocalDomainData,
-  isEccLocalMigrated,
-  markEccLocalMigrated,
-  peekEccLocalDomainState,
-} from "@/modules/ecc-operations/store/eccLocalStore";
 import type {
   EccAppendIssueActionInput,
   EccAppendRequestActionInput,
@@ -50,59 +43,21 @@ const API_PATH = "/api/ecc-operations";
 type ApiSuccess<T> = { success: true; data: T };
 type ApiFailure = { success: false; message?: string; code?: string };
 
-let migrationPromise: Promise<void> | null = null;
-
-async function ensureLocalMigration(): Promise<void> {
-  if (typeof window === "undefined") return;
-  if (isEccLocalMigrated()) return;
-  if (!hasEccLocalDomainData()) {
-    markEccLocalMigrated();
-    return;
+/** Structured API failure so callers can tell a CONFLICT / FORBIDDEN from a generic failure. */
+export class EccApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string
+  ) {
+    super(message);
+    this.name = "EccApiError";
   }
-  if (!migrationPromise) {
-    migrationPromise = (async () => {
-      const state = peekEccLocalDomainState();
-      if (!state) {
-        markEccLocalMigrated();
-        return;
-      }
-      // Empty domain — nothing to import.
-      if (
-        state.dailyOps.length === 0 &&
-        state.issues.length === 0 &&
-        state.requests.length === 0
-      ) {
-        markEccLocalMigrated();
-        return;
-      }
-
-      const response = await fetch(API_PATH, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "importLocalState", state }),
-        credentials: "same-origin",
-      });
-      const json = (await response.json()) as ApiSuccess<unknown> | ApiFailure;
-      if (!response.ok || !json.success) {
-        throw new Error(
-          ("message" in json && json.message) ||
-            "Failed to migrate local ECC data to the server."
-        );
-      }
-      // Verify succeeded on server before clearing local domain data.
-      clearEccLocalDomainData();
-      markEccLocalMigrated();
-    })().finally(() => {
-      migrationPromise = null;
-    });
-  }
-  await migrationPromise;
 }
 
 async function callEccApi<T>(
   payload: Record<string, unknown>
 ): Promise<T> {
-  await ensureLocalMigration();
   const response = await fetch(API_PATH, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -111,9 +66,11 @@ async function callEccApi<T>(
   });
   const json = (await response.json()) as ApiSuccess<T> | ApiFailure;
   if (!response.ok || !json.success) {
-    throw new Error(
+    throw new EccApiError(
       ("message" in json && json.message) ||
-        `ECC Operations API failed (${response.status}).`
+        `ECC Operations API failed (${response.status}).`,
+      response.status,
+      "code" in json ? json.code : undefined
     );
   }
   return json.data;
@@ -121,7 +78,7 @@ async function callEccApi<T>(
 
 /**
  * Canonical ECC Operations service — thin client adapter over `/api/ecc-operations`.
- * Domain persistence is Supabase (server). One-time localStorage import on first use.
+ * Domain persistence is Supabase (server). Browser storage is never imported as domain state.
  */
 export type IEccOperationsService = {
   getFoundationStatus(): Promise<{

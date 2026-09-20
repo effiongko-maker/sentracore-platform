@@ -257,16 +257,29 @@ export function EccReportPreview({
               {report.executiveSummary.overview}
             </p>
             <h3 className="mt-6 text-sm font-semibold text-slate-800">
-              Highlights
+              Recorded facts
             </h3>
             <div className="mt-3">
               <BulletList items={report.executiveSummary.highlights} />
             </div>
             <h3 className="mt-6 text-sm font-semibold text-slate-800">
-              Attention areas
+              Recorded attention
             </h3>
             <div className="mt-3">
               <BulletList items={report.executiveSummary.risks} />
+            </div>
+            <div className="mt-8 border border-slate-200 bg-slate-50/60 px-4 py-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                {report.analysis.label}
+              </p>
+              <p className="mt-3 text-[15px] leading-7 text-slate-700">
+                {report.analysis.summary}
+              </p>
+              <div className="mt-3">
+                <BulletList
+                  items={[...report.analysis.highlights, ...report.analysis.attention]}
+                />
+              </div>
             </div>
           </DocPage>
         ) : null}
@@ -373,6 +386,9 @@ export function EccReportPreview({
                 "Recommendations"
               }
             />
+            <p className="mb-4 text-sm italic leading-relaxed text-slate-600">
+              {report.recommendationsNote}
+            </p>
             <ol className="space-y-3">
               {report.recommendations.map((item, index) => (
                 <li

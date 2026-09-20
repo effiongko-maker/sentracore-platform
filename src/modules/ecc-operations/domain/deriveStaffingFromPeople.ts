@@ -20,13 +20,16 @@ export function deriveStaffingFromPeople(
 
   if (!hasPeople) return null;
 
-  const { agentsAssigned, agentsSignedIn, coverageStatus, shift } =
+  const { agentsAssigned, agentsSignedIn, coverageStatus, shift, lastShift } =
     snapshot.currentShift;
 
   if (!shift) {
+    // No shift is in effect right now: nobody is presented as currently on duty.
     return {
       staffingStatus: "unknown",
-      staffingReadiness: "No current shift set",
+      staffingReadiness: lastShift
+        ? `No shift in effect · last shift "${lastShift.label}" ended ${lastShift.endsAt.slice(0, 10)}`
+        : "No shift in effect",
     };
   }
 

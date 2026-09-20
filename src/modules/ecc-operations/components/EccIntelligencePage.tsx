@@ -85,9 +85,13 @@ function heroStatement(primary: EccIntelligenceInsight | null): {
   };
 }
 
-function relativeLabel(index: number): string {
-  const labels = ["Just now", "Earlier", "This window", "Recent", "Prior"];
-  return labels[index] ?? "Recent";
+/**
+ * Insights are derived from a period of records — they are not timestamped
+ * events. The label therefore states the analysed period, never an invented
+ * recency derived from list position.
+ */
+function insightTimeLabel(periodLabel: string): string {
+  return periodLabel ? `Period: ${periodLabel}` : "Selected period";
 }
 
 function activityTone(
@@ -612,10 +616,10 @@ export function EccIntelligencePage() {
       ...otherPriorities,
       ...intelligence.managementInsights,
     ].slice(0, 5);
-    return source.map((row, index) => ({
+    return source.map((row) => ({
       id: row.id,
       label: row.title,
-      time: relativeLabel(index),
+      time: insightTimeLabel(intelligence.periodLabel),
       tone: activityTone(row.severity),
     }));
   }, [intelligence, otherPriorities, primary]);

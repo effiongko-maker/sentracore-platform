@@ -139,8 +139,19 @@ export function buildEccReportDocument(
       request.status !== "cancelled"
   );
 
-  const highlights = [...intelBullets.highlights];
-  const risks = [...intelBullets.risks];
+  // Recorded facts (read directly from the registers) are kept apart from
+  // Intelligence-derived analysis, which is labelled as such in every rendering.
+  const factHighlights = [
+    `${resolvedHistory.length} Daily Operations submission${resolvedHistory.length === 1 ? "" : "s"} recorded in ${periodLabel}.`,
+    `${snapshot.openIssues} open issue${snapshot.openIssues === 1 ? "" : "s"} (${snapshot.escalatedIssues} escalated) and ${snapshot.openRequests} open request${snapshot.openRequests === 1 ? "" : "s"} on the live registers.`,
+  ];
+  const factAttention =
+    snapshot.escalatedIssues > 0 || snapshot.highUrgentOpenRequests > 0
+      ? [
+          `${snapshot.escalatedIssues} escalated issue${snapshot.escalatedIssues === 1 ? "" : "s"}; ${snapshot.highUrgentOpenRequests} high/urgent open request${snapshot.highUrgentOpenRequests === 1 ? "" : "s"}.`,
+        ]
+      : ["No escalated issues or high/urgent open requests are recorded."];
+  const factOverview = `Recorded operational position for ${snapshot.centre.name} — ${periodLabel}, as of ${snapshot.asOf.slice(0, 10)}.`;
 
   const keyMetrics: EccReportMetric[] = [
     {
@@ -329,10 +340,19 @@ export function buildEccReportDocument(
       confidentiality: "Internal operational report — SentraCore™ ECC Operations",
     },
     executiveSummary: {
-      overview: intelligence.summary,
-      highlights,
-      risks,
+      overview: factOverview,
+      highlights: factHighlights,
+      risks: factAttention,
     },
+    analysis: {
+      label:
+        "Analysis — derived by SentraCore™ Intelligence from the records in this report. Interpretation, not recorded fact.",
+      summary: intelligence.summary,
+      highlights: [...intelBullets.highlights],
+      attention: [...intelBullets.risks],
+    },
+    recommendationsNote:
+      "Recommendations are suggestions derived by SentraCore™ Intelligence. They are not recorded actions or decisions.",
     keyMetrics,
     dailyOperations: {
       narrative: `${resolvedHistory.length} Daily Ops submission${resolvedHistory.length === 1 ? "" : "s"} fall within ${periodLabel}. Morning ${snapshot.morningCount}, evening ${snapshot.eveningCount}, ad hoc ${snapshot.adHocCount} (all-time centre counts).`,
@@ -374,7 +394,7 @@ export function buildEccReportDocument(
     appendix: {
       dataNotes: [
         "Figures are derived from ECC Daily Ops, Issues, and Requests registers.",
-        "Executive summary and recommendations incorporate ECC Intelligence derived from the same registers.",
+        "The executive summary states recorded facts only. The Analysis block and the Recommendations are derived by SentraCore™ Intelligence from the same registers and are interpretation, not recorded fact.",
         "Issue and request register totals reflect current live state unless the table is period-filtered.",
         "Call activity is included only where recorded on Daily Ops submissions.",
         ...intelligence.dataNotes,

@@ -48,16 +48,17 @@ import type {
   EccTransitionRequestInput,
 } from "@/modules/ecc-operations/types";
 import { DEFAULT_ECC_CENTRE } from "@/modules/ecc-operations/types";
+import { ActionError } from "@/lib/actions/errors";
 import { EccOperationsRepository } from "./EccOperationsRepository";
 import { EccPeopleRepository } from "./EccPeopleRepository";
 import { EccFinanceRepository } from "./EccFinanceRepository";
 import { EccAuditRepository } from "./EccAuditRepository";
-import type { EccLocalState } from "@/modules/ecc-operations/store/eccLocalStore";
 import {
   dailyOpsAlreadySubmittedMessage,
   isDailyOpsPeriodUniqueViolation,
   mapUniqueViolation,
   requireNonEmpty,
+  EccConflictError,
 } from "./validation";
 
 /**
@@ -78,6 +79,22 @@ export class EccOperationsServerService {
     this.peopleRepo = new EccPeopleRepository(organisationId);
     this.financeRepo = new EccFinanceRepository(organisationId);
     this.auditRepo = new EccAuditRepository(organisationId);
+  }
+
+  /**
+   * Canonical actor for every ECC write: the authenticated platform profile
+   * (UUID) and its current display name. The client never establishes identity.
+   */
+  private requireActor(): { profileId: string; name: string } {
+    const profileId = this.actor?.userId?.trim();
+    const name = this.actor?.name?.trim();
+    if (!profileId || !name) {
+      throw new ActionError(
+        "UNAUTHENTICATED",
+        "An authenticated actor is required for ECC writes."
+      );
+    }
+    return { profileId, name };
   }
 
   private actorName(fallback?: string): string {
@@ -156,8 +173,16 @@ export class EccOperationsServerService {
           staffingReadiness: staffing.staffingReadiness,
         };
       }
-    } catch {
-      // People tables may not be migrated yet — keep Daily Ops staffing.
+    } catch (error) {
+      // FAILURE IS NOT ZERO: staffing must not silently fall back to (possibly
+      // stale) Daily Ops text. Other Overview domains still render.
+      console.error("[ecc-overview] people snapshot unavailable", error);
+      return {
+        ...overview,
+        staffingStatus: "unknown",
+        staffingReadiness: "Staffing data could not be loaded.",
+        staffingSourceUnavailable: true,
+      };
     }
     return overview;
   }
@@ -287,7 +312,8 @@ export class EccOperationsServerService {
     await this.repo.ensureDefaultCentre();
     const centreId = input.centreId ?? DEFAULT_ECC_CENTRE.id;
     const previous = await this.financeRepo.getActiveBudget(centreId);
-    const budget = await this.financeRepo.setBudget(input);
+    const actor = this.requireActor();
+    const budget = await this.financeRepo.setBudget({ ...input, createdBy: actor.name });
     await this.audit({
       centreId: budget.centreId,
       action: previous ? "finance.budget_changed" : "finance.budget_created",
@@ -311,7 +337,8 @@ export class EccOperationsServerService {
 
   async createFinanceTransaction(input: EccCreateFinanceTransactionInput) {
     await this.repo.ensureDefaultCentre();
-    const row = await this.financeRepo.createTransaction(input);
+    const actor = this.requireActor();
+    const row = await this.financeRepo.createTransaction({ ...input, recordedBy: actor.name });
     await this.audit({
       centreId: row.centreId,
       action: "finance.transaction_recorded",
@@ -333,7 +360,8 @@ export class EccOperationsServerService {
 
   async createFinanceCommitment(input: EccCreateFinanceCommitmentInput) {
     await this.repo.ensureDefaultCentre();
-    const row = await this.financeRepo.createCommitment(input);
+    const actor = this.requireActor();
+    const row = await this.financeRepo.createCommitment({ ...input, recordedBy: actor.name });
     await this.audit({
       centreId: row.centreId,
       action: "finance.commitment_created",
@@ -383,6 +411,7 @@ export class EccOperationsServerService {
   }
 
   async createDailyOps(input: EccCreateDailyOpsInput): Promise<EccDailyOpsRecord> {
+    const actor = this.requireActor();
     await this.repo.ensureDefaultCentre();
     const stamp = nowIso();
     const centreId = input.centreId ?? DEFAULT_ECC_CENTRE.id;
@@ -397,7 +426,10 @@ export class EccOperationsServerService {
         period,
         reportingDate
       );
-      if (existing) return existing;
+      // Never discard the new input silently, never overwrite the immutable record.
+      if (existing) {
+        throw new EccConflictError(dailyOpsAlreadySubmittedMessage(period), existing.id);
+      }
     }
 
     const centreOperations = normalizeSectionInput({
@@ -441,7 +473,8 @@ export class EccOperationsServerService {
       period,
       reportingDate,
       recordedAt: input.recordedAt || stamp,
-      recordedByName: requireNonEmpty(input.recordedByName, "Recorded by"),
+      recordedByName: actor.name,
+      recordedByProfileId: actor.profileId,
       overallStatus: input.overallStatus,
       centreOperations,
       callOperations,
@@ -478,8 +511,7 @@ export class EccOperationsServerService {
           period,
           reportingDate
         );
-        if (raced) return raced;
-        throw new Error(dailyOpsAlreadySubmittedMessage(period));
+        throw new EccConflictError(dailyOpsAlreadySubmittedMessage(period), raced?.id);
       }
       throw mapUniqueViolation(
         error as { code?: string; message?: string },
@@ -491,6 +523,7 @@ export class EccOperationsServerService {
   async raiseIssueFromDailyOps(
     input: EccRaiseIssueFromDailyOpsInput
   ): Promise<{ issue: EccIssue; dailyOps: EccDailyOpsRecord }> {
+    const actor = this.requireActor();
     const snapshot = await this.repo.getDailyOps(input.dailyOpsId);
     if (!snapshot) throw new Error("Daily operations record not found.");
 
@@ -508,7 +541,8 @@ export class EccOperationsServerService {
     const history: EccIssueHistoryEntry = {
       id: newEccId("ECC-IH"),
       at: stamp,
-      byName: input.reporterName.trim(),
+      byName: actor.name,
+      byProfileId: actor.profileId,
       kind: "status_change",
       fromStatus: null,
       toStatus: "identified",
@@ -523,7 +557,8 @@ export class EccOperationsServerService {
       title: input.title.trim(),
       description: input.description.trim(),
       status: "identified",
-      reporterName: input.reporterName.trim(),
+      reporterName: actor.name,
+      reporterProfileId: actor.profileId,
       currentOwnerName: input.currentOwnerName?.trim() || undefined,
       history: [history],
       sourceDailyOpsId: snapshot.id,
@@ -566,6 +601,7 @@ export class EccOperationsServerService {
   async raiseRequestFromDailyOps(
     input: EccRaiseRequestFromDailyOpsInput
   ): Promise<{ request: EccRequest; dailyOps: EccDailyOpsRecord }> {
+    const actor = this.requireActor();
     const snapshot = await this.repo.getDailyOps(input.dailyOpsId);
     if (!snapshot) throw new Error("Daily operations record not found.");
 
@@ -583,7 +619,8 @@ export class EccOperationsServerService {
     const history: EccRequestHistoryEntry = {
       id: newEccId("ECC-RH"),
       at: stamp,
-      byName: input.requestingManagerName.trim(),
+      byName: actor.name,
+      byProfileId: actor.profileId,
       kind: "status_change",
       fromStatus: null,
       toStatus: "submitted",
@@ -599,7 +636,8 @@ export class EccOperationsServerService {
       responsibility: input.responsibility,
       priority: input.priority,
       status: "submitted",
-      requestingManagerName: input.requestingManagerName.trim(),
+      requestingManagerName: actor.name,
+      requestingProfileId: actor.profileId,
       currentOwnerName: input.currentOwnerName?.trim() || undefined,
       history: [history],
       sourceDailyOpsId: snapshot.id,
@@ -642,6 +680,7 @@ export class EccOperationsServerService {
   async linkIssueAndRequest(
     input: EccLinkIssueRequestInput
   ): Promise<{ issue: EccIssue; request: EccRequest }> {
+    const actor = this.requireActor();
     const issue = await this.repo.getIssue(input.issueId);
     const request = await this.repo.getRequest(input.requestId);
     if (!issue) throw new Error("Issue not found.");
@@ -655,7 +694,8 @@ export class EccOperationsServerService {
     const issueEntry: EccIssueHistoryEntry = {
       id: newEccId("ECC-IH"),
       at: stamp,
-      byName: input.byName.trim(),
+      byName: actor.name,
+      byProfileId: actor.profileId,
       kind: "note",
       fromStatus: issue.status,
       toStatus: issue.status,
@@ -664,7 +704,8 @@ export class EccOperationsServerService {
     const requestEntry: EccRequestHistoryEntry = {
       id: newEccId("ECC-RH"),
       at: stamp,
-      byName: input.byName.trim(),
+      byName: actor.name,
+      byProfileId: actor.profileId,
       kind: "note",
       fromStatus: request.status,
       toStatus: request.status,
@@ -718,11 +759,13 @@ export class EccOperationsServerService {
   }
 
   async createIssue(input: EccCreateIssueInput): Promise<EccIssue> {
+    const actor = this.requireActor();
     const stamp = nowIso();
     const history: EccIssueHistoryEntry = {
       id: newEccId("ECC-IH"),
       at: stamp,
-      byName: input.reporterName.trim(),
+      byName: actor.name,
+      byProfileId: actor.profileId,
       kind: "status_change",
       fromStatus: null,
       toStatus: "identified",
@@ -737,7 +780,8 @@ export class EccOperationsServerService {
       title: requireNonEmpty(input.title, "Title"),
       description: requireNonEmpty(input.description, "Description"),
       status: "identified",
-      reporterName: requireNonEmpty(input.reporterName, "Reporter"),
+      reporterName: actor.name,
+      reporterProfileId: actor.profileId,
       currentOwnerName: input.currentOwnerName?.trim() || undefined,
       history: [history],
       relatedEccRequestId: input.relatedEccRequestId,
@@ -766,6 +810,7 @@ export class EccOperationsServerService {
   }
 
   async transitionIssue(input: EccTransitionIssueInput): Promise<EccIssue> {
+    const actor = this.requireActor();
     const current = await this.repo.getIssue(input.id);
     if (!current) throw new Error("Issue not found.");
     assertIssueTransition(current.status, input.toStatus);
@@ -780,7 +825,8 @@ export class EccOperationsServerService {
     const entry: EccIssueHistoryEntry = {
       id: newEccId("ECC-IH"),
       at: stamp,
-      byName: input.byName.trim(),
+      byName: actor.name,
+      byProfileId: actor.profileId,
       kind: issueHistoryKind(input.toStatus),
       fromStatus: current.status,
       toStatus: input.toStatus,
@@ -797,9 +843,11 @@ export class EccOperationsServerService {
         undefined,
       closedAt: input.toStatus === "closed" ? stamp : current.closedAt,
       closedByName:
+        input.toStatus === "closed" ? actor.name : current.closedByName,
+      closedByProfileId:
         input.toStatus === "closed"
-          ? input.byName.trim()
-          : current.closedByName,
+          ? actor.profileId
+          : current.closedByProfileId,
       history: [...current.history, entry],
       updatedAt: stamp,
     };
@@ -822,13 +870,15 @@ export class EccOperationsServerService {
   }
 
   async appendIssueAction(input: EccAppendIssueActionInput): Promise<EccIssue> {
+    const actor = this.requireActor();
     const current = await this.repo.getIssue(input.id);
     if (!current) throw new Error("Issue not found.");
     const stamp = nowIso();
     const entry: EccIssueHistoryEntry = {
       id: newEccId("ECC-IH"),
       at: stamp,
-      byName: input.byName.trim(),
+      byName: actor.name,
+      byProfileId: actor.profileId,
       kind: input.kind ?? "action",
       fromStatus: current.status,
       toStatus: current.status,
@@ -888,16 +938,15 @@ export class EccOperationsServerService {
   }
 
   async createRequest(input: EccCreateRequestInput): Promise<EccRequest> {
+    const actor = this.requireActor();
     const stamp = nowIso();
-    const requestingManagerName = requireNonEmpty(
-      input.requestingManagerName,
-      "Requesting manager"
-    );
+    const requestingManagerName = actor.name;
     const title = requireNonEmpty(input.title, "Title");
     const history: EccRequestHistoryEntry = {
       id: newEccId("ECC-RH"),
       at: stamp,
       byName: requestingManagerName,
+      byProfileId: actor.profileId,
       kind: "status_change",
       fromStatus: null,
       toStatus: "submitted",
@@ -914,6 +963,7 @@ export class EccOperationsServerService {
       priority: input.priority,
       status: "submitted",
       requestingManagerName,
+      requestingProfileId: actor.profileId,
       currentOwnerName: input.currentOwnerName?.trim() || undefined,
       history: [history],
       evidenceNotes: input.evidenceNotes?.trim() || undefined,
@@ -945,6 +995,7 @@ export class EccOperationsServerService {
   async transitionRequest(
     input: EccTransitionRequestInput
   ): Promise<EccRequest> {
+    const actor = this.requireActor();
     const current = await this.repo.getRequest(input.id);
     if (!current) throw new Error("Request not found.");
     assertRequestTransition(current.status, input.toStatus);
@@ -961,7 +1012,8 @@ export class EccOperationsServerService {
     const entry: EccRequestHistoryEntry = {
       id: newEccId("ECC-RH"),
       at: stamp,
-      byName: input.byName.trim(),
+      byName: actor.name,
+      byProfileId: actor.profileId,
       kind: requestHistoryKind(input.toStatus),
       fromStatus: current.status,
       toStatus: input.toStatus,
@@ -980,9 +1032,11 @@ export class EccOperationsServerService {
         undefined,
       closedAt: input.toStatus === "closed" ? stamp : current.closedAt,
       closedByName:
+        input.toStatus === "closed" ? actor.name : current.closedByName,
+      closedByProfileId:
         input.toStatus === "closed"
-          ? input.byName.trim()
-          : current.closedByName,
+          ? actor.profileId
+          : current.closedByProfileId,
       history: [...current.history, entry],
       updatedAt: stamp,
     };
@@ -1007,13 +1061,15 @@ export class EccOperationsServerService {
   async appendRequestAction(
     input: EccAppendRequestActionInput
   ): Promise<EccRequest> {
+    const actor = this.requireActor();
     const current = await this.repo.getRequest(input.id);
     if (!current) throw new Error("Request not found.");
     const stamp = nowIso();
     const entry: EccRequestHistoryEntry = {
       id: newEccId("ECC-RH"),
       at: stamp,
-      byName: input.byName.trim(),
+      byName: actor.name,
+      byProfileId: actor.profileId,
       kind: input.kind ?? "action",
       fromStatus: current.status,
       toStatus: current.status,
@@ -1064,21 +1120,15 @@ export class EccOperationsServerService {
     return deriveReportingSnapshot(state, centreId);
   }
 
-  async importLocalState(state: EccLocalState) {
-    const result = await this.repo.importLocalAggregate({
-      centre: state.centre,
-      dailyOps: state.dailyOps,
-      issues: state.issues,
-      requests: state.requests,
-    });
-    await this.audit({
-      centreId: state.centre?.id ?? DEFAULT_ECC_CENTRE.id,
-      action: "local_state.imported",
-      entityType: "daily_ops",
-      entityId: state.centre?.id ?? DEFAULT_ECC_CENTRE.id,
-      description: "Imported local ECC domain state into Supabase",
-      metadata: result as unknown as Record<string, unknown>,
-    });
-    return result;
+  /**
+   * RETIRED. Browser localStorage is never authoritative ECC domain state, and
+   * opening ECC must not write legacy client data into Supabase. Kept only so
+   * the retired action fails loudly instead of doing nothing silently.
+   */
+  async importLocalState(_state: unknown): Promise<never> {
+    throw new ActionError(
+      "VALIDATION_ERROR",
+      "Importing browser-stored ECC data is retired. Records are created on the server."
+    );
   }
 }

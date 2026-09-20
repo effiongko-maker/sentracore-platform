@@ -385,10 +385,6 @@ export function EccDailyOpsPage() {
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (!form.recordedByName.trim()) {
-      setError("Submitted by is required.");
-      return;
-    }
     if (form.callStatus !== "normal" && !form.callNotes.trim()) {
       setError("Call notes are required when call status is not normal.");
       return;
@@ -684,21 +680,6 @@ export function EccDailyOpsPage() {
                       reportingDate: e.target.value,
                     }))
                   }
-                />
-              </div>
-              <div className="ecc-field">
-                <label htmlFor="ecc-dop-by">Submitted by</label>
-                <input
-                  id="ecc-dop-by"
-                  value={form.recordedByName}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      recordedByName: e.target.value,
-                    }))
-                  }
-                  placeholder="Manager name"
-                  required
                 />
               </div>
             </div>
@@ -1299,20 +1280,6 @@ export function EccDailyOpsPage() {
                           }
                         />
                       </div>
-                      <div className="ecc-field">
-                        <label htmlFor="ecc-raise-by">Reporter</label>
-                        <input
-                          id="ecc-raise-by"
-                          required
-                          value={raiseForm.reporterName}
-                          onChange={(e) =>
-                            setRaiseForm((prev) => ({
-                              ...prev,
-                              reporterName: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
                       <div className="ecc-actions">
                         <button
                           type="submit"
@@ -1431,22 +1398,6 @@ export function EccDailyOpsPage() {
                             setRaiseForm((prev) => ({
                               ...prev,
                               reason: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
-                      <div className="ecc-field">
-                        <label htmlFor="ecc-raise-req-by">
-                          Requesting manager
-                        </label>
-                        <input
-                          id="ecc-raise-req-by"
-                          required
-                          value={raiseForm.reporterName}
-                          onChange={(e) =>
-                            setRaiseForm((prev) => ({
-                              ...prev,
-                              reporterName: e.target.value,
                             }))
                           }
                         />

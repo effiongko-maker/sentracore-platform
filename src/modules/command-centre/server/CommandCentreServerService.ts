@@ -550,6 +550,27 @@ export class CommandCentreServerService {
     try {
       const ecc = new EccOperationsServerService(access.organisationId);
       const overview = await ecc.getOverview();
+      // No ECC operational evidence is NOT stability: distinguish "nothing recorded"
+      // from "recorded and calm".
+      const hasEvidence =
+        overview.latestDailyOps != null ||
+        overview.openIssueCount > 0 ||
+        overview.openRequestCount > 0 ||
+        overview.recentResolutions.length > 0 ||
+        overview.recentActivity.length > 0;
+      if (!hasEvidence) {
+        return {
+          domain: "ecc",
+          label: "ECC",
+          state: "empty",
+          statusLabel: "No ECC activity",
+          lines: ["No ECC operational data has been recorded yet."],
+          href: workspaceEntry.eccOperations ? "/ecc-operations" : null,
+          disabledNavigationLabel: workspaceEntry.eccOperations
+            ? null
+            : "Workspace access required",
+        };
+      }
       const lines: string[] = [];
       if (overview.highUrgentOpenCount === 0 && overview.escalatedIssueCount === 0) {
         lines.push("No critical alerts");

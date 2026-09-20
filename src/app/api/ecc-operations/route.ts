@@ -4,9 +4,10 @@ import { toSessionIdentity } from "@/lib/auth/session";
 import { requireEccAccess } from "@/modules/ecc-operations/server/requireEccAccess";
 import { EccOperationsServerService } from "@/modules/ecc-operations/server/EccOperationsServerService";
 import {
-  hydrateEccLocalStateFromUnknown,
-  type EccLocalState,
-} from "@/modules/ecc-operations/store/eccLocalStore";
+  capabilityForEccAction,
+  ECC_RETIRED_ACTIONS,
+} from "@/modules/ecc-operations/server/eccActionAuthority";
+import { EccConflictError } from "@/modules/ecc-operations/server/validation";
 
 type EccAction =
   | "getFoundationStatus"
@@ -30,7 +31,6 @@ type EccAction =
   | "appendRequestAction"
   | "listReportingDimensions"
   | "getReportingSnapshot"
-  | "importLocalState"
   | "getPeopleSnapshot"
   | "createPerson"
   | "ensureCurrentShift"
@@ -72,6 +72,17 @@ function actionErrorStatus(code: string): number {
 }
 
 function errorResponse(error: unknown) {
+  if (error instanceof EccConflictError) {
+    return NextResponse.json(
+      {
+        success: false,
+        code: error.code,
+        message: error.message,
+        existingId: error.existingId ?? null,
+      },
+      { status: 409 }
+    );
+  }
   if (isActionError(error)) {
     return NextResponse.json(
       { success: false, code: error.code, message: error.message },
@@ -139,14 +150,15 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { session, organisationId } = await requireEccAccess();
-    const identity = toSessionIdentity(session);
-    const service = new EccOperationsServerService(organisationId, {
-      userId: session.userId,
-      email: session.email,
-      name: identity.name,
-    });
-    const body = (await request.json()) as EccRequestBody;
+    let body: EccRequestBody;
+    try {
+      body = (await request.json()) as EccRequestBody;
+    } catch {
+      return NextResponse.json(
+        { success: false, message: "Invalid request body." },
+        { status: 400 }
+      );
+    }
     const action = body.action;
 
     if (!action) {
@@ -155,6 +167,31 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+    if (ECC_RETIRED_ACTIONS.includes(String(action))) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "This action has been retired. ECC records are created on the server.",
+        },
+        { status: 410 }
+      );
+    }
+
+    // Per-action authority: view AND the action's own capability (unknown ⇒ refused).
+    const capability = capabilityForEccAction(String(action));
+    if (!capability) {
+      return NextResponse.json(
+        { success: false, message: `Unknown action: ${String(action)}` },
+        { status: 400 }
+      );
+    }
+    const { session, organisationId } = await requireEccAccess({ capability });
+    const identity = toSessionIdentity(session);
+    const service = new EccOperationsServerService(organisationId, {
+      userId: session.userId,
+      email: session.email,
+      name: identity.name,
+    });
 
     switch (action) {
       case "getFoundationStatus":
@@ -330,11 +367,6 @@ export async function POST(request: Request) {
             String(body.id ?? "")
           ),
         });
-      case "importLocalState": {
-        const state: EccLocalState = hydrateEccLocalStateFromUnknown(body.state);
-        const data = await service.importLocalState(state);
-        return NextResponse.json({ success: true, data });
-      }
       default:
         return NextResponse.json(
           { success: false, message: `Unknown action: ${String(action)}` },

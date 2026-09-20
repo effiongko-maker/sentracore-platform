@@ -186,10 +186,15 @@ export async function downloadEccReportWord(
   if (hasSection(report, "executive_summary")) {
     children.push(heading(sectionTitle(report, "executive_summary")));
     children.push(body(report.executiveSummary.overview));
-    children.push(label("Highlights"));
+    children.push(label("Recorded facts"));
     children.push(...report.executiveSummary.highlights.map(bullet));
-    children.push(label("Attention areas"));
+    children.push(label("Recorded attention"));
     children.push(...report.executiveSummary.risks.map(bullet));
+    children.push(label(report.analysis.label));
+    children.push(body(report.analysis.summary));
+    children.push(
+      ...[...report.analysis.highlights, ...report.analysis.attention].map(bullet)
+    );
   }
 
   if (hasSection(report, "key_metrics")) {
@@ -237,6 +242,7 @@ export async function downloadEccReportWord(
 
   if (hasSection(report, "recommendations")) {
     children.push(heading(sectionTitle(report, "recommendations")));
+    children.push(body(report.recommendationsNote));
     children.push(...report.recommendations.map(bullet));
   }
 
