@@ -437,6 +437,21 @@ export function CommandCentrePage({
             />
             <LastVisitBlock lastVisit={snapshot.lastVisit} />
           </article>
+
+          {/* Editorial art direction only — carries no data, claim or copy. */}
+          <aside className="scc-editorial" aria-hidden>
+            <div className="scc-editorial-media">
+              <Image
+                src="/command-centre/editorial-mountain-sunset.png"
+                alt=""
+                fill
+                className="scc-editorial-image"
+                sizes="(max-width: 900px) 100vw, 28vw"
+              />
+            </div>
+            <div className="scc-editorial-veil" />
+            <p className="scc-editorial-mark">SentraCore™</p>
+          </aside>
         </div>
       </section>
     </div>
