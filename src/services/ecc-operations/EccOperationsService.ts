@@ -86,6 +86,8 @@ export type IEccOperationsService = {
     ready: true;
     persistence: "supabase";
   }>;
+  /** Server-authoritative organisation-local date (never derived in the browser). */
+  getOperationalDate(): Promise<{ date: string; timeZone: string }>;
   getOverview(centreId?: string): Promise<EccOverviewSnapshot>;
   listDailyOps(centreId?: string): Promise<EccDailyOpsRecord[]>;
   getDailyOps(id: string): Promise<EccDailyOpsRecord | null>;
@@ -142,6 +144,10 @@ export type IEccOperationsService = {
 export const EccOperationsService: IEccOperationsService = {
   async getFoundationStatus() {
     return callEccApi({ action: "getFoundationStatus" });
+  },
+
+  async getOperationalDate() {
+    return callEccApi({ action: "getOperationalDate" });
   },
 
   async getOverview(centreId = DEFAULT_ECC_CENTRE.id) {

@@ -21,6 +21,11 @@ export interface AuthOrganisation {
   name: string;
   slug: string;
   status: string;
+  /**
+   * Authoritative IANA timezone (organisations.timezone). Null only if the row
+   * could not supply one — operational date semantics must then fail explicitly.
+   */
+  timezone?: string | null;
 }
 
 export interface AuthRoleAssignment {

@@ -80,7 +80,11 @@ function compact(parts: Array<string | null | undefined>): string {
   return parts.filter(Boolean).join(" · ");
 }
 
-function relativeTime(occurredAt: string, asOf: string): string {
+function relativeTime(
+  occurredAt: string,
+  asOf: string,
+  timeZone: string | null
+): string {
   const deltaSeconds = Math.max(
     0,
     Math.floor((Date.parse(asOf) - Date.parse(occurredAt)) / 1000)
@@ -92,10 +96,12 @@ function relativeTime(occurredAt: string, asOf: string): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   if (days < 7) return `${days}d ago`;
+  // Display only: the organisation's calendar. Unknown timezone ⇒ explicit UTC date, never a guessed zone.
+  if (!timeZone) return `${occurredAt.slice(0, 10)} (UTC)`;
   return new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
     month: "short",
-    timeZone: "Africa/Lagos",
+    timeZone,
   }).format(new Date(occurredAt));
 }
 
@@ -115,8 +121,10 @@ export async function composeLastVisitChanges(input: {
   asOf: string;
   visibility: DomainVisibility;
   workspaceEntry: WorkspaceEntry;
+  /** Authoritative organisation IANA timezone for display (null when unavailable). */
+  timeZone: string | null;
 }): Promise<{ items: CommandCentreChangeItem[]; sourceErrors: string[] }> {
-  const { db, organisationId, previous, asOf, visibility, workspaceEntry } = input;
+  const { db, organisationId, previous, asOf, visibility, workspaceEntry, timeZone } = input;
   const sourceErrors: string[] = [];
   const items: CommandCentreChangeItem[] = [];
 
@@ -146,7 +154,7 @@ export async function composeLastVisitChanges(input: {
         detail: compact([description, amount, entityId, "Operations"]),
         sourceLabel: "Operations",
         occurredAt: String(row.occurred_at),
-        timeLabel: relativeTime(String(row.occurred_at), asOf),
+        timeLabel: relativeTime(String(row.occurred_at), asOf, timeZone),
         href: workspaceEntry.facilityManagement ? "/operations" : null,
       });
     }
@@ -194,7 +202,7 @@ export async function composeLastVisitChanges(input: {
           ]),
           sourceLabel: "Finance",
           occurredAt,
-          timeLabel: relativeTime(occurredAt, asOf),
+          timeLabel: relativeTime(occurredAt, asOf, timeZone),
           href: workspaceEntry.platformFinance
             ? `/platform-finance/requests/${requestId}`
             : null,
@@ -268,7 +276,7 @@ export async function composeLastVisitChanges(input: {
           ]),
           sourceLabel: "Finance",
           occurredAt,
-          timeLabel: relativeTime(occurredAt, asOf),
+          timeLabel: relativeTime(occurredAt, asOf, timeZone),
           href: workspaceEntry.platformFinance ? "/platform-finance" : null,
         });
       }
@@ -296,7 +304,7 @@ export async function composeLastVisitChanges(input: {
         detail: compact([text(row.description), "ECC"]),
         sourceLabel: "ECC",
         occurredAt,
-        timeLabel: relativeTime(occurredAt, asOf),
+        timeLabel: relativeTime(occurredAt, asOf, timeZone),
         href: workspaceEntry.eccOperations ? "/ecc-operations" : null,
       });
     }

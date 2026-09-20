@@ -49,6 +49,10 @@ import type {
 } from "@/modules/ecc-operations/types";
 import { DEFAULT_ECC_CENTRE } from "@/modules/ecc-operations/types";
 import { ActionError } from "@/lib/actions/errors";
+import {
+  assertIanaTimeZone,
+  organisationLocalDate,
+} from "@/lib/time/organisationTime";
 import { EccOperationsRepository } from "./EccOperationsRepository";
 import { EccPeopleRepository } from "./EccPeopleRepository";
 import { EccFinanceRepository } from "./EccFinanceRepository";
@@ -73,10 +77,17 @@ export class EccOperationsServerService {
 
   constructor(
     private readonly organisationId: string,
-    private readonly actor: EccActorContext | null = null
+    private readonly actor: EccActorContext | null = null,
+    /**
+     * Authoritative organisation IANA timezone, taken from the authenticated
+     * session (no extra query). Null ⇒ operational date semantics fail explicitly.
+     */
+    private readonly organisationTimeZone: string | null = null,
+    /** Clock seam (tests). Production always uses the real instant. */
+    private readonly now: () => Date = () => new Date()
   ) {
     this.repo = new EccOperationsRepository(organisationId);
-    this.peopleRepo = new EccPeopleRepository(organisationId);
+    this.peopleRepo = new EccPeopleRepository(organisationId, organisationTimeZone);
     this.financeRepo = new EccFinanceRepository(organisationId);
     this.auditRepo = new EccAuditRepository(organisationId);
   }
@@ -95,6 +106,17 @@ export class EccOperationsServerService {
       );
     }
     return { profileId, name };
+  }
+
+  /** Organisation-local operational date for `instant`. Explicit failure without a valid timezone. */
+  private operationalDate(instant: Date = this.now()): string {
+    return organisationLocalDate(instant, assertIanaTimeZone(this.organisationTimeZone));
+  }
+
+  /** Server-authoritative "today" for the organisation (the browser never decides this). */
+  async getOperationalDate(): Promise<{ date: string; timeZone: string }> {
+    const timeZone = assertIanaTimeZone(this.organisationTimeZone);
+    return { date: organisationLocalDate(this.now(), timeZone), timeZone };
   }
 
   private actorName(fallback?: string): string {
@@ -416,7 +438,9 @@ export class EccOperationsServerService {
     const stamp = nowIso();
     const centreId = input.centreId ?? DEFAULT_ECC_CENTRE.id;
     const period = input.period;
-    const reportingDate = input.reportingDate || stamp.slice(0, 10);
+    // An explicitly chosen (historical) date is honoured; only the DEFAULT is the
+    // organisation-local date — never the UTC calendar date.
+    const reportingDate = input.reportingDate?.trim() || this.operationalDate();
 
     // Morning/evening: one snapshot per centre per reporting date (DB unique index).
     // Ad hoc remains unconstrained. Existing rows are immutable — reuse, never rewrite.

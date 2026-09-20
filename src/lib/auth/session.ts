@@ -93,7 +93,7 @@ export async function getPlatformSession(): Promise<PlatformSession | null> {
     const [{ data: orgRow }, { data: modules }] = await Promise.all([
       supabase
         .from("organisations")
-        .select("id, name, slug, status")
+        .select("id, name, slug, status, timezone")
         .eq("id", profile.organisationId)
         .maybeSingle(),
       supabase
@@ -120,6 +120,10 @@ export async function getPlatformSession(): Promise<PlatformSession | null> {
         name: String(orgRow.name),
         slug: String(orgRow.slug),
         status: String(orgRow.status),
+        timezone:
+          typeof orgRow.timezone === "string" && orgRow.timezone.trim()
+            ? orgRow.timezone.trim()
+            : null,
       };
     }
     moduleRows = (modules ?? []) as unknown as Array<Record<string, unknown>>;

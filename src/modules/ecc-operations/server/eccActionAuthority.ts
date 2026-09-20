@@ -9,6 +9,7 @@ export const ECC_ACTION_CAPABILITY = {
   // ── reads (view) ─────────────────────────────────────────────────────────
   getFoundationStatus: ECC_CAPABILITIES.view,
   getOverview: ECC_CAPABILITIES.view,
+  getOperationalDate: ECC_CAPABILITIES.view,
   listDailyOps: ECC_CAPABILITIES.view,
   getDailyOps: ECC_CAPABILITIES.view,
   listIssues: ECC_CAPABILITIES.view,

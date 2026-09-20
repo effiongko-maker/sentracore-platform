@@ -34,6 +34,10 @@ import {
 } from "@/services/workspace/CommandCentreFmSummaryService";
 import { buildOperationalPictureMetricsFromAggregate } from "@/modules/workspace/operationalPicture";
 import { COMMAND_CENTRE_CAPABILITIES } from "@/modules/command-centre/types";
+import {
+  organisationLocalHour,
+  requireOrganisationTimeZone,
+} from "@/lib/time/organisationTime";
 import { composeLastVisitChanges } from "@/modules/command-centre/server/composeLastVisitChanges";
 import { composeFinanceDecisionQueue } from "@/modules/command-centre/server/composeFinanceDecisionQueue";
 import { PlatformFinanceVendorBillsServerService } from "@/modules/platform-finance/server/PlatformFinanceVendorBillsServerService";
@@ -55,15 +59,20 @@ function initialsFromName(name: string): string {
   return `${parts[0]![0] ?? ""}${parts[parts.length - 1]![0] ?? ""}`.toUpperCase();
 }
 
-function greetingForNow(date: Date): string {
-  // Organisation HQ context — Lagos local time for greeting cadence.
-  const hour = Number(
-    new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Africa/Lagos",
-      hour: "numeric",
-      hour12: false,
-    }).format(date)
-  );
+/** Organisation timezone for display, or null (never a guessed zone). */
+function organisationTimeZoneOrNull(session: PlatformSession): string | null {
+  try {
+    return requireOrganisationTimeZone(session.organisation);
+  } catch {
+    return null;
+  }
+}
+
+function greetingForNow(date: Date, timeZone: string | null): string {
+  // Cosmetic only: cadence follows the ORGANISATION's local hour. Without a valid
+  // organisation timezone the greeting is neutral — no guessed zone.
+  if (!timeZone) return "Hello";
+  const hour = organisationLocalHour(date, timeZone);
   if (hour < 12) return "Good morning";
   if (hour < 17) return "Good afternoon";
   return "Good evening";
@@ -140,7 +149,8 @@ export class CommandCentreServerService {
     const asOf = new Date().toISOString();
     const now = new Date(asOf);
     const displayName = displayNameFromSession(access.session);
-    const greeting = `${greetingForNow(now)}, ${displayName}.`;
+    const organisationTimeZone = organisationTimeZoneOrNull(access.session);
+    const greeting = `${greetingForNow(now, organisationTimeZone)}, ${displayName}.`;
     const operatingAccess = await resolveOperatingAccess(access.session);
     const workspaceEntry = await resolveWorkspaceAccessChrome({
       organisationId: access.organisationId,
@@ -200,6 +210,7 @@ export class CommandCentreServerService {
 
     return {
       asOf,
+      timeZone: organisationTimeZone,
       greeting,
       lede: "Here's what's happening across your organisation today.",
       profile: {
@@ -801,6 +812,7 @@ export class CommandCentreServerService {
       asOf,
       visibility,
       workspaceEntry,
+      timeZone: organisationTimeZoneOrNull(access.session),
     });
     if (changes.sourceErrors.length > 0) {
       return {

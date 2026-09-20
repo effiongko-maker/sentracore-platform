@@ -173,10 +173,6 @@ const PERIOD_OPTIONS: EccDailyOpsPeriod[] = ["morning", "evening", "ad_hoc"];
 
 type DailyOpsPanel = "register" | "detail";
 
-function todayDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function ConditionPicker({
   id,
   value,
@@ -208,7 +204,8 @@ function ConditionPicker({
 
 const emptyForm = {
   period: "morning" as EccDailyOpsPeriod,
-  reportingDate: todayDate(),
+  // Filled from the server-authoritative organisation-local date (never the browser clock).
+  reportingDate: "",
   recordedByName: "",
   overallStatus: "operational" as EccCentreOverallStatus,
   centreStatus: "normal" as EccSectionCondition,
@@ -249,6 +246,7 @@ export function EccDailyOpsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panel, setPanel] = useState<DailyOpsPanel>("register");
   const [form, setForm] = useState(emptyForm);
+  const [operationalDate, setOperationalDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [raiseNotice, setRaiseNotice] = useState<{
@@ -306,6 +304,28 @@ export function EccDailyOpsPage() {
     setRaiseSection(null);
     setError(null);
   }
+
+  // Default reporting date = the organisation's operational "today" as decided by the server.
+  useEffect(() => {
+    let cancelled = false;
+    EccOperationsService.getOperationalDate()
+      .then(({ date }) => {
+        if (cancelled) return;
+        setOperationalDate(date);
+        setForm((prev) => (prev.reportingDate ? prev : { ...prev, reportingDate: date }));
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Couldn't determine today's operational date. Choose the reporting date manually."
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -487,7 +507,7 @@ export function EccDailyOpsPage() {
         );
         return;
       }
-      setForm({ ...emptyForm, reportingDate: todayDate() });
+      setForm({ ...emptyForm, reportingDate: operationalDate });
       setShowForm(false);
       setError(null);
       await reload();

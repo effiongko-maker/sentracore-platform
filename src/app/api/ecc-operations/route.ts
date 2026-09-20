@@ -12,6 +12,7 @@ import { EccConflictError } from "@/modules/ecc-operations/server/validation";
 type EccAction =
   | "getFoundationStatus"
   | "getOverview"
+  | "getOperationalDate"
   | "listDailyOps"
   | "getDailyOps"
   | "createDailyOps"
@@ -187,17 +188,27 @@ export async function POST(request: Request) {
     }
     const { session, organisationId } = await requireEccAccess({ capability });
     const identity = toSessionIdentity(session);
-    const service = new EccOperationsServerService(organisationId, {
-      userId: session.userId,
-      email: session.email,
-      name: identity.name,
-    });
+    const service = new EccOperationsServerService(
+      organisationId,
+      {
+        userId: session.userId,
+        email: session.email,
+        name: identity.name,
+      },
+      // Organisation timezone comes from the already-loaded session — no extra query.
+      session.organisation?.timezone ?? null
+    );
 
     switch (action) {
       case "getFoundationStatus":
         return NextResponse.json({
           success: true,
           data: await service.getFoundationStatus(),
+        });
+      case "getOperationalDate":
+        return NextResponse.json({
+          success: true,
+          data: await service.getOperationalDate(),
         });
       case "getOverview":
         return NextResponse.json({

@@ -74,6 +74,8 @@ export type CommandCentreProfilePresentation = {
 
 export type CommandCentreSnapshot = {
   asOf: string;
+  /** Authoritative organisation IANA timezone for display; null when the organisation has none. */
+  timeZone: string | null;
   greeting: string;
   lede: string;
   profile: CommandCentreProfilePresentation;

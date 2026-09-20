@@ -26,10 +26,13 @@ const PULSE_ICON = {
   projects_construction: HardHat,
 } as const;
 
-function formatAsOfDate(iso: string): string {
+function formatAsOfDate(iso: string, timeZone: string | null): string {
+  // The organisation's timezone comes from the server snapshot. Without it the
+  // date is omitted — the browser timezone is never used as a substitute.
+  if (!timeZone) return "";
   try {
     return new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Africa/Lagos",
+      timeZone,
       weekday: "long",
       day: "numeric",
       month: "long",
@@ -345,7 +348,7 @@ export function CommandCentrePage({
 }: {
   snapshot: CommandCentreSnapshot;
 }) {
-  const dateLabel = formatAsOfDate(snapshot.asOf);
+  const dateLabel = formatAsOfDate(snapshot.asOf, snapshot.timeZone);
   const { decisions, attention, assignments, askSentraCore } = snapshot;
 
   return (

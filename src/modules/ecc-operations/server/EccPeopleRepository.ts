@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/utils/supabase/admin";
 import { isAttendanceLive, isShiftEffective } from "@/modules/ecc-operations/domain/shiftWindow";
+import { assertIanaTimeZone, organisationLocalDate } from "@/lib/time/organisationTime";
 import { newEccId } from "@/modules/ecc-operations/ids";
 import { nowIso } from "@/modules/ecc-operations/domain/rules";
 import { mapUniqueViolation } from "@/modules/ecc-operations/server/validation";
@@ -115,7 +116,11 @@ function computeCoverage(
 }
 
 export class EccPeopleRepository {
-  constructor(private readonly organisationId: string) {}
+  constructor(
+    private readonly organisationId: string,
+    /** Authoritative organisation IANA timezone (from the session). Null ⇒ attendance-day writes fail explicitly. */
+    private readonly organisationTimeZone: string | null = null
+  ) {}
 
   async listPeople(centreId = DEFAULT_ECC_CENTRE.id): Promise<EccPerson[]> {
     const { data, error } = await db()
@@ -496,6 +501,11 @@ export class EccPeopleRepository {
     }
     const shiftId = input.shiftId ?? current.id;
     const stamp = nowIso();
+    // Attendance day is an operational calendar date: organisation-local, never UTC.
+    const attendanceDate = organisationLocalDate(
+      stamp,
+      assertIanaTimeZone(this.organisationTimeZone)
+    );
     const recordId = newEccId("ECC-ATT");
     const status: EccAgentDutyStatus =
       shiftId === current.id ? "on_duty" : "signed_in";
@@ -506,7 +516,7 @@ export class EccPeopleRepository {
       centre_id: person.centreId,
       person_id: person.id,
       shift_id: shiftId,
-      attendance_date: stamp.slice(0, 10),
+      attendance_date: attendanceDate,
       signed_in_at: stamp,
       signed_out_at: null,
       status,
@@ -533,7 +543,7 @@ export class EccPeopleRepository {
       personName: person.name,
       shiftId: shiftId ?? undefined,
       shiftLabel: shiftId === current.id ? current.label : undefined,
-      attendanceDate: stamp.slice(0, 10),
+      attendanceDate,
       signedInAt: stamp,
       status,
       createdAt: stamp,
