@@ -1,3 +1,4 @@
+import { boundaryForSession } from "@/lib/access/moduleBoundary";
 import type { AuthEnabledModule } from "@/lib/auth/types";
 import { getPlatformSession } from "@/lib/auth/session";
 import { resolveOperatingAccess } from "@/lib/access/server";
@@ -45,6 +46,7 @@ export async function bootstrapAppAccess(): Promise<AppAccessBootstrap> {
       roleSlugs: session.roleSlugs,
       enabledModules: session.enabledModules,
       operatingAccess,
+      boundary: boundaryForSession(session),
     });
   }
 

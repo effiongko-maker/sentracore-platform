@@ -243,6 +243,22 @@ export class EccOperationsServerService {
     return person;
   }
 
+  async setPersonActive(input: { personId: string; active: boolean }) {
+    requireNonEmpty(input.personId, "Person");
+    const { person, changed } = await this.peopleRepo.setPersonActive(input.personId, Boolean(input.active));
+    if (changed) {
+      await this.audit({
+        centreId: person.centreId,
+        action: input.active ? "person.reactivated" : "person.deactivated",
+        entityType: "person",
+        entityId: person.id,
+        description: `${input.active ? "Reactivated" : "Deactivated"} ${person.name}`,
+        metadata: { role: person.role, name: person.name, status: person.status },
+      });
+    }
+    return person;
+  }
+
   async ensureCurrentShift(input: EccEnsureCurrentShiftInput) {
     await this.repo.ensureDefaultCentre();
     const centreId = input.centreId ?? DEFAULT_ECC_CENTRE.id;
@@ -784,6 +800,13 @@ export class EccOperationsServerService {
 
   async createIssue(input: EccCreateIssueInput): Promise<EccIssue> {
     const actor = this.requireActor();
+    // Source-integrity: only a verified Daily Ops path (raise*FromDailyOps) may set the Daily
+    // Ops source relationship. The generic path never fabricates one.
+    if (input.sourceDailyOpsId != null || input.sourceDailyOpsSection != null) {
+      throw new Error(
+        "A Daily Ops source can only be set by raising from a Daily Ops submission."
+      );
+    }
     const stamp = nowIso();
     const history: EccIssueHistoryEntry = {
       id: newEccId("ECC-IH"),
@@ -809,8 +832,6 @@ export class EccOperationsServerService {
       currentOwnerName: input.currentOwnerName?.trim() || undefined,
       history: [history],
       relatedEccRequestId: input.relatedEccRequestId,
-      sourceDailyOpsId: input.sourceDailyOpsId,
-      sourceDailyOpsSection: input.sourceDailyOpsSection,
       facilityId: input.facilityId ?? DEFAULT_ECC_CENTRE.facilityId,
       assetId: input.assetId,
       createdAt: stamp,
@@ -963,6 +984,13 @@ export class EccOperationsServerService {
 
   async createRequest(input: EccCreateRequestInput): Promise<EccRequest> {
     const actor = this.requireActor();
+    // Source-integrity: only a verified Daily Ops path (raise*FromDailyOps) may set the Daily
+    // Ops source relationship. The generic path never fabricates one.
+    if (input.sourceDailyOpsId != null || input.sourceDailyOpsSection != null) {
+      throw new Error(
+        "A Daily Ops source can only be set by raising from a Daily Ops submission."
+      );
+    }
     const stamp = nowIso();
     const requestingManagerName = actor.name;
     const title = requireNonEmpty(input.title, "Title");
@@ -992,8 +1020,6 @@ export class EccOperationsServerService {
       history: [history],
       evidenceNotes: input.evidenceNotes?.trim() || undefined,
       relatedEccIssueId: input.relatedEccIssueId,
-      sourceDailyOpsId: input.sourceDailyOpsId,
-      sourceDailyOpsSection: input.sourceDailyOpsSection,
       facilityId: input.facilityId ?? DEFAULT_ECC_CENTRE.facilityId,
       assetId: input.assetId,
       createdAt: stamp,

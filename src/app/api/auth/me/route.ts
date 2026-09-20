@@ -1,3 +1,4 @@
+import { boundaryForSession } from "@/lib/access/moduleBoundary";
 import { NextResponse } from "next/server";
 import {
   getPlatformSession,
@@ -31,6 +32,7 @@ export async function GET() {
           roleSlugs: session.roleSlugs,
           enabledModules: session.enabledModules,
           operatingAccess,
+          boundary: boundaryForSession(session),
         })
       : {
           facilityManagement: false,

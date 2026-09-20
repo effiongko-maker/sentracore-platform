@@ -1,3 +1,4 @@
+import { assertBoundaryAllows } from "@/lib/access/moduleBoundary";
 import { hasModule } from "@/lib/actions/moduleAccess";
 import { ActionError } from "@/lib/actions/errors";
 import { isPlatformSuperAdminFromSlugs } from "@/lib/access/platformRoles";
@@ -38,6 +39,8 @@ async function resolvePlatformFinanceSessionContext(): Promise<{
     throw new ActionError("UNAUTHENTICATED");
   }
   assertActiveProfileForBusinessAccess(session);
+  // Platform-wide surface: unavailable to module-bound identities regardless of grants.
+  assertBoundaryAllows(session, "platform");
 
   const organisationId =
     session.organisation?.id ?? session.profile.organisationId ?? null;

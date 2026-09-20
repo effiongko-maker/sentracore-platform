@@ -2,6 +2,7 @@ import { ActionError } from "@/lib/actions/errors";
 import { createAdminClient } from "@/utils/supabase/admin";
 import type { ProfileStatus } from "@/lib/auth/types";
 import type {
+  AccessScopeResult,
   OrganisationAdminRecord,
   OrganisationModuleAdminStatus,
   OrganisationModuleResult,
@@ -354,6 +355,32 @@ export class PlatformAdminRepository {
       organisationId: rec.organisationId ? String(rec.organisationId) : null,
       status: String(rec.status) as ProfileStatus,
       previousStatus: String(rec.previousStatus) as ProfileStatus,
+      changed: Boolean(rec.changed),
+    };
+  }
+
+  async setAccessScope(input: {
+    actorProfileId: string;
+    targetProfileId: string;
+    accessScope: "platform" | "module";
+    homeModule: string | null;
+  }): Promise<AccessScopeResult> {
+    const { data, error } = await this.admin.rpc("platform_iam_set_access_scope", {
+      p_actor_profile_id: input.actorProfileId,
+      p_target_profile_id: input.targetProfileId,
+      p_access_scope: input.accessScope,
+      p_home_module: input.homeModule,
+    });
+    if (error) rpcError(error, "Unable to update access scope.");
+    const rec = asRecord(data);
+    if (!rec) {
+      throw new ActionError("INTERNAL_ERROR", "Access scope RPC returned no data.");
+    }
+    return {
+      profileId: String(rec.profileId),
+      organisationId: rec.organisationId ? String(rec.organisationId) : null,
+      accessScope: rec.accessScope === "module" ? "module" : "platform",
+      homeModule: rec.homeModule === "facility_management" || rec.homeModule === "ecc_operations" ? rec.homeModule : null,
       changed: Boolean(rec.changed),
     };
   }

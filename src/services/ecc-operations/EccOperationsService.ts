@@ -116,6 +116,7 @@ export type IEccOperationsService = {
   getReportingSnapshot(centreId?: string): Promise<EccReportingSnapshot>;
   getPeopleSnapshot(centreId?: string): Promise<EccPeopleSnapshot>;
   createPerson(input: EccCreatePersonInput): Promise<EccPerson>;
+  setPersonActive(input: { personId: string; active: boolean }): Promise<EccPerson>;
   ensureCurrentShift(input: EccEnsureCurrentShiftInput): Promise<EccShift>;
   setCurrentShiftAssignments(
     input: EccSetCurrentShiftAssignmentsInput
@@ -244,6 +245,10 @@ export const EccOperationsService: IEccOperationsService = {
 
   async setCurrentShiftAssignments(input) {
     return callEccApi({ action: "setCurrentShiftAssignments", input });
+  },
+
+  async setPersonActive(input) {
+    return callEccApi({ action: "setPersonActive", input });
   },
 
   async signInPerson(input) {

@@ -1,3 +1,4 @@
+import { boundaryAllows, boundaryForSession } from "@/lib/access/moduleBoundary";
 import {
   getPlatformSession,
   toSessionIdentity,
@@ -118,6 +119,21 @@ export async function resolveOperatingAccess(
     session.organisation?.id ?? session.profile.organisationId ?? null;
   const profileId = session.profile.id;
   const isSuperAdmin = isPlatformSuperAdminFromSlugs(session.roleSlugs);
+
+  // Module-bound boundary: outside Facility Management, FM authority is zero — whatever
+  // explicit grants exist. Fail closed; never widened by an accidental grant.
+  if (!boundaryAllows(boundaryForSession(session), "facility_management")) {
+    return resolveOperatingAccessFromGrants({
+      email: identity.email,
+      name: identity.name,
+      role: null,
+      roleLabel: "Restricted to another module",
+      status: "unknown",
+      unassigned: true,
+      capabilities: [],
+      profileId,
+    });
+  }
 
   if (session.profile.status !== "active") {
     const inactive =

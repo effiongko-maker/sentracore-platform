@@ -1,3 +1,4 @@
+import { assertBoundaryAllows } from "@/lib/access/moduleBoundary";
 import { hasModule } from "@/lib/actions/moduleAccess";
 import { ActionError } from "@/lib/actions/errors";
 import { isPlatformSuperAdminFromSlugs } from "@/lib/access/platformRoles";
@@ -61,6 +62,8 @@ export async function requireEccAccess(
     throw new ActionError("UNAUTHENTICATED");
   }
   assertActiveProfileForBusinessAccess(session);
+  // Module-bound identities may only enter their home module (upper boundary; grants cannot widen it).
+  assertBoundaryAllows(session, "ecc_operations");
 
   const organisationId =
     session.organisation?.id ?? session.profile.organisationId ?? null;

@@ -13,6 +13,7 @@ export const PLATFORM_IAM_AUDIT_ACTIONS = [
   "capability.granted",
   "capability.revoked",
   "user.offboarded",
+  "access_scope.changed",
   "facility_assignment.created",
   "facility_assignment.activated",
   "facility_assignment.deactivated",
@@ -208,6 +209,17 @@ export type AdminPersonDetail = AdminPersonSummary & {
   organisationRoles: string[];
   financeAccess: AdminFinanceAccess;
   operationalIdentity: { domain: string; externalIdentityId: string; status: string } | null;
+  /** Access scope: platform (default) or bound to one operational module (upper boundary). */
+  accessScope: "platform" | "module";
+  homeModule: "facility_management" | "ecc_operations" | null;
+};
+
+export type AccessScopeResult = {
+  profileId: string;
+  organisationId: string | null;
+  accessScope: "platform" | "module";
+  homeModule: "facility_management" | "ecc_operations" | null;
+  changed: boolean;
 };
 
 export type AdminAuditEntry = {

@@ -1,3 +1,4 @@
+import { assertBoundaryAllows } from "@/lib/access/moduleBoundary";
 import { ActionError } from "@/lib/actions/errors";
 import { isPlatformSuperAdminFromSlugs } from "@/lib/access/platformRoles";
 import { getPlatformSession } from "@/lib/auth/session";
@@ -20,6 +21,7 @@ export async function requirePlatformAdmin(): Promise<PlatformAdminContext> {
   if (session.profile.status !== "active") {
     throw new ActionError("FORBIDDEN", "Your profile is not active.");
   }
+  assertBoundaryAllows(session, "platform");
   if (!isPlatformSuperAdminFromSlugs(session.roleSlugs)) {
     throw new ActionError(
       "FORBIDDEN",

@@ -4,6 +4,7 @@ import { isPlatformSuperAdminFromSlugs } from "@/lib/access/platformRoles";
 import type { AuthEnabledModule } from "@/lib/auth/types";
 import type { OperatingAccess } from "@/lib/access/resolveAccess";
 import { accessCan } from "@/lib/access/resolveAccess";
+import { boundaryAllows, type ModuleBoundary } from "@/lib/access/moduleBoundary";
 import { COMMAND_CENTRE_CAPABILITIES } from "@/modules/command-centre/types";
 import { ECC_CAPABILITIES, ECC_MODULE_SLUG } from "@/modules/ecc-operations/types";
 import { PLATFORM_FINANCE_MODULE_SLUG } from "@/modules/platform-finance/types";
@@ -29,6 +30,8 @@ export async function resolveWorkspaceAccessChrome(input: {
   roleSlugs: string[];
   enabledModules: AuthEnabledModule[];
   operatingAccess: OperatingAccess;
+  /** The identity's module boundary — module-bound users only ever see their home workspace. */
+  boundary: ModuleBoundary;
 }): Promise<WorkspaceAccessChrome> {
   const isSuperAdmin = isPlatformSuperAdminFromSlugs(input.roleSlugs);
   const admin = createAdminClient();
@@ -70,9 +73,19 @@ export async function resolveWorkspaceAccessChrome(input: {
     hasModule(input.enabledModules, "facility_management");
 
   return {
-    facilityManagement: fmModuleOn && accessCan(input.operatingAccess, "ops.view"),
-    eccOperations: eccModuleOn && hasEccGrant,
-    platformFinance: financeModuleOn && hasAnyFinanceGrant,
-    commandCentre: hasCommandCentreGrant,
+    facilityManagement:
+      boundaryAllows(input.boundary, "facility_management") &&
+      fmModuleOn &&
+      accessCan(input.operatingAccess, "ops.view"),
+    eccOperations:
+      boundaryAllows(input.boundary, "ecc_operations") &&
+      eccModuleOn &&
+      hasEccGrant,
+    platformFinance:
+      boundaryAllows(input.boundary, "platform") &&
+      financeModuleOn &&
+      hasAnyFinanceGrant,
+    commandCentre:
+      boundaryAllows(input.boundary, "platform") && hasCommandCentreGrant,
   };
 }

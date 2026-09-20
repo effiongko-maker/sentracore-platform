@@ -36,6 +36,7 @@ export const ECC_ACTION_CAPABILITY = {
   appendRequestAction: ECC_CAPABILITIES.edit,
   // ── roster / shifts / attendance ─────────────────────────────────────────
   createPerson: ECC_CAPABILITIES.managePeople,
+  setPersonActive: ECC_CAPABILITIES.managePeople,
   ensureCurrentShift: ECC_CAPABILITIES.managePeople,
   setCurrentShiftAssignments: ECC_CAPABILITIES.managePeople,
   signInPerson: ECC_CAPABILITIES.managePeople,

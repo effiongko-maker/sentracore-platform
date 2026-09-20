@@ -30,6 +30,8 @@ function mapProfile(row: Record<string, unknown>): AuthProfile {
     jobTitle: row.job_title ? String(row.job_title) : null,
     organisationId: row.organisation_id ? String(row.organisation_id) : null,
     status: String(row.status ?? "invited") as AuthProfile["status"],
+    accessScope: row.access_scope === "module" ? "module" : "platform",
+    homeModule: row.home_module ? String(row.home_module) : null,
   };
 }
 
@@ -55,7 +57,7 @@ export async function getPlatformSession(): Promise<PlatformSession | null> {
     supabase
       .from("profiles")
       .select(
-        "id, first_name, last_name, full_name, avatar_url, job_title, organisation_id, status"
+        "id, first_name, last_name, full_name, avatar_url, job_title, organisation_id, status, access_scope, home_module"
       )
       .eq("id", user.id)
       .maybeSingle(),

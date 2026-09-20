@@ -1,3 +1,4 @@
+import { assertBoundaryAllows } from "@/lib/access/moduleBoundary";
 import { ActionError } from "@/lib/actions/errors";
 import { getPlatformSession } from "@/lib/auth/session";
 import { assertActiveProfileForBusinessAccess } from "@/lib/auth/assertActiveProfile";
@@ -33,6 +34,8 @@ async function resolveCommandCentreSessionContext(): Promise<{
     throw new ActionError("UNAUTHENTICATED");
   }
   assertActiveProfileForBusinessAccess(session);
+  // Platform-wide surface: unavailable to module-bound identities regardless of grants.
+  assertBoundaryAllows(session, "platform");
 
   const organisationId =
     session.organisation?.id ?? session.profile.organisationId ?? null;

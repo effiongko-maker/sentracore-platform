@@ -180,6 +180,43 @@ export class EccPeopleRepository {
     return person;
   }
 
+  /**
+   * Roster lifecycle: ACTIVE → DEACTIVATED (status 'inactive') → optionally REACTIVATED.
+   * History (attendance, past assignments) is never touched. Fails closed while the person
+   * is live on duty or assigned to the shift in effect — no sign-out is ever fabricated and
+   * no assignment is silently removed.
+   */
+  async setPersonActive(personId: string, active: boolean): Promise<{ person: EccPerson; changed: boolean }> {
+    const person = await this.getPerson(personId);
+    if (!person) throw new Error("Person not found.");
+    const target = active ? "active" : "inactive";
+    if (person.status === target) return { person, changed: false };
+
+    if (!active) {
+      const current = await this.getCurrentShift(person.centreId);
+      const open = (await this.listOpenAttendance()).filter((row) => row.person_id === person.id);
+      if (this.liveOpenAttendance(open, current).length > 0) {
+        throw new Error(
+          `${person.name} is signed in and on duty. Sign them out first, then deactivate.`
+        );
+      }
+      if (current && current.assignedPersonIds.includes(person.id)) {
+        throw new Error(
+          `${person.name} is assigned to the shift in effect (${current.label}). Remove them from the current shift first, then deactivate.`
+        );
+      }
+    }
+
+    const stamp = nowIso();
+    const { error } = await db()
+      .from("ecc_people")
+      .update({ status: target, updated_at: stamp })
+      .eq("organisation_id", this.organisationId)
+      .eq("id", person.id);
+    if (error) throwDb(error, active ? "Failed to reactivate person." : "Failed to deactivate person.");
+    return { person: { ...person, status: target, updatedAt: stamp }, changed: true };
+  }
+
   async getCurrentShift(
     centreId = DEFAULT_ECC_CENTRE.id
   ): Promise<EccShift | null> {
@@ -479,6 +516,9 @@ export class EccPeopleRepository {
   async signIn(input: EccSignInInput): Promise<EccAttendanceRecord> {
     const person = await this.getPerson(input.personId);
     if (!person) throw new Error("Person not found.");
+    if (person.status !== "active") {
+      throw new Error(`${person.name} is deactivated and cannot be signed in.`);
+    }
     if (person.role !== "agent") {
       throw new Error("Only agents can sign in for shift attendance.");
     }

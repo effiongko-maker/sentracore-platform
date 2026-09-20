@@ -10,6 +10,7 @@ type PlatformAdminAction =
   | "inviteAndAttachUser"
   | "attachProfileToOrganisation"
   | "setProfileStatus"
+  | "setAccessScope"
   | "setOrganisationModule"
   | "grantPlatformCapability"
   | "revokePlatformCapability"
@@ -31,6 +32,8 @@ type RequestBody = {
   firstName?: string;
   lastName?: string;
   status?: string;
+  accessScope?: string;
+  homeModule?: string | null;
   moduleSlug?: string;
   capability?: string;
   category?: string;
@@ -154,6 +157,20 @@ export async function POST(request: Request) {
         const data = await service.setProfileStatus(ctx, {
           profileId: body.profileId,
           status: body.status,
+        });
+        return NextResponse.json({ success: true, data });
+      }
+      case "setAccessScope": {
+        if (!body.profileId || !body.accessScope) {
+          return NextResponse.json(
+            { success: false, message: "profileId and accessScope are required." },
+            { status: 400 }
+          );
+        }
+        const data = await service.setAccessScope(ctx, {
+          profileId: body.profileId,
+          accessScope: body.accessScope,
+          homeModule: body.homeModule ?? null,
         });
         return NextResponse.json({ success: true, data });
       }

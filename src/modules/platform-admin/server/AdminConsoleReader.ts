@@ -65,7 +65,7 @@ export class AdminConsoleReader {
   private async peopleRows(organisationId: string, profileId?: string) {
     let query = this.admin
       .from("profiles")
-      .select("id, first_name, last_name, full_name, job_title, organisation_id, status, created_at")
+      .select("id, first_name, last_name, full_name, job_title, organisation_id, status, created_at, access_scope, home_module")
       .eq("organisation_id", organisationId)
       .order("created_at", { ascending: true });
     if (profileId) query = query.eq("id", profileId);
@@ -164,6 +164,8 @@ export class AdminConsoleReader {
         companies: (must(finCompanies, "Unable to resolve finance access.") as Array<Record<string, unknown>>).map((r) => String(one(r.finance_companies).name ?? "Company")).sort(),
         financialAccountAccessCount: finAccounts.count ?? 0,
       },
+      accessScope: rows[0].access_scope === "module" ? "module" : "platform",
+      homeModule: rows[0].home_module === "facility_management" || rows[0].home_module === "ecc_operations" ? rows[0].home_module : null,
       operationalIdentity: link ? { domain: link.identity_domain, externalIdentityId: link.external_identity_id, status: link.status } : null,
     };
   }

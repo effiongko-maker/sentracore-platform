@@ -17,6 +17,7 @@ import {
   type PlatformAdminFollowUp,
   type PlatformCapabilityGrantResult,
   type PlatformIdentityAdminRecord,
+  type AccessScopeResult,
   type ProfileStatusResult,
 } from "../types";
 import { FmPeopleRepository } from "@/modules/users/server/FmPeopleRepository";
@@ -27,6 +28,7 @@ import {
   parseAssignmentStatus,
   parseOperationalRole,
 } from "@/modules/users/server/fmPeopleDomain";
+import { isBoundModule } from "@/lib/access/moduleBoundary";
 import { AdminConsoleReader } from "./AdminConsoleReader";
 import { PlatformAdminRepository } from "./PlatformAdminRepository";
 import type { PlatformAdminContext } from "./requirePlatformAdmin";
@@ -337,6 +339,35 @@ export class PlatformAdminServerService {
       ...updated,
       authSignInDisabled: authResult.disabled,
     };
+  }
+
+  async setAccessScope(
+    ctx: PlatformAdminContext,
+    input: { profileId: string; accessScope: unknown; homeModule: unknown }
+  ): Promise<AccessScopeResult> {
+    const { accessScope, homeModule } = input;
+    if (accessScope !== "platform" && accessScope !== "module") {
+      throw new ActionError("VALIDATION_ERROR", "Access scope must be platform or module.");
+    }
+    if (accessScope === "platform" && homeModule != null && homeModule !== "") {
+      throw new ActionError("VALIDATION_ERROR", "Platform scope cannot have a home module.");
+    }
+    if (accessScope === "module" && !isBoundModule(homeModule)) {
+      throw new ActionError("VALIDATION_ERROR", "Module-bound scope requires a supported home module.");
+    }
+    const current = await this.repo.getProfile(input.profileId);
+    if (!current) {
+      throw new ActionError("VALIDATION_ERROR", "Profile not found.");
+    }
+    if (input.profileId === ctx.actorProfileId && accessScope === "module") {
+      throw new ActionError("VALIDATION_ERROR", "You cannot module-bind your own identity.");
+    }
+    return this.repo.setAccessScope({
+      actorProfileId: ctx.actorProfileId,
+      targetProfileId: input.profileId,
+      accessScope,
+      homeModule: accessScope === "module" ? (homeModule as string) : null,
+    });
   }
 
   async setOrganisationModule(

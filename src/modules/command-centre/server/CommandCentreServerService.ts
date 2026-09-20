@@ -1,3 +1,4 @@
+import { boundaryForSession } from "@/lib/access/moduleBoundary";
 /**
  * Command Centre composition/read service.
  * Soft-composes domain snapshots; never invents metrics or bypasses domain auth.
@@ -158,6 +159,7 @@ export class CommandCentreServerService {
       roleSlugs: access.session.roleSlugs,
       enabledModules: access.session.enabledModules,
       operatingAccess,
+      boundary: boundaryForSession(access.session),
     });
     const fmEnabled =
       isPlatformSuperAdminFromSlugs(access.session.roleSlugs) ||

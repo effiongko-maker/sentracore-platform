@@ -8,7 +8,7 @@ import { useToast } from "@/components/ui/Toast";
 import { V1_OPERATING_ROLES, v1OperatingRoleLabel } from "@/lib/access/roles";
 import type { ProfileStatus } from "@/lib/auth/types";
 import { CAPABILITY_DOMAINS, describeCapability } from "../capabilityCatalog";
-import type { AdminAuditPage, AdminFacilityAssignment, AdminPersonDetail, OffboardResult, OrganisationAdminRecord, ProfileStatusResult } from "../types";
+import type { AccessScopeResult, AdminAuditPage, AdminFacilityAssignment, AdminPersonDetail, OffboardResult, OrganisationAdminRecord, ProfileStatusResult } from "../types";
 import { AdminApiError, adminCall } from "./adminApi";
 import { useAdminConsole } from "./AdminConsoleContext";
 import { AuditFeed } from "./AuditFeed";
@@ -63,6 +63,7 @@ function PersonBody({ organisation, profileId }: { organisation: OrganisationAdm
   );
   const [pending, setPending] = useState<StatusAction | null>(null);
   const [offboarding, setOffboarding] = useState(false);
+  const [scoping, setScoping] = useState(false);
   const [assigning, setAssigning] = useState<{ assignment?: AdminFacilityAssignment } | null>(null);
   const isSelf = profileId === actorProfileId;
   const refresh = () => {
@@ -125,6 +126,27 @@ function PersonBody({ organisation, profileId }: { organisation: OrganisationAdm
                       ) : (
                         <span className="ac-secondary">None</span>
                       )}
+                    </dd>
+                    <dt>Access scope</dt>
+                    <dd>
+                      {p.accessScope === "module" ? (
+                        <>
+                          <Pill tone="plain">Module-bound</Pill>{" "}
+                          <span className="ac-secondary">
+                            {p.homeModule === "ecc_operations" ? "ECC Operations" : p.homeModule === "facility_management" ? "Facility Management" : "Invalid home module"} only
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Platform</span>{" "}
+                          <span className="ac-secondary">not restricted to one module</span>
+                        </>
+                      )}{" "}
+                      {!isSelf && !p.isPlatformSuperAdmin ? (
+                        <button type="button" className="ac-btn ac-btn-quiet ac-btn-sm" onClick={() => setScoping(true)}>
+                          Change
+                        </button>
+                      ) : null}
                     </dd>
                     <dt>Business capabilities</dt>
                     <dd>
@@ -231,6 +253,7 @@ function PersonBody({ organisation, profileId }: { organisation: OrganisationAdm
               </div>
             ) : null}
 
+            <ScopeDialog open={scoping} person={p} onClose={() => setScoping(false)} onDone={refresh} />
             <StatusDialog action={pending} person={p} organisationId={organisation.id} onClose={() => setPending(null)} onDone={refresh} />
             <OffboardDialog open={offboarding} person={p} onClose={() => setOffboarding(false)} onDone={refresh} />
             <AssignmentDialog state={assigning} person={p} organisationId={organisation.id} onClose={() => setAssigning(null)} onDone={refresh} />
@@ -320,6 +343,88 @@ function StatusDialog({
     >
       <p className="ac-secondary" style={{ fontSize: 13, lineHeight: 1.55 }}>{action?.consequence}</p>
       {error ? <p className="ac-form-error" role="alert">{error}</p> : null}
+    </Modal>
+  );
+}
+
+function ScopeDialog({ open, person, onClose, onDone }: { open: boolean; person: AdminPersonDetail; onClose: () => void; onDone: () => void }) {
+  const { toast } = useToast();
+  const [scope, setScope] = useState<"platform" | "module">("platform");
+  const [home, setHome] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [seed, setSeed] = useState<boolean>(false);
+  if (open !== seed) {
+    setSeed(open);
+    setError(null);
+    setScope(person.accessScope);
+    setHome(person.homeModule ?? "");
+  }
+
+  function close() {
+    if (busy) return;
+    onClose();
+  }
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await adminCall<AccessScopeResult>("setAccessScope", {
+        profileId: person.profileId,
+        accessScope: scope,
+        homeModule: scope === "module" ? home : null,
+      });
+      toast({ type: "success", title: `Access scope updated for ${displayName(person)}`, description: res.changed ? "Recorded in administrative history." : "No change was needed." });
+      onDone();
+      onClose();
+    } catch (err) {
+      setError(err instanceof AdminApiError ? err.message : "The access scope could not be changed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={close}
+      title="Access scope"
+      description={displayName(person)}
+      size="md"
+      footer={
+        <>
+          <button type="button" className="ac-btn ac-btn-secondary" onClick={close} disabled={busy}>
+            Cancel
+          </button>
+          <button type="submit" form="ac-scope-form" className="ac-btn ac-btn-primary" disabled={busy || (scope === "module" && !home)}>
+            {busy ? "Saving…" : "Save"}
+          </button>
+        </>
+      }
+    >
+      <form id="ac-scope-form" onSubmit={save}>
+        <div className="ac-field">
+          <label htmlFor="ac-scope-select">Access scope</label>
+          <select id="ac-scope-select" className="ac-select" value={scope} onChange={(e) => setScope(e.target.value as "platform" | "module")}>
+            <option value="platform">Platform</option>
+            <option value="module">Module-bound</option>
+          </select>
+          <span className="ac-hint">A module-bound person can only ever reach their home module, whatever grants they hold. Grants still decide what they may do inside it.</span>
+        </div>
+        {scope === "module" ? (
+          <div className="ac-field">
+            <label htmlFor="ac-scope-home">Home module</label>
+            <select id="ac-scope-home" className="ac-select" value={home} onChange={(e) => setHome(e.target.value)} required>
+              <option value="">Select a module</option>
+              <option value="facility_management">Facility Management</option>
+              <option value="ecc_operations">ECC Operations</option>
+            </select>
+          </div>
+        ) : null}
+        {error ? <p className="ac-form-error" role="alert">{error}</p> : null}
+      </form>
     </Modal>
   );
 }

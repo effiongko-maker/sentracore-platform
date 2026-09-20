@@ -18,6 +18,7 @@ export const AUDIT_CATEGORY_LABELS: Record<AuditCategory, string> = {
 export function auditCategoryForAction(action: string): AuditCategory | null {
   if (action.startsWith("capability.")) return "access";
   if (action.startsWith("module.")) return "modules";
+  if (action === "access_scope.changed") return "access";
   if (action.startsWith("facility_assignment.")) return "operating_context";
   if (action.startsWith("user.") || action.startsWith("profile.")) return "people";
   return null;
@@ -25,7 +26,7 @@ export function auditCategoryForAction(action: string): AuditCategory | null {
 
 export const AUDIT_ACTIONS_BY_CATEGORY: Record<AuditCategory, string[]> = {
   people: ["user.invited", "user.offboarded", "profile.attached_to_organisation", "profile.activated", "profile.suspended", "profile.deactivated"],
-  access: ["capability.granted", "capability.revoked"],
+  access: ["capability.granted", "capability.revoked", "access_scope.changed"],
   modules: ["module.enabled", "module.disabled"],
   operating_context: [
     "facility_assignment.created",
@@ -81,6 +82,12 @@ export function describeAuditEvent(
       const verb = action.split(".")[1];
       if (str(details, "previousStatus")) detail.push(`Status: ${str(details, "previousStatus")} → ${str(details, "status") || verb}`);
       return { headline: `${verb === "activated" ? "Activated" : verb === "suspended" ? "Suspended" : "Deactivated"} ${person}`, category, detail };
+    }
+    case "access_scope.changed": {
+      const label = (scope: string, home: string) =>
+        scope === "module" ? `Module-bound · ${home === "ecc_operations" ? "ECC Operations" : home === "facility_management" ? "Facility Management" : "unknown module"}` : "Platform";
+      detail.push(`Access scope: ${label(str(details, "previousAccessScope"), str(details, "previousHomeModule"))} → ${label(str(details, "accessScope"), str(details, "homeModule"))}`);
+      return { headline: `Changed access scope for ${person}`, category, detail };
     }
     case "user.offboarded": {
       const revoked = (details.revoked ?? {}) as Record<string, unknown>;

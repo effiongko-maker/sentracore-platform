@@ -14,6 +14,9 @@ export interface AuthProfile {
   jobTitle: string | null;
   organisationId: string | null;
   status: ProfileStatus;
+  /** platform | module — module-bound identities are restricted to homeModule (see moduleBoundary.ts). */
+  accessScope?: "platform" | "module";
+  homeModule?: string | null;
 }
 
 export interface AuthOrganisation {

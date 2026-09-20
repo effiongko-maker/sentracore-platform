@@ -34,6 +34,7 @@ type EccAction =
   | "getReportingSnapshot"
   | "getPeopleSnapshot"
   | "createPerson"
+  | "setPersonActive"
   | "ensureCurrentShift"
   | "setCurrentShiftAssignments"
   | "signInPerson"
@@ -317,6 +318,11 @@ export async function POST(request: Request) {
         return NextResponse.json({
           success: true,
           data: await service.createPerson(body.input as never),
+        });
+      case "setPersonActive":
+        return NextResponse.json({
+          success: true,
+          data: await service.setPersonActive(body.input as never),
         });
       case "ensureCurrentShift":
         return NextResponse.json({

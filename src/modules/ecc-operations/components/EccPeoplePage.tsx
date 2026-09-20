@@ -119,7 +119,10 @@ export function EccPeoplePage() {
   }, [showShiftForm]);
 
   const agentOptions = useMemo(
-    () => snapshot?.agents.map((row) => row.person) ?? [],
+    () =>
+      snapshot?.agents
+        .map((row) => row.person)
+        .filter((person) => person.status === "active") ?? [],
     [snapshot]
   );
 
@@ -302,6 +305,25 @@ export function EccPeoplePage() {
     } catch (err: unknown) {
       setError(
         err instanceof Error ? err.message : "Unable to assign agent to shift."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onSetActive(person: EccPerson, active: boolean) {
+    setSaving(true);
+    setError(null);
+    try {
+      await EccOperationsService.setPersonActive({ personId: person.id, active });
+      await reload();
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : active
+            ? "Unable to reactivate."
+            : "Unable to deactivate."
       );
     } finally {
       setSaving(false);
@@ -616,6 +638,8 @@ export function EccPeoplePage() {
             emptyTitle="No ECC manager(s) recorded yet"
             emptyCopy="Add a person and assign the ECC Manager role."
             actionLabel="+ Add manager"
+            saving={saving}
+            onSetActive={onSetActive}
             onAdd={() => startAddPerson("ecc_manager")}
           />
           <ManagementRolePanel
@@ -626,6 +650,8 @@ export function EccPeoplePage() {
             emptyTitle="No relationship officer recorded yet"
             emptyCopy="Add a person and assign the Relationship Officer role."
             actionLabel="+ Add relationship officer"
+            saving={saving}
+            onSetActive={onSetActive}
             onAdd={() => startAddPerson("relationship_officer")}
           />
         </div>
@@ -900,7 +926,20 @@ export function EccPeoplePage() {
                       </td>
                       <td className="ecc-reg-actions">
                         <div className="ecc-people-signin">
-                          {!isAssigned ? (
+                          {row.person.status !== "active" ? (
+                            <>
+                              <span className="ecc-people-signin-copy">Deactivated</span>
+                              <button
+                                type="button"
+                                className="ecc-btn ecc-btn-secondary ecc-btn-sm"
+                                disabled={saving}
+                                onClick={() => void onSetActive(row.person, true)}
+                              >
+                                Reactivate
+                              </button>
+                            </>
+                          ) : null}
+                          {row.person.status === "active" && !isAssigned ? (
                             <button
                               type="button"
                               className="ecc-btn ecc-btn-secondary ecc-btn-sm"
@@ -940,16 +979,28 @@ export function EccPeoplePage() {
                                 </button>
                               )}
                             </>
-                          ) : (
-                            <button
-                              type="button"
-                              className="ecc-btn ecc-btn-primary ecc-btn-sm"
-                              disabled={saving || row.person.status !== "active"}
-                              onClick={() => void onSignIn(row.person.id)}
-                            >
-                              Sign in
-                            </button>
-                          )}
+                          ) : row.person.status === "active" ? (
+                            <>
+                              <button
+                                type="button"
+                                className="ecc-btn ecc-btn-primary ecc-btn-sm"
+                                disabled={saving}
+                                onClick={() => void onSignIn(row.person.id)}
+                              >
+                                Sign in
+                              </button>
+                              {!isAssigned ? (
+                                <button
+                                  type="button"
+                                  className="ecc-btn ecc-btn-secondary ecc-btn-sm"
+                                  disabled={saving}
+                                  onClick={() => void onSetActive(row.person, false)}
+                                >
+                                  Deactivate
+                                </button>
+                              ) : null}
+                            </>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -1065,6 +1116,8 @@ function ManagementRolePanel({
   emptyCopy,
   actionLabel,
   onAdd,
+  saving,
+  onSetActive,
 }: {
   accent: "blue" | "green";
   title: string;
@@ -1074,6 +1127,8 @@ function ManagementRolePanel({
   emptyCopy: string;
   actionLabel: string;
   onAdd: () => void;
+  saving: boolean;
+  onSetActive: (person: EccPerson, active: boolean) => void;
 }) {
   return (
     <div className="ecc-ppl-role-panel">
@@ -1117,11 +1172,21 @@ function ManagementRolePanel({
                     person.id}
                 </p>
               </div>
-              <span
-                className={`ecc-people-duty is-${person.status === "active" ? "ok" : "neutral"}`}
-              >
-                {person.status === "active" ? "Active" : "Inactive"}
-              </span>
+              <div className="ecc-people-signin">
+                <span
+                  className={`ecc-people-duty is-${person.status === "active" ? "ok" : "neutral"}`}
+                >
+                  {person.status === "active" ? "Active" : "Deactivated"}
+                </span>
+                <button
+                  type="button"
+                  className="ecc-btn ecc-btn-secondary ecc-btn-sm"
+                  disabled={saving}
+                  onClick={() => onSetActive(person, person.status !== "active")}
+                >
+                  {person.status === "active" ? "Deactivate" : "Reactivate"}
+                </button>
+              </div>
             </li>
           ))}
         </ul>
