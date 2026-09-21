@@ -21,6 +21,7 @@ import {
   sharedRequest,
   stableRequestKey,
 } from "@/services/cache/sharedRequest";
+import { readRecordOrigin } from "@/services/recordOrigin";
 type RemoteWorkOrder = Record<string, unknown>;
 
 function pickField(raw: RemoteWorkOrder, ...keys: string[]): unknown {
@@ -230,6 +231,7 @@ function mapRemoteWorkOrder(raw: RemoteWorkOrder): WorkOrder {
       "Requires Approval"
     ),
     approvalId: optionalMappedString(raw, "approvalId", "Approval ID"),
+    recordOrigin: readRecordOrigin(raw),
     createdAt: String(
       pickField(raw, "createdAt", "Created At") ?? new Date().toISOString()
     ),

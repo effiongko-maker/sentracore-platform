@@ -164,6 +164,17 @@ export function composeIssueFromIncident(
 
   return {
     recordOrigin: inc.recordOrigin,
+    historicalSource:
+      inc.recordOrigin === "migrated_historical"
+        ? {
+            kind: "incident",
+            reference: inc.id,
+            reportedAt: inc.reportedAt,
+            locationDetail: inc.locationDetail,
+            rootCause: inc.rootCause,
+            correctiveActions: inc.correctiveActions,
+          }
+        : undefined,
     id: `issue:incident:${inc.id}`,
     reference: inc.id,
     title: inc.title,

@@ -2,6 +2,7 @@
 
 import type { IssueAction, IssueOperationalView } from "@/lib/operational/issues";
 import { useFacilityName } from "@/hooks/useEntityLabel";
+import { formatDate } from "@/lib/utils";
 import { originLabel } from "../lib/buildUnifiedIssueList";
 
 function StatusPill({ label }: { label: string }) {
@@ -51,7 +52,7 @@ export function IssueOperationalPanel({
   const { issue, outcome, executions, actions } = view;
   const primaryActions = actions.filter((a) => {
     if (!a.available || !a.href) return false;
-    if (a.id === "view_treatment" || a.id === "view_legacy_record") return true;
+    if (a.id === "view_treatment") return true;
     if (a.id === "create_work") return canCreate;
     if (a.id === "treat" || a.id === "cancel") return canMutate;
     return false;
@@ -114,6 +115,30 @@ export function IssueOperationalPanel({
 
       {issue.description ? (
         <p className="text-sm text-[var(--sc-fg)]">{issue.description}</p>
+      ) : null}
+
+      {issue.historicalSource ? (
+        <section aria-label="Source record">
+          <h3 className="mb-2 text-sm font-medium">Source record</h3>
+          <p className="mb-2 text-xs text-[var(--sc-muted)]">
+            Imported historical incident {issue.historicalSource.reference} — read-only source evidence. It was not
+            treated in SentraCore and cannot be changed.
+          </p>
+          <dl className="grid gap-2 text-sm">
+            <div>
+              <dt className="text-[var(--sc-muted)]">Reported</dt>
+              <dd>{issue.historicalSource.reportedAt ? formatDate(issue.historicalSource.reportedAt) : "Not recorded"}</dd>
+            </div>
+            <div>
+              <dt className="text-[var(--sc-muted)]">Root cause</dt>
+              <dd>{issue.historicalSource.rootCause || "Not recorded"}</dd>
+            </div>
+            <div>
+              <dt className="text-[var(--sc-muted)]">Corrective action</dt>
+              <dd>{issue.historicalSource.correctiveActions || "Not recorded"}</dd>
+            </div>
+          </dl>
+        </section>
       ) : null}
 
       <section>

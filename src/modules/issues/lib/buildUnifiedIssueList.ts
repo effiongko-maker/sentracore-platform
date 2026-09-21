@@ -102,6 +102,9 @@ export function buildUnifiedIssueList(input: {
         updatedAt: incident.updatedAt,
         reportedByUserId: incident.reportedByUserId,
         recordOrigin: incident.recordOrigin,
+        reportedAt: incident.reportedAt,
+        rootCause: incident.rootCause,
+        correctiveActions: incident.correctiveActions,
       },
     });
     items.push({ issue, view: buildIssueOperationalView(issue) });

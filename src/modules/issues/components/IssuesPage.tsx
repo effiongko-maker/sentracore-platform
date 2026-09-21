@@ -270,6 +270,9 @@ export function IssuesPage() {
                   updatedAt: incident.updatedAt,
                   reportedByUserId: incident.reportedByUserId,
                   recordOrigin: incident.recordOrigin,
+                  reportedAt: incident.reportedAt,
+                  rootCause: incident.rootCause,
+                  correctiveActions: incident.correctiveActions,
                 },
               })
             )

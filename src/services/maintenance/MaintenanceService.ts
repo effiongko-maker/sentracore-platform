@@ -23,6 +23,7 @@ import {
   sharedRequest,
   stableRequestKey,
 } from "@/services/cache/sharedRequest";
+import { readRecordOrigin } from "@/services/recordOrigin";
 
 type RemoteMaintenance = Record<string, unknown>;
 
@@ -132,6 +133,7 @@ export function mapRemoteMaintenance(raw: RemoteMaintenance): Maintenance {
       "Request ID"
     ),
     priority: priority || "medium",
+    recordOrigin: readRecordOrigin(raw),
     status,
     holdReason: optionalMappedString(raw, "holdReason", "Hold Reason"),
     requiresWorkOrder,

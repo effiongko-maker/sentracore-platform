@@ -291,10 +291,9 @@ const workRow = (over: Record<string, unknown>) => ({
   const hist = composeIssueFromIncident(incidentInput({}));
   const histActions = deriveIssueActions(hist);
   assert(hist.treatments.length === 0 && hist.recordOrigin === "migrated_historical", "Incident-root (imported): the incident is NOT listed as its own treatment");
-  assert(ids(histActions).join() === "view,view_legacy_record", `Incident-root (imported): exactly View + View legacy record (got ${ids(histActions).join()})`);
-  const legacyRecord = histActions.find((a) => a.id === "view_legacy_record")!;
-  assert(legacyRecord.label === "View legacy record" && legacyRecord.href === "/incidents?id=INC-2026-000001", "Incident-root (imported): the read-only source-evidence link routes to the legacy record");
+  assert(ids(histActions).join() === "view" && !histActions.some((a) => a.href), `Incident-root (imported): a single non-navigating View — NO link of any kind (got ${JSON.stringify(histActions)})`);
   assert(!histActions.some((a) => ["treat", "create_work", "cancel", "view_treatment", "log_issue"].includes(a.id)), "Incident-root (imported): NO Treat / Create work / Cancel / View treatment / Log Issue");
+  assert(hist.historicalSource?.reference === "INC-2026-000001", "Incident-root (imported): the source record is carried INSIDE the Issue as read-only evidence");
   assert(buildIssueOperationalView(hist).outcome.kind === "unknown", "Incident-root (imported): lifecycle stays unknown (not open / in progress / resolved)");
   // Incident-root, operational legacy: existing behaviour unchanged
   const legacy = composeIssueFromIncident(incidentInput({ id: "INC-2026-000500", status: "investigating", severity: "high", recordOrigin: undefined }));
@@ -354,6 +353,9 @@ const workRow = (over: Record<string, unknown>) => ({
   assert((rowActions.match(/canMutate && !readOnly/g) ?? []).length === 2, "Legacy Incidents: Investigate and Cancel are hidden for imported records");
   assert(!/Log issue|router\.push/.test(page) && /Back to Issues/.test(page) && /href="\/issues"/.test(page), "Legacy Incidents: the create-styled '+ Log issue' is replaced by ordinary navigation ('Back to Issues')");
   assert(/migrated_historical/.test(modal) && (page.match(/migrated_historical/g) ?? []).length >= 3, "Legacy Incidents: edit / cancel entry points are closed for imported records in the modal and the page state");
+  const svc = (f: string) => readFileSync(f, "utf8");
+  assert(["src/services/incidents/IncidentService.ts", "src/services/maintenance/MaintenanceService.ts", "src/services/workOrders/WorkOrderService.ts", "src/services/dieselUsage/DieselUsageService.ts"].every((f) => /recordOrigin: readRecordOrigin\(raw\)/.test(svc(f))) && /migrated_historical/.test(svc("src/services/recordOrigin.ts")), "client services: every browser-side mapper that rebuilds an object carries recordOrigin (a dropped field made every imported record read as operational in the real UI)");
+  assert(!/href=|Link\b|router\./.test(svc("src/modules/issues/components/IssueOperationalPanel.tsx").split("Source record")[1]?.split("Treatment")[0] ?? "x") && /Source record/.test(svc("src/modules/issues/components/IssueOperationalPanel.tsx")), "Issues panel: the source-record section is inline read-only evidence with no link");
   assert(/useFacilityName\(view\?\.issue\.facilityId\)/.test(readFileSync("src/modules/issues/components/IssueOperationalPanel.tsx", "utf8")) && !/<dd>\{issue\.facilityId\}<\/dd>/.test(readFileSync("src/modules/issues/components/IssueOperationalPanel.tsx", "utf8")), "Issues panel: the facility shows its name, not its UUID");
   pass("Issue → Incident routing: imported incident-root rows are read-only evidence; Work / Request roots never route into Legacy Incidents; server refuses any write to an imported incident before touching the database; creation freeze intact");
 }

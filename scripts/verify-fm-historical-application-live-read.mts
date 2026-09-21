@@ -237,7 +237,7 @@ async function main() {
     // imported incident-derived Issue rows are read-only evidence
     const { deriveIssueActions } = await import("../src/lib/operational/issues/actions");
     const incidentIssues = unified.filter((u) => u.issue.rootIncidentId);
-    assert(incidentIssues.length === 3 && incidentIssues.every((u) => u.issue.treatments.length === 0 && deriveIssueActions(u.issue).map((a) => a.id).join() === "view,view_legacy_record" && deriveIssueActions(u.issue).find((a) => a.id === "view_legacy_record")!.href === `/incidents?id=${u.issue.rootIncidentId}`), "Issues: the 3 imported incident rows offer only View + 'View legacy record' and list no treatment");
+    assert(incidentIssues.length === 3 && incidentIssues.every((u) => u.issue.treatments.length === 0 && deriveIssueActions(u.issue).map((a) => a.id).join() === "view" && !deriveIssueActions(u.issue).some((a) => a.href) && u.issue.historicalSource?.reference === u.issue.rootIncidentId), "Issues: the 3 imported incident rows offer NO link at all (nothing routes to /incidents) and carry their source evidence inline");
     assert(unified.filter((u) => u.issue.rootMaintenanceId).every((u) => deriveIssueActions(u.issue).filter((a) => a.href).every((a) => a.href!.startsWith("/work"))), "Issues: all 115 Work-root rows route only to /work");
     // period correctness on the real data
     const { scopeSnapshotToPeriod, periodCoverageNotes } = await import("../src/services/reporting/periodScope");

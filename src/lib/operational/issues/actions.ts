@@ -83,19 +83,11 @@ function resolveTreatHref(issue: Issue): string | undefined {
 export function deriveIssueActions(issue: Issue): IssueAction[] {
   const actions: IssueAction[] = [];
 
-  // Imported historical Incident: read-only source evidence only. No Treat / Create work / Cancel / Log Issue — the
-  // record is a historical fact, not something to treat, and it cannot be changed through any route.
+  // Imported historical Incident: NO navigation at all. The record is a historical fact — not something to treat,
+  // change or route into the frozen Legacy Incidents module — and its source evidence is shown inside the Issue
+  // (see Issue.historicalSource). No Treat / Create work / Cancel / View treatment / Log Issue.
   if (issue.rootIncidentId && issue.recordOrigin === "migrated_historical") {
-    return [
-      { id: "view", label: "View", available: true, description: "Review this Issue." },
-      {
-        id: "view_legacy_record",
-        label: "View legacy record",
-        available: true,
-        href: `/incidents?id=${encodeURIComponent(issue.rootIncidentId)}`,
-        description: "Open the imported historical incident (read-only source evidence).",
-      },
-    ];
+    return [{ id: "view", label: "View", available: true, description: "Review this Issue." }];
   }
   const terminal =
     issue.status === "resolved" || issue.status === "cancelled" || issue.status === "unknown";

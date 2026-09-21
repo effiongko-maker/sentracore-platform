@@ -198,8 +198,6 @@ export type IssueActionId =
   | "create_work"
   | "view_treatment"
   | "view_related_work"
-  /** Read-only source evidence: the legacy record behind an imported historical Incident. Never a treatment. */
-  | "view_legacy_record"
   | "log_issue";
 
 export type IssueAction = {
@@ -233,7 +231,23 @@ export type IssueOperationalView = {
  * Application-level Issue view composed from authoritative domain records.
  * Not persisted as its own sheet/table.
  */
+/**
+ * Source evidence of an imported historical record, shown INSIDE the Issue (read-only). It lets the record be
+ * inspected without leaving Issues; it is a copy of facts already stored, never a treatment or a relationship.
+ */
+export type IssueHistoricalSource = {
+  kind: "incident";
+  /** The source record's reference (INC-…). */
+  reference: string;
+  reportedAt?: string;
+  locationDetail?: string;
+  rootCause?: string;
+  correctiveActions?: string;
+};
+
 export type Issue = {
+  /** Present only for an imported historical record whose source facts are shown inline. */
+  historicalSource?: IssueHistoricalSource;
   /** migrated_historical = an imported record (its `source` origin is not proven); undefined = operational. */
   recordOrigin?: "operational" | "migrated_historical";
   /**
@@ -406,6 +420,9 @@ export type ComposeIssueFromIncidentInput = {
     updatedAt: string;
     reportedByUserId?: string;
     recordOrigin?: "operational" | "migrated_historical";
+    reportedAt?: string;
+    rootCause?: string;
+    correctiveActions?: string;
   };
   maintenances?: Array<{
     id: string;

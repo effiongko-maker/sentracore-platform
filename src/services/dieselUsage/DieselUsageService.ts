@@ -16,6 +16,7 @@ import {
   sharedRequest,
   stableRequestKey,
 } from "@/services/cache/sharedRequest";
+import { readRecordOrigin } from "@/services/recordOrigin";
 
 /** Raw row shape from the diesel-usage API. */
 type RemoteDieselUsage = Record<string, unknown>;
@@ -65,6 +66,7 @@ function mapRemoteDieselUsage(raw: RemoteDieselUsage): DieselUsage {
     ...(added != null ? { added } : {}),
     closingLevel,
     consumption,
+    recordOrigin: readRecordOrigin(raw),
     createdAt: String(
       pickField(raw, "createdAt", "Created At") ?? new Date().toISOString()
     ),

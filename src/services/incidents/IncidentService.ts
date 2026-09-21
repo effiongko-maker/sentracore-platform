@@ -22,6 +22,7 @@ import {
   sharedRequest,
   stableRequestKey,
 } from "@/services/cache/sharedRequest";
+import { readRecordOrigin } from "@/services/recordOrigin";
 
 type RemoteIncident = Record<string, unknown>;
 
@@ -211,6 +212,7 @@ function mapRemoteIncident(raw: RemoteIncident): Incident {
     ),
     reportedVia,
     severity: severity || "medium",
+    recordOrigin: readRecordOrigin(raw),
     peopleAffected: optionalNumber(raw, "peopleAffected", "People Affected"),
     isEmergency: optionalBoolean(raw, "isEmergency", "Is Emergency", "Emergency"),
     status,
