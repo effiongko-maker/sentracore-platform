@@ -200,7 +200,7 @@ async function main() {
     const migration = src("supabase/migrations/20260921100000_fm_historical_migration_support.sql");
     for (const t of allowed) assert(new RegExp(`'${t}'`).test(migration), `L: the provenance table admits target ${t}`);
     assert(m.rulesVersion === RULES_VERSION && m.batchId.startsWith("fmmig-"), "L: batch identity includes the source hashes and rules version");
-    pass(`L deterministic UUIDv5 identities + ${plan.length} provenance rows (one per record, unique per source row/target); a production importer inserts ON CONFLICT DO NOTHING`);
+    pass(`L deterministic UUIDv5 identities + ${plan.length} provenance rows (one per record, unique per source row/target); the controlled importer classifies each row by provenance + id and aborts on any collision (no ON CONFLICT suppression)`);
   }
 
   // M / N / O / P / Q
