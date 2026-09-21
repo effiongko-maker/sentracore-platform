@@ -17,7 +17,8 @@ export type CapabilityDomainId =
   | "fm_costs"
   | "fm_protected"
   | "ecc"
-  | "command_centre";
+  | "command_centre"
+  | "batcave";
 
 export type CapabilityDomain = {
   id: CapabilityDomainId;
@@ -111,6 +112,15 @@ export const CAPABILITY_DOMAINS: readonly CapabilityDomain[] = [
       { key: "platform.command_centre.decide", label: "Take Command Centre decisions", detail: "Act on decisions surfaced by Command Centre." },
       { key: "platform.command_centre.commitments.view", label: "View executive commitments", detail: "See the commitments they created or own. Being assigned a commitment does not grant this." },
       { key: "platform.command_centre.commitments.manage", label: "Manage executive commitments", detail: "Create, edit, complete and cancel executive commitments. Separate from taking decisions." },
+    ],
+  },
+  {
+    id: "batcave",
+    label: "Batcave",
+    summary: "Private executive domain. Independent of Command Centre and of administrative authority.",
+    moduleSlug: null,
+    capabilities: [
+      { key: "platform.batcave.access", label: "Enter Batcave", detail: "Private executive workspace. Not implied by Command Centre, Super Admin or any other capability, and granting it does not let the administrator enter." },
     ],
   },
 ] as const;

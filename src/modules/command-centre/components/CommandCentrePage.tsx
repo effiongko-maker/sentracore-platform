@@ -346,8 +346,11 @@ function LastVisitBlock({
 
 export function CommandCentrePage({
   snapshot,
+  footer,
 }: {
   snapshot: CommandCentreSnapshot;
+  /** Generic composition slot supplied by the route; Command Centre knows nothing of its content. */
+  footer?: ReactNode;
 }) {
   const dateLabel = formatAsOfDate(snapshot.asOf, snapshot.timeZone);
   const { decisions, attention } = snapshot;
@@ -470,6 +473,7 @@ export function CommandCentrePage({
           </aside>
         </div>
       </section>
+      {footer}
     </div>
   );
 }

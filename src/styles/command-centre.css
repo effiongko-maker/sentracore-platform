@@ -1057,3 +1057,66 @@ a.scc-decision-row:hover {
   font-size: 0.72rem;
   color: var(--scc-gold);
 }
+
+/* Batcave doorway + foundation page — restrained, same visual DNA, no imagery. */
+.scc-batcave-door {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.5rem 0.25rem 0;
+}
+
+.scc-batcave-door-link {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--scc-gold);
+  text-decoration: none;
+}
+
+.scc-batcave-door-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.scc-batcave-door-sub {
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--scc-ink-faint);
+}
+
+.scc-batcave {
+  display: grid;
+  gap: 1rem;
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 3rem 1.25rem;
+}
+
+.scc-batcave-title {
+  margin: 0.25rem 0;
+  font-family: var(--scc-serif);
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  font-weight: 400;
+  color: var(--scc-ink);
+}
+
+.scc-batcave-body {
+  min-height: 0;
+}
+
+.scc-batcave-note {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--scc-ink-soft);
+}
+
+.scc-batcave-back {
+  margin: 0;
+}

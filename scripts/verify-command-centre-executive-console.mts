@@ -250,19 +250,15 @@ async function main() {
     pass("F IAM: nullable, constrained, audited (old/new), canonical RPC only, invalid rejected, existing users unchanged by the migration");
   }
 
-  // ── G. Batcave ────────────────────────────────────────────────────────────
+  // ── G. Batcave (foundation now exists — see verify-batcave-boundary; this pass must stay clear of it) ──
   {
-    const named = [...walk("src"), ...walk("supabase")].filter((f) => /batcave/i.test(f));
-    assert(named.length === 0, "G: no Batcave route/file/migration");
-    const offenders = walk("src").filter((f) => /\.(ts|tsx|css)$/.test(f) && /batcave/i.test(src(f)) && !f.endsWith("financialAccounts.ts"));
-    assert(offenders.length === 0, `G: no Batcave runtime reference (${offenders.join(", ")})`);
+    const ccFiles = walk("src/modules/command-centre").filter((f) => /\.(ts|tsx)$/.test(f));
+    assert(ccFiles.every((f) => !/batcave/i.test(src(f))), "G: Command Centre modules know nothing of Batcave (doorway is composed by the route)");
     for (const f of walk("supabase/migrations")) {
-      const t = src(f);
-      assert(!/(create table|create schema)[^;]*batcave/i.test(t), `G: no Batcave schema in ${f}`);
+      assert(!/(create table|create schema)[^;]*batcave/i.test(src(f)), `G: no Batcave schema in ${f}`);
     }
-    assert(!/batcave/i.test(src("src/lib/access/landingWorkspace.ts").replace(/batcave/gi, "")) , "G: landing values exclude Batcave");
-    assert(!/batcave/i.test(src("src/modules/command-centre/server/CommandCentreServerService.ts")), "G: Command Centre knows nothing of Batcave");
-    pass("G no Batcave runtime, schema, route, capability or placeholder");
+    assert(!/batcave/i.test(src("src/lib/access/landingWorkspace.ts")), "G: landing values exclude Batcave");
+    pass("G Command Centre executive console remains free of Batcave data or knowledge");
   }
 
   console.log(out.join("\n"));

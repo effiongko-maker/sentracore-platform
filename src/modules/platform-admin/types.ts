@@ -1,4 +1,5 @@
 import { ECC_CAPABILITIES } from "@/modules/ecc-operations/types";
+import { BATCAVE_CAPABILITIES } from "@/modules/batcave/types";
 import { COMMAND_CENTRE_CAPABILITIES } from "@/modules/command-centre/types";
 import type { ProfileStatus } from "@/lib/auth/types";
 
@@ -39,6 +40,7 @@ export const PLATFORM_ADMINISTRABLE_CAPABILITIES = [
   COMMAND_CENTRE_CAPABILITIES.decide,
   COMMAND_CENTRE_CAPABILITIES.commitmentsView,
   COMMAND_CENTRE_CAPABILITIES.commitmentsManage,
+  BATCAVE_CAPABILITIES.access,
   "ops.view",
   "ops.create",
   "ops.edit",

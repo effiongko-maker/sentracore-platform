@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { isActionError } from "@/lib/actions/errors";
+import { BatcaveDoorway } from "@/modules/batcave/components/BatcaveDoorway";
+import { canEnterBatcave } from "@/modules/batcave/server/requireBatcaveAccess";
 import {
   requireCommandCentreAccess,
 } from "@/modules/command-centre";
@@ -8,10 +10,13 @@ import { CommandCentrePage } from "@/modules/command-centre/components/CommandCe
 import { CommandCentreServerService } from "@/modules/command-centre/server/CommandCentreServerService";
 
 export default async function CommandCentreRoute() {
+  let snapshot;
+  let batcaveDoorway = false;
   try {
     const access = await requireCommandCentreAccess();
-    const snapshot = await new CommandCentreServerService().load(access);
-    return <CommandCentrePage snapshot={snapshot} />;
+    snapshot = await new CommandCentreServerService().load(access);
+    // Doorway only: a boolean from Batcave's own gate. Command Centre never loads Batcave data.
+    batcaveDoorway = await canEnterBatcave();
   } catch (error) {
     if (isActionError(error)) {
       if (error.code === "UNAUTHENTICATED") {
@@ -39,4 +44,10 @@ export default async function CommandCentreRoute() {
     }
     throw error;
   }
+  return (
+    <CommandCentrePage
+      snapshot={snapshot}
+      footer={batcaveDoorway ? <BatcaveDoorway /> : null}
+    />
+  );
 }
