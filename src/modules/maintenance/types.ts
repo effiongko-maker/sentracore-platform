@@ -20,7 +20,8 @@ export type MaintenanceStatus =
 /** operational = created through the product (strict validation); migrated_historical = explicit migration. */
 export type FmRecordOrigin = "operational" | "migrated_historical";
 
-export type MaintenancePriority = "low" | "medium" | "high" | "critical";
+/** `unknown` = migrated historical Work whose source states no priority. Never selectable in the product. */
+export type MaintenancePriority = "low" | "medium" | "high" | "critical" | "unknown";
 
 export type MaintenanceSource =
   | "manual"

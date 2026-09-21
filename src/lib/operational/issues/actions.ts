@@ -83,7 +83,7 @@ function resolveTreatHref(issue: Issue): string | undefined {
 export function deriveIssueActions(issue: Issue): IssueAction[] {
   const actions: IssueAction[] = [];
   const terminal =
-    issue.status === "resolved" || issue.status === "cancelled";
+    issue.status === "resolved" || issue.status === "cancelled" || issue.status === "unknown";
 
   const anyTreatment = issue.treatments[0];
   const anyWorkOrder = issue.workOrders[0];

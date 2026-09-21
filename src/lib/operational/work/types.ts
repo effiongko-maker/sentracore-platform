@@ -30,7 +30,8 @@ export const WORK_BACKING_STORE = {
  */
 export type WorkStatus = MaintenanceStatus;
 
-export type WorkPriority = "low" | "medium" | "high" | "critical";
+/** `unknown` = migrated historical Work whose source states no priority. */
+export type WorkPriority = "low" | "medium" | "high" | "critical" | "unknown";
 
 /**
  * Operational Work activity addressing an Issue.

@@ -72,6 +72,7 @@ export const MAINTENANCE_PRIORITY_VARIANT: Record<
   medium: "info",
   high: "warning",
   critical: "danger",
+  unknown: "neutral",
 };
 
 export const MAINTENANCE_PAGE_SIZE = 8;

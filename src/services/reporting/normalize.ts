@@ -102,6 +102,12 @@ export function isMaintenanceBacklogStatus(status: unknown): boolean {
   return MAINTENANCE_BACKLOG.has(normalizeToken(status));
 }
 
+/** A KNOWN open incident status. `unknown` (historical, lifecycle not recorded) is neither open nor closed. */
+export function isOpenIncidentStatus(status: unknown): boolean {
+  const token = normalizeToken(status);
+  return token !== "" && token !== "unknown" && !CLOSED_INCIDENT.has(token);
+}
+
 export function isClosedIncidentStatus(status: unknown): boolean {
   return CLOSED_INCIDENT.has(normalizeToken(status));
 }

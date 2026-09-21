@@ -72,6 +72,7 @@ export const WORK_ORDER_PRIORITY_VARIANT: Record<
   medium: "info",
   high: "warning",
   critical: "danger",
+  unknown: "neutral",
 };
 
 export const WORK_ORDERS_PAGE_SIZE = 8;

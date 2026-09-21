@@ -98,6 +98,7 @@ function asRow(value: unknown): FmIncidentRow {
     assigned_to_profile_id: text("assigned_to_profile_id"),
     operational_event_id: text("operational_event_id"),
     reported_at: String(rec.reported_at ?? ""),
+    record_origin: rec.record_origin != null ? String(rec.record_origin) : "operational",
     discovered_at: text("discovered_at"),
     acknowledged_at: text("acknowledged_at"),
     response_due_at: text("response_due_at"),

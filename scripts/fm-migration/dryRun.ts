@@ -336,13 +336,13 @@ export function runDryRun(input: DryRunInput): Manifest {
         root_cause: cellText(s, r, "E"),
         corrective_actions: cellText(s, r, "F"),
         incident_type: "other",
-        severity: "medium",
+        // The source has NO status or severity column: both are stored as explicit UNKNOWN (historical origin only).
+        severity: "unknown",
         source: "manual",
-        status: "reported",
+        status: "unknown",
+        record_origin: "migrated_historical",
         source_only_preserved: { owner_text: owner, source_incident_no: ref },
-      }, transformations, [
-        { field: "status", forced: "reported", asserts: "source has no incident status; every valid value asserts a lifecycle position" },
-        { field: "severity", forced: "medium", asserts: "source has no severity" },
+      }, [...transformations, "status 'unknown' and severity 'unknown': the source states neither (record_origin migrated_historical)"], [
         { field: "incident_type", forced: "other", asserts: "source has no type" },
       ], ref);
       add("FM_PACK", s, r, "business", "TRANSFORM_IMPORT", "INCIDENT_HISTORICAL_IMPORT", "Historical incident ⇒ fm_incidents (creation stays frozen in product).", ref, [rec.id]);
@@ -677,19 +677,15 @@ export function runDryRun(input: DryRunInput): Manifest {
         // Historical Work (+ Work Instruction) with UNKNOWN lifecycle: no dates or status are inferred; Paid/Pending is commercial.
         const workRec = propose("MBORA", s, r, "fm_work", `work:${def.name}#${sn}`, {
           facility_code: input.facility.code, facility_id: facilityId,
-          title: desc, source: "manual", priority: "medium",
+          title: desc, source: "manual", priority: "unknown",
           status: "unknown", reported_at: null, completed_at: null, record_origin: "migrated_historical",
-        }, ["lifecycle unknown: reported_at NULL, status 'unknown', no completion — nothing is inferred from Paid/Pending or payment dates", "facility FAC-0001 from workbook scope (MBORA INCOME STATEMENT); the register has no per-row location", `order register: ${def.name}`], [
-          { field: "priority", forced: "medium", asserts: "source has no priority and the column has no 'unknown' value" },
-        ], ref);
+        }, ["lifecycle unknown: reported_at NULL, status 'unknown', no completion — nothing is inferred from Paid/Pending or payment dates", "facility FAC-0001 from workbook scope (MBORA INCOME STATEMENT); the register has no per-row location", `order register: ${def.name}`], [], ref);
         const wiRec = propose("MBORA", s, r, "fm_work_instructions", `wi:${def.name}#${sn}`, {
           facility_code: input.facility.code, facility_id: facilityId,
           work_record_id: workRec.id, order_type: def.orderType,
-          title: desc, work_category: "other", source: "manual", priority: "medium",
+          title: desc, work_category: "other", source: "manual", priority: "unknown",
           status: "unknown", requested_at: null, completed_at: null, record_origin: "migrated_historical",
-        }, [`order_type "${def.orderType}" is explicit from the source sheet (${def.name})`, "requested_at NULL and status 'unknown': no lifecycle fact is inferred", "work_category 'other' (never 'corrective': the source states no category)"], [
-          { field: "priority", forced: "medium", asserts: "source has no priority and the column has no 'unknown' value" },
-        ], ref);
+        }, [`order_type "${def.orderType}" is explicit from the source sheet (${def.name})`, "requested_at NULL and status 'unknown': no lifecycle fact is inferred", "work_category 'other' (never 'corrective': the source states no category)", "priority 'unknown': the source states no priority (never defaulted to medium)"], [], ref);
         // Direct cost is DEFERRED: preserved as migration evidence only (no cost record, claim, authorization or payment).
         const cost = num(s, r, "E");
         if (cost !== null) deferredEvidence.push({ row: `MBORA/${s.name}/${r}`, kind: "historical_direct_cost_deferred", values: { work_record_id: workRec.id, cost_amount: cost, currency: "NGN" } });
@@ -743,13 +739,11 @@ export function runDryRun(input: DryRunInput): Manifest {
       // Explicit evidence that work was executed with NO Job Order ⇒ historical Work and NO Work Instruction.
       const workRec = propose("MBORA", s, r, "fm_work", `work:executed-no-jo#${sn}`, {
         facility_code: input.facility.code, facility_id: facilityId,
-        title, source: "manual", priority: "medium",
+        title, source: "manual", priority: "unknown",
         status: "completed", reported_at: null, completed_at: null, record_origin: "migrated_historical",
         work_instruction: "NONE — source proves no formal Job Order exists",
         source_only_preserved: { approval_request_submitted_on: date, execution_evidence: "Executed", job_order_absent: true, corroborating_approval_row: approval?.id ?? null },
-      }, ["status 'completed' from explicit source evidence \"Executed\"; completion date unknown ⇒ completed_at NULL (migrated_historical only)", "NO Work Instruction and NO Job Order are created: the source states none exists", "reported_at NULL: the approval-request submission date is not the date the work was reported"], [
-        { field: "priority", forced: "medium", asserts: "source has no priority and the column has no 'unknown' value" },
-      ], ref);
+      }, ["status 'completed' from explicit source evidence \"Executed\"; completion date unknown ⇒ completed_at NULL (migrated_historical only)", "NO Work Instruction and NO Job Order are created: the source states none exists", "reported_at NULL: the approval-request submission date is not the date the work was reported", "priority 'unknown': the source states no priority (never defaulted to medium)"], [], ref);
       add("MBORA", s, r, "business", "TRANSFORM_IMPORT", "EXECUTED_NO_JOB_ORDER_HISTORICAL_WORK", "Executed with NO Job Order ⇒ migrated historical Work only (no Work Instruction, no Job Order).", ref, [workRec.id]);
     }
   }
@@ -835,7 +829,6 @@ export function runDryRun(input: DryRunInput): Manifest {
     { code: "NO_INSPECTION_MODEL", description: "No facility-inspection domain exists; the single inspection row is preserved as migration evidence only.", affected: count("NO_INSPECTION_MODEL") },
     { code: "CSIRT_LOCATION_UNRESOLVED", description: "CSIRT is not an approved SentraCore facility; every CSIRT-dependent record is quarantined for later organisational/location resolution.", affected: ledger.filter((l) => ["UNRESOLVED_FACILITY", "UNRESOLVED_FACILITY_SHEET_OUT_OF_CONTRACT", "CSIRT_DEPENDENT"].includes(l.reasonCode)).length },
     { code: "HISTORICAL_DIRECT_COST_DEFERRED", description: "Historical direct cost is deferred: preserved as migration evidence only; no cost record, claim, authorization or payment is created.", affected: deferredEvidence.length },
-    { code: "PRIORITY_HAS_NO_UNKNOWN_VALUE", description: "fm_work / fm_work_instructions priority is NOT NULL with no 'unknown' value; migrated orders carry the disclosed default 'medium'.", affected: targetCount("fm_work") + targetCount("fm_work_instructions") },
   ];
   const batchKey = batchId;
   const provenancePlan: Manifest["provenancePlan"] = records.map((r) => ({

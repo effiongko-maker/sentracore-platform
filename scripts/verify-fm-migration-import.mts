@@ -20,17 +20,17 @@ const source = process.argv.find((a) => a.startsWith("--source="))?.slice(9) ?? 
 const dir = resolve("supabase/migrations") + "/";
 const CHAIN = ["20260918190000", "20260918200000", "20260918220000", "20260918221000", "20260919120000", "20260919140000", "20260919160000", "20260919180000", "20260919200000", "20260919210000", "20260919230000", "20260919240000"];
 const NEW = "20260921100000";
+const NEW2 = "20260921110000";
 const sqlOf = (stamp: string) => readFileSync(dir + readdirSync(dir).find((n) => n.startsWith(stamp))!, "utf8");
 const ORG = "00000000-0000-4000-8000-000000000001";
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
-const BLOCKERS = ["fm_incidents.status=reported", "fm_incidents.severity=medium", "fm_work.priority=medium", "fm_work_instructions.priority=medium"];
 
 function refuses(fn: () => unknown, needle: RegExp): boolean {
   try { fn(); return false; } catch (e) { return e instanceof PlanError && needle.test(e.message); }
 }
 
-async function freshDb(manifest: Manifest, applyNew = true): Promise<PGlite> {
+async function freshDb(manifest: Manifest, applyNew: boolean | "first-only" = true): Promise<PGlite> {
   const db = new PGlite();
   await db.exec(`
     create role anon; create role authenticated; create role service_role;
@@ -43,6 +43,7 @@ async function freshDb(manifest: Manifest, applyNew = true): Promise<PGlite> {
   `);
   for (const stamp of CHAIN) await db.exec(sqlOf(stamp));
   if (applyNew) await db.exec(sqlOf(NEW));
+  if (applyNew === true) await db.exec(sqlOf(NEW2));
   await db.exec(`insert into public.organisations (id, slug) values ('${ORG}', 'o');
     insert into public.fm_facilities (id, organisation_id, code, name) values ('${manifest.facility.id}', '${ORG}', 'FAC-0001', 'NCC Annex');`);
   return db;
@@ -79,7 +80,7 @@ async function main() {
 
   // ── B. plan verification ────────────────────────────────────────────────────────
   const plan = buildImportPlan(manifest, { expectedDigest: digest, expectedBatchKey: manifest.batchId });
-  const unblocked = buildImportPlan(manifest, { acknowledgeBlockers: BLOCKERS });
+  const unblocked = plan; // the approved manifest no longer carries any blocking default
   {
     const want = { fm_assets: 9, fm_requests: 29, fm_incidents: 3, fm_work: 115, fm_work_instructions: 113, fm_generator_logs: 67, fm_diesel_usage: 14, fm_consumables_items: 31, fm_consumables_register_entries: 31 };
     assert(JSON.stringify(plan.countsByTarget) === JSON.stringify(want), `B: approved counts ${JSON.stringify(plan.countsByTarget)}`);
@@ -90,7 +91,12 @@ async function main() {
     assert(plan.rows.filter((r) => r.target === "fm_work").length - wi.length === 2, "B: 2 executed-without-Job-Order Works have no Work Instruction");
     assert(refuses(() => buildImportPlan(manifest, { expectedDigest: "0".repeat(64) }), /digest/), "B: a different manifest digest is refused");
     assert(refuses(() => buildImportPlan(manifest, { expectedBatchKey: "fmmig-other" }), /batch/), "B: a different batch is refused");
-    assert(plan.blockers.length === 4 && plan.blockers.map((b) => b.key).sort().join() === [...BLOCKERS].sort().join(), "B: exactly the four material forced defaults block execution");
+    assert(plan.blockers.length === 0, "B: no blocking schema-forced default remains in the approved manifest");
+    const val = (t: string, k: string) => plan.rows.filter((r) => r.target === t).map((r) => r.columns[k]);
+    assert(val("fm_incidents", "status").every((v) => v === "unknown") && val("fm_incidents", "severity").every((v) => v === "unknown") && val("fm_incidents", "record_origin").every((v) => v === "migrated_historical"), "B: the 3 incidents are status=unknown, severity=unknown, migrated_historical");
+    assert(val("fm_work", "priority").length === 115 && val("fm_work", "priority").every((v) => v === "unknown"), "B: all 115 Work rows have priority=unknown");
+    assert(val("fm_work_instructions", "priority").length === 113 && val("fm_work_instructions", "priority").every((v) => v === "unknown"), "B: all 113 Work Instructions have priority=unknown");
+    assert(!plan.rows.some((r) => r.forcedDefaults.some((d) => /medium|reported/.test(d))), "B: no forced default asserts medium / reported");
     assert(plan.acceptedDisclosures.length === 1 && plan.acceptedDisclosures[0]!.key === "fm_incidents.incident_type=other", "B: incident_type=other is the only accepted disclosure");
     assert(plan.ignoredByDesign.assetAliases === 30 && plan.ignoredByDesign.links === 131, "B: aliases and relationships are never written");
     const aliasNames = new Set(manifest.assetAliases.map((a) => a.asset));
@@ -98,7 +104,7 @@ async function main() {
     const forCreated = manifest.assetAliases.filter((a) => created.has(a.asset)).length;
     const excluded = manifest.assetAliases.filter((a) => !created.has(a.asset));
     assert(forCreated === 28 && excluded.length === 2 && excluded.every((a) => /CSIRT/.test(a.asset)) && aliasNames.size === 10, "B: 30 aliases = 28 for the 9 created assets + 2 for the excluded CSIRT generator");
-    pass("B plan: approved counts, 412 provenance rows, ids unique, order types, digest/batch pinning, 4 blockers, alias reconciliation (28 + 2 CSIRT)");
+    pass("B plan: approved counts, 412 provenance rows, ids unique, order types, digest/batch pinning, 0 blockers (unknown state preserved), alias reconciliation (28 + 2 CSIRT)");
   }
 
   // ── C. exclusion tests (each mutation must be refused by the plan builder) ─────
@@ -125,15 +131,22 @@ async function main() {
     pass("C exclusions: cost targets, FAC-0002, CSIRT content, quarantined rows, unmapped/commercial keys, deferred cost, asset good/metadata, fabricated WI, unreviewed defaults, broken provenance — all refused");
   }
 
-  // ── D. blockers make execution impossible ──────────────────────────────────────
+  // ── D. regression guard: a manifest that reintroduces a false default is BLOCKED ─
   {
-    const db = await freshDb(manifest);
-    const { client, log } = spy(db);
-    let refusedBlocked = false;
-    try { await executeImport(client, plan); } catch (e) { refusedBlocked = e instanceof PlanError && /BLOCKED/.test(e.message); }
-    assert(refusedBlocked && log.length === 0, "D: a plan with blocking forced defaults opens no transaction and issues no statement");
-    pass("D blocked plan: executeImport refuses before issuing any SQL");
-    await db.close();
+    for (const [key, target, field, forced] of [["fm_incidents.status=reported", "fm_incidents", "status", "reported"], ["fm_incidents.severity=medium", "fm_incidents", "severity", "medium"], ["fm_work.priority=medium", "fm_work", "priority", "medium"], ["fm_work_instructions.priority=medium", "fm_work_instructions", "priority", "medium"]] as const) {
+      const bad = clone(manifest);
+      const rec = bad.records.find((r) => r.target === target)!;
+      rec.values[field] = forced; rec.schemaForcedDefaults.push(key);
+      const blocked = buildImportPlan(bad);
+      assert(blocked.blockers.some((x) => x.key === key), `D: ${key} is flagged as a blocker`);
+      const db = await freshDb(manifest);
+      const { client, log } = spy(db);
+      let refusedBlocked = false;
+      try { await executeImport(client, blocked); } catch (e) { refusedBlocked = e instanceof PlanError && /BLOCKED/.test(e.message); }
+      assert(refusedBlocked && log.length === 0, `D: ${key} — executeImport opens no transaction and issues no statement`);
+      await db.close();
+    }
+    pass("D regression guard: reintroducing status=reported / severity=medium / priority=medium blocks execution before any SQL");
   }
 
   // ── E. gates ────────────────────────────────────────────────────────────────────
@@ -153,13 +166,17 @@ async function main() {
     const old = await freshDb(manifest, false);
     assert((await schemaReadiness(asClient(old))).length > 0, "F: pre-migration schema is reported not ready");
     await old.close();
+    const half = await freshDb(manifest, "first-only");
+    const halfProblems = await schemaReadiness(asClient(half));
+    assert(halfProblems.some((p) => /fm_incidents/.test(p)) && halfProblems.some((p) => /priority/.test(p)), "F: with only 20260921100000 applied the schema is NOT ready (incident record_origin / unknown priority missing)");
+    await half.close();
     const ready = await freshDb(manifest);
     assert((await schemaReadiness(asClient(ready))).length === 0, "F: post-migration schema is ready");
     await ready.close();
     pass("F schema readiness detects the un-migrated and the migrated schema");
   }
 
-  // ── G. full execution against a real Postgres (blockers acknowledged — TEST ONLY) ─
+  // ── G. full execution against a real Postgres ────────────────────────────────
   const db = await freshDb(manifest);
   const client = asClient(db);
   const before = await census(client);
@@ -201,6 +218,11 @@ async function main() {
     await db.exec(`update public.fm_generator_logs set fuel_used = 0 where fuel_used is null`);
     assert(!(await reconcile(client, unblocked)).ok, "H: reconciliation detects NULL fuel converted to zero");
     await db.exec(`update public.fm_generator_logs set fuel_used = null where id in (select id from public.fm_generator_logs where fuel_used = 0)`);
+    await db.exec(`update public.fm_incidents set status = 'reported', severity = 'medium'`);
+    await db.exec(`update public.fm_work set priority = 'medium' where id = (select id from public.fm_work limit 1)`);
+    assert(!(await reconcile(client, unblocked)).ok, "H: reconciliation detects unknown incident status/severity or Work priority defaulted to reported/medium");
+    await db.exec(`update public.fm_incidents set status = 'unknown', severity = 'unknown'`);
+    await db.exec(`update public.fm_work set priority = 'unknown' where priority = 'medium'`);
     assert((await reconcile(client, unblocked)).ok, "H: reconciliation passes again after the tampering is reverted");
     pass("H reconciliation: manifest → provenance → domain rows, field-level equality, DB-derived runtime, tamper detection (good/now()/zero)");
   }
@@ -336,8 +358,7 @@ async function main() {
     assert(!/operational_events|appsScript|apps-script|script\.google/i.test(exec + readFileSync("scripts/fm-migration-import/plan.ts", "utf8")), "M: no operational_events / Apps Script dependency");
     const cli = readFileSync("scripts/fm-migration-import.mts", "utf8");
     assert(/evaluateProductionGates/.test(cli) && cli.indexOf("evaluateProductionGates") < cli.indexOf("executeImport(client"), "M: the CLI evaluates every gate before it can reach executeImport");
-    assert(!/acknowledgeBlockers/.test(cli), "M: the test-only blocker acknowledgement is not reachable from the CLI");
-    pass("M static: no ON CONFLICT, no operational_events/Apps Script, gates precede execution, no CLI blocker override");
+    pass("M static: no ON CONFLICT, no operational_events/Apps Script, gates precede execution");
   }
 
   await db.close();

@@ -203,6 +203,22 @@ async function main() {
     pass(`L deterministic UUIDv5 identities + ${plan.length} provenance rows (one per record, unique per source row/target); the controlled importer classifies each row by provenance + id and aborts on any collision (no ON CONFLICT suppression)`);
   }
 
+  // R. no schema-forced FALSE FACTS remain (20260921110000): unknown is stored as unknown
+  {
+    const APPROVED_DIGEST = "271c3b2ab368227737f80f36352ae8d9f298120675142fe34544e589c35e4722";
+    assert(manifestDigest(m) === APPROVED_DIGEST, `R: manifest digest is the approved ${APPROVED_DIGEST.slice(0, 16)}… (a change needs a new reviewed approval)`);
+    const of = (t: string) => m.records.filter((r) => r.target === t);
+    assert(of("fm_incidents").length === 3 && of("fm_incidents").every((r) => r.values.status === "unknown" && r.values.severity === "unknown" && r.values.record_origin === "migrated_historical"), "R: the 3 incidents carry status=unknown, severity=unknown, migrated_historical (the source has no such columns)");
+    assert(of("fm_work").length === 115 && of("fm_work").every((r) => r.values.priority === "unknown"), "R: all 115 Work rows have priority=unknown");
+    assert(of("fm_work_instructions").length === 113 && of("fm_work_instructions").every((r) => r.values.priority === "unknown"), "R: all 113 Work Instructions have priority=unknown");
+    assert(m.exceptions.schemaForcedDefaults.length === 1 && m.exceptions.schemaForcedDefaults[0]!.field === "incident_type" && m.exceptions.schemaForcedDefaults[0]!.forced === "other", "R: the only remaining schema-forced default is incident_type=other (the schema's explicit uncategorised value)");
+    assert(!m.exceptions.modelGaps.some((g) => g.code === "PRIORITY_HAS_NO_UNKNOWN_VALUE"), "R: the priority model gap is resolved, not hidden");
+    assert(!m.records.some((r) => r.schemaForcedDefaults.some((d) => /medium|reported/.test(d))), "R: no record asserts medium / reported");
+    const sources = m.sources.map((x) => `${x.workbook}:${x.sha256}`).join();
+    assert(sources === "LETTERS:0ab7000870b81877845bb875122373cb56e4e608b7ff90be6cadb708765aba5e,FM_PACK:fd0ff8c8520c2419e7a23cb1fc8b8ee2d64d24fa2fa7f71fa5cdf30bb5a39dce,MBORA:ae67725384d89841bd43dbd0ed61491be0988fc64db7231a7b759fdf1cb3979c" && m.batchId === "fmmig-fff6b9cb6a4a1970", "R: source hashes and batch identity are unchanged");
+    pass("R unknown incident status/severity and Work/WI priority; only incident_type=other remains; digest pinned; sources + batch identity unchanged");
+  }
+
   // M / N / O / P / Q
   {
     assert(!/operational_events/.test(toolCode), "M: the tool never reads operational_events");

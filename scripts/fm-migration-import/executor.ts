@@ -44,14 +44,19 @@ export async function schemaReadiness(db: SqlClient): Promise<string[]> {
   for (const t of ["fm_migration_batches", "fm_migration_provenance", "fm_consumables_register_entries"]) {
     if (!(await db.query<{ ok: boolean }>("select to_regclass($1) is not null ok", [`public.${t}`])).rows[0]!.ok) problems.push(`missing table ${t}`);
   }
-  for (const t of ["fm_work", "fm_work_instructions", "fm_generator_logs"]) if (!(await cols(t)).has("record_origin")) problems.push(`${t}.record_origin missing`);
+  for (const t of ["fm_work", "fm_work_instructions", "fm_generator_logs", "fm_incidents"]) if (!(await cols(t)).has("record_origin")) problems.push(`${t}.record_origin missing`);
   const gl = await cols("fm_generator_logs");
   for (const c of ["log_basis", "start_meter_reading", "end_meter_reading", "asset_id"]) if (!gl.has(c)) problems.push(`fm_generator_logs.${c} missing`);
   const assetCons = await cons("fm_assets");
   if (!/unknown/.test(assetCons.get("fm_assets_condition_check") ?? "")) problems.push("fm_assets condition check does not admit 'unknown'");
   const workCons = await cons("fm_work");
   if (!workCons.has("fm_work_unknown_status_historical_only")) problems.push("fm_work unknown-status historical-only constraint missing");
+  const incCons = await cons("fm_incidents");
+  for (const name of ["fm_incidents_unknown_status_historical_only", "fm_incidents_unknown_severity_historical_only"]) if (!incCons.has(name)) problems.push(`fm_incidents ${name} missing`);
+  if (!/unknown/.test(incCons.get("fm_incidents_status_check") ?? "") || !/unknown/.test(incCons.get("fm_incidents_severity_check") ?? "")) problems.push("fm_incidents status/severity checks do not admit 'unknown'");
+  if (!/unknown/.test(workCons.get("fm_work_priority_check") ?? "") || !workCons.has("fm_work_unknown_priority_historical_only")) problems.push("fm_work priority does not admit historical-only 'unknown'");
   const wiCons = await cons("fm_work_instructions");
+  if (!/unknown/.test(wiCons.get("fm_work_instructions_priority_check") ?? "") || !wiCons.has("fm_work_instructions_unknown_priority_historical_only")) problems.push("fm_work_instructions priority does not admit historical-only 'unknown'");
   if (!wiCons.has("fm_work_instructions_unknown_status_historical_only")) problems.push("fm_work_instructions unknown-status historical-only constraint missing");
   for (const t of ["fm_migration_batches", "fm_migration_provenance"]) {
     const trig = await db.query<{ n: string }>("select tgname n from pg_trigger where tgrelid = to_regclass($1) and not tgisinternal", [`public.${t}`]);
@@ -284,7 +289,9 @@ export async function reconcile(db: SqlClient, plan: ImportPlan): Promise<{ ok: 
   add("no historical asset condition promoted to good", (await one("select count(*)::text c from public.fm_assets where id = any($1::uuid[]) and condition = 'good'", [ids("fm_assets")])) === 0);
   add("historical Work has no invented reported_at / completed_at", (await one("select count(*)::text c from public.fm_work where id = any($1::uuid[]) and (reported_at is not null or completed_at is not null)", [ids("fm_work")])) === 0);
   add("historical Work Instructions have no invented requested_at / completed_at", (await one("select count(*)::text c from public.fm_work_instructions where id = any($1::uuid[]) and (requested_at is not null or completed_at is not null)", [ids("fm_work_instructions")])) === 0);
-  add("all imported Work / WI are migrated_historical", (await one("select ((select count(*) from public.fm_work where id = any($1::uuid[]) and record_origin <> 'migrated_historical') + (select count(*) from public.fm_work_instructions where id = any($2::uuid[]) and record_origin <> 'migrated_historical'))::text as c", [ids("fm_work"), ids("fm_work_instructions")])) === 0);
+  add("all imported Incidents / Work / WI are migrated_historical", (await one("select ((select count(*) from public.fm_work where id = any($1::uuid[]) and record_origin <> 'migrated_historical') + (select count(*) from public.fm_work_instructions where id = any($2::uuid[]) and record_origin <> 'migrated_historical') + (select count(*) from public.fm_incidents where id = any($3::uuid[]) and record_origin <> 'migrated_historical'))::text as c", [ids("fm_work"), ids("fm_work_instructions"), ids("fm_incidents")])) === 0);
+  const unknownWanted = (t: ImportTarget, col: string) => plan.rows.filter((r) => r.target === t && r.columns[col] === "unknown").length;
+  add("unknown incident status/severity and Work/WI priority preserved as unknown (never defaulted)", (await one("select ((select count(*) from public.fm_incidents where id = any($1::uuid[]) and status = 'unknown') + (select count(*) from public.fm_incidents where id = any($1::uuid[]) and severity = 'unknown') + (select count(*) from public.fm_work where id = any($2::uuid[]) and priority = 'unknown') + (select count(*) from public.fm_work_instructions where id = any($3::uuid[]) and priority = 'unknown'))::text as c", [ids("fm_incidents"), ids("fm_work"), ids("fm_work_instructions")])) === unknownWanted("fm_incidents", "status") + unknownWanted("fm_incidents", "severity") + unknownWanted("fm_work", "priority") + unknownWanted("fm_work_instructions", "priority"));
   const nullFuelPlanned = plan.rows.filter((r) => r.target === "fm_generator_logs" && r.columns.fuel_used === null).length;
   add("generator fuel NULL preserved (never zero)", (await one("select count(*)::text c from public.fm_generator_logs where id = any($1::uuid[]) and fuel_used is null", [ids("fm_generator_logs")])) === nullFuelPlanned, `${nullFuelPlanned} expected NULL`);
   add("no clock times invented on hour-meter logs", (await one("select count(*)::text c from public.fm_generator_logs where id = any($1::uuid[]) and (started_at is not null or ended_at is not null or log_basis <> 'hour_meter')", [ids("fm_generator_logs")])) === 0);

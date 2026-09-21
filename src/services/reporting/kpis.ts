@@ -6,7 +6,7 @@ import type { User } from "@/modules/users/types";
 import type { WorkOrder } from "@/modules/work-orders/types";
 import {
   isActiveEntityStatus,
-  isClosedIncidentStatus,
+  isOpenIncidentStatus,
   isCriticalSeverity,
   isHighOrCriticalPriority,
   isMaintenanceBacklogStatus,
@@ -44,7 +44,7 @@ export function isMaintenanceBacklog(row: Maintenance) {
 export function isCriticalOpenIncident(incident: Incident) {
   return (
     isCriticalSeverity(incident.severity) &&
-    !isClosedIncidentStatus(incident.status)
+    isOpenIncidentStatus(incident.status)
   );
 }
 
@@ -123,7 +123,7 @@ export function computeReportingKpis(input: {
         incident.requiresWorkOrder === true ||
         normalizeToken(incident.requiresWorkOrder) === "true";
       return (
-        !isClosedIncidentStatus(incident.status) &&
+        isOpenIncidentStatus(incident.status) &&
         requires &&
         !String(incident.workOrderId || "").trim()
       );

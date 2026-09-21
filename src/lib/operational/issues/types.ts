@@ -34,7 +34,9 @@ export type IssueStatus =
   | "reported"
   | "being_treated"
   | "resolved"
-  | "cancelled";
+  | "cancelled"
+  /** Migrated historical record whose lifecycle is not stated by the source: NOT reported, NOT being treated, NOT resolved. */
+  | "unknown";
 
 /**
  * Optional classification attribute on an Issue.
@@ -167,7 +169,13 @@ export type IssueExecutionRef = {
 };
 
 /** Conceptual outcome of Issue pursuit — derived, not stored. */
-export type IssueOutcomeKind = "open" | "in_progress" | "resolved" | "cancelled";
+export type IssueOutcomeKind =
+  | "open"
+  | "in_progress"
+  | "resolved"
+  | "cancelled"
+  /** Migrated historical record with no recorded lifecycle — not open, not in progress, not resolved. */
+  | "unknown";
 
 export type IssueOutcome = {
   kind: IssueOutcomeKind;

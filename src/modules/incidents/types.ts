@@ -9,7 +9,11 @@ export type IncidentType =
   | "complaint"
   | "other";
 
-export type IncidentSeverity = "low" | "medium" | "high" | "critical";
+/** `unknown` = migrated historical incident whose source states no severity. Never selectable in the product. */
+export type IncidentSeverity = "low" | "medium" | "high" | "critical" | "unknown";
+
+/** operational = created through the product (strict validation); migrated_historical = explicit migration. */
+export type FmRecordOrigin = "operational" | "migrated_historical";
 
 export type IncidentStatus =
   | "reported"
@@ -18,7 +22,9 @@ export type IncidentStatus =
   | "contained"
   | "resolved"
   | "closed"
-  | "cancelled";
+  | "cancelled"
+  /** Migrated historical incident whose lifecycle is not stated by the source. Never selectable in the product. */
+  | "unknown";
 
 export type IncidentSource =
   | "manual"
@@ -75,6 +81,8 @@ export interface Incident {
   reportedVia?: IncidentChannel;
 
   severity: IncidentSeverity;
+  /** operational (product-created, strict) | migrated_historical (explicit migration). Never set from input. */
+  recordOrigin?: FmRecordOrigin;
   peopleAffected?: number;
   isEmergency?: boolean;
 

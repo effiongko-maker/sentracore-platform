@@ -48,6 +48,8 @@ export function mapMaintenanceStatusToIssueStatus(
   maintenanceStatus: string
 ): IssueStatus {
   switch (maintenanceStatus) {
+    case "unknown":
+      return "unknown"; // historical Work with no recorded lifecycle — never inferred as being treated
     case "completed":
       return "resolved";
     case "cancelled":
@@ -71,6 +73,8 @@ export function mapIncidentStatusToIssueStatus(
   incidentStatus: string
 ): IssueStatus {
   switch (incidentStatus) {
+    case "unknown":
+      return "unknown"; // historical incident with no recorded lifecycle — never inferred as reported/open
     case "resolved":
     case "closed":
       return "resolved";

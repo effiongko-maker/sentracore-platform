@@ -6,6 +6,13 @@ import type { Issue, IssueOutcome } from "./types";
  * from the authoritative root (Request / Maintenance / Incident).
  */
 export function deriveIssueOutcome(issue: Issue): IssueOutcome {
+  if (issue.status === "unknown") {
+    return {
+      kind: "unknown",
+      summary: "Historical record — lifecycle not recorded in the source.",
+      contributingTreatmentIds: [],
+    };
+  }
   if (issue.status === "cancelled") {
     return {
       kind: "cancelled",

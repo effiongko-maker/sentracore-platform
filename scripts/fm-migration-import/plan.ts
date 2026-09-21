@@ -49,7 +49,7 @@ export const TARGET_SPECS: Record<ImportTarget, TargetSpec> = {
   },
   fm_incidents: {
     prefix: "INC",
-    columns: { ...SAME("facility_id", "title", "location_detail", "root_cause", "corrective_actions", "incident_type", "severity", "source", "status"), reported_at: "reported_at_local" },
+    columns: { ...SAME("facility_id", "title", "location_detail", "root_cause", "corrective_actions", "incident_type", "severity", "source", "status", "record_origin"), reported_at: "reported_at_local" },
     nonPersisted: ["facility_code", "reported_on", "source_only_preserved"],
     references: {},
   },
@@ -100,16 +100,15 @@ export const TARGET_SPECS: Record<ImportTarget, TargetSpec> = {
 };
 
 /**
- * Schema-forced defaults that the owner review found to materially assert something the source never says.
- * A plan containing any of these is BLOCKED: the importer will not write them (fix the schema to carry
- * `unknown` for migrated_historical rows first, in a reviewed phase). Disclosed-but-accepted defaults are
- * listed in ACCEPTED_FORCED_DEFAULTS.
+ * Schema-forced defaults that materially assert something the source never says. Migration 20260921110000 gave
+ * historical rows an explicit `unknown`, so the manifest no longer emits any of these. They remain registered as
+ * REGRESSION GUARDS: if a manifest ever carries one again, the plan is BLOCKED and the importer will not write it.
  */
 export const BLOCKING_FORCED_DEFAULTS: Record<string, string> = {
-  "fm_incidents.status=reported": "'reported' is the OPEN lifecycle state; all 3 source incidents record corrective actions taken, so this shows resolved history as an open incident.",
+  "fm_incidents.status=reported": "'reported' is the OPEN lifecycle state; historical incident status is unknown, not open.",
   "fm_incidents.severity=medium": "the source assigns no severity; 'medium' is a risk grade that feeds incident severity analytics.",
-  "fm_work.priority=medium": "the source assigns no priority; every one of 115 Work rows would present and aggregate as 'medium'.",
-  "fm_work_instructions.priority=medium": "the source assigns no priority; every one of 113 Work Instructions would present and aggregate as 'medium'.",
+  "fm_work.priority=medium": "the source assigns no priority; historical Work priority is unknown, not medium.",
+  "fm_work_instructions.priority=medium": "the source assigns no priority; historical Work Instruction priority is unknown, not medium.",
 };
 export const ACCEPTED_FORCED_DEFAULTS: Record<string, string> = {
   "fm_incidents.incident_type=other": "'other' is the schema's own uncategorised bucket; it asserts no specific type.",
@@ -159,8 +158,6 @@ export type BuildOptions = {
   /** Digest the operator approved; the plan is refused if the manifest differs. */
   expectedDigest?: string;
   expectedBatchKey?: string;
-  /** TEST-ONLY hook (not reachable from the CLI): treat these blocking defaults as acknowledged. */
-  acknowledgeBlockers?: string[];
 };
 
 export function buildImportPlan(manifest: Manifest, options: BuildOptions = {}): ImportPlan {
@@ -243,6 +240,9 @@ export function buildImportPlan(manifest: Manifest, options: BuildOptions = {}):
   for (const w of rows.filter((r) => r.target === "fm_work" || r.target === "fm_work_instructions")) {
     if (w.columns.record_origin !== "migrated_historical") problems.push(`${w.target} ${w.id}: record_origin must be migrated_historical`);
   }
+  for (const i of rows.filter((r) => r.target === "fm_incidents")) {
+    if (i.columns.record_origin !== "migrated_historical") problems.push(`fm_incidents ${i.id}: record_origin must be migrated_historical`);
+  }
   for (const a of rows.filter((r) => r.target === "fm_assets")) {
     if (a.columns.condition === "good") problems.push(`fm_assets ${a.id}: condition "good" is not source-evidenced`);
     for (const f of ["manufacturer", "model", "serial_number"]) if (a.columns[f] !== null) problems.push(`fm_assets ${a.id}: ${f} is speculative metadata`);
@@ -263,10 +263,9 @@ export function buildImportPlan(manifest: Manifest, options: BuildOptions = {}):
   for (const r of rows) for (const d of r.forcedDefaults) forced.set(d, (forced.get(d) ?? 0) + 1);
   const blockers: ImportPlan["blockers"] = [];
   const acceptedDisclosures: ImportPlan["acceptedDisclosures"] = [];
-  const acknowledged = new Set(options.acknowledgeBlockers ?? []);
   for (const [key, count] of forced) {
     if (key in BLOCKING_FORCED_DEFAULTS) {
-      if (!acknowledged.has(key)) blockers.push({ key, recordCount: count, reason: BLOCKING_FORCED_DEFAULTS[key]! });
+      blockers.push({ key, recordCount: count, reason: BLOCKING_FORCED_DEFAULTS[key]! });
     } else if (key in ACCEPTED_FORCED_DEFAULTS) acceptedDisclosures.push({ key, recordCount: count, reason: ACCEPTED_FORCED_DEFAULTS[key]! });
     else problems.push(`unreviewed schema-forced default ${key} (${count} records)`);
   }

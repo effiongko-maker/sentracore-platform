@@ -65,6 +65,8 @@ export const INCIDENT_SEVERITY_VARIANT: Record<
   medium: "info",
   high: "warning",
   critical: "danger",
+  // Neutral and explicit: unknown is not medium.
+  unknown: "neutral",
 };
 
 export const INCIDENT_STATUS_VARIANT: Record<
@@ -78,6 +80,8 @@ export const INCIDENT_STATUS_VARIANT: Record<
   resolved: "success",
   closed: "success",
   cancelled: "neutral",
+  // Neutral and explicit: unknown is not "reported/open" and not "resolved".
+  unknown: "neutral",
 };
 
 export const INCIDENTS_PAGE_SIZE = 8;

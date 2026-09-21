@@ -11,6 +11,7 @@ import { PGlite } from "@electric-sql/pglite";
 const dir = resolve("supabase/migrations") + "/";
 const CHAIN = ["20260918190000", "20260918200000", "20260918220000", "20260918221000", "20260919120000", "20260919140000", "20260919160000", "20260919180000", "20260919200000", "20260919210000", "20260919230000", "20260919240000"];
 const NEW = "20260921100000";
+const NEW2 = "20260921110000";
 const sqlOf = (stamp: string) => readFileSync(dir + readdirSync(dir).find((n) => n.startsWith(stamp))!, "utf8");
 
 function assert(cond: unknown, message: string): asserts cond {
@@ -54,9 +55,18 @@ async function main() {
       values ('00000000-0000-4000-8000-0000000000b1', '00000000-0000-4000-8000-000000000001', 'AST-L1', '00000000-0000-4000-8000-0000000000f1', 'legacy asset', 'fair');
     insert into public.fm_generator_logs (organisation_id, code, log_date, generator, started_at, ended_at, fuel_used)
       values ('00000000-0000-4000-8000-000000000001', 'GEN-L1', '2026-08-01', 'Gen 1', '2026-08-01T08:00:00Z', '2026-08-01T10:30:00Z', 120);
+    insert into public.fm_work_instructions (id, organisation_id, code, order_type, work_id, facility_id, title, priority, status)
+      values ('00000000-0000-4000-8000-0000000000d1', '00000000-0000-4000-8000-000000000001', 'WO-L1', 'job_order', '00000000-0000-4000-8000-0000000000a1', '00000000-0000-4000-8000-0000000000f1', 'legacy wi', 'high', 'open');
+    insert into public.fm_incidents (id, organisation_id, code, facility_id, title, severity, status)
+      values ('00000000-0000-4000-8000-0000000000e2', '00000000-0000-4000-8000-000000000001', 'INC-L1', '00000000-0000-4000-8000-0000000000f1', 'legacy incident', 'critical', 'investigating');
   `);
+  const snapshot = async () => JSON.stringify((await db.query(`select 'w' k, code, priority, status, reported_at::text from public.fm_work where code='WRK-L1'
+    union all select 'wi', code, priority, status, requested_at::text from public.fm_work_instructions where code='WO-L1'
+    union all select 'inc', code, severity, status, reported_at::text from public.fm_incidents where code='INC-L1' order by 1`)).rows);
+  const legacyBefore = await snapshot();
   const before = (await db.query<{ c: string; h: string }>("select condition c, hours::text h from public.fm_assets, public.fm_generator_logs")).rows[0]!;
   await db.exec(sqlOf(NEW));
+  await db.exec(sqlOf(NEW2));
   const O = "'00000000-0000-4000-8000-000000000001'";
   const F = "'00000000-0000-4000-8000-0000000000f1'";
 
@@ -162,6 +172,48 @@ async function main() {
     const cols = (await db.query<{ column_name: string }>("select column_name from information_schema.columns where table_name='fm_migration_provenance'")).rows.map((r) => r.column_name);
     assert(!cols.some((c) => /amount|title|description|status|quantity|reading/.test(c)), "provenance holds identifiers and hashes only — never operational values");
     pass("provenance: central, append-only, idempotent per (workbook hash, sheet, row, target), hash-validated, service-role only, no operational values");
+  }
+
+  // 8. unknown incident status/severity and Work/WI priority — historical ONLY (20260921110000)
+  {
+    assert((await snapshot()) === legacyBefore, "existing operational Work / Work Instruction / Incident rows are byte-for-byte unchanged by the migration");
+    const inc = (extra: { status?: string; severity?: string; origin?: string }) => `insert into public.fm_incidents (organisation_id, code, facility_id, title, status, severity, record_origin) values (${O}, 'I-${Math.random().toString(36).slice(2, 8)}', ${F}, 't', '${extra.status ?? "reported"}', '${extra.severity ?? "medium"}', '${extra.origin ?? "operational"}');`;
+    const legacyOrigin = (await db.query<{ o: string }>("select record_origin o from public.fm_incidents where code='INC-L1'")).rows[0]!.o;
+    assert(legacyOrigin === "operational", "the legacy incident is backfilled as operational (default), never historical");
+    // forward strictness
+    assert(await rejects(db, inc({ status: "unknown" })), "operational Incident cannot use status=unknown");
+    assert(await rejects(db, inc({ severity: "unknown" })), "operational Incident cannot use severity=unknown");
+    assert(await rejects(db, inc({ status: "unknown", severity: "unknown" })), "operational Incident cannot use unknown status AND severity");
+    assert((await rejects(db, inc({ status: "triaged", severity: "high" }))) === null, "operational Incident with real values still inserts");
+    assert(await rejects(db, inc({ status: "bogus" })) && await rejects(db, inc({ severity: "bogus" })), "incident status/severity remain closed sets");
+    // explicit historical
+    assert((await rejects(db, inc({ status: "unknown", severity: "unknown", origin: "migrated_historical" }))) === null, "migrated historical Incident can use status=unknown and severity=unknown");
+    assert((await rejects(db, inc({ status: "unknown", origin: "migrated_historical" }))) === null && (await rejects(db, inc({ severity: "unknown", origin: "migrated_historical" }))) === null, "migrated historical Incident can use either unknown alone");
+    assert(await rejects(db, inc({ origin: "sideways" })), "incident record_origin is a closed set");
+    assert(await rejects(db, `update public.fm_incidents set record_origin = 'migrated_historical' where code = 'INC-L1';`), "an operational Incident cannot be re-labelled historical");
+    assert(await rejects(db, `update public.fm_incidents set status = 'unknown' where code = 'INC-L1';`), "an operational Incident cannot be flipped to unknown status");
+    assert(await rejects(db, `update public.fm_incidents set severity = 'unknown' where code = 'INC-L1';`), "an operational Incident cannot be flipped to unknown severity");
+    const histCode = (await db.query<{ code: string }>("select code from public.fm_incidents where record_origin='migrated_historical' limit 1")).rows[0]!.code;
+    assert(await rejects(db, `update public.fm_incidents set record_origin = 'operational' where code = '${histCode}';`), "a historical Incident cannot be re-labelled operational (unknown would become invalid)");
+    // Work priority
+    const wk = (priority: string, origin: string) => `insert into public.fm_work (organisation_id, code, facility_id, title, source, priority, record_origin, status, reported_at) values (${O}, 'W-${Math.random().toString(36).slice(2, 8)}', ${F}, 't', 'manual', '${priority}', '${origin}', '${origin === "operational" ? "requested" : "unknown"}', ${origin === "operational" ? "now()" : "null"});`;
+    assert(await rejects(db, wk("unknown", "operational")), "operational Work cannot use priority=unknown");
+    assert((await rejects(db, wk("high", "operational"))) === null, "operational Work with a real priority still inserts");
+    assert((await rejects(db, wk("unknown", "migrated_historical"))) === null, "migrated historical Work can use priority=unknown");
+    assert(await rejects(db, wk("urgent", "migrated_historical")), "Work priority remains a closed set for historical rows");
+    assert(await rejects(db, `update public.fm_work set priority = 'unknown' where code = 'WRK-L1';`), "an operational Work cannot be flipped to priority unknown");
+    // Work Instruction priority
+    const wid = historicalWork;
+    const wi = (priority: string, origin: string) => `insert into public.fm_work_instructions (organisation_id, code, order_type, work_id, facility_id, title, priority, status, requested_at, record_origin) values (${O}, 'X-${Math.random().toString(36).slice(2, 8)}', 'job_order', '${wid}', ${F}, 't', '${priority}', '${origin === "operational" ? "open" : "unknown"}', ${origin === "operational" ? "now()" : "null"}, '${origin}');`;
+    assert(await rejects(db, wi("unknown", "operational")), "operational Work Instruction cannot use priority=unknown");
+    assert((await rejects(db, wi("low", "operational"))) === null, "operational Work Instruction with a real priority still inserts");
+    assert((await rejects(db, wi("unknown", "migrated_historical"))) === null, "migrated historical Work Instruction can use priority=unknown");
+    assert(await rejects(db, `update public.fm_work_instructions set priority = 'unknown' where code = 'WO-L1';`), "an operational Work Instruction cannot be flipped to priority unknown");
+    assert((await snapshot()) === legacyBefore, "the legacy operational rows are still identical after all attempted writes");
+    // the default for new operational rows is unchanged
+    const defs = (await db.query<{ n: string; d: string | null }>("select column_name n, column_default d from information_schema.columns where table_name in ('fm_incidents') and column_name in ('status','severity','record_origin') order by 1")).rows.map((r) => `${r.n}=${r.d}`).join();
+    assert(defs === "record_origin='operational'::text,severity='medium'::text,status='reported'::text", `forward column defaults are unchanged (${defs})`);
+    pass("unknown incident status/severity and Work/WI priority: rejected for operational rows (insert AND update), accepted only for migrated_historical, origin immutable, legacy rows unchanged");
   }
 
   void historicalWork;

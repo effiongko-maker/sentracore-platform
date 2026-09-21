@@ -20,7 +20,8 @@ export type WorkOrderStatus =
 
 export type FmRecordOrigin = "operational" | "migrated_historical";
 
-export type WorkOrderPriority = "low" | "medium" | "high" | "critical";
+/** `unknown` = migrated historical Work Instruction whose source states no priority. Never selectable in the product. */
+export type WorkOrderPriority = "low" | "medium" | "high" | "critical" | "unknown";
 
 export type WorkOrderSource =
   | "manual"
