@@ -108,17 +108,21 @@ async function main() {
 
   // ── D. Domain minimalism ──────────────────────────────────────────────────
   {
+    // Superseded law: Batcave business data now exists — but ONLY inside the Batcave private domain,
+    // and is never consumed by Command Centre / Finance / Intelligence / general operational domains
+    // (proved in group C and in verify-batcave-private-notes).
     for (const f of walk("supabase/migrations")) {
-      assert(!/(create table|create schema|create view)[^;]*batcave/i.test(src(f)), `D: no Batcave business table/schema in ${f}`);
+      const creates = [...src(f).matchAll(/create (?:table|schema|view)\s+(?:if not exists\s+)?([\w.]+)/gi)].map((m) => m[1]).filter((n) => /batcave/i.test(n));
+      assert(creates.every((n) => n === "public.batcave_notes") && (creates.length === 0 || f.endsWith("20260920240000_batcave_private_notes.sql")), `D: only the private-notes migration may create Batcave business structures (${f})`);
     }
-    assert(!/create table/i.test(mig) && !/insert into/i.test(mig), "D: the Batcave migration is IAM-only — no tables, no seed rows");
+    assert(!/create table/i.test(mig) && !/insert into/i.test(mig), "D: the access-capability migration stays IAM-only — no tables, no seed rows");
     const files = walk("src/modules/batcave");
-    assert(files.length === 4, `D: Batcave module stays skeletal (types, gate, doorway, page) — found ${files.length} files`);
+    assert(files.every((f) => /modules\/batcave\/(types\.ts|server\/|components\/|notes\/)/.test(f)), "D: Batcave module contains only its gate, doorway/page and the private-notes capability");
     const ui = src("src/modules/batcave/components/BatcavePage.tsx") + src("src/modules/batcave/components/BatcaveDoorway.tsx");
     assert(!/Strategic Intelligence|Private Finance|CEO Notes|Confidential Decisions|Kaiso|Private Documents|Coming soon/i.test(ui), "D: no invented feature cards or roadmap teasers");
     assert(!/kaiso|llm|openai|anthropic/i.test(files.map(src).join("\n")), "D: no Kaiso / AI in Batcave");
     assert(!/\.(png|jpg|svg)/i.test(ui), "D: no new imagery");
-    pass("D minimalism: no tables, no seeds, no fake features, no Kaiso");
+    pass("D minimalism: business data confined to the private-notes table; no seeds, no fake features, no Kaiso");
   }
 
   // ── E. Admin ──────────────────────────────────────────────────────────────

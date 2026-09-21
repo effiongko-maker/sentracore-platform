@@ -255,7 +255,7 @@ async function main() {
     const ccFiles = walk("src/modules/command-centre").filter((f) => /\.(ts|tsx)$/.test(f));
     assert(ccFiles.every((f) => !/batcave/i.test(src(f))), "G: Command Centre modules know nothing of Batcave (doorway is composed by the route)");
     for (const f of walk("supabase/migrations")) {
-      assert(!/(create table|create schema)[^;]*batcave/i.test(src(f)), `G: no Batcave schema in ${f}`);
+      assert(!/(create table|create schema)[^;]*batcave/i.test(src(f)) || f.endsWith("20260920240000_batcave_private_notes.sql"), `G: Batcave schema exists only in its own private-notes migration (${f})`);
     }
     assert(!/batcave/i.test(src("src/lib/access/landingWorkspace.ts")), "G: landing values exclude Batcave");
     pass("G Command Centre executive console remains free of Batcave data or knowledge");

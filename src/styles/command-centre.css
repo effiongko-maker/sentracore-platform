@@ -1120,3 +1120,56 @@ a.scc-decision-row:hover {
 .scc-batcave-back {
   margin: 0;
 }
+
+/* Batcave private notes — quiet, plain-text workspace. */
+.scc-batcave { max-width: 64rem; }
+
+.scc-notes {
+  display: grid;
+  grid-template-columns: minmax(0, 18rem) minmax(0, 1fr);
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 720px) {
+  .scc-notes { grid-template-columns: 1fr; }
+}
+
+.scc-notes-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.scc-notes-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.scc-notes-item {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.55rem 0.5rem;
+  text-align: left;
+  font: inherit;
+  color: var(--scc-ink);
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--scc-line);
+  cursor: pointer;
+}
+
+.scc-notes-item:hover,
+.scc-notes-item.is-active {
+  background: var(--scc-surface-raise);
+}
+
+.scc-notes-item-title { font-size: 0.82rem; }
+.scc-notes-item-date { font-size: 0.66rem; color: var(--scc-ink-faint); }
+.scc-notes-empty { margin: 0.5rem 0; font-size: 0.8rem; color: var(--scc-ink-soft); }
+.scc-notes-editor textarea { min-height: 14rem; resize: vertical; }
