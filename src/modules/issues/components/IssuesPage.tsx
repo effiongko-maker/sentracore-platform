@@ -32,6 +32,7 @@ import {
   originLabel,
   type UnifiedIssueListItem,
 } from "../lib/buildUnifiedIssueList";
+import { restrictedRequestsNotice } from "../lib/requestsAccessNotice";
 import { IssueOperationalPanel } from "./IssueOperationalPanel";
 import { LogIssueModal } from "./LogIssueModal";
 
@@ -343,6 +344,11 @@ export function IssuesPage() {
           />
         ) : (
           <>
+          {restrictedRequestsNotice(requestsSource) ? (
+            <p role="note" className="mb-3 text-xs text-muted">
+              {restrictedRequestsNotice(requestsSource)}
+            </p>
+          ) : null}
           {requestsSource === "unavailable" ? (
             <div
               role="status"

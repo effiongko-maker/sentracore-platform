@@ -358,5 +358,30 @@ const workRow = (over: Record<string, unknown>) => ({
   pass("Issue → Incident routing: imported incident-root rows are read-only evidence; Work / Request roots never route into Legacy Incidents; server refuses any write to an imported incident before touching the database; creation freeze intact");
 }
 
+// Issues access-state indication: restricted (no requests.view) is disclosed subtly; ok shows nothing; the
+// composition (118 vs 147) is unchanged
+{
+  const { restrictedRequestsNotice } = await import("../src/modules/issues/lib/requestsAccessNotice");
+  const { buildUnifiedIssueList } = await import("../src/modules/issues/lib/buildUnifiedIssueList");
+  const note = restrictedRequestsNotice("restricted");
+  assert(note !== null && /Request-based Issues/.test(note) && /access scope/.test(note), "restricted: a note says Request-based Issues are excluded because of the operator's access scope");
+  assert(!/\d/.test(note) && !/REQ-|\bcount\b|\bexist|hidden|\bsome\b|\bmore\b/i.test(note), "restricted: the note carries no count, title, identifier or hint that any Request exists");
+  assert(restrictedRequestsNotice("ok") === null, "operator WITH requests.view: no restriction notice");
+  assert(restrictedRequestsNotice("unavailable") === null, "a FAILED load is not 'restricted': it keeps its own distinct notice with Retry");
+  const page = readFileSync("src/modules/issues/components/IssuesPage.tsx", "utf8");
+  assert(/requests === null \? "restricted"/.test(page) && /const canReadRequests = can\("requests\.view"\)/.test(page), "the restricted state is derived ONLY from the absence of requests.view (not from a failure)");
+  assert(/requestsSource === "unavailable"[\s\S]{0,600}Retry/.test(page) && /role="note"/.test(page) && !/onClick[^\n]*restrictedRequestsNotice/.test(page), "unavailable keeps its alert-style notice with Retry; restricted is a plain, non-interactive, non-alarming note");
+  const access = readFileSync("src/lib/access/capabilities.ts", "utf8");
+  assert(/requests\.view/.test(access) && !/requests\.view[^\n]*\bgrant/i.test(readFileSync("src/modules/issues/lib/requestsAccessNotice.ts", "utf8").replace(/\/\*[\s\S]*?\*\//g, "")), "access control is untouched: nothing here grants or requests requests.view");
+  // composition unchanged: 115 Work + 3 incidents = 118 restricted; + 29 Requests = 147
+  const at = "2026-09-21T15:37:00Z";
+  const works = Array.from({ length: 115 }, (_, i) => ({ id: `WRK-${i}`, title: "w", facilityId: "f", status: "unknown", priority: "unknown", createdAt: at, updatedAt: at, recordOrigin: "migrated_historical" }));
+  const incs = Array.from({ length: 3 }, (_, i) => ({ id: `INC-${i}`, title: "i", facilityId: "f", status: "unknown", severity: "unknown", type: "other", createdAt: at, updatedAt: at, recordOrigin: "migrated_historical" }));
+  const reqs = Array.from({ length: 29 }, (_, i) => ({ id: `REQ-${i}`, title: "r", facilityId: "f", status: "closed", maintenanceIds: [], incidentIds: [], workOrderIds: [], createdAt: at, updatedAt: at }));
+  assert(buildUnifiedIssueList({ requests: [], maintenances: works as never, incidents: incs as never }).length === 118, "composition (restricted): 115 Work + 3 incidents = 118, exactly as before");
+  assert(buildUnifiedIssueList({ requests: reqs as never, maintenances: works as never, incidents: incs as never }).length === 147, "composition (with requests.view): 118 + 29 Requests = 147, exactly as before");
+  pass("Issues access state: restricted → subtle scope note with no Request metadata; requests.view → no notice; failed load stays distinct; 118 / 147 composition unchanged");
+}
+
 console.log(out.join("\n"));
 console.log(`\n${out.length} groups passed`);
