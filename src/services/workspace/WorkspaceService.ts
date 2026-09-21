@@ -223,8 +223,11 @@ function buildActivity(
   incidents: Incident[],
   maintenance: Maintenance[]
 ): WorkspaceActivityItem[] {
+  // Migrated historical Work / Work Instructions have no known business timestamp: their createdAt is the import
+  // time, so they must never appear as fresh activity. Only records with a real business date feed the stream.
+  const isLive = (row: { recordOrigin?: string }) => row.recordOrigin !== "migrated_historical";
   const items: WorkspaceActivityItem[] = [
-    ...maintenance.map((row) => ({
+    ...maintenance.filter(isLive).map((row) => ({
       id: `activity-mnt-${row.id}`,
       kind: "maintenance_requested" as const,
       module: "work" as const,
@@ -233,7 +236,7 @@ function buildActivity(
       summary: "Work requested",
       at: row.reportedAt || row.createdAt || "",
     })),
-    ...workOrders.map((row) => ({
+    ...workOrders.filter(isLive).map((row) => ({
       id: `activity-wo-${row.id}`,
       kind: "work_order_created" as const,
       module: "work-orders" as const,

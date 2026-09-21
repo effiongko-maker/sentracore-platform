@@ -5,7 +5,7 @@ import type {
 } from "../types";
 import {
   buildCoverLetter,
-  closureRate,
+  closureRateLabel,
   formatPercent,
   listTitles,
   recommendationBullets,
@@ -18,7 +18,6 @@ export function buildMonthlyFacilityReportDocument(
 ): MonthlyFacilityReportDocument {
   const { kpis, health, projections } = snapshot;
   const raised = snapshot.workOrders.length;
-  const closedPct = closureRate(snapshot);
 
   const fields = {
     facilityName: context.facilityName ?? "Portfolio",
@@ -29,7 +28,7 @@ export function buildMonthlyFacilityReportDocument(
     department: context.department ?? "",
     workOrdersRaised: raised,
     openWorkOrders: kpis.openWorkOrders,
-    closureRate: `${closedPct}%`,
+    closureRate: closureRateLabel(snapshot),
     assetAvailability: formatPercent(kpis.assetsOperationalPercent),
     criticalWork: kpis.criticalWork,
     maintenanceBacklog: kpis.maintenanceBacklog,
@@ -49,7 +48,7 @@ export function buildMonthlyFacilityReportDocument(
       reportTitle: "Monthly Facility Report",
       highlights: [
         `${raised} work orders in scope`,
-        `Closure rate ${closedPct}%`,
+        `Closure rate ${closureRateLabel(snapshot)}`,
         `Asset availability ${fields.assetAvailability}`,
       ],
     }),

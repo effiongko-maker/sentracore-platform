@@ -5,7 +5,7 @@ import type {
 } from "../types";
 import {
   buildCoverLetter,
-  closureRate,
+  closureRateLabel,
   recommendationBullets,
 } from "./shared";
 
@@ -14,7 +14,6 @@ export function buildWorkOrderReportDocument(
   context: DocumentBuildContext
 ): WorkOrderReportDocument {
   const { kpis, workOrders, projections } = snapshot;
-  const closedPct = closureRate(snapshot);
   const open = workOrders.filter((w) =>
     ["draft", "open", "assigned", "in_progress", "on_hold"].includes(w.status)
   );
@@ -27,7 +26,8 @@ export function buildWorkOrderReportDocument(
     type: w.type,
     priority: w.priority,
     status: w.status,
-    createdAt: w.createdAt?.slice(0, 10) ?? "—",
+    // Migrated historical rows have no known raised date (createdAt is the import time).
+    createdAt: w.recordOrigin === "migrated_historical" ? "—" : (w.createdAt?.slice(0, 10) ?? "—"),
     dueAt: w.dueAt?.slice(0, 10) ?? "—",
   }));
 
@@ -38,7 +38,7 @@ export function buildWorkOrderReportDocument(
     workOrdersRaised: workOrders.length,
     openWorkOrders: kpis.openWorkOrders,
     overdueWorkOrders: kpis.overdueWorkOrders,
-    closureRate: `${closedPct}%`,
+    closureRate: closureRateLabel(snapshot),
     workOrdersDueToday: kpis.workOrdersDueToday,
     workOrdersOnHold: kpis.workOrdersOnHold,
     recommendations: recommendationBullets(snapshot).join(" | "),
@@ -54,7 +54,7 @@ export function buildWorkOrderReportDocument(
       reportTitle: "Work Order Report",
       highlights: [
         `${workOrders.length} work orders in scope`,
-        `Closure rate ${closedPct}%`,
+        `Closure rate ${closureRateLabel(snapshot)}`,
       ],
     }),
     fields,

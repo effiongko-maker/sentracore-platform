@@ -1,7 +1,9 @@
 import {
   isActiveEntityStatus,
+  isOpenIncidentStatus,
   isOperationalAssetStatus,
 } from "@/services/reporting/normalize";
+import { unrecordedStateNotes } from "@/services/reporting/documents/builders/shared";
 import {
   computeReportingHealth,
   computeReportingKpis,
@@ -120,10 +122,12 @@ function assetFacilityName(
   return byId || asset.facility || "—";
 }
 
+/** Records with no recorded lifecycle (migrated historical `unknown`) are neither closed nor open: excluded. */
 function closureRate(scoped: ReportingSnapshot): number {
-  const total = scoped.workOrders.length;
+  const known = scoped.workOrders.filter((w) => String(w.status || "").toLowerCase() !== "unknown");
+  const total = known.length;
   if (!total) return 0;
-  const closed = scoped.workOrders.filter((w) =>
+  const closed = known.filter((w) =>
     ["completed", "closed", "cancelled"].includes(
       String(w.status || "").toLowerCase()
     )
@@ -164,9 +168,14 @@ function riskBullets(scoped: ReportingSnapshot): string[] {
     bullets.push(`${item.title}${item.meta ? ` — ${item.meta}` : ""}`);
   }
 
-  return bullets.length
-    ? bullets
-    : ["No major risks identified in the current reporting snapshot."];
+  const notes = unrecordedStateNotes(scoped);
+  if (bullets.length) return [...bullets, ...notes];
+  return [
+    notes.length
+      ? "No major risks identified in the recorded data."
+      : "No major risks identified in the current reporting snapshot.",
+    ...notes,
+  ];
 }
 
 function recommendationBullets(scoped: ReportingSnapshot): string[] {
@@ -366,12 +375,9 @@ export function buildClientReport(input: {
   );
   const { kpis, projections } = scoped;
   const rate = closureRate(scoped);
-  const openIncidents = scoped.incidents.filter(
-    (i) =>
-      !["closed", "resolved", "cancelled"].includes(
-        String(i.status || "").toLowerCase()
-      )
-  );
+  const rateLabel = scoped.workOrders.some((w) => String(w.status || "").toLowerCase() !== "unknown") ? `${rate}%` : "—";
+  // A KNOWN open status: an `unknown` (migrated historical) incident is neither open nor closed.
+  const openIncidents = scoped.incidents.filter((i) => isOpenIncidentStatus(i.status));
 
   const sections: ReportSectionId[] = [...wizard.sections];
   const woStatus = statusCounts(scoped.workOrders);
@@ -455,8 +461,8 @@ export function buildClientReport(input: {
       metric(
         "closure",
         "Work order closure rate",
-        `${rate}%`,
-        "Closed / cancelled of recorded WOs"
+        rateLabel,
+        "Closed / cancelled of WOs with a recorded status"
       ),
     ],
     operationalPerformance: {
@@ -481,14 +487,14 @@ export function buildClientReport(input: {
     workOrders: {
       narrative:
         `${kpis.openWorkOrders} work order(s) remain open, with ${kpis.workOrdersDueToday} due today ` +
-        `and ${kpis.workOrdersOnHold} on hold. Closure rate across recorded work orders is ${rate}%.`,
+        `and ${kpis.workOrdersOnHold} on hold. Closure rate across work orders with a recorded status is ${rateLabel}.`,
       metrics: [
         metric("open", "Open", kpis.openWorkOrders),
         metric("overdue", "Overdue", kpis.overdueWorkOrders),
         metric("due_today", "Due today", kpis.workOrdersDueToday),
         metric("on_hold", "On hold", kpis.workOrdersOnHold),
         metric("created_today", "Created today", kpis.workOrdersCreatedToday),
-        metric("closure", "Closure rate", `${rate}%`),
+        metric("closure", "Closure rate", rateLabel),
       ],
       table: listTable(
         ["Work order", "Status", "Priority", "Notes"],

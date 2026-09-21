@@ -5,7 +5,7 @@ import type {
 } from "../types";
 import {
   buildCoverLetter,
-  closureRate,
+  closureRateLabel,
   formatPercent,
   listTitles,
   recommendationBullets,
@@ -17,7 +17,6 @@ export function buildQuarterlyReportDocument(
   context: DocumentBuildContext
 ): QuarterlyReportDocument {
   const { kpis, health, assets } = snapshot;
-  const closedPct = closureRate(snapshot);
 
   const majorAssets = assets
     .filter((a) => a.criticality === "critical" || a.criticality === "high")
@@ -50,7 +49,7 @@ export function buildQuarterlyReportDocument(
     operationalScore: health.score,
     assetAvailability: formatPercent(kpis.assetsOperationalPercent),
     workOrdersRaised: snapshot.workOrders.length,
-    closureRate: `${closedPct}%`,
+    closureRate: closureRateLabel(snapshot),
     criticalWork: kpis.criticalWork,
     maintenanceBacklog: kpis.maintenanceBacklog,
     majorRisks: riskBullets(snapshot).join(" | "),

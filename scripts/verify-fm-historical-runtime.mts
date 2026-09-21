@@ -167,5 +167,44 @@ const workRow = (over: Record<string, unknown>) => ({
   pass("Consumers: Issue lens/outcome/actions, Reporting KPIs, Workspace attention and Operational Picture never treat unknown as reported/open/medium/critical/resolved/overdue");
 }
 
+// Application consumers of the IMPORTED dataset (Reporting / Home / notifications / reports) — pure regression
+{
+  const { computeReportingKpis: kpisOf, kpiInsightLabels: labelsOf } = await import("../src/services/reporting/kpis");
+  const { closureRateLabel, unrecordedStateNotes, riskBullets: risks } = await import("../src/services/reporting/documents/builders/shared");
+  const { composeWorkspaceSnapshot } = await import("../src/services/workspace/WorkspaceService");
+  const { deriveOperationalNotifications } = await import("../src/modules/workspace/utils/deriveOperationalNotifications");
+  const NOW = "2026-09-21T16:00:00Z";
+  const importedAt = "2026-09-21T15:37:16Z";
+  const histWi = { id: "WO-H", status: "unknown", priority: "unknown", recordOrigin: "migrated_historical", createdAt: importedAt, updatedAt: importedAt, title: "h" };
+  const liveWi = { id: "WO-L", status: "open", priority: "high", recordOrigin: "operational", createdAt: NOW, updatedAt: NOW, title: "l" };
+  const histWork = { id: "WRK-H", status: "unknown", priority: "unknown", recordOrigin: "migrated_historical", createdAt: importedAt, updatedAt: importedAt, title: "h" };
+  const asset = (over: Record<string, unknown>) => ({ id: "a", status: "pending", condition: "unknown", ...over });
+  const k = kpisOf({ asOf: NOW, facilities: [], users: [], incidents: [], assets: [asset({}), asset({ id: "b" })] as never, maintenance: [histWork] as never, workOrders: [histWi, liveWi] as never });
+  assert(k.workOrdersCreatedToday === 1, "KPI: only the LIVE work order is 'created today'; the migrated one (created at import time) is not");
+  assert(k.assetsOperationalPercent === null && k.activeAssets === 0, "KPI: assets with no recorded status → availability unknown (null), not 0%");
+  const k2 = kpisOf({ asOf: NOW, facilities: [], users: [], incidents: [], assets: [asset({ status: "active", condition: "good" }), asset({ id: "b", status: "inactive", condition: "good" }), asset({ id: "c" })] as never, maintenance: [], workOrders: [] });
+  assert(k2.assetsOperationalPercent === 50, "KPI: availability is measured over assessed assets only (1 of 2 = 50%; the unassessed one is excluded)");
+  assert(k.workLifecycleUnknown === 2 && k.assetsConditionUnknown === 2, "KPI: unknown lifecycle / condition counts are disclosed");
+  const lab = labelsOf({ ...k, openWorkOrders: 0, maintenanceBacklog: 0, criticalWork: 0 });
+  assert(lab.activeAssets === "Operational status not recorded" && /None recorded open \(2 with no recorded status\)/.test(lab.openWorkOrders) && /None recorded open/.test(lab.maintenanceBacklog) && /None recorded critical/.test(lab.criticalWork), "labels: zeros over unrecorded records say what they exclude");
+  assert(labelsOf({ ...k2, openWorkOrders: 0, maintenanceBacklog: 0, criticalWork: 0 }).maintenanceBacklog === "All clear", "labels: with nothing unrecorded the original wording is unchanged");
+  assert(closureRateLabel({ workOrders: [histWi] } as never) === "—" && closureRateLabel({ workOrders: [histWi, { status: "completed" }, { status: "open" }] } as never) === "50%", "reports: closure rate ignores unknown-lifecycle rows and is '—' when none is known");
+  const notes = unrecordedStateNotes({ assets: [asset({})], maintenance: [histWork], workOrders: [histWi], incidents: [{ status: "unknown" }] } as never);
+  assert(notes.length === 2 && /1 asset\(s\) have no recorded condition/.test(notes[0]!), "reports: unrecorded state is disclosed");
+  assert(risks({ kpis: k, projections: { blockedItems: [] }, health: { band: "healthy", score: 100 }, assets: [asset({})], maintenance: [], workOrders: [], incidents: [] } as never)[0] === "No major risks identified in the recorded data.", "reports: 'no risks' is qualified when state is unrecorded");
+  const snap = composeWorkspaceSnapshot(NOW, { id: "u", name: "x", operationalUserId: null }, {
+    workOrders: { ok: true, data: [histWi, liveWi] as never }, incidents: { ok: true, data: [] }, maintenance: { ok: true, data: [histWork] as never },
+    criticalWork: { ok: true, total: 0 }, approvals: { ok: true, data: [] }, facilities: { ok: true, data: [] },
+  } as never);
+  assert(snap.activity.length === 1 && snap.activity[0]!.entityId === "WO-L", "Home activity: the migrated Work / WI never appear as fresh activity; the live one does");
+  const feed = deriveOperationalNotifications({ asOf: NOW, requests: [{ id: "REQ-H", title: "t", status: "submitted", occurredAt: "2026-06-22T00:00:00Z", createdAt: importedAt }], maintenance: [histWork], workOrders: [histWi], incidents: [] } as never);
+  assert(feed.items.length === 1 && feed.items[0]!.at === "2026-06-22T00:00:00Z", "notifications: an open Request is stamped with its OWN occurrence time, not the import time; unknown Work / WI notify nothing");
+  const client = readFileSync("src/services/reports/buildClientReport.ts", "utf8");
+  assert(/isOpenIncidentStatus\(i\.status\)/.test(client) && !/!\["closed", "resolved", "cancelled"\]\.includes/.test(client), "client report: open incidents require a KNOWN open status (unknown is not open)");
+  const modal = readFileSync("src/modules/generator-log/components/ViewGeneratorLogModal.tsx", "utf8");
+  assert(/not recorded/.test(modal) && !/Diesel \{entry\.fuelUsed\}/.test(modal), "generator modal: an unrecorded fuel figure is stated, not blank");
+  pass("Application consumers: created-today, availability, zero-labels, closure rate, report disclosure, Home activity, notification timestamps, client-report open incidents, generator modal");
+}
+
 console.log(out.join("\n"));
 console.log(`\n${out.length} groups passed`);

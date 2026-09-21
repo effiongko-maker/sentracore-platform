@@ -80,7 +80,8 @@ export function ViewGeneratorLogModal({
           </p>
           <p className="mt-1 text-sm text-muted">
             {entry.date ? formatDate(entry.date) : "—"} · {entry.hours.toFixed(2)}{" "}
-            hrs · Diesel {entry.fuelUsed}
+            hrs · Diesel{" "}
+            {Number.isFinite(entry.fuelUsed) ? entry.fuelUsed : "not recorded"}
           </p>
         </div>
       </div>

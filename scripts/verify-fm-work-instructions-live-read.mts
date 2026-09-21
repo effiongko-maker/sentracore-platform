@@ -62,9 +62,16 @@ async function main() {
     search: "pump, (leak) 50%",
   });
   assert(filtered.total === 0, "filter shape");
-  for (const dueDate of ["overdue", "no_due"] as const) {
-    assert((await repo.listPage({ dueDate })).total === 0, `dueDate ${dueDate}`);
-  }
+  // The table may be populated (migrated historical rows have no due date): derive the expectation from the
+  // authoritative table instead of assuming emptiness. No due date is NOT overdue.
+  const noDue = await admin.from("fm_work_instructions").select("id", { count: "exact", head: true }).eq("organisation_id", orgId).is("due_at", null);
+  assert(!noDue.error, "no_due expectation unreadable");
+  assert((await repo.listPage({ dueDate: "no_due" })).total === (noDue.count ?? 0), "dueDate no_due matches the rows with a NULL due_at");
+  const startOfToday = new Date();
+  startOfToday.setUTCHours(0, 0, 0, 0);
+  const overdue = await admin.from("fm_work_instructions").select("id", { count: "exact", head: true }).eq("organisation_id", orgId).lt("due_at", startOfToday.toISOString());
+  assert(!overdue.error, "overdue expectation unreadable");
+  assert((await repo.listPage({ dueDate: "overdue" })).total === (overdue.count ?? 0), "dueDate overdue matches only rows with a known past due_at (a NULL due date is never overdue)");
   assert((await repo.listPage({ maintenanceId: "WRK-2099-000000" })).total === 0, "unknown Work filter → valid empty");
   assert((await repo.listPage({ facilityId: "FAC-NOPE" })).total === 0, "unknown facility → valid empty");
   assert((await repo.listPage({ assignedToUserId: "USR-0001" })).total === 0, "legacy USR assignee → valid empty");

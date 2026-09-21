@@ -35,6 +35,10 @@ export interface ReportingKpis {
   overdueMaintenance: number;
   maintenanceOnHold: number;
   workOrdersOnHold: number;
+  /** Assets whose condition is not recorded (migrated historical). Never counted as good or poor. */
+  assetsConditionUnknown?: number;
+  /** Work + Work Instructions with no recorded lifecycle status (migrated historical). Never open, closed or overdue. */
+  workLifecycleUnknown?: number;
 }
 
 export interface ReportingListItem {

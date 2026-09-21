@@ -101,9 +101,14 @@ export function riskBullets(snapshot: ReportingSnapshot): string[] {
     bullets.push(`${item.title}${item.meta ? ` — ${item.meta}` : ""}`);
   }
 
-  return bullets.length
-    ? bullets
-    : ["No major risks identified in the current reporting snapshot."];
+  const notes = unrecordedStateNotes(snapshot);
+  if (bullets.length) return [...bullets, ...notes];
+  return [
+    notes.length
+      ? "No major risks identified in the recorded data."
+      : "No major risks identified in the current reporting snapshot.",
+    ...notes,
+  ];
 }
 
 export function recommendationBullets(snapshot: ReportingSnapshot): string[] {
@@ -145,10 +150,34 @@ export function listTitles(
 }
 
 export function closureRate(snapshot: ReportingSnapshot): number {
-  const total = snapshot.workOrders.length;
+  // Records with no recorded lifecycle (migrated historical, status `unknown`) are excluded: they are neither closed
+  // nor open, so they cannot lower — or raise — the rate.
+  const known = snapshot.workOrders.filter((w) => w.status !== "unknown");
+  const total = known.length;
   if (!total) return 0;
-  const closed = snapshot.workOrders.filter((w) =>
+  const closed = known.filter((w) =>
     ["completed", "closed", "cancelled"].includes(w.status)
   ).length;
   return Math.round((closed / total) * 100);
+}
+
+/** Display form: "—" when no Work Instruction has a recorded lifecycle (never a misleading 0%). */
+export function closureRateLabel(snapshot: ReportingSnapshot): string {
+  return snapshot.workOrders.some((w) => w.status !== "unknown") ? `${closureRate(snapshot)}%` : "—";
+}
+
+/** Historical records that carry no recorded state, disclosed alongside any "no risks" statement. */
+export function unrecordedStateNotes(snapshot: ReportingSnapshot): string[] {
+  const notes: string[] = [];
+  const assets = snapshot.assets.filter((a) => a.condition === "unknown").length;
+  const work = snapshot.maintenance.filter((m) => m.status === "unknown").length;
+  const instructions = snapshot.workOrders.filter((w) => w.status === "unknown").length;
+  const incidents = snapshot.incidents.filter((i) => i.status === "unknown").length;
+  if (assets > 0) notes.push(`${assets} asset(s) have no recorded condition.`);
+  if (work + instructions + incidents > 0) {
+    notes.push(
+      `${work} Work, ${instructions} Work Instruction and ${incidents} incident record(s) have no recorded status (migrated historical) and are excluded from open, overdue and closure figures.`
+    );
+  }
+  return notes;
 }

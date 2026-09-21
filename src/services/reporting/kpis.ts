@@ -88,9 +88,13 @@ export function computeReportingKpis(input: {
   const criticalOpen = incidents.filter(isCriticalOpenIncident);
   const criticalWorkOpen = maintenance.filter(isCriticalOpenWork);
 
+  // Availability is measured over assets whose operational posture is KNOWN. A `pending` asset (e.g. a migrated
+  // historical asset whose source states no status) is not "not operational" — it is unassessed, so it is excluded
+  // from the denominator; with nothing assessed the figure is unknown (null), never 0%.
+  const assessedAssets = assets.filter((a) => normalizeToken(a.status) !== "pending");
   const assetsOperationalPercent =
-    assets.length > 0
-      ? Math.round((activeAssets / assets.length) * 100)
+    assessedAssets.length > 0
+      ? Math.round((activeAssets / assessedAssets.length) * 100)
       : null;
 
   return {
@@ -105,8 +109,12 @@ export function computeReportingKpis(input: {
     activeWorkforce: users.filter((u) => isActiveEntityStatus(u.status)).length,
     totalUsers: users.length,
     openWorkOrders: openWorkOrders.length,
-    workOrdersCreatedToday: workOrders.filter((wo) =>
-      isSameDay(wo.createdAt || wo.requestedAt, asOf)
+    // Migrated historical rows carry the IMPORT time as createdAt: that is not a business event and must never
+    // read as "raised today".
+    workOrdersCreatedToday: workOrders.filter(
+      (wo) =>
+        wo.recordOrigin !== "migrated_historical" &&
+        isSameDay(wo.createdAt || wo.requestedAt, asOf)
     ).length,
     workOrdersDueToday: openWorkOrders.filter((wo) =>
       isSameDay(wo.dueAt, asOf)
@@ -145,6 +153,10 @@ export function computeReportingKpis(input: {
       .length,
     workOrdersOnHold: workOrders.filter((wo) => isOnHoldStatus(wo.status))
       .length,
+    assetsConditionUnknown: assets.filter((a) => normalizeToken(a.condition) === "unknown").length,
+    workLifecycleUnknown:
+      maintenance.filter((row) => normalizeToken(row.status) === "unknown").length +
+      workOrders.filter((wo) => normalizeToken(wo.status) === "unknown").length,
   };
 }
 
@@ -174,6 +186,10 @@ export function computeReportingHealth(kpis: ReportingKpis): ReportingHealth {
 
 /** Live contextual labels for KPI cards — never invents values. */
 export function kpiInsightLabels(kpis: ReportingKpis) {
+  // Historical records with no recorded lifecycle are neither open nor closed: a zero must say what it excludes.
+  const unrecorded = kpis.workLifecycleUnknown ?? 0;
+  const zeroOpen = (calm: string) =>
+    unrecorded > 0 ? `None recorded open (${unrecorded} with no recorded status)` : calm;
   return {
     activeFacilities:
       kpis.totalFacilities === 0
@@ -191,7 +207,7 @@ export function kpiInsightLabels(kpis: ReportingKpis) {
           ? `${kpis.assetsOperationalPercent}% operational`
           : kpis.assetsInPoorCondition > 0
             ? `${kpis.assetsInPoorCondition} in poor condition`
-            : "All clear",
+            : "Operational status not recorded",
 
     activeWorkforce:
       kpis.totalUsers === 0
@@ -202,7 +218,7 @@ export function kpiInsightLabels(kpis: ReportingKpis) {
 
     openWorkOrders:
       kpis.openWorkOrders === 0
-        ? "Nothing requiring attention"
+        ? zeroOpen("Nothing requiring attention")
         : kpis.workOrdersCreatedToday > 0
           ? `${kpis.workOrdersCreatedToday} created today`
           : kpis.overdueWorkOrders > 0
@@ -213,7 +229,9 @@ export function kpiInsightLabels(kpis: ReportingKpis) {
 
     criticalWork:
       kpis.criticalWork === 0
-        ? "No outstanding critical work"
+        ? unrecorded > 0
+          ? `None recorded critical (${unrecorded} with no recorded status or priority)`
+          : "No outstanding critical work"
         : kpis.criticalWorkUnassigned > 0
           ? `${kpis.criticalWorkUnassigned} awaiting assignment`
           : kpis.workNeedingWorkOrder > 0
@@ -231,7 +249,7 @@ export function kpiInsightLabels(kpis: ReportingKpis) {
 
     maintenanceBacklog:
       kpis.maintenanceBacklog === 0
-        ? "All clear"
+        ? zeroOpen("All clear")
         : kpis.overdueMaintenance > 0
           ? `${kpis.overdueMaintenance} overdue`
           : kpis.maintenanceOnHold > 0

@@ -144,7 +144,8 @@ function fromOpenIntakeRequests(
   const items: OperationalNotification[] = [];
   for (const row of requests) {
     if (row.status !== "submitted" && row.status !== "under_review") continue;
-    const at = row.createdAt || row.occurredAt || new Date(asOfMs).toISOString();
+    // occurredAt is the business time; createdAt is when the record was written (the import time for migrated rows).
+    const at = row.occurredAt || row.createdAt || new Date(asOfMs).toISOString();
     items.push({
       id: `req-new-${row.id}`,
       kind: "new_issue",

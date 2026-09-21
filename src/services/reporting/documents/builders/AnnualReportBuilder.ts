@@ -6,6 +6,7 @@ import type {
 import {
   buildCoverLetter,
   closureRate,
+  closureRateLabel,
   formatPercent,
   recommendationBullets,
   riskBullets,
@@ -25,7 +26,7 @@ export function buildAnnualReportDocument(
     );
   }
   if (closedPct >= 70) {
-    achievements.push(`Work order closure rate reached ${closedPct}%.`);
+    achievements.push(`Work order closure rate reached ${closureRateLabel(snapshot)}.`);
   }
   if (kpis.assetsOperationalPercent != null && kpis.assetsOperationalPercent >= 85) {
     achievements.push(
@@ -58,7 +59,7 @@ export function buildAnnualReportDocument(
     totalAssets: kpis.totalAssets,
     assetAvailability: formatPercent(kpis.assetsOperationalPercent),
     openWorkOrders: kpis.openWorkOrders,
-    closureRate: `${closedPct}%`,
+    closureRate: closureRateLabel(snapshot),
     maintenanceBacklog: kpis.maintenanceBacklog,
     criticalWork: kpis.criticalWork,
     workforce: kpis.activeWorkforce,
