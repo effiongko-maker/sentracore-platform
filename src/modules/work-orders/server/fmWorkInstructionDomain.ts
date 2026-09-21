@@ -59,6 +59,20 @@ export class FmWorkInstructionValidationError extends Error {
     this.name = "FmWorkInstructionValidationError";
   }
 }
+/**
+ * Migrated historical Work Instructions are source evidence, never current operational state — and a Work Instruction
+ * cannot be attached to (or moved onto) imported historical Work. Enforced at the repository write choke point.
+ */
+export class FmWorkInstructionReadOnlyError extends Error {
+  readonly errorClass = "read_only" as const;
+  constructor(
+    message = "Imported historical Work Instructions are read-only source records and cannot be changed."
+  ) {
+    super(message);
+    this.name = "FmWorkInstructionReadOnlyError";
+  }
+}
+
 export class FmWorkInstructionNotFoundError extends Error {
   readonly errorClass = "validation" as const;
   constructor(message: string) {

@@ -80,7 +80,7 @@ function main() {
 
   const useWork = readSrc("src/modules/work/hooks/useWork.ts");
   assert(useWork.includes("requiresWorkOrder"), "requires wo state");
-  assert(useWork.includes('DEFAULT_WORK_LIST_STATUS'), "wip default import");
+  assert(useWork.includes('DEFAULT_WORK_SCOPE') && useWork.includes('baseStatusForScope'), "default scope (In Progress) drives the default status");
   assert(DEFAULT_WORK_LIST_STATUS === "active", "default active");
   results.push("PASS Work Requires-WO filter + WIP default status=active");
 
@@ -88,7 +88,7 @@ function main() {
   assert(WORK_WIP_STATUS_FILTER.statuses.includes("in_progress"), "wip statuses");
   const workToolbar = readSrc("src/modules/work/components/WorkToolbar.tsx");
   assert(workToolbar.includes("Requires work order"), "wo filter ui");
-  assert(workToolbar.includes("Active work (WIP)"), "wip option");
+  assert(workToolbar.includes("Any in-progress status"), "In Progress scope refinement uses the active workflow statuses");
   results.push("PASS Work WIP scope uses existing active workflow statuses");
 
   const maintPage = readSrc("src/modules/maintenance/components/MaintenancePage.tsx");

@@ -28,6 +28,9 @@ import { collectLinkedWorkOrderIds } from "../utils/linkedWorkOrderIds";
 import { WorkDetailModal } from "./WorkDetailModal";
 import { WorkTable } from "./WorkTable";
 import { WorkToolbar } from "./WorkToolbar";
+import { cn } from "@/lib/utils";
+import { WORK_SCOPES } from "../constants";
+import { isHistoricalWork } from "../utils/historicalWork";
 
 type WorkModalState =
   | { type: "closed" }
@@ -49,6 +52,8 @@ export function WorkPage() {
     items,
     loading,
     error,
+    scope,
+    setScope,
     search,
     setSearch,
     priority,
@@ -159,6 +164,8 @@ export function WorkPage() {
   }
 
   /** List rows can lag behind persisted fields (e.g. requiresWorkOrder). Refresh on open. */
+  const activeScope = WORK_SCOPES.find((s) => s.value === scope) ?? WORK_SCOPES[0];
+
   function openWorkView(row: Maintenance) {
     setModal({ type: "view", work: row });
     void MaintenanceService.getMaintenance(row.id)
@@ -192,21 +199,41 @@ export function WorkPage() {
   return (
     <ModeFrame mode="execute">
       <OperateHeader
-        title="Work In Progress"
-        description="Work currently being handled across the facility."
+        title="Work"
+        description={activeScope.description}
+        signalValue={loading ? "—" : total}
+        signalLabel="In view"
       />
 
-      <div className="mb-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-          WIP
-        </h2>
-        <p className="mt-0.5 text-sm text-muted">
-          What we are doing about open Issues — treat, complete, or authorise
-          formal execution.
-        </p>
+      <div
+        className="mb-3 flex flex-wrap gap-1 border-b border-border/70"
+        role="tablist"
+        aria-label="Work scope"
+      >
+        {WORK_SCOPES.map((option) => {
+          const selected = scope === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              className={cn(
+                "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+                selected
+                  ? "border-accent text-accent"
+                  : "border-transparent text-muted hover:text-foreground"
+              )}
+              onClick={() => setScope(option.value)}
+            >
+              {option.label}
+            </button>
+          );
+        })}
       </div>
 
       <WorkToolbar
+        scope={scope}
         search={search}
         onSearchChange={setSearch}
         priority={priority}
@@ -237,6 +264,7 @@ export function WorkPage() {
       ) : (
         <StreamSurface>
           <WorkTable
+            scope={scope}
             canMutate={canMutateOps}
             items={items}
             loading={loading}
@@ -261,14 +289,16 @@ export function WorkPage() {
         onClose={() => setModal({ type: "closed" })}
         onTreat={
           canMutateOps
-            ? (row) => setModal({ type: "treat", work: row })
+            ? (row) =>
+                // Imported historical Work is evidence: never opened for treatment (the server refuses it too).
+                isHistoricalWork(row) ? undefined : setModal({ type: "treat", work: row })
             : undefined
         }
         onUpdated={handleWorkUpdated}
         onOpenWorkOrder={(workOrderId) => {
           setViewWorkOrderId(workOrderId);
         }}
-        canCreateWorkOrder={canCreateOps}
+        canCreateWorkOrder={canCreateOps && !(modal.type === "view" && isHistoricalWork(modal.work))}
       />
 
       <MaintenanceFormModal

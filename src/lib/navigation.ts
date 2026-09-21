@@ -134,11 +134,11 @@ export const NAV_GROUPS: NavGroup[] = [
         description: "Manage what needs attention",
       }),
       item({
-        label: "Work In Progress",
+        label: "Work",
         href: "/work",
         icon: Wrench,
-        title: "Work In Progress",
-        description: "What we are doing about Issues",
+        title: "Work",
+        description: "Work across the facility — in progress and history",
       }),
       item({
         label: "Work Orders",

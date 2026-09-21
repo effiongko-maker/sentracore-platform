@@ -154,11 +154,11 @@ export const OPERATING_LAYERS: OperatingLayer[] = [
         description: "Manage what needs attention",
       }),
       fm({
-        label: "Work In Progress",
+        label: "Work",
         href: "/work",
         icon: Wrench,
-        title: "Work In Progress",
-        description: "What we are doing about Issues",
+        title: "Work",
+        description: "Work across the facility — in progress and history",
       }),
       fm({
         label: "Work Orders",

@@ -228,7 +228,7 @@ function runStatic(results: CheckResult[]) {
     const mapped = mapFmWorkRowToMaintenance(sampleRow());
     assert(mapped.id === "WRK-2026-000001", "display id is code");
     assert(mapped.workOrderIds?.length === 0, "no stored WO ids");
-    assert(mapped.type === "corrective", "null kind adapter default");
+    assert(mapped.type === undefined, "null work_kind stays unset — Work type is never defaulted (migration law: missing is missing)");
 
     const input = parseCreateWorkInput({
       title: "Test",

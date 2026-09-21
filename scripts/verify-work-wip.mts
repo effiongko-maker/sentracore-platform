@@ -97,14 +97,14 @@ function main() {
   const operate = NAV_GROUPS.find((g) => g.id === "operate");
   assert(operate, "operate group");
   const labels = operate!.items.map((i) => i.label);
-  assert(labels.includes("Work In Progress"), "Work In Progress nav");
+  assert(labels.includes("Work"), "Work nav (In Progress is a scope of Work)");
   assert(labels.includes("Issues"), "Issues nav");
   assert(labels.includes("Work Orders"), "WO nav");
   assert(!labels.includes("Request Queue"), "no Request Queue");
   const workItem = operate!.items.find((i) => i.href === "/work");
   assert(workItem, "/work nav href");
-  assert(workItem!.label === "Work In Progress", "WIP label");
-  results.push("PASS navigation: Work In Progress; Request Queue absent");
+  assert(workItem!.label === "Work", "Work label");
+  results.push("PASS navigation: Work; Request Queue absent");
 
   // Incident boundary
   assert(INCIDENT_DOMAIN_LEGACY.newFmLogIssueCreatesIncident === false, "no INC");

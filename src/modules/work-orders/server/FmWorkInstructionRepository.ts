@@ -8,6 +8,7 @@ import {
   ASSIGNED_INSTRUCTION_STATUSES,
   FM_WORK_INSTRUCTION_SELECT,
   FmWorkInstructionNotFoundError,
+  FmWorkInstructionReadOnlyError,
   FmWorkInstructionUnavailableError,
   FmWorkInstructionValidationError,
   UUID_RE,
@@ -105,7 +106,7 @@ function asRow(value: unknown): FmWorkInstructionRow {
   };
 }
 
-type WorkRef = { id: string; code: string; facility_id: string; incident_id: string | null };
+type WorkRef = { id: string; code: string; facility_id: string; incident_id: string | null; record_origin: string };
 
 function toColumns(f: InstructionFields): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -164,7 +165,7 @@ export class FmWorkInstructionRepository {
     const target = workRef.trim();
     const query = this.admin
       .from("fm_work")
-      .select("id, code, facility_id, incident_id")
+      .select("id, code, facility_id, incident_id, record_origin")
       .eq("organisation_id", this.organisationId);
     const { data, error } = UUID_RE.test(target)
       ? await query.eq("id", target).maybeSingle()
@@ -179,6 +180,7 @@ export class FmWorkInstructionRepository {
       code: String(rec.code),
       facility_id: String(rec.facility_id),
       incident_id: rec.incident_id != null ? String(rec.incident_id) : null,
+      record_origin: rec.record_origin != null ? String(rec.record_origin) : "operational",
     };
   }
 
@@ -408,6 +410,8 @@ export class FmWorkInstructionRepository {
 
   async create(input: ParsedCreateInstruction, actorProfileId: string): Promise<FmWorkInstructionRow> {
     const work = await this.resolveWork(input.workRef);
+    // A Work Instruction cannot be attached to imported historical Work (that would alter the historical relationship).
+    if (work.record_origin === "migrated_historical") throw new FmWorkInstructionReadOnlyError();
     await this.assertInherited(work, input);
     const parentId = input.parentRef ? await this.resolveParentId(input.parentRef) : null;
     const columns = toColumns({ ...input, assetRef: await this.resolveAssetRef(input.assetRef) });
@@ -446,12 +450,17 @@ export class FmWorkInstructionRepository {
   ): Promise<{ row: FmWorkInstructionRow; previousStatus: string }> {
     const existing = await this.getByIdOrCode(input.id);
     if (!existing) throw new FmWorkInstructionNotFoundError(`Work Instruction ${input.id} not found.`);
+    // Imported historical Work Instructions are evidence: refuse BEFORE any relation resolution or write.
+    if (existing.record_origin === "migrated_historical") throw new FmWorkInstructionReadOnlyError();
 
     const patch = toColumns({ ...input, assetRef: await this.resolveAssetRef(input.assetRef) });
     let workId = existing.work_id;
     let workRow: WorkRef | null = null;
     if (input.workRef) {
       workRow = await this.resolveWork(input.workRef);
+      if (workRow.record_origin === "migrated_historical" && workRow.id !== existing.work_id) {
+        throw new FmWorkInstructionReadOnlyError();
+      }
       if (workRow.id !== existing.work_id) {
         patch.work_id = workRow.id;
         patch.facility_id = workRow.facility_id; // inherited

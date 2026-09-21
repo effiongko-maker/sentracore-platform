@@ -135,7 +135,7 @@ export function ViewMaintenanceModal({
         <Badge variant={MAINTENANCE_PRIORITY_VARIANT[maintenance.priority]}>
           {labelize(maintenance.priority)}
         </Badge>
-        <span className="text-sm text-muted">{labelize(maintenance.type)}</span>
+        <span className="text-sm text-muted">{maintenance.type ? labelize(maintenance.type) : "Type not recorded"}</span>
       </div>
 
       <div className="mt-5 grid gap-5 sm:grid-cols-2">

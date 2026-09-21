@@ -152,7 +152,15 @@ function toColumns(f: ApprovalFields): Record<string, unknown> {
   return out;
 }
 
-type InstructionRef = { id: string; code: string; facility_id: string; asset_id: string | null };
+type InstructionRef = { id: string; code: string; facility_id: string; asset_id: string | null; record_origin: string };
+
+function assertWorkInstructionNotHistorical(wi: InstructionRef): void {
+  if (wi.record_origin === "migrated_historical") {
+    throw new FmApprovalValidationError(
+      "Imported historical Work Instructions are read-only source records: an Approval cannot be raised against them."
+    );
+  }
+}
 
 export class FmApprovalRepository {
   constructor(
@@ -165,7 +173,7 @@ export class FmApprovalRepository {
     const target = ref.trim();
     const query = this.admin
       .from("fm_work_instructions")
-      .select("id, code, facility_id, asset_id")
+      .select("id, code, facility_id, asset_id, record_origin")
       .eq("organisation_id", this.organisationId);
     const { data, error } = UUID_RE.test(target)
       ? await query.eq("id", target).maybeSingle()
@@ -178,6 +186,7 @@ export class FmApprovalRepository {
       code: String(rec.code),
       facility_id: String(rec.facility_id),
       asset_id: rec.asset_id != null ? String(rec.asset_id) : null,
+      record_origin: rec.record_origin != null ? String(rec.record_origin) : "operational",
     };
   }
 
@@ -331,6 +340,8 @@ export class FmApprovalRepository {
 
   async create(input: ParsedCreateApproval, actorProfileId: string): Promise<FmApprovalRow> {
     const wi = await this.resolveWorkInstruction(input.workInstructionRef);
+    // Imported historical Work Instructions are read-only evidence: no Approval is raised against them.
+    assertWorkInstructionNotHistorical(wi);
     const columns = toColumns(input);
     const now = new Date().toISOString();
     for (let attempt = 0; attempt < CODE_RETRY_LIMIT; attempt += 1) {
@@ -369,7 +380,10 @@ export class FmApprovalRepository {
     const patch = toColumns(input);
     if (input.workInstructionRef) {
       const wi = await this.resolveWorkInstruction(input.workInstructionRef);
-      if (wi.id !== existing.work_instruction_id) patch.work_instruction_id = wi.id;
+      if (wi.id !== existing.work_instruction_id) {
+        assertWorkInstructionNotHistorical(wi);
+        patch.work_instruction_id = wi.id;
+      }
     }
     patch.updated_by_profile_id = actorProfileId;
     const { data, error } = await this.admin

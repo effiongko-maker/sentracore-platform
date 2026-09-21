@@ -75,8 +75,11 @@ export function composeIssueFromMaintenance(
     facilityId: m.facilityId,
     assetId: m.assetId,
     priority: mapSeverityToIssuePriority(m.priority),
+    // "routine" is a product default for operational Work only. Imported historical Work states no classification:
+    // leave it unset ("—") rather than manufacture one.
     classification:
-      mapIncidentTypeToClassification(relatedIncident?.type) ?? "routine",
+      mapIncidentTypeToClassification(relatedIncident?.type) ??
+      (m.recordOrigin === "migrated_historical" ? undefined : "routine"),
     status,
     treatmentState: {
       hasActiveTreatment,

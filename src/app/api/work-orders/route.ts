@@ -4,6 +4,7 @@ import { capabilityForOperationalProxyAction } from "@/lib/access/operationalApi
 import { isActionError } from "@/lib/actions/errors";
 import {
   FmWorkInstructionNotFoundError,
+  FmWorkInstructionReadOnlyError,
   FmWorkInstructionUnavailableError,
   FmWorkInstructionValidationError,
 } from "@/modules/work-orders/server/fmWorkInstructionDomain";
@@ -60,6 +61,7 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     if (error instanceof FmWorkInstructionValidationError) return fail(400, error.message, { errorClass: "validation" });
+    if (error instanceof FmWorkInstructionReadOnlyError) return fail(403, error.message, { errorClass: "read_only" });
     if (error instanceof FmWorkInstructionNotFoundError) return fail(404, error.message, { errorClass: "validation" });
     if (error instanceof FmWorkInstructionUnavailableError) {
       console.error("[api/work-orders] storage unavailable:", error);

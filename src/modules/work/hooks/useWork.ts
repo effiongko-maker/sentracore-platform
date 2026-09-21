@@ -10,7 +10,14 @@ import type {
   MaintenanceSort,
   MaintenanceStatus,
 } from "@/modules/maintenance/types";
-import { DEFAULT_WORK_LIST_STATUS, DEFAULT_WORK_SORT, WORK_PAGE_SIZE } from "../constants";
+import {
+  DEFAULT_WORK_SCOPE,
+  DEFAULT_WORK_SORT,
+  WORK_PAGE_SIZE,
+  baseStatusForScope,
+  effectiveWorkStatus,
+  type WorkScope,
+} from "../constants";
 import { matchesWorkListFilters } from "../utils/matchesWorkListFilters";
 
 type WorkListStatus = MaintenanceStatus | "all" | "active";
@@ -27,9 +34,12 @@ export function useWork() {
   const [priority, setPriorityState] = useState<MaintenancePriority | "all">(
     "all"
   );
-  const [status, setStatusState] = useState<WorkListStatus>(
-    DEFAULT_WORK_LIST_STATUS
+  const [scope, setScopeState] = useState<WorkScope>(DEFAULT_WORK_SCOPE);
+  // Optional refinement WITHIN the scope (e.g. only "On hold" while In Progress).
+  const [statusRefinement, setStatusState] = useState<WorkListStatus>(
+    baseStatusForScope(DEFAULT_WORK_SCOPE)
   );
+  const status = effectiveWorkStatus(scope, statusRefinement);
   const [facilityId, setFacilityIdState] = useState<string | "all">("all");
   const [assignedToUserId, setAssignedToUserIdState] = useState<
     string | "all"
@@ -52,6 +62,12 @@ export function useWork() {
 
   const setStatus = useCallback((value: WorkListStatus) => {
     setStatusState(value);
+    setPage(1);
+  }, []);
+
+  const setScope = useCallback((value: WorkScope) => {
+    setScopeState(value);
+    setStatusState(baseStatusForScope(value));
     setPage(1);
   }, []);
 
@@ -78,12 +94,12 @@ export function useWork() {
   const clearAll = useCallback(() => {
     setSearch("");
     setPriorityState("all");
-    setStatusState(DEFAULT_WORK_LIST_STATUS);
+    setStatusState(baseStatusForScope(scope));
     setFacilityIdState("all");
     setAssignedToUserIdState("all");
     setRequiresWorkOrderState("all");
     setPage(1);
-  }, []);
+  }, [scope]);
 
   const fetchWork = useCallback(
     async (nextPage = page) => {
@@ -246,7 +262,9 @@ export function useWork() {
     setSearch,
     priority,
     setPriority,
-    status,
+    scope,
+    setScope,
+    status: statusRefinement,
     setStatus,
     facilityId,
     setFacilityId,

@@ -53,8 +53,9 @@ assert(!page.includes('title="Work In Progress"'), "WO page must not be WIP");
 assert(route.includes('title: "Work Orders"'), "WO route metadata");
 assert(!route.includes("Work In Progress"), "WO route must not be WIP");
 
-assert(workPage.includes('title="Work In Progress"'), "/work remains WIP");
-assert(workRoute.includes('title: "Work In Progress"'), "/work route WIP");
+assert(workPage.includes('title="Work"'), "/work is the canonical Work surface");
+assert(workRoute.includes('title: "Work"'), "/work route title is Work");
+assert(workPage.includes("WORK_SCOPES") && workPage.includes("scope={scope}"), "In Progress is a scope of Work");
 
 assert(page.includes("WORK_ORDER_ORDER_TYPE_SCOPE_OPTIONS"), "scope tabs");
 assert(table.includes('header: "Order Type"'), "Order Type column");

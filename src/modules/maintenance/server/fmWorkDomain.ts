@@ -62,6 +62,21 @@ export class FmWorkValidationError extends Error {
   }
 }
 
+/**
+ * Migrated historical Work is source evidence, never current operational state. Refused at the repository — the single
+ * choke point for Work writes — so no route, action or orchestration path can edit, treat, complete, cancel, assign,
+ * re-date or re-link it.
+ */
+export class FmWorkReadOnlyError extends Error {
+  readonly errorClass = "read_only" as const;
+  constructor(
+    message = "Imported historical Work is a read-only source record and cannot be changed."
+  ) {
+    super(message);
+    this.name = "FmWorkReadOnlyError";
+  }
+}
+
 export class FmWorkNotFoundError extends Error {
   readonly errorClass = "validation" as const;
   constructor(message: string) {
@@ -236,7 +251,8 @@ export function generateNextWorkCode(
  * workOrderIds are never stored; response leaves them empty unless caller overlays.
  */
 export function mapFmWorkRowToMaintenance(row: FmWorkRow): Maintenance {
-  const type = (row.work_kind as MaintenanceType) || "corrective";
+  // work_kind NULL = the source did not establish a Work type: leave it unset (never "corrective").
+  const type = row.work_kind ? (row.work_kind as MaintenanceType) : undefined;
   return {
     id: row.code,
     workUuid: row.id,

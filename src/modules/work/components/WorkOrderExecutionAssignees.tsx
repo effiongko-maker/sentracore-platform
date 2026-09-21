@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useUserName } from "@/hooks/useEntityLabel";
 import { EntityKinds, EntityResolver } from "@/services/entityResolver";
@@ -51,11 +52,11 @@ function useAssigneeDisplay(userId?: string): AssigneeDisplay {
   return { state: "resolved", name };
 }
 
-function AssigneeName({ userId }: { userId?: string }) {
+function AssigneeName({ userId, unassignedLabel = "Unassigned" }: { userId?: string; unassignedLabel?: string }) {
   const display = useAssigneeDisplay(userId);
 
   if (display.state === "unassigned") {
-    return <span className="text-muted">Unassigned</span>;
+    return <span className="text-muted">{unassignedLabel}</span>;
   }
   if (display.state === "loading") {
     return <span className="text-muted">Loading…</span>;
@@ -83,15 +84,18 @@ export function WorkExecutionAssigneeCell({
   work,
   workOrdersById,
   loading,
+  unassignedLabel = "Unassigned",
 }: {
   work: Maintenance;
   workOrdersById: Record<string, WorkOrder | null>;
   loading?: boolean;
+  /** Imported historical Work: assignment absent in the source is "Not recorded", not "Unassigned". */
+  unassignedLabel?: string;
 }) {
   const linkedIds = collectLinkedWorkOrderIds(work);
 
   if (!linkedIds.length) {
-    return <AssigneeName userId={work.assignedToUserId} />;
+    return <AssigneeName userId={work.assignedToUserId} unassignedLabel={unassignedLabel} />;
   }
 
   if (loading && linkedIds.some((id) => !(id in workOrdersById))) {
@@ -100,7 +104,7 @@ export function WorkExecutionAssigneeCell({
 
   const assignees = uniqueAssigneeIds(linkedIds, workOrdersById);
   if (!assignees.length) {
-    return <span className="text-muted">Unassigned</span>;
+    return <span className="text-muted">{unassignedLabel}</span>;
   }
 
   if (assignees.length === 1) {
@@ -125,11 +129,13 @@ export function WorkOrderExecutionAssigneeList({
   workOrdersById,
   loading,
   onOpenWorkOrder,
+  unassignedLabel = "Unassigned",
 }: {
   work: Maintenance;
   workOrdersById: Record<string, WorkOrder | null>;
   loading?: boolean;
   onOpenWorkOrder?: (workOrderId: string) => void;
+  unassignedLabel?: string;
 }) {
   const linkedIds = collectLinkedWorkOrderIds(work);
   if (!linkedIds.length) return null;
@@ -137,13 +143,14 @@ export function WorkOrderExecutionAssigneeList({
   return (
     <div className="sm:col-span-2 space-y-2">
       <p className="text-xs font-medium uppercase tracking-wider text-muted">
-        Execution assignment
+        Work Instruction
       </p>
       <div className="overflow-hidden rounded-md border border-border/70">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/70 bg-muted/30 text-left text-xs uppercase tracking-wide text-muted">
-              <th className="px-3 py-2 font-medium">Work order</th>
+              <th className="px-3 py-2 font-medium">Work Instruction</th>
+              <th className="px-3 py-2 font-medium">Type</th>
               <th className="px-3 py-2 font-medium">Assigned to</th>
             </tr>
           </thead>
@@ -169,8 +176,25 @@ export function WorkOrderExecutionAssigneeList({
                   <td className="px-3 py-2 align-top text-foreground">
                     {pending ? (
                       <span className="text-muted">—</span>
+                    ) : wo?.orderType ? (
+                      wo.orderType === "job_order" ? "Job Order" : "Work Order"
+                    ) : (
+                      <span className="text-muted">Not recorded</span>
+                    )}
+                    <p className="mt-0.5 text-xs">
+                      <Link
+                        href={`/work-orders?id=${encodeURIComponent(woId)}`}
+                        className="text-accent underline-offset-2 hover:underline"
+                      >
+                        Open in Work Orders
+                      </Link>
+                    </p>
+                  </td>
+                  <td className="px-3 py-2 align-top text-foreground">
+                    {pending ? (
+                      <span className="text-muted">—</span>
                     ) : wo ? (
-                      <AssigneeName userId={wo.assignedToUserId} />
+                      <AssigneeName userId={wo.assignedToUserId} unassignedLabel={unassignedLabel} />
                     ) : (
                       <span className="text-muted">Work order not found</span>
                     )}

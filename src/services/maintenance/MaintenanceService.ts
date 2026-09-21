@@ -65,7 +65,7 @@ function normalizeEnum(value: string) {
 function mapStatus(raw: string): MaintenanceStatus {
   const value = normalizeEnum(raw);
   if (value === "open" || value === "new") return "requested";
-  return (value || "requested") as MaintenanceStatus;
+  return (value || "unknown") as MaintenanceStatus;
 }
 
 /**
@@ -73,36 +73,43 @@ function mapStatus(raw: string): MaintenanceStatus {
  * workOrderIds are never authoritative on Work after Phase 2B.
  */
 export function mapRemoteMaintenance(raw: RemoteMaintenance): Maintenance {
-  const type = normalizeEnum(
-    String(pickField(raw, "type", "Type", "Maintenance Type") ?? "corrective")
-  ) as MaintenanceType;
+  // Work type is source evidence: when the record states none it stays UNSET (rendered "Not recorded"). No default.
+  const typeRaw = optionalMappedString(raw, "type", "Type", "Maintenance Type");
+  const type = typeRaw ? (normalizeEnum(typeRaw) as MaintenanceType) : undefined;
   const source = normalizeEnum(
     String(pickField(raw, "source", "Source") ?? "manual")
   ) as MaintenanceSource;
+  // A missing priority/status is UNKNOWN — never "medium" / "requested".
   const priority = normalizeEnum(
-    String(pickField(raw, "priority", "Priority") ?? "medium")
+    String(pickField(raw, "priority", "Priority") ?? "unknown")
   ) as MaintenancePriority;
   const status = mapStatus(
-    String(pickField(raw, "status", "Status") ?? "requested")
+    String(pickField(raw, "status", "Status") ?? "unknown")
   );
 
   const description = optionalMappedString(raw, "description", "Description");
   const title =
     optionalMappedString(raw, "title", "Title", "Maintenance Title") || "";
 
-  const reportedAt = String(
-    pickField(raw, "reportedAt", "Reported At") ?? new Date().toISOString()
-  );
+  // Missing stays missing: never the current time, created_at or any other date.
+  const reportedAt = optionalMappedString(raw, "reportedAt", "Reported At");
   const completedAt = optionalMappedString(raw, "completedAt", "Completed At");
   const requiresWorkOrder =
     optionalBoolean(raw, "requiresWorkOrder", "Requires Work Order") ?? false;
 
-  return applyWorkOrderRule({
+  // Work Instruction linkage is AUTHORITATIVE on the server read (fm_work_instructions.work_id) and survives here
+  // unchanged: no heuristics, nothing manufactured. (applyWorkOrderRule is an INPUT rule and must not erase it.)
+  const workOrderIds = Array.isArray(raw.workOrderIds)
+    ? raw.workOrderIds.map((id) => String(id).trim()).filter(Boolean)
+    : [];
+  const workOrderId = optionalMappedString(raw, "workOrderId") ?? workOrderIds[0];
+
+  return ({
     id: String(pickField(raw, "id", "Maintenance ID") ?? ""),
     workUuid: optionalMappedString(raw, "workUuid"),
     title,
     description,
-    type: type || "corrective",
+    type,
     source: source || "manual",
     categoryId: optionalMappedString(raw, "categoryId", "Category ID"),
     department: optionalMappedString(raw, "department", "Department"),
@@ -125,14 +132,14 @@ export function mapRemoteMaintenance(raw: RemoteMaintenance): Maintenance {
     ),
     eventId: optionalMappedString(raw, "operationalEventId", "eventId"),
     incidentId: optionalMappedString(raw, "incidentId", "Incident ID"),
-    workOrderId: undefined,
-    workOrderIds: [],
+    workOrderId,
+    workOrderIds,
     sourceRequestId: optionalMappedString(
       raw,
       "sourceRequestId",
       "Request ID"
     ),
-    priority: priority || "medium",
+    priority: priority || "unknown",
     recordOrigin: readRecordOrigin(raw),
     status,
     holdReason: optionalMappedString(raw, "holdReason", "Hold Reason"),
@@ -145,13 +152,12 @@ export function mapRemoteMaintenance(raw: RemoteMaintenance): Maintenance {
     completedAt,
     completionNotes: optionalMappedString(raw, "completionNotes"),
     workPerformed: optionalMappedString(raw, "workPerformed"),
-    createdAt: String(pickField(raw, "createdAt", "Created At") ?? reportedAt),
-    updatedAt: String(
-      pickField(raw, "updatedAt", "Updated At") ?? completedAt ?? reportedAt
-    ),
+    // Record-keeping timestamps only; never substituted for a lifecycle date such as reportedAt.
+    createdAt: String(pickField(raw, "createdAt", "Created At") ?? ""),
+    updatedAt: String(pickField(raw, "updatedAt", "Updated At") ?? ""),
     createdByUserId: optionalMappedString(raw, "createdByUserId"),
     updatedByUserId: optionalMappedString(raw, "updatedByUserId"),
-  });
+  } satisfies Maintenance);
 }
 
 function toPaginatedMaintenance(

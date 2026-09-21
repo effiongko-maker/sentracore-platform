@@ -20,11 +20,14 @@ import {
 } from "@/modules/maintenance/utils";
 import type { Maintenance } from "@/modules/maintenance/types";
 import type { WorkOrder } from "@/modules/work-orders/types";
-import { WORK_PRIORITY_VARIANT, WORK_STATUS_VARIANT } from "../constants";
+import { WORK_PRIORITY_VARIANT, WORK_STATUS_VARIANT, WORK_SCOPES, type WorkScope } from "../constants";
+import { collectLinkedWorkOrderIds } from "../utils/linkedWorkOrderIds";
+import { isHistoricalWork } from "../utils/historicalWork";
 import { WorkExecutionAssigneeCell } from "./WorkOrderExecutionAssignees";
 import { WorkRowActions } from "./WorkRowActions";
 
 interface WorkTableProps {
+  scope?: WorkScope;
   items: Maintenance[];
   loading: boolean;
   page: number;
@@ -52,6 +55,7 @@ function FacilityCell({ row }: { row: Maintenance }) {
 }
 
 export function WorkTable({
+  scope = "in_progress",
   items,
   loading,
   page,
@@ -79,10 +83,21 @@ export function WorkTable({
             >
               {displayMaintenanceTitle(row)}
             </button>
-            <p className="text-xs text-muted">{row.id}</p>
-            {row.workOrderId ? (
-              <p className="text-xs text-muted">WO {row.workOrderId}</p>
-            ) : null}
+            <p className="text-xs text-muted">
+              {row.id}
+              {isHistoricalWork(row) ? <span> · Imported record</span> : null}
+            </p>
+            {collectLinkedWorkOrderIds(row).map((woId) => (
+              <p key={woId} className="text-xs text-muted">
+                <Link
+                  href={`/work-orders?id=${encodeURIComponent(woId)}`}
+                  className="text-accent underline-offset-2 hover:underline"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {woId}
+                </Link>
+              </p>
+            ))}
           </div>
         ),
       },
@@ -105,7 +120,7 @@ export function WorkTable({
         header: "Priority",
         render: (row) => (
           <Badge variant={WORK_PRIORITY_VARIANT[row.priority]}>
-            {labelize(row.priority)}
+            {row.priority === "unknown" ? "Not recorded" : labelize(row.priority)}
           </Badge>
         ),
       },
@@ -118,6 +133,7 @@ export function WorkTable({
               work={row}
               workOrdersById={linkedWorkOrdersById}
               loading={linkedWorkOrdersLoading}
+              unassignedLabel={isHistoricalWork(row) ? "Not recorded" : undefined}
             />
           </span>
         ),
@@ -148,6 +164,7 @@ export function WorkTable({
             row.status === "completed" && row.completedAt
               ? row.completedAt
               : row.scheduledStartAt || row.dueAt || row.reportedAt;
+          // Only label a date that exists; a missing date is "Not recorded", never a substitute date.
           const label =
             row.status === "completed" && row.completedAt
               ? "Completed"
@@ -155,11 +172,13 @@ export function WorkTable({
                 ? "Scheduled"
                 : row.dueAt
                   ? "Due"
-                  : "Reported";
+                  : row.reportedAt
+                    ? "Reported"
+                    : null;
           return (
             <div>
-              <span className="text-muted">{when ? formatDate(when) : "Date not recorded"}</span>
-              <p className="text-xs text-muted">{label}</p>
+              <span className="text-muted">{when ? formatDate(when) : "Not recorded"}</span>
+              {when && label ? <p className="text-xs text-muted">{label}</p> : null}
             </div>
           );
         },
@@ -175,7 +194,7 @@ export function WorkTable({
             onView={onView}
             onTreat={onTreat}
             onCancel={onCancel}
-            canMutate={canMutate}
+            canMutate={canMutate && !isHistoricalWork(row)}
           />
         ),
       },
@@ -183,13 +202,20 @@ export function WorkTable({
     [onView, onTreat, onCancel, canMutate, page, total, linkedWorkOrdersById, linkedWorkOrdersLoading]
   );
 
+  const scopeLabel = WORK_SCOPES.find((s) => s.value === scope)?.label ?? "Work";
   const emptyTitle =
     total === 0 && !loading
-      ? "No work currently in progress"
+      ? scope === "in_progress"
+        ? "No work currently in progress"
+        : scope === "all"
+          ? "No Work recorded"
+          : `No Work in “${scopeLabel}”`
       : "No work matches your filters";
   const emptyDescription =
     total === 0 && !loading
-      ? "When Issues are treated, work appears here. Empty WIP does not mean there are no Issues."
+      ? scope === "in_progress"
+        ? "When Issues are treated, work appears here. Nothing in progress does not mean there is no Work — see All Work."
+        : "There is no Work in this scope."
       : "Clear search or adjust status, priority, location, and assignee filters.";
 
   return (

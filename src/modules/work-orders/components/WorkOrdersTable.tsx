@@ -173,7 +173,8 @@ export function WorkOrdersTable({
             onView={onView}
             onEdit={onEdit}
             onDeactivate={onDeactivate}
-            canMutate={canMutate}
+            // Imported historical Work Instructions are read-only evidence (also refused server-side).
+            canMutate={canMutate && workOrder.recordOrigin !== "migrated_historical"}
           />
         ),
       },

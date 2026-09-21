@@ -79,7 +79,7 @@ export function WorkOrderClientApprovalSection({
               : "This record can proceed without an Approval Request when not required."}
           </p>
         </div>
-        {!approval && !loading ? (
+        {!approval && !loading && workOrder.recordOrigin !== "migrated_historical" ? (
           <Button size="sm" onClick={() => setWizardOpen(true)}>
             Generate Approval Request
           </Button>

@@ -26,9 +26,14 @@ import {
   WORK_PRIORITIES,
   WORK_SORT_OPTIONS,
   WORK_STATUSES,
+  baseStatusForScope,
+  type WorkScope,
 } from "../constants";
+import { MAINTENANCE_ACTIVE_WORKFLOW_STATUSES } from "@/modules/maintenance/constants";
 
 interface WorkToolbarProps {
+  /** The Work scope; the Status filter only REFINES within In Progress / All Work. */
+  scope: WorkScope;
   search: string;
   onSearchChange: (value: string) => void;
   priority: MaintenancePriority | "all";
@@ -65,6 +70,7 @@ function countActiveFilters(filters: {
 }
 
 export function WorkToolbar({
+  scope,
   search,
   onSearchChange,
   priority,
@@ -88,9 +94,10 @@ export function WorkToolbar({
   const users = peopleCatalog.items;
   const [filterOpen, setFilterOpen] = useState(false);
 
+  const refinable = scope === "in_progress" || scope === "all";
   const activeFilterCount = countActiveFilters({
     priority,
-    status,
+    status: refinable ? status : "all",
     facilityId,
     assignedToUserId,
     requiresWorkOrder,
@@ -114,11 +121,11 @@ export function WorkToolbar({
         onRemove: () => onPriorityChange("all"),
       });
     }
-    if (status !== "all" && status !== "active") {
+    if (refinable && status !== "all" && status !== "active") {
       next.push({
         id: "status",
         label: WORK_STATUS_LABELS[status] ?? labelize(status),
-        onRemove: () => onStatusChange("active"),
+        onRemove: () => onStatusChange(baseStatusForScope(scope)),
       });
     }
     if (requiresWorkOrder !== "all") {
@@ -150,6 +157,8 @@ export function WorkToolbar({
     search,
     priority,
     status,
+    scope,
+    refinable,
     facilityId,
     assignedToUserId,
     requiresWorkOrder,
@@ -165,7 +174,7 @@ export function WorkToolbar({
 
   function clearFiltersOnly() {
     onPriorityChange("all");
-    onStatusChange("active");
+    onStatusChange(baseStatusForScope(scope));
     onFacilityIdChange("all");
     onAssignedToUserIdChange("all");
     onRequiresWorkOrderChange("all");
@@ -188,22 +197,39 @@ export function WorkToolbar({
         onSortChange={(value) => onSortChange(value as MaintenanceSort)}
         filterPanel={
           <>
-            <FilterField
-              id="work-filter-status"
-              label="Status"
-              value={status}
-              onChange={(value) =>
-                onStatusChange(value as MaintenanceStatus | "all" | "active")
-              }
-            >
-              <option value="active">Active work (WIP)</option>
-              <option value="all">All statuses</option>
-              {WORK_STATUSES.map((value) => (
-                <option key={value} value={value}>
-                  {WORK_STATUS_LABELS[value] ?? labelize(value)}
-                </option>
-              ))}
-            </FilterField>
+            {refinable ? (
+              <FilterField
+                id="work-filter-status"
+                label="Status"
+                value={status}
+                onChange={(value) =>
+                  onStatusChange(value as MaintenanceStatus | "all" | "active")
+                }
+              >
+                {scope === "in_progress" ? (
+                  <>
+                    <option value="active">Any in-progress status</option>
+                    {MAINTENANCE_ACTIVE_WORKFLOW_STATUSES.map((value) => (
+                      <option key={value} value={value}>
+                        {WORK_STATUS_LABELS[value] ?? labelize(value)}
+                      </option>
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    <option value="all">All statuses</option>
+                    {WORK_STATUSES.map((value) => (
+                      <option key={value} value={value}>
+                        {WORK_STATUS_LABELS[value] ?? labelize(value)}
+                      </option>
+                    ))}
+                    <option value="unknown">
+                      {WORK_STATUS_LABELS.unknown ?? "Status not recorded"}
+                    </option>
+                  </>
+                )}
+              </FilterField>
+            ) : null}
 
             <FilterField
               id="work-filter-priority"

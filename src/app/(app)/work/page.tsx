@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { WorkPage } from "@/modules/work";
 
 export const metadata: Metadata = {
-  title: "Work In Progress",
+  title: "Work",
 };
 
 export default function WorkRoute() {

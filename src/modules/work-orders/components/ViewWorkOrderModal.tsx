@@ -85,6 +85,14 @@ export function ViewWorkOrderModal({
         </>
       }
     >
+      {workOrder.recordOrigin === "migrated_historical" ? (
+        <div className="mb-4 rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-sm" role="note">
+          <p className="font-medium text-foreground">Historical imported record</p>
+          <p className="mt-0.5 text-muted">
+            This record reflects source evidence migrated into SentraCore™ and is read-only.
+          </p>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2 border-b border-border/70 pb-5">
         <Badge variant={WORK_ORDER_STATUS_VARIANT[workOrder.status]}>
           {labelize(workOrder.status)}

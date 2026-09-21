@@ -17,7 +17,7 @@ export function buildMaintenanceReportDocument(
 
   const rows = maintenance.slice(0, 100).map((m) => ({
     title: m.title,
-    type: m.type,
+    type: m.type ?? "—",
     priority: m.priority,
     status: m.status,
     reportedAt: m.reportedAt?.slice(0, 10) ?? "—",

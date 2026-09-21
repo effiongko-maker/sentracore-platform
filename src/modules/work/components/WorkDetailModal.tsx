@@ -29,6 +29,7 @@ import type { Maintenance } from "@/modules/maintenance/types";
 import type { WorkOrder } from "@/modules/work-orders/types";
 import { WORK_PRIORITY_VARIANT, WORK_STATUS_VARIANT } from "../constants";
 import { collectLinkedWorkOrderIds } from "../utils/linkedWorkOrderIds";
+import { isHistoricalWork } from "../utils/historicalWork";
 import { WorkOrderExecutionAssigneeList } from "./WorkOrderExecutionAssignees";
 
 interface WorkDetailModalProps {
@@ -100,10 +101,14 @@ export function WorkDetailModal({
     (work.reportedByUserId
       ? reportedByName || work.reportedByUserId
       : undefined);
+  // Imported historical Work is read-only evidence: no treat / cancel / create-instruction / link controls, and
+  // absent facts read "Not recorded" (never a dash that could pass for a value, never a substitute).
+  const historical = isHistoricalWork(work);
+  const none = historical ? "Not recorded" : "—";
   const needsWorkOrderLink =
-    Boolean(work.requiresWorkOrder) && !work.workOrderId;
+    !historical && Boolean(work.requiresWorkOrder) && !work.workOrderId;
   const linkedWorkOrderIds = collectLinkedWorkOrderIds(work);
-  const canTreat = work.status !== "cancelled";
+  const canTreat = !historical && work.status !== "cancelled";
 
   async function handleCreateWorkOrder() {
     if (!work) return;
@@ -161,15 +166,32 @@ export function WorkDetailModal({
           {WORK_STATUS_LABELS[work.status] ?? labelize(work.status)}
         </Badge>
         <Badge variant={WORK_PRIORITY_VARIANT[work.priority]}>
-          {labelize(work.priority)}
+          {work.priority === "unknown" ? "Priority not recorded" : labelize(work.priority)}
         </Badge>
+        {historical ? <Badge variant="neutral">Imported record</Badge> : null}
       </div>
+
+      {historical ? (
+        <div
+          className="mt-4 rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-sm"
+          role="note"
+        >
+          <p className="font-medium text-foreground">Historical imported record</p>
+          <p className="mt-0.5 text-muted">
+            This record reflects source evidence migrated into SentraCore™ and is read-only.
+          </p>
+        </div>
+      ) : null}
 
       <div className="mt-5 space-y-5">
         <Section title="What is the work?">
           <Detail
             label="Description"
-            value={notes.body || work.description || "—"}
+            value={notes.body || work.description || none}
+          />
+          <Detail
+            label="Work type"
+            value={work.type ? labelize(work.type) : "Not recorded"}
           />
           <Detail
             label="Location"
@@ -184,14 +206,14 @@ export function WorkDetailModal({
           />
           <Detail
             label="Asset"
-            value={work.assetId ? assetName || work.assetId : "—"}
+            value={work.assetId ? assetName || work.assetId : none}
           />
           <Detail
             label="Assigned to"
             value={
               work.assignedToUserId
                 ? assigneeName || work.assignedToUserId
-                : "—"
+                : none
             }
           />
         </Section>
@@ -219,11 +241,11 @@ export function WorkDetailModal({
                   {work.sourceRequestId}
                 </Link>
               ) : (
-                "—"
+                none
               )
             }
           />
-          <Detail label="Reported by" value={requesterLabel || "—"} />
+          <Detail label="Reported by" value={requesterLabel || none} />
           <Detail label="Reported at" value={work.reportedAt ? formatDate(work.reportedAt) : "Not recorded"} />
         </Section>
 
@@ -237,14 +259,14 @@ export function WorkDetailModal({
             value={
               work.scheduledStartAt
                 ? formatDate(work.scheduledStartAt)
-                : "—"
+                : none
             }
           />
           <Detail
             label="Due"
-            value={work.dueAt ? formatDate(work.dueAt) : "—"}
+            value={work.dueAt ? formatDate(work.dueAt) : none}
           />
-          <Detail label="Department" value={work.department || "—"} />
+          <Detail label="Department" value={work.department || none} />
         </Section>
 
         <Section title="Formal execution">
@@ -254,6 +276,7 @@ export function WorkDetailModal({
               workOrdersById={linkedWorkOrdersById}
               loading={linkedWorkOrdersLoading}
               onOpenWorkOrder={onOpenWorkOrder}
+              unassignedLabel={historical ? "Not recorded" : undefined}
             />
           ) : (
             <Detail
@@ -293,7 +316,7 @@ export function WorkDetailModal({
                     </div>
                   </div>
                 ) : (
-                  "—"
+                  <span className="text-muted">No Work Instruction recorded</span>
                 )
               }
             />
@@ -304,16 +327,16 @@ export function WorkDetailModal({
           <Detail
             label="Completed at"
             value={
-              work.completedAt ? formatDate(work.completedAt) : "—"
+              work.completedAt ? formatDate(work.completedAt) : none
             }
           />
           <Detail
             label="Completion notes"
-            value={work.completionNotes || "—"}
+            value={work.completionNotes || none}
           />
           <Detail
             label="Work performed"
-            value={work.workPerformed || "—"}
+            value={work.workPerformed || none}
           />
           {notes.attachment ? (
             <Detail label="Attachment" value={notes.attachment} />

@@ -5,6 +5,7 @@ import { isActionError } from "@/lib/actions/errors";
 import {
   FmWorkNotFoundError,
   FmWorkUnavailableError,
+  FmWorkReadOnlyError,
   FmWorkValidationError,
 } from "@/modules/maintenance/server/fmWorkDomain";
 import {
@@ -77,6 +78,9 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof FmWorkValidationError) {
       return fail(400, error.message, { errorClass: "validation" });
+    }
+    if (error instanceof FmWorkReadOnlyError) {
+      return fail(403, error.message, { errorClass: "read_only" });
     }
     if (error instanceof FmWorkNotFoundError) {
       return fail(404, error.message, { errorClass: "validation" });

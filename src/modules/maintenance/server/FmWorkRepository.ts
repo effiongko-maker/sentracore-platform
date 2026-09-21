@@ -5,6 +5,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import {
   FM_WORK_SELECT,
   FmWorkNotFoundError,
+  FmWorkReadOnlyError,
   FmWorkUnavailableError,
   FmWorkValidationError,
   UUID_RE,
@@ -430,6 +431,9 @@ export class FmWorkRepository {
     if (!existing) {
       throw new FmWorkNotFoundError(`Work ${idOrCode} not found.`);
     }
+    // Imported historical Work is evidence: refuse BEFORE any relation resolution or write. This covers edit, treat,
+    // progress, complete, cancel (deactivate delegates here), assign, date/status/priority and relationship changes.
+    if (existing.record_origin === "migrated_historical") throw new FmWorkReadOnlyError();
 
     const facilityId = input.facilityId
       ? await this.resolveFacilityId(input.facilityId)

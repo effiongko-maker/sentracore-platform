@@ -45,7 +45,8 @@ export interface Maintenance {
 
   title: string;
   description?: string;
-  type: MaintenanceType;
+  /** Undefined when the source does not establish a Work type (e.g. migrated historical Work). Never defaulted. */
+  type?: MaintenanceType;
   source: MaintenanceSource;
   categoryId?: string;
   department?: string;

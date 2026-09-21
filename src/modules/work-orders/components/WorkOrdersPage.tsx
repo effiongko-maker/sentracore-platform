@@ -241,7 +241,7 @@ export function WorkOrdersPage() {
         workOrder={modal.type === "view" ? modal.workOrder : null}
         onClose={() => setModal({ type: "closed" })}
         onEdit={
-          canMutateOps
+          canMutateOps && !(modal.type === "view" && modal.workOrder.recordOrigin === "migrated_historical")
             ? (workOrder) => setModal({ type: "edit", workOrder })
             : undefined
         }
