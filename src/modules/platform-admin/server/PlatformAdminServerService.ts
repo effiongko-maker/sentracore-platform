@@ -30,6 +30,7 @@ import {
   parseOperationalRole,
 } from "@/modules/users/server/fmPeopleDomain";
 import { isBoundModule } from "@/lib/access/moduleBoundary";
+import { facilityManagerPackageGaps } from "@/lib/access/facilityManagerPackage";
 import { isLandingWorkspace } from "@/lib/access/landingWorkspace";
 import { AdminConsoleReader } from "./AdminConsoleReader";
 import { PlatformAdminRepository } from "./PlatformAdminRepository";
@@ -462,11 +463,75 @@ export class PlatformAdminServerService {
     });
   }
 
+  /** The capabilities a profile currently holds in an organisation (explicit grants only). */
+  private async heldCapabilities(organisationId: string, profileId: string): Promise<string[]> {
+    const { data, error } = await this.admin
+      .from("platform_capability_grants")
+      .select("capability")
+      .eq("organisation_id", organisationId)
+      .eq("profile_id", profileId);
+    if (error) throw new ActionError("INTERNAL_ERROR", "Unable to read the profile's capability grants.");
+    return (data ?? []).map((row) => String((row as { capability: string }).capability));
+  }
+
+  /**
+   * Apply the canonical Facility Manager operating package to one profile: grant ONLY the package capabilities
+   * the profile does not already hold, through the audited, idempotent platform_iam_grant_platform_capability RPC
+   * (the same mechanism as the Admin Console). Protected authority is never part of the package.
+   */
+  async applyFacilityManagerOperatingPackage(
+    ctx: PlatformAdminContext,
+    input: { organisationId: string; profileId: string }
+  ): Promise<{ profileId: string; granted: string[]; alreadyHeld: string[] }> {
+    const held = await this.heldCapabilities(input.organisationId, input.profileId);
+    const gaps = facilityManagerPackageGaps(held);
+    const granted: string[] = [];
+    for (const capability of gaps) {
+      const result = await this.repo.grantPlatformCapability({
+        actorProfileId: ctx.actorProfileId,
+        organisationId: input.organisationId,
+        targetProfileId: input.profileId,
+        capability,
+      });
+      if (result.changed) granted.push(capability);
+    }
+    return { profileId: input.profileId, granted, alreadyHeld: held.filter((c) => !gaps.includes(c as never)) };
+  }
+
+  /**
+   * Reconcile EVERY active Facility Manager (active profile, active facility_manager assignment) with the canonical
+   * package. `apply: false` is a read-only report of what is missing. Idempotent.
+   */
+  async reconcileFacilityManagerPackages(
+    ctx: PlatformAdminContext,
+    input: { organisationId: string; apply: boolean }
+  ): Promise<Array<{ profileId: string; missing: string[]; granted: string[] }>> {
+    const { data, error } = await this.admin
+      .from("fm_facility_assignments")
+      .select("profile_id")
+      .eq("organisation_id", input.organisationId)
+      .eq("operational_role", "facility_manager")
+      .eq("status", "active");
+    if (error) throw new ActionError("INTERNAL_ERROR", "Unable to read facility assignments.");
+    const profileIds = [...new Set((data ?? []).map((r) => String((r as { profile_id: string }).profile_id)))];
+    const out: Array<{ profileId: string; missing: string[]; granted: string[] }> = [];
+    for (const profileId of profileIds) {
+      const { data: profile } = await this.admin.from("profiles").select("status, organisation_id").eq("id", profileId).maybeSingle();
+      if (!profile || (profile as { status: string }).status !== "active" || (profile as { organisation_id: string }).organisation_id !== input.organisationId) continue;
+      const missing = facilityManagerPackageGaps(await this.heldCapabilities(input.organisationId, profileId));
+      const applied = input.apply && missing.length ? await this.applyFacilityManagerOperatingPackage(ctx, { organisationId: input.organisationId, profileId }) : null;
+      out.push({ profileId, missing, granted: applied?.granted ?? [] });
+    }
+    return out;
+  }
+
   /**
    * Operating-context administration: assign a profile to a facility, change the
-   * operational role, or (de)activate an assignment. Operational role is
-   * context — it grants NO capability. Every change is audited atomically by the
-   * fm_facility_assignments trigger (actor = the acting Super Admin).
+   * operational role, or (de)activate an assignment. The operational role itself
+   * derives NO authority at runtime; making a profile an ACTIVE Facility Manager
+   * applies the canonical Facility Manager operating package as explicit, audited
+   * grants (see facilityManagerPackage.ts). Every assignment change is audited
+   * atomically by the fm_facility_assignments trigger (actor = the acting Super Admin).
    */
   async setFacilityAssignment(
     ctx: PlatformAdminContext,
@@ -497,9 +562,11 @@ export class PlatformAdminServerService {
           throw new ActionError("VALIDATION_ERROR", "Assignment not found for this person.");
         }
         const row = await people.updateAssignment(existing.id, { role, status }, ctx.actorProfileId);
+        await this.applyPackageIfActiveFacilityManager(ctx, input.organisationId, row);
         return { assignmentId: row.id, profileId: row.profile_id, facilityId: row.facility_id, operationalRole: row.operational_role, status: row.status === "active" ? "active" : "inactive" };
       }
       const row = await people.createAssignment({ profileId: input.profileId, facilityId: input.facilityId, role, status, actorProfileId: ctx.actorProfileId });
+      await this.applyPackageIfActiveFacilityManager(ctx, input.organisationId, row);
       return { assignmentId: row.id, profileId: row.profile_id, facilityId: row.facility_id, operationalRole: row.operational_role, status: row.status === "active" ? "active" : "inactive" };
     } catch (error) {
       if (error instanceof FmPeopleValidationError || error instanceof FmPeopleNotFoundError) {
@@ -508,6 +575,15 @@ export class PlatformAdminServerService {
       if (error instanceof FmPeopleUnavailableError) throw new ActionError("INTERNAL_ERROR", error.message);
       throw error;
     }
+  }
+
+  private async applyPackageIfActiveFacilityManager(
+    ctx: PlatformAdminContext,
+    organisationId: string,
+    row: { profile_id: string; operational_role: string; status: string }
+  ): Promise<void> {
+    if (row.operational_role !== "facility_manager" || row.status !== "active") return;
+    await this.applyFacilityManagerOperatingPackage(ctx, { organisationId, profileId: row.profile_id });
   }
 
   reader(): AdminConsoleReader {

@@ -229,10 +229,8 @@ async function main() {
     const withRequests = buildUnifiedIssueList({ requests, maintenances: maintenance, incidents });
     assert(withRequests.length === 115 + 3 + 29 && withRequests.filter((u) => u.issue.id.startsWith("issue:request:")).length === 29, "Issues: with requests.view the lens is 147 = 115 Work + 3 incidents + ALL 29 Requests (no deduplication removes any Request)");
     assert(requests.every((r) => (r.maintenanceIds ?? []).length === 0 && (r.incidentIds ?? []).length === 0 && (r.workOrderIds ?? []).length === 0) && maintenance.every((m) => !m.sourceRequestId) && incidents.every((i) => !i.sourceRequestId), "Issues: no Request is linked to any Work/Incident (none was invented), so nothing is collapsed under a Request");
-    const { data: grants } = await admin.from("platform_capability_grants").select("profile_id, capability").eq("organisation_id", organisationId);
-    const byProfile = new Map<string, Set<string>>();
-    for (const g of (grants ?? []) as Array<{ profile_id: string; capability: string }>) byProfile.set(g.profile_id, (byProfile.get(g.profile_id) ?? new Set()).add(g.capability));
-    assert([...byProfile.values()].some((c) => c.has("ops.view") && !c.has("requests.view")) && [...byProfile.values()].some((c) => c.has("requests.view")), "Issues: requests.view is an explicit grant — an operator with ops.view but WITHOUT requests.view sees exactly the 118 Work + incident rows (access authority, not a defect)");
+    // requests.view is an explicit grant that gates the Request-derived part of the lens (the 118 / 147 split). The
+    // canonical Facility Manager package now carries it, so an active FM sees all 147 (verify-fm-operating-visibility).
     assert(/const canReadRequests = can\("requests\.view"\)/.test(readFileSync("src/modules/issues/components/IssuesPage.tsx", "utf8")), "Issues: the page never reads Requests without requests.view (documented gating)");
     // imported incident-derived Issue rows are read-only evidence
     const { deriveIssueActions } = await import("../src/lib/operational/issues/actions");
