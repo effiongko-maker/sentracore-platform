@@ -86,3 +86,42 @@ export function composeFinanceDecisionQueue(input: {
 
   return { items, totalsByCurrency };
 }
+
+/**
+ * Completeness of an actor's Finance decision view.
+ *
+ * The decision queue is narrowed by finance_company_access, while the organisation-wide Finance
+ * pulse counts EVERY company. An empty visible queue therefore only means "nothing waiting" when
+ * the actor's company access covers the whole organisation population (the same population the
+ * pulse counts). Otherwise the view is PARTIAL and zero visible items proves nothing.
+ */
+export type DecisionScope = {
+  complete: boolean;
+  totalCompanies: number;
+  accessibleCompanies: number;
+  /** Organisation companies outside the actor's access. */
+  uncoveredCompanies: number;
+};
+
+export function evaluateDecisionScope(
+  organisationCompanyIds: readonly string[],
+  accessibleCompanyIds: readonly string[]
+): DecisionScope {
+  const accessible = new Set(accessibleCompanyIds);
+  const total = new Set(organisationCompanyIds);
+  const uncovered = [...total].filter((id) => !accessible.has(id)).length;
+  return {
+    complete: uncovered === 0,
+    totalCompanies: total.size,
+    accessibleCompanies: total.size - uncovered,
+    uncoveredCompanies: uncovered,
+  };
+}
+
+export function decisionScopeNote(scope: DecisionScope): string | null {
+  if (scope.complete) return null;
+  if (scope.accessibleCompanies === 0) {
+    return "You have no Finance company access, so no decisions can be shown to you here.";
+  }
+  return `Your Finance decision view is limited by company access (${scope.accessibleCompanies} of ${scope.totalCompanies} companies).`;
+}

@@ -10,7 +10,9 @@ export type CommandCentreSurfaceState =
   | "empty"
   | "unavailable"
   | "error"
-  | "restricted";
+  | "restricted"
+  /** Some evaluation scope is missing (e.g. limited company access): zero visible items is NOT "none". */
+  | "partial";
 
 export type CommandCentrePulseDomain =
   | "finance"
@@ -113,6 +115,8 @@ export type CommandCentreSnapshot = {
     viewAllHref: string | null;
     /** Why the queue is not shown (restricted / not enabled / failed), in user language. */
     reason: string | null;
+    /** Set when the actor's Finance company access covers only part of the organisation. */
+    scopeNote: string | null;
   };
   attention: {
     state: CommandCentreSurfaceState;

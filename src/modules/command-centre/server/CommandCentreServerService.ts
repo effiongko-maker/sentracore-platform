@@ -53,7 +53,12 @@ import {
 import { ExecutiveCommitmentsService } from "@/modules/command-centre/commitments/server/ExecutiveCommitmentsService";
 import { readCommitmentCapabilities } from "@/modules/command-centre/commitments/server/requireCommitmentsAccess";
 import { composeLastVisitChanges } from "@/modules/command-centre/server/composeLastVisitChanges";
-import { composeFinanceDecisionQueue } from "@/modules/command-centre/server/composeFinanceDecisionQueue";
+import {
+  composeFinanceDecisionQueue,
+  decisionScopeNote,
+  evaluateDecisionScope,
+  type DecisionScope,
+} from "@/modules/command-centre/server/composeFinanceDecisionQueue";
 import { PlatformFinanceVendorBillsServerService } from "@/modules/platform-finance/server/PlatformFinanceVendorBillsServerService";
 
 function displayNameFromSession(session: PlatformSession): string {
@@ -187,7 +192,11 @@ function measuredFromLabel(iso: string, timeZone: string | null): string {
 
 type FinanceQueueResult =
   | { status: "not_enabled" | "restricted" | "unavailable" }
-  | { status: "loaded"; decisions: ReturnType<typeof composeFinanceDecisionQueue> };
+  | {
+      status: "loaded";
+      decisions: ReturnType<typeof composeFinanceDecisionQueue>;
+      scope: DecisionScope;
+    };
 
 export class CommandCentreServerService {
   /**
@@ -586,14 +595,16 @@ export class CommandCentreServerService {
         access.organisationId
       );
       const actor = actorFromSession(access.session, access.organisationId);
-      const [requests, vendorBills, categories] = await Promise.all([
+      const [requests, vendorBills, categories, scope] = await Promise.all([
         requestsSvc.listApprovalQueue(actor),
         vendorBillsSvc.listApprovalQueue(actor),
         requestsSvc.listCategories(actor),
+        this.readDecisionScope(access),
       ]);
       return {
         status: "loaded",
         decisions: composeFinanceDecisionQueue({ requests, vendorBills, categories }),
+        scope,
       };
     } catch (error) {
       if (isActionError(error) && error.code === "FORBIDDEN") {
@@ -601,6 +612,32 @@ export class CommandCentreServerService {
       }
       return { status: "unavailable" };
     }
+  }
+
+  /**
+   * Is the actor's Finance company access complete for the organisation? Compares the actor's
+   * finance_company_access with EVERY company of the organisation (the population the org-wide
+   * pulse counts). A read failure throws so the queue becomes unavailable — never "complete".
+   */
+  private async readDecisionScope(
+    access: CommandCentreAccessContext
+  ): Promise<DecisionScope> {
+    const admin = createAdminClient();
+    const [companies, accessRows] = await Promise.all([
+      admin.from("finance_companies").select("id").eq("organisation_id", access.organisationId),
+      admin
+        .from("finance_company_access")
+        .select("company_id")
+        .eq("organisation_id", access.organisationId)
+        .eq("profile_id", access.profileId),
+    ]);
+    if (companies.error || accessRows.error) {
+      throw new Error("Finance company scope could not be read.");
+    }
+    return evaluateDecisionScope(
+      (companies.data ?? []).map((row) => String(row.id)),
+      (accessRows.data ?? []).map((row) => String(row.company_id))
+    );
   }
 
   private composeDecisions(
@@ -613,6 +650,7 @@ export class CommandCentreServerService {
           items: [],
           viewAllHref: null,
           reason: "Platform Finance is not enabled for this organisation.",
+          scopeNote: null,
         };
       case "restricted":
         return {
@@ -621,6 +659,7 @@ export class CommandCentreServerService {
           viewAllHref: null,
           reason:
             "Finance decisions are shown to people with Finance approval authority and Command Centre decision access.",
+          scopeNote: null,
         };
       case "unavailable":
         return {
@@ -628,14 +667,21 @@ export class CommandCentreServerService {
           items: [],
           viewAllHref: null,
           reason: "The Finance decision queue could not be read.",
+          scopeNote: null,
         };
-      case "loaded":
+      case "loaded": {
+        const scopeNote = decisionScopeNote(queue.scope);
+        const items = queue.decisions.items;
         return {
-          state: queue.decisions.items.length === 0 ? "empty" : "healthy",
-          items: queue.decisions.items,
+          // Visible decisions are always shown. A truthful "empty" needs a COMPLETE scope: with
+          // limited company access, zero visible items is partial knowledge, never "none waiting".
+          state: !queue.scope.complete ? "partial" : items.length === 0 ? "empty" : "healthy",
+          items,
           viewAllHref: null,
-          reason: null,
+          reason: scopeNote,
+          scopeNote,
         };
+      }
     }
   }
 
@@ -654,15 +700,22 @@ export class CommandCentreServerService {
       };
     }
     const { items, totalsByCurrency } = queue.decisions;
+    const scopeNote = decisionScopeNote(queue.scope);
     const amountDetail =
-      [...totalsByCurrency.entries()]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([currency, amount]) => formatAmount(amount, currency))
+      [
+        ...[...totalsByCurrency.entries()]
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([currency, amount]) => formatAmount(amount, currency)),
+        scopeNote ? "within your company access" : null,
+      ]
+        .filter(Boolean)
         .join(" · ") || null;
     return {
       domain: "finance",
-      status: "loaded",
+      // Partial scope stays partial: a zero here is never an all-clear.
+      status: queue.scope.complete ? "loaded" : "partial",
       items: financeAttentionItems({ pendingCount: items.length, amountDetail }),
+      note: scopeNote,
     };
   }
 

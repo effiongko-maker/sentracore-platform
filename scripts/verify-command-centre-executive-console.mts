@@ -116,7 +116,7 @@ async function main() {
     const dec = (q: unknown) => proto.composeDecisions.call({}, q) as { state: string; reason: string | null };
     assert(dec({ status: "restricted" }).state === "restricted" && !/could not be read/.test(dec({ status: "restricted" }).reason ?? ""), "B: restricted Finance decisions read as restricted");
     assert(dec({ status: "unavailable" }).state === "error" && /could not be read/.test(dec({ status: "unavailable" }).reason ?? ""), "B: a failed decision queue reads as a failure");
-    assert(dec({ status: "loaded", decisions: { items: [], totalsByCurrency: new Map() } }).state === "empty", "B: a loaded empty queue is a truthful zero");
+    assert(dec({ status: "loaded", decisions: { items: [], totalsByCurrency: new Map() }, scope: { complete: true, totalCompanies: 1, accessibleCompanies: 1, uncoveredCompanies: 0 } }).state === "empty", "B: a loaded empty queue over a COMPLETE company scope is a truthful zero");
     // payables failure is explicit
     const { PlatformFinanceServerService } = await import("../src/modules/platform-finance/server/PlatformFinanceServerService");
     const { PlatformFinancePayablesServerService } = await import("../src/modules/platform-finance/server/PlatformFinancePayablesServerService");

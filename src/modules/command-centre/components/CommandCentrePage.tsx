@@ -262,8 +262,9 @@ function DecisionsBlock({
 }: {
   decisions: CommandCentreSnapshot["decisions"];
 }) {
-  if (decisions.state === "healthy" && decisions.items.length > 0) {
+  if ((decisions.state === "healthy" || decisions.state === "partial") && decisions.items.length > 0) {
     return (
+      <>
       <ul className="scc-decision-list">
         {decisions.items.map((item) => (
           <li key={item.id}>
@@ -286,6 +287,8 @@ function DecisionsBlock({
           </li>
         ))}
       </ul>
+      {decisions.scopeNote ? <p className="scc-panel-scope">{decisions.scopeNote}</p> : null}
+      </>
     );
   }
 
