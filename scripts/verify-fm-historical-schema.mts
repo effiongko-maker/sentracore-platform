@@ -12,6 +12,7 @@ const dir = resolve("supabase/migrations") + "/";
 const CHAIN = ["20260918190000", "20260918200000", "20260918220000", "20260918221000", "20260919120000", "20260919140000", "20260919160000", "20260919180000", "20260919200000", "20260919210000", "20260919230000", "20260919240000"];
 const NEW = "20260921100000";
 const NEW2 = "20260921110000";
+const NEW3 = "20260921120000";
 const sqlOf = (stamp: string) => readFileSync(dir + readdirSync(dir).find((n) => n.startsWith(stamp))!, "utf8");
 
 function assert(cond: unknown, message: string): asserts cond {
@@ -214,6 +215,28 @@ async function main() {
     const defs = (await db.query<{ n: string; d: string | null }>("select column_name n, column_default d from information_schema.columns where table_name in ('fm_incidents') and column_name in ('status','severity','record_origin') order by 1")).rows.map((r) => `${r.n}=${r.d}`).join();
     assert(defs === "record_origin='operational'::text,severity='medium'::text,status='reported'::text", `forward column defaults are unchanged (${defs})`);
     pass("unknown incident status/severity and Work/WI priority: rejected for operational rows (insert AND update), accepted only for migrated_historical, origin immutable, legacy rows unchanged");
+  }
+
+  // 9. least privilege on the migration tables (20260921120000)
+  {
+    // PGlite has no Supabase default privileges: reproduce them (service_role gets ALL on new public tables), then apply the migration.
+    const T = ["fm_migration_batches", "fm_migration_provenance", "fm_consumables_register_entries"];
+    await db.exec(`grant all on table ${T.map((t) => "public." + t).join(", ")} to service_role;`);
+    const privs = async () => (await db.query<{ t: string; p: string }>(`select table_name t, string_agg(privilege_type, ',' order by privilege_type) p from information_schema.role_table_grants where table_schema='public' and table_name = any($1) and grantee='service_role' group by 1 order by 1`, [T])).rows;
+    assert((await privs()).every((r) => /TRUNCATE/.test(r.p) && /UPDATE/.test(r.p)), "precondition: default-style grants reproduce the over-privileged state");
+    const trig = async () => (await db.query<{ n: string }>("select tgname n from pg_trigger where not tgisinternal and tgrelid in ('public.fm_migration_batches'::regclass,'public.fm_migration_provenance'::regclass) order by 1")).rows.map((r) => r.n).join();
+    const trigBefore = await trig();
+    const rlsBefore = (await db.query<{ r: string }>("select string_agg(relname||':'||relrowsecurity, ',' order by relname) r from pg_class where relname = any($1) and relnamespace='public'::regnamespace", [T])).rows[0]!.r;
+    await db.exec(sqlOf(NEW3));
+    assert((await privs()).every((r) => r.p === "INSERT,SELECT"), `service_role keeps only SELECT and INSERT (${JSON.stringify(await privs())})`);
+    assert((await trig()) === trigBefore && /append_only/.test(trigBefore), "append-only triggers are untouched");
+    assert((await db.query<{ r: string }>("select string_agg(relname||':'||relrowsecurity, ',' order by relname) r from pg_class where relname = any($1) and relnamespace='public'::regnamespace", [T])).rows[0]!.r === rlsBefore, "RLS is untouched");
+    const anon = (await db.query<{ n: string }>("select count(*)::text n from information_schema.role_table_grants where table_name = any($1) and grantee in ('anon','authenticated','PUBLIC')", [T])).rows[0]!.n;
+    assert(anon === "0", "no access for anon / authenticated / PUBLIC");
+    await db.exec(sqlOf(NEW3)); // idempotent
+    assert((await privs()).every((r) => r.p === "INSERT,SELECT"), "re-applying is idempotent");
+    assert(/^\s*(--[^\n]*\n|\s)*(revoke|grant)/im.test(sqlOf(NEW3)) && !/\b(drop|alter|create|delete|update)\s/i.test(sqlOf(NEW3).replace(/--[^\n]*/g, "")), "the migration contains privilege statements only");
+    pass("least privilege: service_role reduced to SELECT+INSERT on the three migration tables; triggers, RLS, anon/authenticated untouched; idempotent; privilege-only migration");
   }
 
   void historicalWork;
