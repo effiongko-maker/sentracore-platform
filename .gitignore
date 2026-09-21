@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# FM migration dry-run output (local only; may contain personal names from source)
+/migration-output/
