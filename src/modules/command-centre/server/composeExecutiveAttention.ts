@@ -18,6 +18,8 @@ import type {
  *   ECC     — escalated Issues; open Issues at high/critical severity; open Requests at high/urgent
  *             priority (existing ECC semantics); a shift IN EFFECT with agents assigned and none signed in
  *   FM      — Critical Work; Overdue Work / Work Instructions (existing Operational Picture semantics)
+ *   Commitments — OVERDUE open Executive Commitments only (an explicitly tracked obligation past its date);
+ *             evaluated only for identities holding commitments.view, otherwise not applicable
  *
  * Deliberately NOT surfaced (no explicit executive ownership in the domain, or not provable):
  *   - FM Approvals awaiting decision (these are client-side approvals, not CEO decisions)
@@ -29,9 +31,10 @@ export const ATTENTION_DOMAIN_LABEL: Record<CommandCentreAttentionDomain, string
   finance: "Finance",
   ecc: "ECC",
   facility_management: "Facility Management",
+  commitments: "Commitments",
 };
 
-const DOMAIN_ORDER: CommandCentreAttentionDomain[] = ["finance", "ecc", "facility_management"];
+const DOMAIN_ORDER: CommandCentreAttentionDomain[] = ["finance", "ecc", "facility_management", "commitments"];
 const TONE_RANK: Record<CommandCentreAttentionItem["tone"], number> = { critical: 0, high: 1, medium: 2, info: 3 };
 export const ATTENTION_DISPLAY_LIMIT = 8;
 

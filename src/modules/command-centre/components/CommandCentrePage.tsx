@@ -17,6 +17,7 @@ import type {
   CommandCentreSurfaceState,
 } from "@/modules/command-centre/presentationTypes";
 import { cn } from "@/lib/utils";
+import { CommitmentsPanel } from "@/modules/command-centre/components/CommitmentsPanel";
 
 const PULSE_ICON = {
   finance: Landmark,
@@ -434,6 +435,8 @@ export function CommandCentrePage({
             />
             <DecisionsBlock decisions={decisions} />
           </article>
+
+          <CommitmentsPanel commitments={snapshot.commitments} />
         </div>
 
         <div className="scc-col">

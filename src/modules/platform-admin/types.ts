@@ -37,6 +37,8 @@ export const PLATFORM_ADMINISTRABLE_CAPABILITIES = [
   ECC_CAPABILITIES.delete,
   COMMAND_CENTRE_CAPABILITIES.view,
   COMMAND_CENTRE_CAPABILITIES.decide,
+  COMMAND_CENTRE_CAPABILITIES.commitmentsView,
+  COMMAND_CENTRE_CAPABILITIES.commitmentsManage,
   "ops.view",
   "ops.create",
   "ops.edit",

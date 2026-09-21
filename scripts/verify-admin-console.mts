@@ -126,7 +126,7 @@ check("Operating role / facility assignment / title never confer capability", ()
 // ------------------------------------------------------------------ CATALOG / AUDIT DESCRIPTION
 check("Capability catalog covers all administrable capabilities exactly once; labels are human-first", () => {
   assert(catalogCoversAllAdministrableCapabilities(), "catalog does not cover every administrable capability");
-  assert(PLATFORM_ADMINISTRABLE_CAPABILITIES.length === 22, "expected 22 (17 + 5 ECC)");
+  assert(PLATFORM_ADMINISTRABLE_CAPABILITIES.length === 24, "expected 24 (22 + 2 executive-commitments capabilities)");
   assert(CAPABILITY_DOMAINS.every((d) => d.capabilities.every((c) => c.label && c.label !== c.key)), "raw keys used as labels");
   assert(describeCapability("ops.edit").label === "Edit operational records" && !describeCapability("nope.nope").known, "describeCapability");
 });

@@ -1,3 +1,5 @@
+import type { CommitmentView } from "@/modules/command-centre/commitments/domain";
+
 /**
  * Command Centre presentation DTOs — composition/read layer only.
  * Domain records remain authoritative in Finance / ECC / FM services.
@@ -64,7 +66,7 @@ export type CommandCentreAttentionItem = {
 };
 
 /** Domains the V1 executive-attention contract evaluates. */
-export type CommandCentreAttentionDomain = "finance" | "ecc" | "facility_management";
+export type CommandCentreAttentionDomain = "finance" | "ecc" | "facility_management" | "commitments";
 
 /**
  * How one attention domain was evaluated:
@@ -121,6 +123,21 @@ export type CommandCentreSnapshot = {
     complete: boolean;
     summary: string;
     coverage: CommandCentreAttentionCoverage[];
+  };
+  /**
+   * Executive Commitments register for the acting executive (created/delegated + owned).
+   * `restricted` means the surface is not offered to this identity — it is not a failure.
+   */
+  commitments: {
+    state: CommandCentreSurfaceState;
+    reason: string | null;
+    canManage: boolean;
+    currentProfileId: string;
+    /** Organisation-local date the overdue derivation used; null when it could not be evaluated. */
+    today: string | null;
+    overdue: CommitmentView[];
+    open: CommitmentView[];
+    completed: CommitmentView[];
   };
   lastVisit: {
     state: CommandCentreSurfaceState;

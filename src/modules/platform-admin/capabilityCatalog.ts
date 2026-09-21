@@ -109,6 +109,8 @@ export const CAPABILITY_DOMAINS: readonly CapabilityDomain[] = [
     capabilities: [
       { key: "platform.command_centre.view", label: "View Command Centre", detail: "Open pulse, exceptions, decisions and assignments." },
       { key: "platform.command_centre.decide", label: "Take Command Centre decisions", detail: "Act on decisions surfaced by Command Centre." },
+      { key: "platform.command_centre.commitments.view", label: "View executive commitments", detail: "See the commitments they created or own. Being assigned a commitment does not grant this." },
+      { key: "platform.command_centre.commitments.manage", label: "Manage executive commitments", detail: "Create, edit, complete and cancel executive commitments. Separate from taking decisions." },
     ],
   },
 ] as const;

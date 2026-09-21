@@ -47,6 +47,11 @@ import {
   organisationLocalHour,
   requireOrganisationTimeZone,
 } from "@/lib/time/organisationTime";
+import {
+  overdueCommitmentAttentionItems,
+} from "@/modules/command-centre/commitments/domain";
+import { ExecutiveCommitmentsService } from "@/modules/command-centre/commitments/server/ExecutiveCommitmentsService";
+import { readCommitmentCapabilities } from "@/modules/command-centre/commitments/server/requireCommitmentsAccess";
 import { composeLastVisitChanges } from "@/modules/command-centre/server/composeLastVisitChanges";
 import { composeFinanceDecisionQueue } from "@/modules/command-centre/server/composeFinanceDecisionQueue";
 import { PlatformFinanceVendorBillsServerService } from "@/modules/platform-finance/server/PlatformFinanceVendorBillsServerService";
@@ -217,7 +222,7 @@ export class CommandCentreServerService {
       ? loadOperationalPictureSummary(asOf)
       : Promise.resolve<OperationalPictureSummary | null>(null);
 
-    const [financePulse, operationsPulse, financeQueue, eccAttention, fmAttention, lastVisit] =
+    const [financePulse, operationsPulse, financeQueue, eccAttention, fmAttention, lastVisit, commitmentsResult] =
       await Promise.all([
         this.composeFinancePulse(access, workspaceEntry, asOf, organisationTimeZone),
         this.composeOperationsPulse(
@@ -230,6 +235,7 @@ export class CommandCentreServerService {
         this.evaluateEccAttention(access),
         this.evaluateFmAttention(access, operationalPicture, fmViewAllowed),
         this.composeLastVisit(access, asOf, workspaceEntry),
+        this.loadCommitments(access, now, organisationTimeZone),
       ]);
     const eccPulse = await this.composeEccPulse(
       access,
@@ -242,6 +248,7 @@ export class CommandCentreServerService {
       this.financeAttentionResult(financeQueue),
       eccAttention.result,
       fmAttention,
+      commitmentsResult.attention,
     ]);
 
     const pulse: CommandCentrePulseCard[] = [
@@ -274,8 +281,78 @@ export class CommandCentreServerService {
       pulse,
       decisions: this.composeDecisions(financeQueue),
       attention,
+      commitments: commitmentsResult.section,
       lastVisit,
     };
+  }
+
+  /**
+   * Executive Commitments for the acting executive. Requires the explicit commitments.view
+   * grant: without it the surface is simply not offered (restricted) and commitments take no
+   * part in attention. A failed read is an error/unavailable state — never an empty register.
+   */
+  private async loadCommitments(
+    access: CommandCentreAccessContext,
+    now: Date,
+    timeZone: string | null
+  ): Promise<{
+    section: CommandCentreSnapshot["commitments"];
+    attention: DomainAttentionResult;
+  }> {
+    const base = {
+      canManage: false,
+      currentProfileId: access.profileId,
+      today: null as string | null,
+      overdue: [],
+      open: [],
+      completed: [],
+    };
+    const unavailable = (reason: string) => ({
+      section: { ...base, state: "error" as const, reason },
+      attention: {
+        domain: "commitments" as const,
+        status: "unavailable" as const,
+        items: [],
+        note: "Commitments could not be evaluated.",
+      },
+    });
+    const caps = await readCommitmentCapabilities(access.organisationId, access.profileId);
+    if (caps === null) return unavailable("Commitments access could not be verified.");
+    if (!caps.view) {
+      return {
+        section: { ...base, state: "restricted", reason: null },
+        // Not applicable to this identity: never claimed as evaluated, never a gap.
+        attention: { domain: "commitments", status: "not_enabled", items: [] },
+      };
+    }
+    if (!timeZone) return unavailable("Due dates cannot be evaluated without the organisation timezone.");
+    try {
+      const register = await new ExecutiveCommitmentsService(
+        access.organisationId,
+        access.profileId,
+        timeZone
+      ).loadRegister(now);
+      const outstanding = register.overdue.length + register.open.length;
+      return {
+        section: {
+          ...base,
+          canManage: caps.manage,
+          state: outstanding === 0 ? "empty" : "healthy",
+          reason: null,
+          today: register.today,
+          overdue: register.overdue,
+          open: register.open,
+          completed: register.completed,
+        },
+        attention: {
+          domain: "commitments",
+          status: "loaded",
+          items: overdueCommitmentAttentionItems(register.overdue),
+        },
+      };
+    } catch {
+      return unavailable("The commitments register could not be read.");
+    }
   }
 
   private async composeOperationsPulse(

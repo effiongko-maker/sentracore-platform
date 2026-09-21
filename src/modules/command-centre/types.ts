@@ -14,6 +14,13 @@ export const COMMAND_CENTRE_CAPABILITIES = {
    * (e.g. Finance approve remains platform_finance.request.approve).
    */
   decide: "platform.command_centre.decide",
+  /** See the Executive Commitments register (commitments the actor created or owns). */
+  commitmentsView: "platform.command_centre.commitments.view",
+  /**
+   * Create / edit / complete / cancel Executive Commitments. Separate from `decide`
+   * (decision authority) and never implied by being assigned a commitment.
+   */
+  commitmentsManage: "platform.command_centre.commitments.manage",
 } as const;
 
 export type CommandCentreCapability =
