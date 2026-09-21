@@ -30,7 +30,7 @@ export function FinanceHeader({
     <header className="fin-v13-header">
       <div className="fin-v13-header-row">
         <div className="min-w-0">
-          <h1 className="fin-title fin-title--compact">Finance</h1>
+          <h1 className="fin-title fin-title--compact">Costs &amp; Claims</h1>
           <p className="fin-lede fin-lede--compact">
             Track operational costs, submit reimbursement claims, and record
             client payments.
@@ -68,7 +68,7 @@ export function FinanceHeader({
             size="sm"
             onClick={onRefresh}
             disabled={loading}
-            aria-label="Refresh finance data"
+            aria-label="Refresh costs and claims"
           >
             <RefreshCw className="h-4 w-4" />
           </Button>

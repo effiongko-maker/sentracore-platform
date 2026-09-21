@@ -496,7 +496,7 @@ export function CostDetailPage({ costId }: { costId: string }) {
           href="/finance"
           className="text-sm font-medium text-muted hover:underline"
         >
-          Finance overview
+          Costs & Claims overview
         </Link>
       </div>
 

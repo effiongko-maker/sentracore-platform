@@ -34,9 +34,12 @@ async function main() {
     assert(views.every((c) => PKG.includes(c)), `EVERY FM view capability is in the package (${views.join(", ")}) — a future view capability that is omitted fails here`);
     assert(FACILITY_MANAGER_EXCLUDED.every((e) => !PKG.includes(e.capability)), "no excluded (protected / mutation-only) capability is in the package");
     assert(PKG.every((c) => (FM_EXPLICIT_GRANT_CAPABILITIES as readonly string[]).includes(c)), "every package capability is a grantable FM capability");
-    for (const c of ["fm.authorize_protected", "finance.authorize", "finance.pay", "approvals.manage", "finance.create", "finance.submit", "users.manage", "platform.admin_override"]) assert(FACILITY_MANAGER_EXCLUDED.some((e) => e.capability === c), `${c} is explicitly excluded`);
+    for (const c of ["fm.authorize_protected", "finance.authorize", "finance.pay", "approvals.manage", "users.manage", "platform.admin_override"]) assert(FACILITY_MANAGER_EXCLUDED.some((e) => e.capability === c), `${c} is explicitly excluded`);
+    assert([...PKG].join() === "ops.view,ops.create,ops.edit,ops.submit,requests.view,finance.view,finance.create,finance.submit,users.view", "the canonical Facility Manager package is exactly the nine approved capabilities");
+    assert(PKG.includes("finance.create") && PKG.includes("finance.submit") && !FACILITY_MANAGER_EXCLUDED.some((e) => e.capability === "finance.create" || e.capability === "finance.submit"), "FM costs/claims: the Facility Manager may record costs, draft and submit claims");
+    assert(!PKG.some((c) => c.startsWith("platform_finance.")), "no Platform Finance capability is in the package");
     assert(!PKG.some((c) => c.startsWith("platform.")), "no platform-scope (Command Centre / ECC / Batcave / override) capability is in the package");
-    assert(facilityManagerPackageGaps(PREVIOUS).join() === "requests.view,finance.view", "the previous package was missing exactly requests.view and finance.view");
+    assert(facilityManagerPackageGaps(PREVIOUS).join() === "requests.view,finance.view,finance.create,finance.submit", "the previous package was missing requests.view, finance.view and the ordinary cost/claim authority");
     pass("A package: every FM view capability, ordinary operating authority; protected and mutation-only powers explicitly excluded");
   }
 
@@ -51,7 +54,7 @@ async function main() {
     for (const s of ["home", "operations", "approvals", "organise", "reports", "finance", "users", "requests", "intelligence"] as const) assert(after.surfaces.has(s), `surface ${s} is visible`);
     assert(canSeeHref(after, "/requests") && canSeeHref(after, "/issues") && canSeeHref(after, "/finance"), "Requests, Issues and Finance (FM costs) are all open");
     const access = fm(PKG);
-    assert(!after.canMutateFinance && !after.canAuthorizeFinance && !after.canManageUsers && !after.canManageApprovals, "package does NOT confer finance mutation, reimbursement authorisation/payment, people administration or approval management");
+    assert(after.canMutateFinance && !after.canAuthorizeFinance && !after.canManageUsers && !after.canManageApprovals, "package confers ordinary FM cost/claim work, but NOT reimbursement authorisation/payment, people administration or approval management");
     for (const e of FACILITY_MANAGER_EXCLUDED) assert(!accessCan(access, e.capability), `package does not imply ${e.capability}`);
     assert(resolveProtectedActionAuthority(access) === null && !access.hasAdminOverride, "package carries NO protected-action authority and no admin override");
     pass("B visibility: the package opens every FM navigation entry and surface; protected authorities remain separately gated (previous package reproduces the defect)");
@@ -93,10 +96,10 @@ async function main() {
     const svc = new PlatformAdminServerService(repoStub as never, adminStub as never);
     const ctx = { actorProfileId: "actor" } as never;
     const first = await svc.applyFacilityManagerOperatingPackage(ctx, { organisationId: "o", profileId: "p" });
-    assert(first.granted.join() === "requests.view,finance.view" && grants.join() === "requests.view,finance.view", "applying the package to the previous FM grants exactly the two missing capabilities");
+    assert(first.granted.join() === "requests.view,finance.view,finance.create,finance.submit" && grants.join() === "requests.view,finance.view,finance.create,finance.submit", "applying the package to the previous FM grants exactly the four missing capabilities");
     assert(!grants.some((g) => FACILITY_MANAGER_EXCLUDED.some((e) => e.capability === g)), "no protected / excluded capability is ever granted");
     const again = await svc.applyFacilityManagerOperatingPackage(ctx, { organisationId: "o", profileId: "p" });
-    assert(again.granted.length === 0 && grants.length === 2, "re-applying is idempotent (no further grants)");
+    assert(again.granted.length === 0 && grants.length === 4, "re-applying is idempotent (no further grants)");
     held = ["fm.authorize_protected", "finance.authorize", ...PKG];
     const keep = await svc.applyFacilityManagerOperatingPackage(ctx, { organisationId: "o", profileId: "p" });
     assert(keep.granted.length === 0, "a profile that separately holds protected authority is left exactly as it is (nothing added, nothing revoked)");

@@ -281,7 +281,7 @@ function main() {
     "WO raised routes to Work orders"
   );
   assert(
-    notificationSourceLabel("/finance/submissions/SUB-1") === "Finance",
+    notificationSourceLabel("/finance/submissions/SUB-1") === "Costs & Claims",
     "Finance source label ready for future feed items"
   );
   assert(

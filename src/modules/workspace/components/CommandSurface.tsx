@@ -72,7 +72,7 @@ const EXECUTIVE_OVERSIGHT_LINKS: Array<{
   },
   {
     href: "/finance",
-    title: "Finance",
+    title: "Costs & Claims",
     description: "Costs, claims, and reimbursement position",
     icon: Banknote,
     tone: "green",
@@ -196,7 +196,7 @@ function buildHeroCopy(
           ? `${pulse.openWork} open work item${
               pulse.openWork === 1 ? "" : "s"
             } ${pulse.openWork === 1 ? "is" : "are"} in flow with no urgent escalation.`
-          : "Operations appear calm. Drill into Work or Finance for detail.",
+          : "Operations appear calm. Drill into Work or Costs & Claims for detail.",
     };
   }
 

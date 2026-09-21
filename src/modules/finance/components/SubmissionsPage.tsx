@@ -108,7 +108,7 @@ export function SubmissionsPage() {
             href="/finance"
             className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
           >
-            <ArrowLeft className="h-4 w-4" /> Back to Finance
+            <ArrowLeft className="h-4 w-4" /> Back to Costs & Claims
           </Link>
         </div>
 

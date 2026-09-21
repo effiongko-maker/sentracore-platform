@@ -159,7 +159,7 @@ export function CostRecordsPage() {
           href="/finance"
           className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
         >
-          <ArrowLeft className="h-4 w-4" /> Back to Finance
+          <ArrowLeft className="h-4 w-4" /> Back to Costs & Claims
         </Link>
       </div>
       <OperateHeader
@@ -189,7 +189,7 @@ export function CostRecordsPage() {
             onPageChange={setPage}
             emptyIcon={ReceiptText}
             emptyTitle="No cost records yet"
-            emptyDescription="Record a cost from the Finance overview when an operational expense is incurred."
+            emptyDescription="Record a cost from the Costs & Claims overview when an operational expense is incurred."
           />
         )}
       </StreamSurface>

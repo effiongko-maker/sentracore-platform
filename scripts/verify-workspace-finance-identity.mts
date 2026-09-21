@@ -37,7 +37,7 @@ function main() {
     "platform Finance catalogue is active"
   );
   assert(FM_FINANCE_HOME.href === "/finance", "FM Finance home preserved");
-  assert(FM_FINANCE_HOME.label === "Finance", "FM Finance label");
+  assert(FM_FINANCE_HOME.label === "Costs & Claims" && platformFinance.label === "Finance", "FM Costs & Claims label is distinct from Platform Finance");
 
   // Route ownership
   assert(

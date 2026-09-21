@@ -79,7 +79,7 @@ export const OPERATING_LAYERS: OperatingLayer[] = [
         label: FM_FINANCE_HOME.label,
         href: FM_FINANCE_HOME.href,
         icon: Banknote,
-        title: "Finance",
+        title: "Costs & Claims",
         description:
           "Operational costs, reimbursement submissions, and payment position",
       }),

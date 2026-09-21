@@ -13,7 +13,7 @@ function assert(cond: unknown, message: string): asserts cond {
 
 function main() {
   const finance = resolveBreadcrumbSegments("/finance");
-  assert(finance.length === 1 && finance[0] === "Finance", "Finance standalone");
+  assert(finance.length === 1 && finance[0] === "Costs & Claims", "Costs & Claims standalone (FM, not Platform Finance)");
   assert(!finance.includes("Understand"), "Finance no Understand parent");
 
   const intelligence = resolveBreadcrumbSegments("/intelligence");

@@ -36,13 +36,13 @@ export function FinancialPositionSection() {
             {loading
               ? "Loading operational spend and reimbursement figures"
               : allUnavailable || error
-                ? "Financial position could not be loaded. Open Finance for the full record, or try again."
+                ? "Financial position could not be loaded. Open Costs & Claims for the full record, or try again."
                 : !snapshot?.spentAvailable ||
                     !snapshot?.expectedAvailable ||
                     !snapshot?.outstandingAvailable
-                  ? "Some figures are temporarily unavailable. Open Finance for the full record."
+                  ? "Some figures are temporarily unavailable. Open Costs & Claims for the full record."
                   : isSample
-                    ? "In-view sample from the current Finance pool"
+                    ? "In-view sample from the current Costs & Claims pool"
                     : "Operational costs and open reimbursement claims"}
           </p>
         </div>
@@ -57,7 +57,7 @@ export function FinancialPositionSection() {
             </button>
           ) : null}
           <Link href="/finance" className="sc-fm-view-all">
-            Open Finance
+            Open Costs & Claims
             <ArrowRight className="h-3.5 w-3.5" aria-hidden />
           </Link>
         </div>

@@ -28,7 +28,7 @@ export function FinancePage() {
       <ModeFrame mode="understand">
         <EmptyState
           icon={Banknote}
-          title="Unable to load Finance"
+          title="Unable to load Costs & Claims"
           description={error}
           actionLabel="Retry"
           onAction={() => void reload()}

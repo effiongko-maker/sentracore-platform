@@ -74,7 +74,7 @@ export const PLATFORM_WORKSPACES: PlatformWorkspace[] = [
   {
     /**
      * Platform-level Finance workspace (SentraCore → Finance).
-     * Distinct from Facility Management → Finance (`FM_FINANCE_HOME` / `/finance`).
+     * Distinct from Facility Management → Costs & Claims (`FM_FINANCE_HOME` / `/finance`).
      * Must never share the FM Finance route.
      */
     id: "finance",
@@ -119,11 +119,12 @@ export const PLATFORM_WORKSPACES: PlatformWorkspace[] = [
 ];
 
 /**
- * Facility Management → Finance home.
- * Owned by the Facility Management (`operations`) workspace — not platform Finance.
+ * Facility Management → Costs & Claims home (route `/finance`, capabilities `finance.*`).
+ * Owned by the Facility Management (`operations`) workspace — NOT Platform Finance (`/platform-finance`,
+ * `platform_finance.*`). The identifier and route keep their historical names; the user-facing label does not.
  */
 export const FM_FINANCE_HOME = {
-  label: "Finance",
+  label: "Costs & Claims",
   href: "/finance",
 } as const;
 

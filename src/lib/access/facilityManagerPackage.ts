@@ -23,9 +23,12 @@ export const FACILITY_MANAGER_OPERATING_PACKAGE = [
   "ops.submit",
   // The Request queue: Request-derived Issues, the Requests surface and request notifications.
   "requests.view",
-  // Read-only FM costs and claims (cost records, claims, authorisations and payments as RECORDS). Not Platform Finance
-  // (which has its own capability family) and not authority to authorise or pay anything.
+  // FM Costs & Claims — the ordinary operational cost/claim workflow for an assigned facility: view the records,
+  // record/edit costs and draft claims (create), and submit a completed claim (submit). Not Platform Finance (its own
+  // capability family) and not authority to authorise or pay anything.
   "finance.view",
+  "finance.create",
+  "finance.submit",
   // The FM people directory (read).
   "users.view",
 ] as const satisfies readonly AccessCapability[];
@@ -40,8 +43,6 @@ export const FACILITY_MANAGER_EXCLUDED: ReadonlyArray<{ capability: AccessCapabi
   { capability: "fm.authorize_protected", reason: "Protected-action authority (password step-up) is a separate, deliberate grant." },
   { capability: "finance.authorize", reason: "Reimbursement authorisation is protected authority, separated from operating visibility." },
   { capability: "finance.pay", reason: "Recording reimbursement payments is protected authority." },
-  { capability: "finance.create", reason: "Recording FM costs / drafting claims is a mutation, not visibility." },
-  { capability: "finance.submit", reason: "Submitting claims is a mutation, not visibility." },
   { capability: "approvals.manage", reason: "Creating and progressing approval packages is a mutation, not visibility." },
   { capability: "users.manage", reason: "Assigning people and changing operating roles is administration, not operating visibility." },
   { capability: "platform.admin_override", reason: "System Administrator override is derived from Super Admin, never from an operating role." },

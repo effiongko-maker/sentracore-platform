@@ -84,7 +84,7 @@ export function notificationSourceLabel(href: string): string {
   ) {
     return "Issues";
   }
-  if (href.startsWith("/finance")) return "Finance";
+  if (href.startsWith("/finance")) return "Costs & Claims";
   if (href.startsWith("/approvals")) return "Approvals";
   return "Operations";
 }
