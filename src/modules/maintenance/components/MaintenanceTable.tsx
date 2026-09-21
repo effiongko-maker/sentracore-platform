@@ -138,7 +138,7 @@ export function MaintenanceTable({
                 : "Reported";
           return (
             <div>
-              <span className="text-muted">{formatDate(when)}</span>
+              <span className="text-muted">{when ? formatDate(when) : "Date not recorded"}</span>
               <p className="text-xs text-muted">{label}</p>
             </div>
           );

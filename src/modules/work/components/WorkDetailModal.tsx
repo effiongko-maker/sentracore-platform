@@ -224,7 +224,7 @@ export function WorkDetailModal({
             }
           />
           <Detail label="Reported by" value={requesterLabel || "—"} />
-          <Detail label="Reported at" value={formatDate(work.reportedAt)} />
+          <Detail label="Reported at" value={work.reportedAt ? formatDate(work.reportedAt) : "Not recorded"} />
         </Section>
 
         <Section title="Status & schedule">

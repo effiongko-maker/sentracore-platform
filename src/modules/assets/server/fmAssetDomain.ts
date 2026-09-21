@@ -13,7 +13,7 @@ import type {
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const ASSET_CATEGORY_VALUES: AssetCategory[] = ["hvac", "power", "electrical", "mechanical", "vertical_transport", "fire_safety", "it", "other"];
-export const ASSET_CONDITION_VALUES: AssetCondition[] = ["excellent", "good", "fair", "poor"];
+export const ASSET_CONDITION_VALUES: AssetCondition[] = ["excellent", "good", "fair", "poor", "unknown"];
 export const ASSET_STATUS_VALUES: AssetStatus[] = ["active", "inactive", "pending", "suspended"];
 export const ASSET_CRITICALITY_VALUES: AssetCriticality[] = ["unassessed", "low", "medium", "high", "critical"];
 export const ASSET_SORT_VALUES: AssetSort[] = ["newest", "oldest", "name_asc", "name_desc"];

@@ -182,7 +182,7 @@ const eq = (raw: Record<string, unknown>, ...pairs: Array<[string, string]>): Li
 
 export const GENERATOR_SPEC: FmLogSpec = {
   resource: "generator-log", label: "Generator log", table: "fm_generator_logs", prefix: "GENLOG", facility: false,
-  select: `${COMMON}, generator, started_at, ended_at, hours, fuel_used, remarks`,
+  select: `${COMMON}, generator, started_at, ended_at, hours, fuel_used, remarks, log_basis, start_meter_reading, end_meter_reading, asset_id, record_origin`,
   searchColumns: ["generator", "remarks", "code"],
   parseCreate(p) {
     const r = asRecord(p);
@@ -201,7 +201,23 @@ export const GENERATOR_SPEC: FmLogSpec = {
     return { id: updateId(r, "Generator log"), columns: c };
   },
   parseExtras: (r) => ({ eq: eq(r, ["generator", "generator"]) }),
-  map: (row) => ({ ...base(row), date: s(row, "log_date"), generator: s(row, "generator"), startedAt: s(row, "started_at"), endedAt: s(row, "ended_at"), hours: n(row, "hours"), fuelUsed: n(row, "fuel_used"), remarks: optS(row, "remarks") }),
+  // Unknown stays unknown: a historical hour-meter log has NO clock times, and a NULL fuel_used is "not
+  // recorded" — it is never rendered as 0. Runtime (hours) is derived by the database from the basis.
+  map: (row) => ({
+    ...base(row),
+    date: s(row, "log_date"),
+    generator: s(row, "generator"),
+    startedAt: optS(row, "started_at") ?? null,
+    endedAt: optS(row, "ended_at") ?? null,
+    hours: n(row, "hours"),
+    fuelUsed: row.fuel_used == null ? null : Number(row.fuel_used),
+    remarks: optS(row, "remarks"),
+    logBasis: s(row, "log_basis") || "clock_times",
+    startMeterReading: row.start_meter_reading == null ? null : Number(row.start_meter_reading),
+    endMeterReading: row.end_meter_reading == null ? null : Number(row.end_meter_reading),
+    assetId: optS(row, "asset_id") ?? null,
+    recordOrigin: s(row, "record_origin") || "operational",
+  }),
 };
 
 export const ENERGY_SPEC: FmLogSpec = {

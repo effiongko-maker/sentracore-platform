@@ -64,6 +64,10 @@ export type Manifest = {
   ledger: LedgerRow[];
   records: ProposedRecord[];
   deferred: Array<{ id: string; target: string; reasonCode: string; row: string; values: Record<string, unknown> }>;
+  /** Evidence preserved in the manifest ONLY (e.g. historical direct cost — deferred, never imported). */
+  deferredEvidence: Array<{ row: string; kind: string; values: Record<string, unknown> }>;
+  /** One provenance row per proposed record (central fm_migration_provenance ledger). */
+  provenancePlan: Array<{ batchKey: string; workbook: WorkbookCode; workbookSha256: string; sheet: string; row: number; sourceReference: string | null; fingerprint: string; targetTable: string; targetId: string; classification: string; transformations: string[] }>;
   dateExceptions: DateException[];
   links: Link[];
   assetAliases: Array<{ asset: string; alias: string }>;
@@ -176,6 +180,7 @@ export function runDryRun(input: DryRunInput): Manifest {
   const ledger: LedgerRow[] = [];
   const records: ProposedRecord[] = [];
   const deferred: Manifest["deferred"] = [];
+  const deferredEvidence: Manifest["deferredEvidence"] = [];
   const dateExceptions: DateException[] = [];
   const links: Link[] = [];
   const incompleteRows: string[] = [];
@@ -377,12 +382,11 @@ export function runDryRun(input: DryRunInput): Manifest {
         manufacturer: null,
         model: null,
         serial_number: null,
+        condition: "unknown",
         status: "pending",
         criticality: "unassessed",
         source_only_preserved: { source_label: label, location_text: entry.locationText, oem: null, pm_frequency: null },
-      }, [`source label "${label}" ⇒ canonical name "${entry.name}"`, `category "${entry.category}" from the explicit alias map (label evidence), not inference from text`], [
-        { field: "condition", forced: "good", asserts: "source condition is blank/unknown but the column is NOT NULL with no 'unknown' value" },
-      ], label);
+      }, [`source label "${label}" ⇒ canonical name "${entry.name}"`, `category "${entry.category}" from the explicit alias map (label evidence), not inference from text`, "condition unknown: the source condition is blank (explicit 'unknown', never 'good')"], [], label);
       add("FM_PACK", s, r, "business", "BOOTSTRAP", "ASSET_BOOTSTRAP", "Asset ⇒ fm_assets with explicit aliases; OEM/model/serial/PM frequency remain unknown.", label, [rec.id]);
     }
   }
@@ -409,22 +413,50 @@ export function runDryRun(input: DryRunInput): Manifest {
     }
   }
 
-  // G. Consumables → model gap (no date / unit / blank≠0 issued)
+  // G. Consumables → historical register evidence (explicit units; no dates, zeroes or derived balances)
   {
     const s = pack("Consumables Register");
-    const unitOf = (v: string | null) => (v === null || isPlaceholder(v) ? null : /^-?\d+(\.\d+)?\s*([a-z]+)$/i.exec(v)?.[2] ?? "?");
-    const normUnit = (u: string) => ({ pcs: "pcs", pc: "pcs", pcks: "packs", pck: "packs", packs: "packs", gallons: "gallons" } as Record<string, string>)[u.toLowerCase()] ?? null;
-    const unknown = new Set<string>();
+    const UNIT_ALIASES: Record<string, string> = { pcs: "pcs", pc: "pcs", pcks: "packs", pck: "packs", packs: "packs", pack: "packs", gallons: "gallons", gallon: "gallons" };
+    const unknownUnits = new Set<string>();
+    // "19 Gallons" / "12pcs" ⇒ { quantity, unit }; "-" and blank ⇒ unknown (null), NEVER zero.
+    const parseQty = (raw: string | null): { quantity: number | null; unit: string | null; raw: string | null; ok: boolean } => {
+      if (raw === null) return { quantity: null, unit: null, raw: null, ok: true };
+      if (isPlaceholder(raw)) return { quantity: null, unit: null, raw, ok: true };
+      const m = /^(\d+(?:\.\d+)?)\s*([A-Za-z]+)$/.exec(raw);
+      if (!m) return { quantity: null, unit: null, raw, ok: false };
+      const unit = UNIT_ALIASES[m[2]!.toLowerCase()];
+      if (!unit) { unknownUnits.add(m[2]!); return { quantity: null, unit: null, raw, ok: false }; }
+      return { quantity: Number(m[1]), unit, raw, ok: true };
+    };
+    const seenNames = new Set<string>();
     for (const r of populatedRows(s)) {
       if (r < 4) { structural("FM_PACK", s, r, "STRUCTURAL_TITLE_OR_HEADER", "Title/header row."); continue; }
-      const units = ["B", "C", "D", "E", "F"].map((c) => unitOf(cellText(s, r, c))).filter((u): u is string => !!u);
-      for (const u of units) if (!normUnit(u)) unknown.add(u);
-      const normed = new Set(units.map((u) => normUnit(u) ?? u));
-      const mixed = normed.size > 1;
-      add("FM_PACK", s, r, "business", "MODEL_GAP", "CONSUMABLES_SCHEMA_CANNOT_HOLD_SOURCE", `fm_consumables_updates requires log_date and issued (source has neither a date nor a value for blank cells) and stores no unit${mixed ? "; this row mixes units across fields (ambiguous semantics)" : ""}. Nothing is imported.`, cellText(s, r, "A"));
-      deferred.push({ id: importedId(shas.FM_PACK, s.name, r, "fm_consumables_items"), target: "fm_consumables_items", reasonCode: "CONSUMABLES_SCHEMA_CANNOT_HOLD_SOURCE", row: `FM_PACK/${s.name}/${r}`, values: { name: cellText(s, r, "A"), units_observed: units, mixed_units: mixed } });
+      const name = cellText(s, r, "A");
+      const fields = { opening: parseQty(cellText(s, r, "B")), received: parseQty(cellText(s, r, "C")), issued: parseQty(cellText(s, r, "D")), closing: parseQty(cellText(s, r, "E")), reorder: parseQty(cellText(s, r, "F")) };
+      if (!name) { add("FM_PACK", s, r, "business", "QUARANTINE", "INCOMPLETE_ROW", "Item name missing."); continue; }
+      if (Object.values(fields).some((f) => !f.ok)) {
+        add("FM_PACK", s, r, "business", "QUARANTINE", "UNKNOWN_UNIT_SEMANTICS", `A quantity cell has an unrecognised unit/format; preserving it as a number would misstate the source.`, name);
+        continue;
+      }
+      if (seenNames.has(name.toLowerCase())) { add("FM_PACK", s, r, "business", "QUARANTINE", "DUPLICATE_ITEM_NAME", "Item name repeats within the register.", name); continue; }
+      seenNames.add(name.toLowerCase());
+      const item = propose("FM_PACK", s, r, "fm_consumables_items", `item:${name.toLowerCase()}`, {
+        facility_code: input.facility.code, facility_id: facilityId, name,
+      }, ["facility FAC-0001 from workbook scope (the NCC Annex contract pack); the register carries no per-row location"], [], name);
+      const entry = propose("FM_PACK", s, r, "fm_consumables_register_entries", `entry:${name.toLowerCase()}`, {
+        facility_code: input.facility.code, facility_id: facilityId, item_record_id: item.id,
+        record_origin: "migrated_historical",
+        snapshot_date: null,
+        opening_quantity: fields.opening.quantity, opening_unit: fields.opening.unit,
+        received_quantity: fields.received.quantity, received_unit: fields.received.unit,
+        issued_quantity: fields.issued.quantity, issued_unit: fields.issued.unit,
+        closing_quantity: fields.closing.quantity, closing_unit: fields.closing.unit,
+        reorder_level_quantity: fields.reorder.quantity, reorder_level_unit: fields.reorder.unit,
+        raw_opening: fields.opening.raw, raw_received: fields.received.raw, raw_issued: fields.issued.raw, raw_closing: fields.closing.raw, raw_reorder_level: fields.reorder.raw,
+      }, ["units are explicit per field (aliases only: pcs/pc⇒pcs, pcks/pck/packs⇒packs, gallons); pcs and packs are never equated", "no snapshot date: the register has none (null = unknown)", "'-' and blank are unknown (null), never 0", "closing is stored only if the source states it — no balance is derived"], [], name);
+      add("FM_PACK", s, r, "business", "TRANSFORM_IMPORT", "CONSUMABLES_REGISTER_EVIDENCE", "Register row ⇒ consumables item + historical register evidence (explicit units, no invented date or balance).", name, [item.id, entry.id]);
     }
-    (globalThis as { __unknownUnits?: string[] }).__unknownUnits = [...unknown].sort();
+    (globalThis as { __unknownUnits?: string[] }).__unknownUnits = [...unknownUnits].sort();
   }
 
   // E. Generator Log
@@ -481,8 +513,28 @@ export function runDryRun(input: DryRunInput): Manifest {
       if (gen) lastEnd.set(gen, end);
       const recomputed = Math.round((end - start) * 10) / 10;
       const alias = ASSET_MAP.find((a) => a.aliases.some((x) => normLabel(x) === normLabel(gen ?? "")));
-      add("FM_PACK", s, r, "business", "MODEL_GAP", "GENERATOR_LOG_SCHEMA_REQUIRES_CLOCK_TIMES", `Valid dated reading (runtime recomputed from meter readings = ${recomputed}h${runSource !== null && Math.abs(runSource - recomputed) > 0.05 ? `; source cell ${runSource} disagrees` : ""}). fm_generator_logs stores clock started_at/ended_at and a required fuel_used, not hour-meter readings; importing would fabricate times/fuel.`, gen);
-      deferred.push({ id: importedId(shas.FM_PACK, s.name, r, "fm_generator_logs"), target: "fm_generator_logs", reasonCode: "GENERATOR_LOG_SCHEMA_REQUIRES_CLOCK_TIMES", row: `FM_PACK/${s.name}/${r}`, values: { log_date: date.iso, generator: gen, asset_alias_resolved: alias?.name ?? null, start_reading: start, end_reading: end, run_hours_recomputed: recomputed, fuel_used_source: num(s, r, "F") } });
+      const assetRecord = alias ? records.find((x) => x.target === "fm_assets" && x.values.name === alias.name) : undefined;
+      const fuel = num(s, r, "F");
+      const rec = propose("FM_PACK", s, r, "fm_generator_logs", `gen:${date.iso}:${gen}`, {
+        log_date: date.iso,
+        generator: gen,
+        log_basis: "hour_meter",
+        start_meter_reading: start,
+        end_meter_reading: end,
+        fuel_used: fuel,
+        remarks: null,
+        asset_record_id: assetRecord?.id ?? null,
+        record_origin: "migrated_historical",
+        run_hours_derived_by_database: recomputed,
+        source_only_preserved: { source_run_hours_formula_result: runSource },
+      }, [
+        ...(date.status === "repaired" ? [`date repaired: raw ${date.raw} ⇒ ${date.iso} (${date.rule})`] : []),
+        ...(alias ? [`generator label "${gen}" ⇒ explicit alias of asset "${alias.name}"`] : [`generator label "${gen}" has no explicit alias — no asset link`]),
+        `runtime is derived from the meter readings (${recomputed}h); the spreadsheet formula result is not trusted or imported`,
+        fuel === null ? "fuel not recorded ⇒ NULL (unknown), never 0" : `fuel ${fuel} as recorded`,
+        "no clock start/end time exists in the source and none is invented",
+      ], [], gen);
+      add("FM_PACK", s, r, "business", "TRANSFORM_IMPORT", "GENERATOR_HOUR_METER_IMPORT", `Valid dated hour-meter reading ⇒ fm_generator_logs (hour_meter basis)${runSource !== null && Math.abs(runSource - recomputed) > 0.05 ? `; source cell ${runSource} disagrees with readings, readings win` : ""}.`, gen, [rec.id]);
     }
     (globalThis as { __genDisc?: number }).__genDisc = discontinuities;
   }
@@ -616,9 +668,32 @@ export function runDryRun(input: DryRunInput): Manifest {
       const desc = cellText(s, r, "B");
       if (r === 1) { structural("MBORA", s, r, "STRUCTURAL_TITLE_OR_HEADER", "Header row."); continue; }
       if (sn !== null && /^\d+$/.test(sn) && desc) {
-        add("MBORA", s, r, "business", "MODEL_GAP", "HISTORICAL_WORK_STATE_NOT_REPRESENTABLE",
-          `Register lists a ${def.orderType.replace("_", " ")} but carries no execution date, actor or work state: fm_work.reported_at and fm_work_instructions.requested_at are NOT NULL, and every status either asserts a lifecycle position or (completed) requires a completion date. Paid/Pending is commercial state and cannot set Work state. Nothing is imported.`, `${def.name}#${sn}`);
-        deferred.push({ id: importedId(shas.MBORA, s.name, r, "fm_work"), target: "fm_work+fm_work_instructions", reasonCode: "HISTORICAL_WORK_STATE_NOT_REPRESENTABLE", row: `MBORA/${s.name}/${r}`, values: { title: desc, order_type: def.orderType, register_year: def.year, work_instruction_id_would_be: importedId(shas.MBORA, s.name, r, "fm_work_instructions"), cost_evidence_present: cellText(s, r, "E") !== null, source_commercial_status_excluded: cellText(s, r, "F") } });
+        const ref = `${def.name}#${sn}`;
+        if (/csirt/i.test(desc)) {
+          unresolvedLocations.push(`MBORA/${s.name}/${r}: CSIRT-dependent order`);
+          add("MBORA", s, r, "business", "QUARANTINE", "CSIRT_DEPENDENT", "The order concerns the CSIRT office (alone or together with the Annex). CSIRT has no approved SentraCore facility; the record is held for organisational/location resolution.", ref);
+          continue;
+        }
+        // Historical Work (+ Work Instruction) with UNKNOWN lifecycle: no dates or status are inferred; Paid/Pending is commercial.
+        const workRec = propose("MBORA", s, r, "fm_work", `work:${def.name}#${sn}`, {
+          facility_code: input.facility.code, facility_id: facilityId,
+          title: desc, source: "manual", priority: "medium",
+          status: "unknown", reported_at: null, completed_at: null, record_origin: "migrated_historical",
+        }, ["lifecycle unknown: reported_at NULL, status 'unknown', no completion — nothing is inferred from Paid/Pending or payment dates", "facility FAC-0001 from workbook scope (MBORA INCOME STATEMENT); the register has no per-row location", `order register: ${def.name}`], [
+          { field: "priority", forced: "medium", asserts: "source has no priority and the column has no 'unknown' value" },
+        ], ref);
+        const wiRec = propose("MBORA", s, r, "fm_work_instructions", `wi:${def.name}#${sn}`, {
+          facility_code: input.facility.code, facility_id: facilityId,
+          work_record_id: workRec.id, order_type: def.orderType,
+          title: desc, work_category: "other", source: "manual", priority: "medium",
+          status: "unknown", requested_at: null, completed_at: null, record_origin: "migrated_historical",
+        }, [`order_type "${def.orderType}" is explicit from the source sheet (${def.name})`, "requested_at NULL and status 'unknown': no lifecycle fact is inferred", "work_category 'other' (never 'corrective': the source states no category)"], [
+          { field: "priority", forced: "medium", asserts: "source has no priority and the column has no 'unknown' value" },
+        ], ref);
+        // Direct cost is DEFERRED: preserved as migration evidence only (no cost record, claim, authorization or payment).
+        const cost = num(s, r, "E");
+        if (cost !== null) deferredEvidence.push({ row: `MBORA/${s.name}/${r}`, kind: "historical_direct_cost_deferred", values: { work_record_id: workRec.id, cost_amount: cost, currency: "NGN" } });
+        add("MBORA", s, r, "business", "TRANSFORM_IMPORT", def.orderType === "job_order" ? "HISTORICAL_JOB_ORDER_IMPORT" : "HISTORICAL_WORK_ORDER_IMPORT", `Historical ${def.orderType.replace("_", " ")} ⇒ migrated Work + Work Instruction (${def.orderType}); lifecycle unknown; commercial state excluded.`, ref, [workRec.id, wiRec.id]);
         continue;
       }
       if (sn === null && desc && /monthly payment/i.test(desc)) {
@@ -660,8 +735,22 @@ export function runDryRun(input: DryRunInput): Manifest {
         add("MBORA", s, r, "business", "QUARANTINE", "EXECUTION_STATE_CONFLICT", `This sheet says "Executed" but the matching Pending Approval row (${approval.id}) says "${approvalState}". Source contradicts itself; no state is chosen.`, `Executed#${sn}`);
         continue;
       }
-      add("MBORA", s, r, "business", "MODEL_GAP", "EXECUTED_WITHOUT_COMPLETION_DATE", "Explicit evidence that work was executed with NO Job Order ⇒ a historical Work (and NO Work Instruction). fm_work cannot record 'completed' without a completion date the source does not give, and other statuses would misstate execution.", `Executed#${sn}`);
-      deferred.push({ id: importedId(shas.MBORA, s.name, r, "fm_work"), target: "fm_work", reasonCode: "EXECUTED_WITHOUT_COMPLETION_DATE", row: `MBORA/${s.name}/${r}`, values: { title, reported_on_evidence: date, execution_evidence: "Executed", work_instruction: "NONE — source proves no formal Job Order", job_order_absent_evidence: approval ? `${approval.id} (${approvalState})` : "Executed (NO JOB ORDER) sheet" } });
+      const ref = `Executed#${sn}`;
+      if (/csirt/i.test(title)) {
+        add("MBORA", s, r, "business", "QUARANTINE", "CSIRT_DEPENDENT", "CSIRT-dependent; no approved CSIRT facility.", ref);
+        continue;
+      }
+      // Explicit evidence that work was executed with NO Job Order ⇒ historical Work and NO Work Instruction.
+      const workRec = propose("MBORA", s, r, "fm_work", `work:executed-no-jo#${sn}`, {
+        facility_code: input.facility.code, facility_id: facilityId,
+        title, source: "manual", priority: "medium",
+        status: "completed", reported_at: null, completed_at: null, record_origin: "migrated_historical",
+        work_instruction: "NONE — source proves no formal Job Order exists",
+        source_only_preserved: { approval_request_submitted_on: date, execution_evidence: "Executed", job_order_absent: true, corroborating_approval_row: approval?.id ?? null },
+      }, ["status 'completed' from explicit source evidence \"Executed\"; completion date unknown ⇒ completed_at NULL (migrated_historical only)", "NO Work Instruction and NO Job Order are created: the source states none exists", "reported_at NULL: the approval-request submission date is not the date the work was reported"], [
+        { field: "priority", forced: "medium", asserts: "source has no priority and the column has no 'unknown' value" },
+      ], ref);
+      add("MBORA", s, r, "business", "TRANSFORM_IMPORT", "EXECUTED_NO_JOB_ORDER_HISTORICAL_WORK", "Executed with NO Job Order ⇒ migrated historical Work only (no Work Instruction, no Job Order).", ref, [workRec.id]);
     }
   }
 
@@ -740,19 +829,31 @@ export function runDryRun(input: DryRunInput): Manifest {
     bySheet[key]![l.classification]!++;
   }
   const targetCount = (t: string) => records.filter((r) => r.target === t).length;
-  const deferredCount = (t: string, pred?: (d: Manifest["deferred"][number]) => boolean) => deferred.filter((d) => d.target === t && (!pred || pred(d))).length;
   const linkCount = (c: Link["confidence"]) => links.filter((l) => l.confidence === c).length;
+  const count = (code: string) => ledger.filter((l) => l.reasonCode === code).length;
   const gaps: Manifest["exceptions"]["modelGaps"] = [
-    { code: "HISTORICAL_WORK_STATE_NOT_REPRESENTABLE", description: "fm_work / fm_work_instructions cannot hold historical Work whose execution dates/state are unknown (NOT NULL reported_at/requested_at; completed needs completed_at).", affected: ledger.filter((l) => l.reasonCode === "HISTORICAL_WORK_STATE_NOT_REPRESENTABLE").length },
-    { code: "EXECUTED_WITHOUT_COMPLETION_DATE", description: "Executed-with-no-Job-Order Work has no completion date.", affected: ledger.filter((l) => l.reasonCode === "EXECUTED_WITHOUT_COMPLETION_DATE").length },
-    { code: "GENERATOR_LOG_SCHEMA_REQUIRES_CLOCK_TIMES", description: "fm_generator_logs needs clock started_at/ended_at + fuel_used; source has hour-meter readings and optional fuel.", affected: ledger.filter((l) => l.reasonCode === "GENERATOR_LOG_SCHEMA_REQUIRES_CLOCK_TIMES").length },
-    { code: "CONSUMABLES_SCHEMA_CANNOT_HOLD_SOURCE", description: "fm_consumables_updates requires log_date and issued and stores no unit; the register has no date, mixed units and blank cells.", affected: ledger.filter((l) => l.reasonCode === "CONSUMABLES_SCHEMA_CANNOT_HOLD_SOURCE").length },
-    { code: "NO_INSPECTION_MODEL", description: "No facility-inspection domain exists.", affected: ledger.filter((l) => l.reasonCode === "NO_INSPECTION_MODEL").length },
-    { code: "ASSET_CONDITION_CANNOT_BE_UNKNOWN", description: "fm_assets.condition is NOT NULL without an 'unknown' value.", affected: targetCount("fm_assets") },
-    { code: "COST_EVIDENCE_BLOCKED", description: "fm_cost_records needs recorded_at, category and evidence that the registers do not carry, and would need a Work/WI to attach to; historical cost is not imported.", affected: deferred.filter((d) => d.reasonCode === "HISTORICAL_WORK_STATE_NOT_REPRESENTABLE" && d.values.cost_evidence_present === true).length },
-    { code: "NO_CSIRT_FACILITY", description: "CSIRT office records cannot be placed under FAC-0001 and no CSIRT facility exists.", affected: unresolvedLocations.length },
-    { code: "NO_SOURCE_PROVENANCE_STORE", description: "No provenance/idempotency ledger exists in the schema (a forward migration is needed in phase 2).", affected: records.length },
+    { code: "NO_INSPECTION_MODEL", description: "No facility-inspection domain exists; the single inspection row is preserved as migration evidence only.", affected: count("NO_INSPECTION_MODEL") },
+    { code: "CSIRT_LOCATION_UNRESOLVED", description: "CSIRT is not an approved SentraCore facility; every CSIRT-dependent record is quarantined for later organisational/location resolution.", affected: ledger.filter((l) => ["UNRESOLVED_FACILITY", "UNRESOLVED_FACILITY_SHEET_OUT_OF_CONTRACT", "CSIRT_DEPENDENT"].includes(l.reasonCode)).length },
+    { code: "HISTORICAL_DIRECT_COST_DEFERRED", description: "Historical direct cost is deferred: preserved as migration evidence only; no cost record, claim, authorization or payment is created.", affected: deferredEvidence.length },
+    { code: "PRIORITY_HAS_NO_UNKNOWN_VALUE", description: "fm_work / fm_work_instructions priority is NOT NULL with no 'unknown' value; migrated orders carry the disclosed default 'medium'.", affected: targetCount("fm_work") + targetCount("fm_work_instructions") },
   ];
+  const batchKey = batchId;
+  const provenancePlan: Manifest["provenancePlan"] = records.map((r) => ({
+    batchKey,
+    workbook: r.provenance.workbook,
+    workbookSha256: r.provenance.workbookSha256,
+    sheet: r.provenance.sheet,
+    row: r.provenance.row,
+    sourceReference: r.provenance.sourceRef,
+    fingerprint: r.provenance.fingerprint,
+    targetTable: r.target,
+    targetId: r.id,
+    classification: lof(r),
+    transformations: r.transformations,
+  }));
+  function lof(r: ProposedRecord): string {
+    return ledger.find((l) => l.workbook === r.provenance.workbook && l.sheet === r.provenance.sheet && l.row === r.provenance.row)!.classification;
+  }
   const manifest: Manifest = {
     rulesVersion: RULES_VERSION,
     asOf,
@@ -764,6 +865,8 @@ export function runDryRun(input: DryRunInput): Manifest {
     ledger,
     records,
     deferred,
+    deferredEvidence,
+    provenancePlan,
     dateExceptions,
     links,
     assetAliases: g.__aliases ?? [],
@@ -783,30 +886,28 @@ export function runDryRun(input: DryRunInput): Manifest {
       populatedRows: ledger.length,
       businessRows: ledger.filter((l) => l.kind === "business").length,
       structuralRows: ledger.filter((l) => l.kind === "structural").length,
-      importableNow: {
+      proposedTargets: {
         facilitiesReused: records.length ? 1 : 0,
         assets: targetCount("fm_assets"),
         assetAliasesForCreatedAssets: (g.__aliases ?? []).filter((a) => records.some((r) => r.target === "fm_assets" && r.values.name === a.asset)).length,
         requests: targetCount("fm_requests"),
         incidents: targetCount("fm_incidents"),
-        works: 0,
-        workInstructions: { job_order: 0, work_order: 0 },
-        approvalsOrProvenanceRelationships: 0,
-        generatorLogs: 0,
-        dieselLogs: targetCount("fm_diesel_usage"),
-        consumables: 0,
-        costRecords: 0,
-      },
-      blockedByModelGap: {
-        historicalWorkFromJobAndWorkOrders: deferredCount("fm_work+fm_work_instructions"),
+        works: targetCount("fm_work"),
+        worksFromOrders: records.filter((r) => r.target === "fm_work" && r.values.work_instruction === undefined).length,
+        worksExecutedWithoutJobOrder: records.filter((r) => r.target === "fm_work" && r.values.work_instruction !== undefined).length,
         workInstructions: {
-          job_order: deferredCount("fm_work+fm_work_instructions", (d) => d.values.order_type === "job_order"),
-          work_order: deferredCount("fm_work+fm_work_instructions", (d) => d.values.order_type === "work_order"),
+          job_order: records.filter((r) => r.target === "fm_work_instructions" && r.values.order_type === "job_order").length,
+          work_order: records.filter((r) => r.target === "fm_work_instructions" && r.values.order_type === "work_order").length,
         },
-        executedWithoutJobOrderWork: deferredCount("fm_work"),
-        generatorLogs: deferredCount("fm_generator_logs"),
-        consumablesRows: deferredCount("fm_consumables_items"),
+        approvalsOrProvenanceRelationships: 0,
+        generatorLogs: targetCount("fm_generator_logs"),
+        dieselLogs: targetCount("fm_diesel_usage"),
+        consumablesItems: targetCount("fm_consumables_items"),
+        consumablesRegisterEntries: targetCount("fm_consumables_register_entries"),
+        costRecords: 0,
+        provenanceRows: provenancePlan.length,
       },
+      deferredHistoricalCostEvidence: deferredEvidence.length,
       links: { CERTAIN: linkCount("CERTAIN"), PROBABLE: linkCount("PROBABLE"), POSSIBLE: linkCount("POSSIBLE"), UNSUPPORTED: linkCount("UNSUPPORTED") },
       generatorMeterDiscontinuities: g.__genDisc ?? 0,
       chronologyConfirmedDates,

@@ -1,6 +1,6 @@
 export type AssetStatus = "active" | "inactive" | "pending" | "suspended";
 
-export type AssetCondition = "excellent" | "good" | "fair" | "poor";
+export type AssetCondition = "excellent" | "good" | "fair" | "poor" | "unknown";
 
 export type AssetCriticality =
   | "unassessed"

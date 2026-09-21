@@ -14,7 +14,11 @@ export type WorkOrderStatus =
   | "on_hold"
   | "completed"
   | "cancelled"
-  | "closed";
+  | "closed"
+  /** Historical migrated Work Instruction only: lifecycle not recorded in the source. Never selectable in the product. */
+  | "unknown";
+
+export type FmRecordOrigin = "operational" | "migrated_historical";
 
 export type WorkOrderPriority = "low" | "medium" | "high" | "critical";
 
@@ -66,6 +70,8 @@ export interface WorkOrder {
   assignedGroupId?: string;
 
   requestedAt?: string;
+  /** operational (product-created, strict) | migrated_historical. Never set from input. */
+  recordOrigin?: FmRecordOrigin;
   scheduledStartAt?: string;
   scheduledEndAt?: string;
   dueAt?: string;

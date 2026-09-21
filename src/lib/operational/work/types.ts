@@ -50,7 +50,8 @@ export type WorkRecord = {
   assignedToUserId?: string;
   assignedGroupId?: string;
   reportedByUserId?: string;
-  reportedAt: string;
+  /** Undefined only for migrated_historical Work (reporting date not in the source). */
+  reportedAt?: string;
   scheduledStartAt?: string;
   scheduledEndAt?: string;
   dueAt?: string;
@@ -89,6 +90,7 @@ export const WORK_STATUS_SEMANTICS: Record<WorkStatus, string> = {
   on_hold: "work paused",
   completed: "work completed",
   cancelled: "work cancelled",
+  unknown: "historical record — lifecycle not recorded in the source",
 };
 
 /** Operator-facing status labels (persisted values unchanged). */
@@ -100,6 +102,8 @@ export const WORK_STATUS_LABELS: Record<WorkStatus, string> = {
   on_hold: "On hold",
   completed: "Completed",
   cancelled: "Cancelled",
+  // Neutral and explicit: unknown is not "awaiting action", "completed" or "healthy".
+  unknown: "Status not recorded",
 };
 
 /** Issue lens identity for a Work-backed Maintenance root. */

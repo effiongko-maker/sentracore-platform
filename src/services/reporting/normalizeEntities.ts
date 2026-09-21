@@ -77,14 +77,17 @@ function normalizeIncident(row: Incident): Incident {
 }
 
 function normalizeMaintenance(row: Maintenance): Maintenance {
+  // Migrated historical Work may have NO reporting date: it stays unknown here — reports must
+  // never present it as "now" (toIsoUtc falls back to the current time).
+  const reportedAt = row.reportedAt ? toIsoUtc(row.reportedAt) : undefined;
   return {
     ...row,
     status: normalizeToken(row.status) as Maintenance["status"],
     priority: normalizeToken(row.priority) as Maintenance["priority"],
     type: normalizeToken(row.type) as Maintenance["type"],
-    reportedAt: toIsoUtc(row.reportedAt),
-    createdAt: toIsoUtc(row.createdAt, toIsoUtc(row.reportedAt)),
-    updatedAt: toIsoUtc(row.updatedAt, toIsoUtc(row.reportedAt)),
+    reportedAt,
+    createdAt: toIsoUtc(row.createdAt, reportedAt),
+    updatedAt: toIsoUtc(row.updatedAt, reportedAt),
     dueAt: row.dueAt ? toIsoUtc(row.dueAt) : row.dueAt,
   };
 }

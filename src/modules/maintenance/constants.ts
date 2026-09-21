@@ -61,6 +61,7 @@ export const MAINTENANCE_STATUS_VARIANT: Record<
   on_hold: "warning",
   completed: "success",
   cancelled: "neutral",
+  unknown: "neutral",
 };
 
 export const MAINTENANCE_PRIORITY_VARIANT: Record<

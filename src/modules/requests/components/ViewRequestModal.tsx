@@ -391,7 +391,7 @@ export function ViewRequestModal({
                       </Link>
                     </p>
                     <p className="text-xs text-muted">
-                      {mnt.id} · {mnt.status} · {formatDate(mnt.reportedAt)}
+                      {mnt.id} · {mnt.status} · {mnt.reportedAt ? formatDate(mnt.reportedAt) : "date not recorded"}
                     </p>
                   </div>
                 ))}

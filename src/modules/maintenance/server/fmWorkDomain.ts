@@ -104,7 +104,8 @@ export type FmWorkRow = {
   hold_reason: string | null;
   requires_work_instruction: boolean;
   operational_event_id: string | null;
-  reported_at: string;
+  reported_at: string | null;
+  record_origin?: string;
   due_at: string | null;
   scheduled_start_at: string | null;
   scheduled_end_at: string | null;
@@ -120,7 +121,7 @@ export type FmWorkRow = {
 };
 
 export const FM_WORK_SELECT =
-  "id, organisation_id, code, facility_id, title, description, work_kind, source, priority, status, asset_id, source_request_id, incident_id, assigned_to_profile_id, reported_by_profile_id, hold_reason, requires_work_instruction, operational_event_id, reported_at, due_at, scheduled_start_at, scheduled_end_at, started_at, completed_at, completion_notes, category_id, department, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
+  "id, organisation_id, code, facility_id, title, description, work_kind, source, priority, status, asset_id, source_request_id, incident_id, assigned_to_profile_id, reported_by_profile_id, hold_reason, requires_work_instruction, operational_event_id, reported_at, record_origin, due_at, scheduled_start_at, scheduled_end_at, started_at, completed_at, completion_notes, category_id, department, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -259,7 +260,8 @@ export function mapFmWorkRowToMaintenance(row: FmWorkRow): Maintenance {
     status: row.status as MaintenanceStatus,
     holdReason: row.hold_reason ?? undefined,
     requiresWorkOrder: row.requires_work_instruction,
-    reportedAt: row.reported_at,
+    reportedAt: row.reported_at ?? undefined,
+    recordOrigin: row.record_origin === "migrated_historical" ? "migrated_historical" : "operational",
     scheduledStartAt: row.scheduled_start_at ?? undefined,
     scheduledEndAt: row.scheduled_end_at ?? undefined,
     dueAt: row.due_at ?? undefined,
@@ -557,17 +559,24 @@ export function sortWorkRows(
   rows: Maintenance[],
   sort?: MaintenanceListParams["sort"]
 ): Maintenance[] {
+  // Unknown reporting dates (migrated historical Work) always sort LAST in either direction.
+  const compareReportedAt = (a: Maintenance, b: Maintenance, direction: 1 | -1): number => {
+    if (!a.reportedAt && !b.reportedAt) return 0;
+    if (!a.reportedAt) return 1;
+    if (!b.reportedAt) return -1;
+    return direction * a.reportedAt.localeCompare(b.reportedAt);
+  };
   const copy = [...rows];
   switch (sort) {
     case "oldest":
-      return copy.sort((a, b) => a.reportedAt.localeCompare(b.reportedAt));
+      return copy.sort((a, b) => compareReportedAt(a, b, 1));
     case "title_asc":
       return copy.sort((a, b) => a.title.localeCompare(b.title));
     case "title_desc":
       return copy.sort((a, b) => b.title.localeCompare(a.title));
     case "newest":
     default:
-      return copy.sort((a, b) => b.reportedAt.localeCompare(a.reportedAt));
+      return copy.sort((a, b) => compareReportedAt(a, b, -1));
   }
 }
 

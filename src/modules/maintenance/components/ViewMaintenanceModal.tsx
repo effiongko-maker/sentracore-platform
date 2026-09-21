@@ -176,7 +176,7 @@ export function ViewMaintenanceModal({
         <Detail label="Requested by" value={requesterLabel || "—"} />
         <Detail label="Department" value={maintenance.department || "—"} />
         <Detail label="Event ID" value={maintenance.eventId || "—"} />
-        <Detail label="Reported at" value={formatDate(maintenance.reportedAt)} />
+        <Detail label="Reported at" value={maintenance.reportedAt ? formatDate(maintenance.reportedAt) : "Not recorded"} />
         {maintenance.status === "completed" ? (
           <>
             <Detail

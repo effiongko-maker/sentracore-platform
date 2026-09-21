@@ -94,7 +94,8 @@ export type FmWorkInstructionRow = {
   status: string;
   priority: string;
   hold_reason: string | null;
-  requested_at: string;
+  requested_at: string | null;
+  record_origin?: string;
   scheduled_start_at: string | null;
   scheduled_end_at: string | null;
   due_at: string | null;
@@ -117,7 +118,7 @@ export type FmWorkInstructionRow = {
 };
 
 export const FM_WORK_INSTRUCTION_SELECT =
-  "id, organisation_id, code, order_type, work_id, facility_id, title, description, instruction_text, work_category, maintenance_type, source, category_id, asset_id, parent_instruction_id, reported_by_profile_id, assigned_to_profile_id, status, priority, hold_reason, requested_at, scheduled_start_at, scheduled_end_at, due_at, sla_due_at, started_at, completed_at, estimated_hours, actual_hours, estimated_cost, actual_cost, downtime_minutes, completion_notes, work_performed, requires_approval, operational_event_id, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
+  "id, organisation_id, code, order_type, work_id, facility_id, title, description, instruction_text, work_category, maintenance_type, source, category_id, asset_id, parent_instruction_id, reported_by_profile_id, assigned_to_profile_id, status, priority, hold_reason, requested_at, record_origin, scheduled_start_at, scheduled_end_at, due_at, sla_due_at, started_at, completed_at, estimated_hours, actual_hours, estimated_cost, actual_cost, downtime_minutes, completion_notes, work_performed, requires_approval, operational_event_id, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
 
 /** Relationships derived at read time — never stored as arrays or duplicated. */
 export type FmWorkInstructionRelations = {
@@ -439,7 +440,8 @@ export function mapFmWorkInstructionRowToWorkOrder(
     parentWorkOrderId: relations.parentCode,
     operationalEventId: row.operational_event_id ?? undefined,
     assignedToUserId: row.assigned_to_profile_id ?? undefined,
-    requestedAt: row.requested_at,
+    requestedAt: row.requested_at ?? undefined,
+    recordOrigin: row.record_origin === "migrated_historical" ? "migrated_historical" : "operational",
     scheduledStartAt: row.scheduled_start_at ?? undefined,
     scheduledEndAt: row.scheduled_end_at ?? undefined,
     dueAt: row.due_at ?? undefined,

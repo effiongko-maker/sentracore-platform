@@ -87,7 +87,9 @@ function asRow(value: unknown): FmWorkRow {
       rec.operational_event_id != null
         ? String(rec.operational_event_id)
         : null,
-    reported_at: String(rec.reported_at ?? ""),
+    // NULL = unknown reporting date (migrated historical Work only) — never coerced to "".
+    reported_at: rec.reported_at != null ? String(rec.reported_at) : null,
+    record_origin: rec.record_origin != null ? String(rec.record_origin) : "operational",
     due_at: rec.due_at != null ? String(rec.due_at) : null,
     scheduled_start_at:
       rec.scheduled_start_at != null ? String(rec.scheduled_start_at) : null,
@@ -126,7 +128,7 @@ export class FmWorkRepository {
         .from("fm_work")
         .select(FM_WORK_SELECT)
         .eq("organisation_id", this.organisationId)
-        .order("reported_at", { ascending: false })
+        .order("reported_at", { ascending: false, nullsFirst: false })
         .order("id", { ascending: true })
         .range(offset, offset + batchSize - 1);
       if (error) throwDb(error, "Unable to load work.");

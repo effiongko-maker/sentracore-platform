@@ -80,7 +80,9 @@ function asRow(value: unknown): FmWorkInstructionRow {
     status: String(rec.status ?? "open"),
     priority: String(rec.priority ?? "medium"),
     hold_reason: txt(rec, "hold_reason"),
-    requested_at: String(rec.requested_at ?? ""),
+    // NULL = unknown request date (migrated historical only) — never coerced to "".
+    requested_at: rec.requested_at != null ? String(rec.requested_at) : null,
+    record_origin: rec.record_origin != null ? String(rec.record_origin) : "operational",
     scheduled_start_at: txt(rec, "scheduled_start_at"),
     scheduled_end_at: txt(rec, "scheduled_end_at"),
     due_at: txt(rec, "due_at"),

@@ -61,6 +61,7 @@ export const WORK_ORDER_STATUS_VARIANT: Record<
   completed: "success",
   cancelled: "neutral",
   closed: "success",
+  unknown: "neutral",
 };
 
 export const WORK_ORDER_PRIORITY_VARIANT: Record<

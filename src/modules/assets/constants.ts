@@ -36,6 +36,8 @@ export const ASSET_CONDITIONS: AssetCondition[] = [
   "good",
   "fair",
   "poor",
+  // Explicit "not assessed / not recorded". Never good, never counted as healthy.
+  "unknown",
 ];
 
 export const ASSET_CRITICALITIES: AssetCriticality[] = [

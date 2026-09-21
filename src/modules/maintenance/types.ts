@@ -13,7 +13,12 @@ export type MaintenanceStatus =
   | "in_progress"
   | "on_hold"
   | "completed"
-  | "cancelled";
+  | "cancelled"
+  /** Historical migrated Work only: lifecycle state not recorded in the source. Never selectable in the product. */
+  | "unknown";
+
+/** operational = created through the product (strict validation); migrated_historical = explicit migration. */
+export type FmRecordOrigin = "operational" | "migrated_historical";
 
 export type MaintenancePriority = "low" | "medium" | "high" | "critical";
 
@@ -68,7 +73,10 @@ export interface Maintenance {
   holdReason?: string;
   requiresWorkOrder?: boolean;
 
-  reportedAt: string;
+  /** Undefined ONLY for migrated_historical Work whose reporting date is not in the source. */
+  reportedAt?: string;
+  /** operational (product-created, strict) | migrated_historical (explicit migration). Never set from input. */
+  recordOrigin?: FmRecordOrigin;
   scheduledStartAt?: string;
   scheduledEndAt?: string;
   dueAt?: string;
