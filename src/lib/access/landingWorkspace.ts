@@ -1,5 +1,6 @@
 import type { ModuleBoundary } from "@/lib/access/moduleBoundary";
 import { homeRouteForBoundary } from "@/lib/access/moduleBoundary";
+import { LANDING_OPTIONS, LANDING_SELECTABLE_IDS, type LandingId } from "@/lib/access/workspaceRegistry";
 import type { WorkspaceAccessChrome } from "@/lib/access/workspaceAccessChrome";
 
 /**
@@ -13,27 +14,16 @@ import type { WorkspaceAccessChrome } from "@/lib/access/workspaceAccessChrome";
  * flags the switcher uses); otherwise the neutral Platform Home is shown.
  */
 
-export const LANDING_WORKSPACES = [
-  "command_centre",
-  "facility_management",
-  "ecc_operations",
-  "platform_finance",
-] as const;
-export type LandingWorkspace = (typeof LANDING_WORKSPACES)[number];
+export const LANDING_WORKSPACES = LANDING_SELECTABLE_IDS;
+export type LandingWorkspace = LandingId;
 
-export const LANDING_WORKSPACE_ROUTE: Record<LandingWorkspace, string> = {
-  command_centre: "/command-centre",
-  facility_management: "/operations",
-  ecc_operations: "/ecc-operations",
-  platform_finance: "/platform-finance",
-};
+export const LANDING_WORKSPACE_ROUTE = Object.fromEntries(
+  LANDING_OPTIONS.map((w) => [w.id, w.route])
+) as Record<LandingWorkspace, string>;
 
-export const LANDING_WORKSPACE_LABEL: Record<LandingWorkspace, string> = {
-  command_centre: "Command Centre",
-  facility_management: "Facility Management",
-  ecc_operations: "ECC Operations",
-  platform_finance: "Platform Finance",
-};
+export const LANDING_WORKSPACE_LABEL = Object.fromEntries(
+  LANDING_OPTIONS.map((w) => [w.id, w.label])
+) as Record<LandingWorkspace, string>;
 
 const CHROME_FLAG: Record<LandingWorkspace, keyof WorkspaceAccessChrome> = {
   command_centre: "commandCentre",

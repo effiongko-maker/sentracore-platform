@@ -33,6 +33,7 @@ import {
   parseOperationalRole,
 } from "@/modules/users/server/fmPeopleDomain";
 import { isBoundModule } from "@/lib/access/moduleBoundary";
+import { workspaceEntry, workspaceLabel } from "@/lib/access/workspaceRegistry";
 import { facilityManagerPackageGaps } from "@/lib/access/facilityManagerPackage";
 import { MUST_CHANGE_PASSWORD_KEY } from "@/lib/auth/passwordLifecycle";
 import { generateTemporaryPassword } from "./temporaryPassword";
@@ -204,6 +205,12 @@ export class PlatformAdminServerService {
       throw new ActionError("VALIDATION_ERROR", "Unknown capability package.");
     }
     let assignment: { facilityId: string; operationalRole: string } | null = null;
+    // Facility context belongs to Facility Management (and to platform-scope accounts, which may work across
+    // modules). A home whose domain has no facility context — ECC Operations, Platform Finance — never carries a
+    // facility assignment or an FM operating role.
+    if (input.facilityAssignment && accessScope === "module" && !workspaceEntry(homeModule as string)?.facilityContext) {
+      throw new ActionError("VALIDATION_ERROR", `${workspaceLabel(homeModule as string)} has no facility context: a facility assignment and FM operating role do not apply.`);
+    }
     if (input.facilityAssignment) {
       const role = parseOperationalRole(input.facilityAssignment.operationalRole);
       assignment = { facilityId: input.facilityAssignment.facilityId, operationalRole: role };

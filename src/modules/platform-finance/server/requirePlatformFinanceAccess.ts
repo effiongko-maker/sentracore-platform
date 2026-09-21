@@ -39,8 +39,9 @@ async function resolvePlatformFinanceSessionContext(): Promise<{
     throw new ActionError("UNAUTHENTICATED");
   }
   assertActiveProfileForBusinessAccess(session);
-  // Platform-wide surface: unavailable to module-bound identities regardless of grants.
-  assertBoundaryAllows(session, "platform");
+  // Boundary: platform-scope identities, or an identity module-bound to Platform Finance. Every other module-bound
+  // identity is refused regardless of grants. (The boundary is not authority: grants and company access still apply.)
+  assertBoundaryAllows(session, "platform_finance");
 
   const organisationId =
     session.organisation?.id ?? session.profile.organisationId ?? null;

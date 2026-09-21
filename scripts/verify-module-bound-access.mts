@@ -58,17 +58,22 @@ async function main() {
   const fm = sess("module", "facility_management");
   assert(forbidden(() => assertBoundaryAllows(ecc, "facility_management")), "4: ECC-bound blocked from FM");
   assert(forbidden(() => assertBoundaryAllows(ecc, "platform")), "4: ECC-bound blocked from Command Centre / Finance / Admin (platform surfaces)");
+  assert(forbidden(() => assertBoundaryAllows(ecc, "platform_finance")), "4: ECC-bound blocked from Platform Finance");
   assertBoundaryAllows(ecc, "ecc_operations");
   pass("4 ECC-bound cannot reach FM, Command Centre, Platform Finance or Admin Console");
   assert(forbidden(() => assertBoundaryAllows(fm, "ecc_operations")), "5: FM-bound blocked from ECC");
   assert(forbidden(() => assertBoundaryAllows(fm, "platform")), "5: FM-bound blocked from platform surfaces");
+  assert(forbidden(() => assertBoundaryAllows(fm, "platform_finance")), "5: FM-bound blocked from Platform Finance");
   assertBoundaryAllows(fm, "facility_management");
-  pass("5 FM-bound cannot reach ECC or platform-wide surfaces");
+  const fin = sess("module", "platform_finance");
+  for (const target of ["facility_management", "ecc_operations", "platform"] as const) assert(forbidden(() => assertBoundaryAllows(fin, target)), `5: Finance-bound blocked from ${target} (FM / ECC / Command Centre / Admin Console / Batcave)`);
+  assertBoundaryAllows(fin, "platform_finance");
+  pass("5 FM-bound cannot reach ECC or platform-wide surfaces; Finance-bound reaches Platform Finance only");
   // 6. accidental grants cannot bypass: boundary is independent of capabilities and ANDed by every gate
   for (const [file, target] of [
     ["src/modules/ecc-operations/server/requireEccAccess.ts", '"ecc_operations"'],
     ["src/modules/command-centre/server/requireCommandCentreAccess.ts", '"platform"'],
-    ["src/modules/platform-finance/server/requirePlatformFinanceAccess.ts", '"platform"'],
+    ["src/modules/platform-finance/server/requirePlatformFinanceAccess.ts", '"platform_finance"'],
     ["src/modules/platform-admin/server/requirePlatformAdmin.ts", '"platform"'],
   ] as const) {
     assert(src(file).includes(`assertBoundaryAllows(session, ${target})`), `6: ${file} enforces the boundary`);
@@ -76,7 +81,7 @@ async function main() {
   const access = src("src/lib/access/server.ts");
   assert(access.includes('boundaryAllows(boundaryForSession(session), "facility_management")') && access.includes("Restricted to another module"), "6: FM operating access is zeroed outside the boundary");
   const chrome = src("src/lib/access/workspaceAccessChrome.ts");
-  for (const t of ["facility_management", "ecc_operations"]) assert(chrome.includes(`boundaryAllows(input.boundary, "${t}")`), `6: chrome flag ${t} is boundary-ANDed`);
+  for (const t of ["facility_management", "ecc_operations", "platform_finance"]) assert(chrome.includes(`boundaryAllows(input.boundary, "${t}")`), `6: chrome flag ${t} is boundary-ANDed`);
   assert(/boundaryAllows\(input\.boundary, "platform"\)/.test(chrome), "6: platform surfaces are boundary-ANDed");
   pass("6 accidental out-of-module capability grants cannot bypass the boundary (every gate + FM access + chrome)");
 

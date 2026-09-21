@@ -82,7 +82,7 @@ export async function resolveWorkspaceAccessChrome(input: {
       eccModuleOn &&
       hasEccGrant,
     platformFinance:
-      boundaryAllows(input.boundary, "platform") &&
+      boundaryAllows(input.boundary, "platform_finance") &&
       financeModuleOn &&
       hasAnyFinanceGrant,
     commandCentre:

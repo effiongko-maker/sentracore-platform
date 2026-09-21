@@ -1,4 +1,5 @@
 import { ActionError } from "@/lib/actions/errors";
+import { MODULE_BOUND_HOME_IDS, WORKSPACE_REGISTRY, type BoundHomeId } from "@/lib/access/workspaceRegistry";
 
 /**
  * Module-bound platform identities.
@@ -10,8 +11,9 @@ import { ActionError } from "@/lib/actions/errors";
  * holds. Operational/job role never implies module-bound scope.
  */
 
-export const BOUND_MODULES = ["facility_management", "ecc_operations"] as const;
-export type BoundModule = (typeof BOUND_MODULES)[number];
+/** Derived from the workspace registry (workspaceRegistry.ts) — the only place a home workspace is defined. */
+export const BOUND_MODULES = MODULE_BOUND_HOME_IDS;
+export type BoundModule = BoundHomeId;
 export type AccessScope = "platform" | "module";
 
 /** What a gate protects: one operational module, or platform-wide surfaces. */
@@ -24,15 +26,13 @@ export type ModuleBoundary = {
   valid: boolean;
 };
 
-export const MODULE_HOME_ROUTE: Record<BoundModule, string> = {
-  facility_management: "/operations",
-  ecc_operations: "/ecc-operations",
-};
+export const MODULE_HOME_ROUTE = Object.fromEntries(
+  WORKSPACE_REGISTRY.filter((w) => w.moduleBoundHome).map((w) => [w.id, w.route])
+) as Record<BoundModule, string>;
 
-export const MODULE_LABEL: Record<BoundModule, string> = {
-  facility_management: "Facility Management",
-  ecc_operations: "ECC Operations",
-};
+export const MODULE_LABEL = Object.fromEntries(
+  WORKSPACE_REGISTRY.filter((w) => w.moduleBoundHome).map((w) => [w.id, w.label])
+) as Record<BoundModule, string>;
 
 export function isBoundModule(value: unknown): value is BoundModule {
   return typeof value === "string" && (BOUND_MODULES as readonly string[]).includes(value);

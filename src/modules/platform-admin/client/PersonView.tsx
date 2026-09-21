@@ -1,5 +1,6 @@
 "use client";
 
+import { MODULE_BOUND_HOME_OPTIONS, workspaceLabel } from "@/lib/access/workspaceRegistry";
 import Link from "next/link";
 import { Activity, Building2, KeyRound, UserRound } from "lucide-react";
 import { useState } from "react";
@@ -142,7 +143,7 @@ function PersonBody({ organisation, profileId }: { organisation: OrganisationAdm
                         <>
                           <Pill tone="plain">Module-bound</Pill>{" "}
                           <span className="ac-secondary">
-                            {p.homeModule === "ecc_operations" ? "ECC Operations" : p.homeModule === "facility_management" ? "Facility Management" : "Invalid home module"} only
+                            {workspaceLabel(p.homeModule)} only
                           </span>
                         </>
                       ) : (
@@ -515,9 +516,11 @@ function ScopeDialog({ open, person, onClose, onDone }: { open: boolean; person:
             <label htmlFor="ac-scope-home">Home module</label>
             <select id="ac-scope-home" className="ac-select" value={home} onChange={(e) => setHome(e.target.value)} required>
               <option value="">Select a module</option>
-              <option value="facility_management">Facility Management</option>
-              <option value="ecc_operations">ECC Operations</option>
+              {MODULE_BOUND_HOME_OPTIONS.map((w) => (
+                <option key={w.id} value={w.id}>{w.label}</option>
+              ))}
             </select>
+            <span className="ac-hint">Sets the operating boundary and default destination only — it grants no capability and no company or facility access.</span>
           </div>
         ) : null}
         {error ? <p className="ac-form-error" role="alert">{error}</p> : null}

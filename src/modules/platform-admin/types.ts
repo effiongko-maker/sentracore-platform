@@ -1,3 +1,4 @@
+import type { BoundModule } from "@/lib/access/moduleBoundary";
 import { ECC_CAPABILITIES } from "@/modules/ecc-operations/types";
 import { BATCAVE_CAPABILITIES } from "@/modules/batcave/types";
 import { COMMAND_CENTRE_CAPABILITIES } from "@/modules/command-centre/types";
@@ -245,7 +246,7 @@ export type AdminPersonDetail = AdminPersonSummary & {
   operationalIdentity: { domain: string; externalIdentityId: string; status: string } | null;
   /** Access scope: platform (default) or bound to one operational module (upper boundary). */
   accessScope: "platform" | "module";
-  homeModule: "facility_management" | "ecc_operations" | null;
+  homeModule: BoundModule | null;
   /** UX routing preference (platform scope only); never authority. */
   landingWorkspace: string | null;
 };
@@ -261,7 +262,7 @@ export type AccessScopeResult = {
   profileId: string;
   organisationId: string | null;
   accessScope: "platform" | "module";
-  homeModule: "facility_management" | "ecc_operations" | null;
+  homeModule: BoundModule | null;
   changed: boolean;
 };
 

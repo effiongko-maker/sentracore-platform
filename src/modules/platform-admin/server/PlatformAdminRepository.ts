@@ -1,3 +1,4 @@
+import { isBoundModule } from "@/lib/access/moduleBoundary";
 import { ActionError } from "@/lib/actions/errors";
 import { createAdminClient } from "@/utils/supabase/admin";
 import type { ProfileStatus } from "@/lib/auth/types";
@@ -381,7 +382,7 @@ export class PlatformAdminRepository {
       profileId: String(rec.profileId),
       organisationId: rec.organisationId ? String(rec.organisationId) : null,
       accessScope: rec.accessScope === "module" ? "module" : "platform",
-      homeModule: rec.homeModule === "facility_management" || rec.homeModule === "ecc_operations" ? rec.homeModule : null,
+      homeModule: isBoundModule(rec.homeModule) ? rec.homeModule : null,
       changed: Boolean(rec.changed),
     };
   }

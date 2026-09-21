@@ -1,4 +1,5 @@
 import "server-only";
+import { isBoundModule } from "@/lib/access/moduleBoundary";
 import { ActionError } from "@/lib/actions/errors";
 import type { ProfileStatus } from "@/lib/auth/types";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -165,7 +166,7 @@ export class AdminConsoleReader {
         financialAccountAccessCount: finAccounts.count ?? 0,
       },
       accessScope: rows[0].access_scope === "module" ? "module" : "platform",
-      homeModule: rows[0].home_module === "facility_management" || rows[0].home_module === "ecc_operations" ? rows[0].home_module : null,
+      homeModule: isBoundModule(rows[0].home_module) ? rows[0].home_module : null,
       landingWorkspace: rows[0].landing_workspace ? String(rows[0].landing_workspace) : null,
       operationalIdentity: link ? { domain: link.identity_domain, externalIdentityId: link.external_identity_id, status: link.status } : null,
     };

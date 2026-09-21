@@ -1,5 +1,6 @@
 "use client";
 
+import { LANDING_OPTIONS, MODULE_BOUND_HOME_OPTIONS, workspaceEntry, workspaceLabel } from "@/lib/access/workspaceRegistry";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight, Search, UserPlus } from "lucide-react";
@@ -230,7 +231,11 @@ function CreateAccountDialog({
     onClose();
   }
 
-  const packageAvailable = role === "facility_manager" && Boolean(facilityId);
+  const homeEntry = scope === "module" ? workspaceEntry(homeModule) : null;
+  // Facility context (assignment, FM operating role, FM package) applies to Facility Management and to platform-scope
+  // accounts only; ECC Operations and Platform Finance homes have none.
+  const facilityContext = scope === "platform" || Boolean(homeEntry?.facilityContext);
+  const packageAvailable = facilityContext && role === "facility_manager" && Boolean(facilityId);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -245,7 +250,7 @@ function CreateAccountDialog({
         accessScope: scope,
         homeModule: scope === "module" ? homeModule : null,
         landingWorkspace: scope === "platform" && landing ? landing : null,
-        ...(facilityId && role ? { facilityId, operationalRole: role } : {}),
+        ...(facilityContext && facilityId && role ? { facilityId, operationalRole: role } : {}),
         capabilityPackage: pkg && packageAvailable ? "facility_manager" : null,
       });
       setResult(data);
@@ -289,7 +294,7 @@ function CreateAccountDialog({
             <dt>Organisation</dt>
             <dd>{organisationName}</dd>
             <dt>Access scope</dt>
-            <dd>{result.accessScope === "module" ? `Module-bound (${result.homeModule})` : "Platform"}</dd>
+            <dd>{result.accessScope === "module" ? `Module-bound (${workspaceLabel(result.homeModule)})` : "Platform"}</dd>
             <dt>Facility assignment</dt>
             <dd>{result.assignment ? `${v1OperatingRoleLabel(result.assignment.operationalRole as never)} (active)` : "None"}</dd>
             <dt>Capabilities granted</dt>
@@ -319,23 +324,38 @@ function CreateAccountDialog({
           {scope === "module" ? (
             <div className="ac-field">
               <label htmlFor="ac-create-module">Home workspace</label>
-              <select id="ac-create-module" className="ac-select" value={homeModule} onChange={(e) => setHomeModule(e.target.value)}>
-                <option value="facility_management">Facility Management</option>
-                <option value="ecc_operations">ECC Operations</option>
+              <select id="ac-create-module" className="ac-select" value={homeModule} onChange={(e) => { setHomeModule(e.target.value); if (!workspaceEntry(e.target.value)?.facilityContext) { setFacilityId(""); setRole(""); setPkg(false); } }}>
+                {MODULE_BOUND_HOME_OPTIONS.map((w) => (
+                  <option key={w.id} value={w.id}>{w.label}</option>
+                ))}
               </select>
+              <span className="ac-hint">
+                The operating boundary and default destination. Selecting it grants no capability — authority is always explicit.
+                {homeEntry ? ` ${homeEntry.note}` : ""}
+              </span>
             </div>
           ) : (
             <div className="ac-field">
               <label htmlFor="ac-create-landing">Landing workspace</label>
               <select id="ac-create-landing" className="ac-select" value={landing} onChange={(e) => setLanding(e.target.value)}>
                 <option value="">Default</option>
-                <option value="command_centre">Command Centre</option>
-                <option value="facility_management">Facility Management</option>
-                <option value="ecc_operations">ECC Operations</option>
-                <option value="platform_finance">Platform Finance</option>
+                {LANDING_OPTIONS.map((w) => (
+                  <option key={w.id} value={w.id}>{w.label}</option>
+                ))}
               </select>
             </div>
           )}
+          {scope === "module" && homeEntry?.id === "platform_finance" ? (
+            <div className="ac-field">
+              <p className="ac-hint" role="note">
+                <strong>Finance authority is not granted here.</strong> Platform Finance company access and platform_finance.*
+                capabilities are assigned explicitly through Platform Finance&apos;s own access model. Until they are, this person
+                signs in and lands in Platform Finance but sees &ldquo;No access&rdquo;. They cannot open Facility Management, ECC
+                Operations, Command Centre or the Admin Console.
+              </p>
+            </div>
+          ) : null}
+          {facilityContext ? (
           <div className="ac-field">
             <label htmlFor="ac-create-facility">Facility (optional)</label>
             <select id="ac-create-facility" className="ac-select" value={facilityId} onChange={(e) => setFacilityId(e.target.value)} disabled={facilities.loading}>
@@ -347,7 +367,8 @@ function CreateAccountDialog({
               ))}
             </select>
           </div>
-          {facilityId ? (
+          ) : null}
+          {facilityContext && facilityId ? (
             <div className="ac-field">
               <label htmlFor="ac-create-role">Operating role</label>
               <select id="ac-create-role" className="ac-select" value={role} onChange={(e) => setRole(e.target.value)} required>
