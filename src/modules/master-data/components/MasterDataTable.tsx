@@ -48,7 +48,6 @@ export function MasterDataTable({
         render: (item) => (
           <div>
             <span className="font-medium text-foreground">{item.name}</span>
-            <p className="text-xs text-muted">{item.id}</p>
           </div>
         ),
       },

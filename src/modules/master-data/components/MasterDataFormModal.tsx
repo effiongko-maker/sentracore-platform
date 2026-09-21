@@ -408,7 +408,7 @@ export function MasterDataFormModal({
             id="md-code"
             className={inputClassName}
             placeholder="Auto-assigned if blank"
-            value={isEdit ? item?.code || item?.id || "" : form.code ?? ""}
+            value={isEdit ? item?.code || "" : form.code ?? ""}
             disabled={isEdit}
             readOnly={isEdit}
             onChange={(event) => updateField("code", event.target.value)}

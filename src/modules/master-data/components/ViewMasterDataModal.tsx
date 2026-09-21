@@ -4,6 +4,10 @@ import { Modal } from "@/components/modals/Modal";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { MASTER_DATA_STATUS_VARIANT } from "../constants";
+import {
+  resolveRelationName,
+  useMasterDataRelationMaps,
+} from "../hooks/useMasterDataRelationMaps";
 import { entitySingular, labelize } from "../utils";
 import type { MasterDataEntity, MasterDataItem } from "../types";
 
@@ -31,6 +35,8 @@ export function ViewMasterDataModal({
   onClose: () => void;
   onEdit: (item: MasterDataItem) => void;
 }) {
+  // Relations are shown by name (internal identifiers are never displayed to users).
+  const { facilities, buildings, floors, ready } = useMasterDataRelationMaps(open);
   if (!item) return null;
 
   return (
@@ -38,7 +44,7 @@ export function ViewMasterDataModal({
       open={open}
       onClose={onClose}
       title={item.name}
-      description={`${entitySingular(entity)} · ${item.id}`}
+      description={item.code ? `${entitySingular(entity)} · ${item.code}` : entitySingular(entity)}
     >
       <div className="space-y-5">
         <div className="flex items-center gap-2">
@@ -52,12 +58,12 @@ export function ViewMasterDataModal({
 
         <dl className="grid gap-4 sm:grid-cols-2">
           {item.facilityId ? (
-            <Detail label="Facility" value={item.facilityId} />
+            <Detail label="Facility" value={resolveRelationName(item.facilityId, facilities, ready)} />
           ) : null}
           {item.buildingId ? (
-            <Detail label="Building" value={item.buildingId} />
+            <Detail label="Building" value={resolveRelationName(item.buildingId, buildings, ready)} />
           ) : null}
-          {item.floorId ? <Detail label="Floor" value={item.floorId} /> : null}
+          {item.floorId ? <Detail label="Floor" value={resolveRelationName(item.floorId, floors, ready)} /> : null}
           {item.level ? <Detail label="Level" value={item.level} /> : null}
           {item.category ? (
             <Detail label="Category" value={item.category} />

@@ -6,9 +6,14 @@
  * governed ledger as a NEW batch: row-level evidence for every entity that a genuine workbook row supports (28), and a
  * batch-level owner-confirmed decision for "Annex Building" (no workbook row exists for it — none is fabricated).
  *
+ * Two explicit plans (each its own provenance batch, both idempotent):
+ *   --plan=estate       2 buildings + 8 floors + 17 rooms + departments CIG, SPAD          (batch fm-master-data-bootstrap-1)
+ *   --plan=departments  the 8 further owner-confirmed NCC departments seen in the Maintenance Request source
+ *                       (CSD, ABZO, RM, PD, S&CPSM, DIGITAL ECONOMY, DC, DDE)             (batch fm-master-data-departments-1)
+ *
  *   NODE_PATH=<dir with empty server-only/> npx tsx --tsconfig tsconfig.json scripts/reconstruct-fm-master-data.mts \
- *     --actor=<profile uuid>            # DRY-RUN (default): prints the plan + conflict checks, writes nothing
- *   ... --actor=<uuid> --apply          # create + ledger (idempotent; safe to re-run)
+ *     --plan=<estate|departments> --actor=<profile uuid>       # DRY-RUN (default): prints the plan, writes nothing
+ *   ... --plan=<...> --actor=<uuid> --apply                    # create + ledger (idempotent; safe to re-run)
  *
  * Never touches Requests, Work, Work Instructions, Assets, Incidents, inspections, vendors, CSIRT or Head Office, and
  * creates no link from any historical record.
@@ -32,8 +37,6 @@ function loadEnvLocal() {
 const arg = (n: string) => process.argv.find((a) => a.startsWith(`--${n}=`))?.slice(n.length + 3);
 
 const FACILITY_CODE = "FAC-0001";
-const BATCH_KEY = "fm-master-data-bootstrap-1";
-const RULES_VERSION = "fm-master-data-bootstrap/1";
 const FILES = { FM_PACK: "Facility Management Operations System Pack.xlsx", MBORA: "MBORA INCOME STATEMENT.xlsx" } as const;
 type WB = keyof typeof FILES;
 
@@ -42,7 +45,7 @@ type Spec =
   | { target: "fm_buildings"; name: string; evidence: Evidence | null }
   | { target: "fm_floors"; name: string; building: string; evidence: Evidence }
   | { target: "fm_rooms"; name: string; floor: string; evidence: Evidence; variants?: string[] }
-  | { target: "fm_departments"; name: string; evidence: Evidence };
+  | { target: "fm_departments"; name: string; evidence: Evidence; variants?: string[] };
 
 const MR = "Maintenance Request";
 const EX = "Executed (NO JOB ORDER)";
@@ -83,6 +86,30 @@ const PLAN: Spec[] = [
   { target: "fm_departments", name: "SPAD", evidence: ev("FM_PACK", MR, 28, "D", "spad") },
 ];
 
+// Departments: the source column holds NCC department tokens, often role-prefixed (e.g. "SM(CSD)"). The owner confirmed
+// the canonical department values are exactly the tokens below (names are NOT expanded). "-" / blank = none recorded.
+const DEPARTMENT_PLAN: Spec[] = [
+  { target: "fm_departments", name: "CSD", evidence: ev("FM_PACK", MR, 5, "D", "csd", [13]) },
+  { target: "fm_departments", name: "ABZO", evidence: ev("FM_PACK", MR, 6, "D", "abzo") },
+  { target: "fm_departments", name: "RM", evidence: ev("FM_PACK", MR, 7, "D", "rm", [11, 12, 15]) },
+  { target: "fm_departments", name: "PD", evidence: ev("FM_PACK", MR, 8, "D", "pd") },
+  { target: "fm_departments", name: "S&CPSM", evidence: ev("FM_PACK", MR, 18, "D", "s&cpsm"), variants: ["s&cpsm"] },
+  { target: "fm_departments", name: "DIGITAL ECONOMY", evidence: ev("FM_PACK", MR, 21, "D", "digital economy") },
+  { target: "fm_departments", name: "DC", evidence: ev("FM_PACK", MR, 23, "D", "dc") },
+  { target: "fm_departments", name: "DDE", evidence: ev("FM_PACK", MR, 25, "D", "dde", [26]) },
+];
+const DEPARTMENT_CONFIRMATION = {
+  workbook: "OWNER_CONFIRMATION",
+  kind: "owner_confirmed_department_values",
+  confirmedOn: "2026-09-22",
+  statements: [
+    "The non-blank Department values in the Maintenance Request source are NCC organisational departments.",
+    "Canonical values are exactly: CIG, CSD, ABZO, RM, PD, S&CPSM, DIGITAL ECONOMY, DC, DDE, SPAD. Abbreviations are not expanded and no full names are inferred.",
+    "'-' and blank mean no department recorded and never become Master Data.",
+  ],
+  canonicalDecisions: [] as unknown[],
+};
+
 const OWNER_CONFIRMATION = {
   workbook: "OWNER_CONFIRMATION",
   kind: "owner_confirmed_estate_structure",
@@ -106,6 +133,12 @@ function rowFingerprint(sheet: Sheet, row: number): string {
 async function main() {
   loadEnvLocal();
   const apply = process.argv.includes("--apply");
+  const which = arg("plan");
+  if (which !== "estate" && which !== "departments") throw new Error("--plan=estate|departments is required");
+  const SPECS = which === "estate" ? PLAN : DEPARTMENT_PLAN;
+  const BATCH_KEY = which === "estate" ? "fm-master-data-bootstrap-1" : "fm-master-data-departments-1";
+  const RULES_VERSION = which === "estate" ? "fm-master-data-bootstrap/1" : "fm-master-data-departments/1";
+  const CONFIRMATION = which === "estate" ? OWNER_CONFIRMATION : DEPARTMENT_CONFIRMATION;
   const actor = arg("actor");
   if (!actor) throw new Error("--actor=<profile uuid> is required");
   const source = arg("source") ?? resolve(process.env.HOME ?? "", "Developer/sentracore-migration-source");
@@ -114,7 +147,7 @@ async function main() {
   const shas = { FM_PACK: sha256File(resolve(source, FILES.FM_PACK)), MBORA: sha256File(resolve(source, FILES.MBORA)) };
   const books = { FM_PACK: readWorkbook(resolve(source, FILES.FM_PACK)), MBORA: readWorkbook(resolve(source, FILES.MBORA)) };
   type Resolved = Spec & { key: string; fingerprint: string | null; sha: string | null; sourceReference: string | null; support: number[] };
-  const resolved: Resolved[] = PLAN.map((s) => {
+  const resolved: Resolved[] = SPECS.map((s) => {
     if (!s.evidence) return { ...s, key: `${s.target}:${s.name}`, fingerprint: null, sha: null, sourceReference: null, support: [] } as Resolved;
     const e = s.evidence;
     const sheet = sheetByName(books[e.wb], e.sheet);
@@ -133,7 +166,8 @@ async function main() {
   const counts = (t: string) => resolved.filter((r) => r.target === t).length;
   const withRow = resolved.filter((r) => r.fingerprint);
   const plan = { buildings: counts("fm_buildings"), floors: counts("fm_floors"), rooms: counts("fm_rooms"), departments: counts("fm_departments"), total: resolved.length, rowLevel: withRow.length, ownerConfirmedBatchLevel: resolved.length - withRow.length };
-  if (plan.buildings !== 2 || plan.floors !== 8 || plan.rooms !== 17 || plan.departments !== 2 || plan.total !== 29 || plan.rowLevel !== 28 || plan.ownerConfirmedBatchLevel !== 1) throw new Error(`candidate set is not the approved 2/8/17/2 = 29 (28 row-level + 1 owner-confirmed): ${JSON.stringify(plan)}`);
+  const expected = which === "estate" ? [2, 8, 17, 2, 29, 28, 1] : [0, 0, 0, 8, 8, 8, 0];
+  if ([plan.buildings, plan.floors, plan.rooms, plan.departments, plan.total, plan.rowLevel, plan.ownerConfirmedBatchLevel].join() !== expected.join()) throw new Error(`candidate set is not the approved set for plan "${which}": ${JSON.stringify(plan)}`);
   const dupes = resolved.filter((r, i) => resolved.findIndex((x) => x.key === r.key) !== i);
   const rowKeys = withRow.map((r) => `${r.target}|${(r as { evidence: Evidence }).evidence.wb}|${(r as { evidence: Evidence }).evidence.sheet}|${(r as { evidence: Evidence }).evidence.row}`);
   if (dupes.length || new Set(rowKeys).size !== rowKeys.length) throw new Error("duplicate candidate / duplicate (source row, target table) in the plan");
@@ -157,7 +191,7 @@ async function main() {
   const { data: provBefore } = await admin.from("fm_migration_provenance").select("id", { count: "exact", head: true });
   void provBefore;
 
-  console.log(JSON.stringify({ mode: apply ? "APPLY" : "DRY-RUN (no writes)", facility: { code: FACILITY_CODE, id: facilityId }, plan, productionBefore: existing, workbookShas: shas }, null, 2));
+  console.log(JSON.stringify({ planName: which, mode: apply ? "APPLY" : "DRY-RUN (no writes)", facility: { code: FACILITY_CODE, id: facilityId }, plan, productionBefore: existing, workbookShas: shas }, null, 2));
   console.log("\nProposed inserts (codes are assigned by the Master Data service, not supplied):");
   for (const r of resolved) {
     const parent = "building" in r ? ` ← building "${r.building}"` : "floor" in r ? ` ← floor "${r.floor}"` : r.target === "fm_buildings" || r.target === "fm_departments" ? ` ← ${FACILITY_CODE}` : "";
@@ -184,7 +218,7 @@ async function main() {
   const sources = [
     { workbook: "FM_PACK", file: FILES.FM_PACK, sha256: shas.FM_PACK },
     { workbook: "MBORA", file: FILES.MBORA, sha256: shas.MBORA },
-    OWNER_CONFIRMATION,
+    CONFIRMATION,
   ];
   let { data: batch } = await admin.from("fm_migration_batches").select("id, rules_version").eq("organisation_id", organisationId).eq("batch_key", BATCH_KEY).maybeSingle();
   if (!batch) {
