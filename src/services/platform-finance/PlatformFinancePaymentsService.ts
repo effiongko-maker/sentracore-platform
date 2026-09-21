@@ -10,6 +10,14 @@ const API_PATH = "/api/platform-finance/payments";
 type ApiSuccess<T> = { success: true; data: T };
 type ApiFailure = { success: false; message?: string; code?: string };
 
+/** Carries the HTTP status so callers can tell RESTRICTED (403) from a genuine failure. */
+export class FinancePaymentApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "FinancePaymentApiError";
+  }
+}
+
 async function postAction<T>(
   action: string,
   body: Record<string, unknown> = {}
@@ -22,8 +30,9 @@ async function postAction<T>(
   });
   const json = (await response.json()) as ApiSuccess<T> | ApiFailure;
   if (!response.ok || !json.success) {
-    throw new Error(
-      ("message" in json && json.message) || `Finance payment failed (${action}).`
+    throw new FinancePaymentApiError(
+      ("message" in json && json.message) || `Finance payment failed (${action}).`,
+      response.status
     );
   }
   return json.data;

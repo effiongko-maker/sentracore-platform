@@ -79,8 +79,10 @@ export type FinanceJournalDetail = {
   reference: string;
   transactionId: string;
   transactionReference: string;
-  /** No FT detail route in product yet — always false for now. */
   transactionHref: string | null;
+  sourceId: string | null;
+  sourceLabel: string | null;
+  sourceHref: string | null;
   companyId: string;
   companyName: string;
   periodId: string;

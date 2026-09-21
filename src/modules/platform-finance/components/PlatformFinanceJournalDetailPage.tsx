@@ -191,6 +191,20 @@ export function PlatformFinanceJournalDetailPage() {
                 )}
               </dd>
             </div>
+            {detail.sourceId ? (
+              <div>
+                <dt>Source Record</dt>
+                <dd>
+                  {detail.sourceHref ? (
+                    <Link href={detail.sourceHref} className="pf-journal-link">
+                      {detail.sourceLabel ?? detail.sourceId}
+                    </Link>
+                  ) : (
+                    detail.sourceLabel ?? detail.sourceId
+                  )}
+                </dd>
+              </div>
+            ) : null}
             <div>
               <dt>Created At</dt>
               <dd>{formatDateTime(detail.createdAt)}</dd>

@@ -407,6 +407,9 @@ export const PlatformFinanceService = {
     transactionId: string;
     transactionReference: string;
     transactionHref: string | null;
+    sourceId: string | null;
+    sourceLabel: string | null;
+    sourceHref: string | null;
     companyId: string;
     companyName: string;
     periodId: string;

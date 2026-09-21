@@ -16,7 +16,7 @@ import {
 import type { FinanceJournalRegisterRow } from "@/modules/platform-finance/journalTypes";
 import type { FinanceCompany, FinancePeriod } from "@/modules/platform-finance/types";
 import { financePeriodLabel } from "@/modules/platform-finance/domain/periods";
-import { PlatformFinancePaymentsService } from "@/services/platform-finance/PlatformFinancePaymentsService";
+import { FinancePaymentApiError, PlatformFinancePaymentsService } from "@/services/platform-finance/PlatformFinancePaymentsService";
 import type { PaymentAccountingWorkItem } from "@/modules/platform-finance/domain/paymentAccounting";
 import { PlatformFinancePaymentReviewDrawer } from "./PlatformFinancePaymentReviewDrawer";
 
@@ -64,6 +64,9 @@ export function PlatformFinanceJournalPage() {
     reference: string;
   } | null>(null);
   const [paymentWork, setPaymentWork] = useState<PaymentAccountingWorkItem[]>([]);
+  const [paymentWorkLoading, setPaymentWorkLoading] = useState(true);
+  const [paymentWorkError, setPaymentWorkError] = useState<string | null>(null);
+  const [paymentWorkRestricted, setPaymentWorkRestricted] = useState(false);
   const [reviewPaymentId, setReviewPaymentId] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
@@ -165,8 +168,23 @@ export function PlatformFinanceJournalPage() {
   }, [load]);
 
   const loadPaymentWork = useCallback(async () => {
-    try { setPaymentWork(await PlatformFinancePaymentsService.listPaymentAccountingWork()); }
-    catch { setPaymentWork([]); }
+    setPaymentWorkLoading(true);
+    try {
+      setPaymentWork(await PlatformFinancePaymentsService.listPaymentAccountingWork());
+      setPaymentWorkError(null);
+      setPaymentWorkRestricted(false);
+    } catch (cause: unknown) {
+      // RESTRICTED (403) is not a failure and not "nothing awaiting".
+      setPaymentWork([]);
+      setPaymentWorkRestricted(cause instanceof FinancePaymentApiError && cause.status === 403);
+      setPaymentWorkError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to load payment accounting work."
+      );
+    } finally {
+      setPaymentWorkLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -261,20 +279,44 @@ export function PlatformFinanceJournalPage() {
         </p>
       ) : null}
 
-      {paymentWork.some((item) => item.accountingStatus !== "posted") ? (
-        <section className="pf-rev-card">
-          <h2>Payments awaiting accounting</h2>
-          <p className="pf-journal-desc">Confirmed corporate Payments ready for accounting review.</p>
+      <section className="pf-rev-card" aria-labelledby="payment-accounting-heading">
+        <h2 id="payment-accounting-heading">Payments awaiting accounting</h2>
+        <p className="pf-journal-desc">
+          Confirmed disbursements remain awaiting accounting until their Journal Entry is posted.
+        </p>
+        {paymentWorkLoading ? (
+          <p className="pf-state-message">Loading payment accounting status…</p>
+        ) : paymentWorkRestricted ? (
+          <p className="pf-state-message">Payment accounting is restricted for your access.</p>
+        ) : paymentWorkError ? (
+          <div className="pf-vb-alert is-danger" role="alert">
+            <p>{paymentWorkError}</p>
+            <button type="button" className="pf-link-btn" onClick={() => void loadPaymentWork()}>
+              Retry
+            </button>
+          </div>
+        ) : paymentWork.some((item) => item.accountingStatus !== "posted") ? (
           <ul className="pf-payd-pay-history">
             {paymentWork.filter((item) => item.accountingStatus !== "posted").map((item) => (
               <li key={item.paymentId}>
-                <strong>{formatNaira(item.amount)}</strong> · {item.payeeName} · {formatDate(item.paymentDate)} · {item.accountingStatus === "draft" ? "Draft accounting" : "Accounting pending"}
-                <br /><button type="button" className="pf-link-btn" onClick={() => setReviewPaymentId(item.paymentId)}>{item.accountingStatus === "draft" ? "Continue Review" : "Review & Post"}</button>
+                <strong>{formatNaira(item.amount)}</strong> · {item.payeeName} · {formatDate(item.paymentDate)}
+                <br />
+                <span className="pf-payd-muted">
+                  Payment: Confirmed · Accounting: {item.blockingReason ? "Blocked" : "Awaiting accounting"}
+                </span>
+                {item.blockingReason ? (
+                  <p className="pf-form-error">{item.blockingReason}{/period/i.test(item.blockingReason) ? <> <Link href="/platform-finance/accounting/periods">Manage periods</Link></> : null}</p>
+                ) : null}
+                <button type="button" className="pf-link-btn" onClick={() => setReviewPaymentId(item.paymentId)}>
+                  Review &amp; Post
+                </button>
               </li>
             ))}
           </ul>
-        </section>
-      ) : null}
+        ) : (
+          <p className="pf-empty-copy">No confirmed payments in the companies you can access are awaiting accounting.</p>
+        )}
+      </section>
 
       <div className="pf-journal-toolbar">
         <div className="pf-journal-search">

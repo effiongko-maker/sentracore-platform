@@ -37,7 +37,10 @@ assert.match(service, /transaction\.transactionDate !== payment\.payment_date/);
 assert.match(service, /account\.company_id !== payment\.company_id/);
 assert.match(service, /account\.currency !== payment\.currency/);
 assert.match(service, /findOpenPeriodForDate/);
-assert.match(service, /closed accounting period/);
+// The closed-period refusal text now lives in the payment-accounting domain rules (single source of
+// truth shared by the work list and Review & Post); the service must still use it.
+assert.match(await read("src/modules/platform-finance/domain/paymentAccounting.ts"), /closed accounting period/);
+assert.match(service, /paymentPeriodBlockingReason/);
 assert.match(service, /account\.status !== "active"/);
 assert.match(service, /account\.accountType !== "asset"/);
 assert.match(service, /account\.classification !== "current_asset"/);

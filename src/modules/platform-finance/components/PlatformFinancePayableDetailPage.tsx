@@ -883,12 +883,18 @@ export function PlatformFinancePayableDetailPage() {
                               {payment.sourceFinancialAccountLast4
                                 ? ` · •••• ${payment.sourceFinancialAccountLast4}`
                                 : ""}{" "}
-                              · {payment.status}
+                              · Payment: Confirmed · Accounting: {payment.accountingStatus === "posted" ? "Posted" : "Awaiting accounting"}
                             </span>
                             <br />
-                            <button type="button" className="pf-link-btn" onClick={() => setReviewPaymentId(payment.id)}>
-                              Review &amp; Post accounting
-                            </button>
+                            {payment.accountingStatus === "posted" && payment.journalEntryId ? (
+                              <Link className="pf-link-btn" href={`/platform-finance/accounting/journal/${payment.journalEntryId}`}>
+                                View Journal Entry
+                              </Link>
+                            ) : (
+                              <button type="button" className="pf-link-btn" onClick={() => setReviewPaymentId(payment.id)}>
+                                Review &amp; Post accounting
+                              </button>
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -1008,13 +1014,18 @@ export function PlatformFinancePayableDetailPage() {
                         {payment.sourceFinancialAccountLast4
                           ? ` · •••• ${payment.sourceFinancialAccountLast4}`
                           : ""}{" "}
-                        · recorded {formatDateTime(payment.createdAt)} ·{" "}
-                        {payment.status}
+                        · recorded {formatDateTime(payment.createdAt)} · Payment: Confirmed · Accounting: {payment.accountingStatus === "posted" ? "Posted" : "Awaiting accounting"}
                       </span>
                       <br />
-                      <button type="button" className="pf-link-btn" onClick={() => setReviewPaymentId(payment.id)}>
-                        Review &amp; Post accounting
-                      </button>
+                      {payment.accountingStatus === "posted" && payment.journalEntryId ? (
+                        <Link className="pf-link-btn" href={`/platform-finance/accounting/journal/${payment.journalEntryId}`}>
+                          View Journal Entry
+                        </Link>
+                      ) : (
+                        <button type="button" className="pf-link-btn" onClick={() => setReviewPaymentId(payment.id)}>
+                          Review &amp; Post accounting
+                        </button>
+                      )}
                     </li>
                   ))}
                 </ul>

@@ -1067,6 +1067,21 @@ export class PlatformFinanceServerService {
       transaction?.createdByProfileId,
     ].filter(Boolean) as string[];
     const names = await this.repo.getProfilesByIds(profileIds);
+    let sourceLabel: string | null = null;
+    let sourceHref: string | null = null;
+    if (transaction?.sourceType === "payment" && transaction.sourceId) {
+      const { data: payment } = await createAdminClient()
+        .from("finance_payments")
+        .select("id,payable_id")
+        .eq("organisation_id", this.organisationId)
+        .eq("company_id", entry.companyId)
+        .eq("id", transaction.sourceId)
+        .maybeSingle();
+      if (payment) {
+        sourceLabel = `Payment ${String(payment.id).slice(0, 8).toUpperCase()}`;
+        sourceHref = `/platform-finance/payables/${payment.payable_id}`;
+      }
+    }
 
     const totalDebit = linesWithAccounts.reduce(
       (s, row) => s + row.line.debit,
@@ -1092,6 +1107,9 @@ export class PlatformFinanceServerService {
       transactionId: entry.transactionId,
       transactionReference: transaction?.reference ?? entry.reference,
       transactionHref: null,
+      sourceId: transaction?.sourceId ?? null,
+      sourceLabel,
+      sourceHref,
       companyId: entry.companyId,
       companyName: company?.name ?? "—",
       periodId: entry.periodId,

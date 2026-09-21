@@ -46,6 +46,8 @@ export type FinancePayment = {
 export type FinancePaymentView = FinancePayment & {
   sourceFinancialAccountName: string | null;
   sourceFinancialAccountLast4: string | null;
+  accountingStatus: "awaiting_accounting" | "posted";
+  journalEntryId: string | null;
 };
 
 export type ConfirmFinancePaymentInput = {

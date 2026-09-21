@@ -101,12 +101,22 @@ export class PlatformFinancePaymentsRepository {
     if (rows.length === 0) return [];
 
     const accountIds = [...new Set(rows.map((r) => r.source_financial_account_id))];
-    const { data: accounts, error: accountError } = await admin
-      .from("finance_financial_accounts")
-      .select("id, name, account_number_last4")
-      .eq("organisation_id", this.organisationId)
-      .in("id", accountIds);
+    const [{ data: accounts, error: accountError }, { data: transactions, error: transactionError }] =
+      await Promise.all([
+        admin
+          .from("finance_financial_accounts")
+          .select("id, name, account_number_last4")
+          .eq("organisation_id", this.organisationId)
+          .in("id", accountIds),
+        admin
+          .from("finance_transactions")
+          .select("source_id, status, journal_entry_id")
+          .eq("organisation_id", this.organisationId)
+          .eq("source_type", "payment")
+          .in("source_id", rows.map((row) => row.id)),
+      ]);
     if (accountError) throwDb(accountError, "Unable to load payment source accounts.");
+    if (transactionError) throwDb(transactionError, "Unable to load payment accounting status.");
     const byId = new Map(
       ((accounts ?? []) as Array<{
         id: string;
@@ -120,13 +130,28 @@ export class PlatformFinancePaymentsRepository {
         },
       ])
     );
+    const accountingByPaymentId = new Map(
+      (transactions ?? []).map((transaction) => [
+        transaction.source_id as string,
+        {
+          status: transaction.status as string,
+          journalEntryId: transaction.journal_entry_id as string | null,
+        },
+      ])
+    );
 
     return rows.map((row) => {
       const account = byId.get(row.source_financial_account_id);
+      const accounting = accountingByPaymentId.get(row.id);
       return {
         ...mapPayment(row),
         sourceFinancialAccountName: account?.name ?? null,
         sourceFinancialAccountLast4: account?.last4 ?? null,
+        accountingStatus:
+          accounting?.status === "posted" && accounting.journalEntryId
+            ? "posted"
+            : "awaiting_accounting",
+        journalEntryId: accounting?.journalEntryId ?? null,
       };
     });
   }
