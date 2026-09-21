@@ -7,6 +7,7 @@ import {
   EMPTY_INCIDENT_RELATIONS,
   FM_INCIDENT_SELECT,
   FmIncidentNotFoundError,
+  FmIncidentReadOnlyError,
   FmIncidentUnavailableError,
   FmIncidentValidationError,
   UUID_RE,
@@ -458,6 +459,8 @@ export class FmIncidentRepository {
   ): Promise<{ row: FmIncidentRow; previousStatus: string }> {
     const existing = await this.getByIdOrCode(input.id);
     if (!existing) throw new FmIncidentNotFoundError(`Incident ${input.id} not found.`);
+    // Historical facts are never editable or cancellable: refuse BEFORE any relation resolution or write.
+    if (existing.record_origin === "migrated_historical") throw new FmIncidentReadOnlyError();
 
     const resolved = await this.resolveRelations(input);
     if (resolved.parentIncidentId === existing.id) {

@@ -198,6 +198,8 @@ export type IssueActionId =
   | "create_work"
   | "view_treatment"
   | "view_related_work"
+  /** Read-only source evidence: the legacy record behind an imported historical Incident. Never a treatment. */
+  | "view_legacy_record"
   | "log_issue";
 
 export type IssueAction = {

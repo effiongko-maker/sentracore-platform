@@ -61,7 +61,9 @@ function main() {
   const incPage = readSrc("src/modules/incidents/components/IncidentsPage.tsx");
   assert(!incPage.includes("ReportIncidentModal"), "no report modal");
   assert(!incPage.includes("Report event"), "no report event label");
-  assert(/Log issue/i.test(incPage), "log issue CTA");
+  // Legacy Incidents has NO create-styled control: it navigates back to the canonical Issues surface instead.
+  assert(!/Log issue/i.test(incPage) && !/canCreateOps/.test(incPage) && !/router\.push/.test(incPage), "no create-styled Log issue CTA on Legacy Incidents");
+  assert(/href="\/issues"/.test(incPage) && /Back to Issues/.test(incPage), "ordinary navigation back to Issues");
   results.push("PASS Report Incident creation path removed from Incidents page");
 
   const orchIndex = readSrc("src/lib/operational/orchestration/index.ts");

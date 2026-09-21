@@ -79,6 +79,18 @@ export class FmIncidentNotFoundError extends Error {
   }
 }
 
+/**
+ * A migrated historical Incident is a read-only source fact: it cannot be edited, transitioned, cancelled or
+ * re-linked through ANY route. Enforced at the repository — the single choke point for incident writes.
+ */
+export class FmIncidentReadOnlyError extends Error {
+  readonly errorClass = "read_only" as const;
+  constructor(message = "Migrated historical incidents are read-only source records and cannot be changed.") {
+    super(message);
+    this.name = "FmIncidentReadOnlyError";
+  }
+}
+
 export class FmIncidentUnavailableError extends Error {
   constructor(message: string) {
     super(message);

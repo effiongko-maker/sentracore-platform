@@ -114,8 +114,10 @@ export function composeIssueFromIncident(
     (row): row is NonNullable<typeof row> => Boolean(row)
   );
 
+  // An imported historical Incident is a SOURCE RECORD, not a treatment: nobody investigated it in SentraCore, so it
+  // is never listed as its own "Legacy investigation". (Operational legacy incidents keep the existing model.)
   const treatments = [
-    mapIncidentToTreatmentRef(inc),
+    ...(inc.recordOrigin === "migrated_historical" ? [] : [mapIncidentToTreatmentRef(inc)]),
     ...maintenances.map(mapMaintenanceToTreatmentRef),
   ];
 

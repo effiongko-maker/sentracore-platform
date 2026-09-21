@@ -1,8 +1,8 @@
 "use client";
 
 import { useOperatingAccess } from "@/hooks/useOperatingAccess";
-import { AlertTriangle } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { AlertTriangle, ArrowLeft } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ModeFrame, StreamSurface } from "@/components/platform";
 import { OperationalPageHeader } from "@/components/operational";
@@ -19,10 +19,8 @@ import { IncidentsToolbar } from "./IncidentsToolbar";
 import { ViewIncidentModal } from "./ViewIncidentModal";
 
 export function IncidentsPage() {
-  const router = useRouter();
   const { toast } = useToast();
   const { can } = useOperatingAccess();
-  const canCreateOps = can("ops.create");
   const canMutateOps = can("ops.edit");
   const openId = useQueryRecordId();
   const {
@@ -95,13 +93,21 @@ export function IncidentsPage() {
   return (
     <ModeFrame mode="execute">
       <div className="op-page">
+        {/* Ordinary navigation, not a create action: incidents are created nowhere; Issues is the current surface. */}
+        <div className="mb-4">
+          <Link
+            href="/issues"
+            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden />
+            {openId ? "Back to Issues" : "Issues"}
+          </Link>
+        </div>
         <OperationalPageHeader
           title="Incidents"
           description="Legacy incident records — view and manage historical events. Log new issues from Issues."
           countValue={total}
           countLabel="Active events"
-          actionLabel={canCreateOps ? "Log issue" : undefined}
-          onAction={canCreateOps ? () => router.push("/issues") : undefined}
           loading={loading}
         />
 
@@ -141,10 +147,12 @@ export function IncidentsPage() {
               total={total}
               onPageChange={setPage}
               onView={(incident) => setModal({ type: "view", incident })}
-              onEdit={(incident) => setModal({ type: "edit", incident })}
-              onDeactivate={(incident) =>
-                setModal({ type: "deactivate", incident })
-              }
+              onEdit={(incident) => {
+                if (incident.recordOrigin !== "migrated_historical") setModal({ type: "edit", incident });
+              }}
+              onDeactivate={(incident) => {
+                if (incident.recordOrigin !== "migrated_historical") setModal({ type: "deactivate", incident });
+              }}
             />
           </StreamSurface>
         )}
@@ -161,7 +169,9 @@ export function IncidentsPage() {
         open={modal.type === "view"}
         incident={modal.type === "view" ? modal.incident : null}
         onClose={() => setModal({ type: "closed" })}
-        onEdit={(incident) => setModal({ type: "edit", incident })}
+        onEdit={(incident) => {
+          if (incident.recordOrigin !== "migrated_historical") setModal({ type: "edit", incident });
+        }}
         onUpdated={(incident) => {
           setModal({ type: "view", incident });
           reload();

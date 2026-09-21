@@ -1,7 +1,8 @@
 /**
  * Runtime compatibility of the historical-migration schema evolution: unknown lifecycle facts must
  * render/sort/count truthfully, and the product must still be unable to CREATE them.
- * Pure (no database). Run with: npx tsx --tsconfig tsconfig.json scripts/verify-fm-historical-runtime.mts
+ * Pure (no database). Needs the empty `server-only` stub on NODE_PATH (the incident repository imports it):
+ *   NODE_PATH=<dir with empty server-only/> npx tsx --tsconfig tsconfig.json scripts/verify-fm-historical-runtime.mts
  */
 import {
   filterWorkRows, mapFmWorkRowToMaintenance, parseCreateWorkInput, parseUpdateWorkInput, sortWorkRows, summarizeWorkOperationalPicture, WORK_STATUSES,
@@ -274,6 +275,87 @@ const workRow = (over: Record<string, unknown>) => ({
   const reportsSvc = readFileSync("src/services/reports/ReportsService.ts", "utf8");
   assert(/organisationTimeZone: timeZone/.test(route) && /session\?\.organisation\?\.timezone/.test(route) && /loadOrganisationTimeZone\(\)/.test(reportsSvc) && !/resolvedOptions/.test(readFileSync("src/services/reports/organisationTimeZone.ts", "utf8")), "timezone: the organisation's authoritative timezone (organisations.timezone) is served and used; the browser zone is never a substitute");
   pass("Product reconciliation: asset code + status, diesel generator label + threshold, facility names, Issues origin + no cap, registers grid, consumables register read, genuine report periods");
+}
+
+// Issue → Incident routing and read-only protection of imported historical incidents (all three source types)
+{
+  const { composeIssueFromRequest, composeIssueFromMaintenance, composeIssueFromIncident, buildIssueOperationalView } = await import("../src/lib/operational/issues");
+  const { deriveIssueActions } = await import("../src/lib/operational/issues/actions");
+  const { FmIncidentRepository } = await import("../src/modules/incidents/server/FmIncidentRepository");
+  const { FmIncidentReadOnlyError } = await import("../src/modules/incidents/server/fmIncidentDomain");
+  const NOW = "2026-09-21T16:00:00Z";
+  const ids = (a: Array<{ id: string }>) => a.map((x) => x.id);
+  const incidentInput = (over: Record<string, unknown>) => ({ incident: { id: "INC-2026-000001", title: "Bee hive", facilityId: "f", status: "unknown", severity: "unknown", type: "other", createdAt: NOW, updatedAt: NOW, recordOrigin: "migrated_historical", ...over } }) as never;
+
+  // Incident-root, imported historical: read-only source evidence only
+  const hist = composeIssueFromIncident(incidentInput({}));
+  const histActions = deriveIssueActions(hist);
+  assert(hist.treatments.length === 0 && hist.recordOrigin === "migrated_historical", "Incident-root (imported): the incident is NOT listed as its own treatment");
+  assert(ids(histActions).join() === "view,view_legacy_record", `Incident-root (imported): exactly View + View legacy record (got ${ids(histActions).join()})`);
+  const legacyRecord = histActions.find((a) => a.id === "view_legacy_record")!;
+  assert(legacyRecord.label === "View legacy record" && legacyRecord.href === "/incidents?id=INC-2026-000001", "Incident-root (imported): the read-only source-evidence link routes to the legacy record");
+  assert(!histActions.some((a) => ["treat", "create_work", "cancel", "view_treatment", "log_issue"].includes(a.id)), "Incident-root (imported): NO Treat / Create work / Cancel / View treatment / Log Issue");
+  assert(buildIssueOperationalView(hist).outcome.kind === "unknown", "Incident-root (imported): lifecycle stays unknown (not open / in progress / resolved)");
+  // Incident-root, operational legacy: existing behaviour unchanged
+  const legacy = composeIssueFromIncident(incidentInput({ id: "INC-2026-000500", status: "investigating", severity: "high", recordOrigin: undefined }));
+  const legacyIds = ids(deriveIssueActions(legacy));
+  assert(legacy.treatments.length === 1 && legacy.treatments[0]!.kind === "incident_handling" && legacyIds.includes("treat") && legacyIds.includes("cancel"), "Incident-root (operational legacy): unchanged — still its own legacy investigation with Treat / Cancel");
+  // Work-root: routes to Work, never to Incidents
+  const work = composeIssueFromMaintenance({ maintenance: { id: "WRK-2026-000001", title: "w", facilityId: "f", status: "unknown", priority: "unknown", createdAt: NOW, updatedAt: NOW, recordOrigin: "migrated_historical" } } as never);
+  const workActions = deriveIssueActions(work);
+  assert(workActions.filter((a) => a.href).every((a) => a.href!.startsWith("/work") && !a.href!.startsWith("/incidents")), "Work-root: every action routes to /work — never into the legacy Incidents UI");
+  const liveWork = deriveIssueActions(composeIssueFromMaintenance({ maintenance: { id: "WRK-2026-000002", title: "w", facilityId: "f", status: "requested", priority: "high", createdAt: NOW, updatedAt: NOW } } as never));
+  assert(liveWork.some((a) => a.id === "treat" && a.href === "/work?id=WRK-2026-000002") && liveWork.some((a) => a.id === "cancel"), "Work-root (operational): Treat / Cancel still route to Work");
+  // Request-root: routes to Requests / Work, never to Incidents
+  const request = composeIssueFromRequest({ request: { id: "REQ-2026-000001", title: "r", facilityId: "f", status: "submitted", maintenanceIds: [], incidentIds: [], workOrderIds: [], createdAt: NOW, updatedAt: NOW } } as never);
+  const reqActions = deriveIssueActions(request);
+  assert(reqActions.filter((a) => a.href).every((a) => a.href!.startsWith("/requests") || a.href!.startsWith("/work") || a.href === "/issues") && !reqActions.some((a) => a.href?.startsWith("/incidents")), "Request-root: actions route to Requests / Work / Issues — never into the legacy Incidents UI");
+
+  // Server-side read-only enforcement (repository = the single incident write choke point), proven with a stub
+  // client that records every call: an imported historical incident is refused BEFORE any write.
+  const makeAdmin = (row: Record<string, unknown>) => {
+    const calls: string[] = [];
+    const chain: Record<string, unknown> = new Proxy({}, {
+      get(_t, prop: string) {
+        if (prop === "then") return undefined;
+        return (...args: unknown[]) => {
+          calls.push(prop);
+          if (prop === "maybeSingle" || prop === "single") return Promise.resolve({ data: row, error: null });
+          void args;
+          return chain;
+        };
+      },
+    });
+    return { admin: { from: () => chain } as never, calls };
+  };
+  const base = { id: "u1", organisation_id: "o", code: "INC-2026-000001", facility_id: "f", title: "t", incident_type: "other", source: "manual", severity: "unknown", status: "unknown", reported_at: "2026-08-15T00:00:00Z", created_at: NOW, updated_at: NOW };
+  for (const input of [{ id: "INC-2026-000001", status: "cancelled" }, { id: "INC-2026-000001", title: "edited" }, { id: "INC-2026-000001", status: "resolved", severity: "high" }]) {
+    const { admin, calls } = makeAdmin({ ...base, record_origin: "migrated_historical" });
+    let err: unknown = null;
+    try { await new FmIncidentRepository("o", admin).update(input as never, "profile"); } catch (e) { err = e; }
+    assert(err instanceof FmIncidentReadOnlyError, `imported incident: update ${JSON.stringify(input)} is refused with FmIncidentReadOnlyError`);
+    assert(!calls.includes("update") && !calls.includes("insert") && !calls.includes("delete"), "imported incident: the refusal happens BEFORE any write reaches the database");
+  }
+  {
+    const { admin, calls } = makeAdmin({ ...base, record_origin: "operational", status: "reported", severity: "medium" });
+    let err: unknown = null;
+    try { await new FmIncidentRepository("o", admin).update({ id: "INC-2026-000001", title: "edited" } as never, "profile"); } catch (e) { err = e; }
+    assert(!(err instanceof FmIncidentReadOnlyError) && calls.includes("update"), "operational legacy incident: still updatable (the guard is origin-scoped)");
+  }
+  const service = readFileSync("src/modules/incidents/server/FmIncidentServerService.ts", "utf8");
+  assert(/async deactivate[\s\S]{0,200}this\.update\(/.test(service) && /assertNewIncidentCreateAllowed\("FmIncidentServerService\.create"\)/.test(service), "deactivate flows through update (guarded); the incident creation freeze is intact");
+  const route = readFileSync("src/app/api/incidents/route.ts", "utf8");
+  assert(/FmIncidentReadOnlyError[\s\S]{0,120}fail\(403/.test(route), "API: a read-only refusal is a 403, not a 500");
+
+  // UI
+  const rowActions = readFileSync("src/modules/incidents/components/IncidentRowActions.tsx", "utf8");
+  const page = readFileSync("src/modules/incidents/components/IncidentsPage.tsx", "utf8");
+  const modal = readFileSync("src/modules/incidents/components/ViewIncidentModal.tsx", "utf8");
+  assert((rowActions.match(/canMutate && !readOnly/g) ?? []).length === 2, "Legacy Incidents: Investigate and Cancel are hidden for imported records");
+  assert(!/Log issue|router\.push/.test(page) && /Back to Issues/.test(page) && /href="\/issues"/.test(page), "Legacy Incidents: the create-styled '+ Log issue' is replaced by ordinary navigation ('Back to Issues')");
+  assert(/migrated_historical/.test(modal) && (page.match(/migrated_historical/g) ?? []).length >= 3, "Legacy Incidents: edit / cancel entry points are closed for imported records in the modal and the page state");
+  assert(/useFacilityName\(view\?\.issue\.facilityId\)/.test(readFileSync("src/modules/issues/components/IssueOperationalPanel.tsx", "utf8")) && !/<dd>\{issue\.facilityId\}<\/dd>/.test(readFileSync("src/modules/issues/components/IssueOperationalPanel.tsx", "utf8")), "Issues panel: the facility shows its name, not its UUID");
+  pass("Issue → Incident routing: imported incident-root rows are read-only evidence; Work / Request roots never route into Legacy Incidents; server refuses any write to an imported incident before touching the database; creation freeze intact");
 }
 
 console.log(out.join("\n"));

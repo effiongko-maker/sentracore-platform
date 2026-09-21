@@ -23,6 +23,8 @@ export function IncidentRowActions({
 }: IncidentRowActionsProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  // A migrated historical incident is a read-only source record (also enforced server-side).
+  const readOnly = incident.recordOrigin === "migrated_historical";
   const canDeactivate =
     incident.status !== "cancelled" && incident.status !== "closed";
 
@@ -80,7 +82,7 @@ export function IncidentRowActions({
             <Eye className="h-3.5 w-3.5 text-muted" />
             View
           </button>
-          {canMutate ? (
+          {canMutate && !readOnly ? (
             <button
               type="button"
               role="menuitem"
@@ -94,7 +96,7 @@ export function IncidentRowActions({
               Investigate
             </button>
           ) : null}
-          {canMutate ? (
+          {canMutate && !readOnly ? (
             <button
               type="button"
               role="menuitem"

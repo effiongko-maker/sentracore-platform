@@ -225,6 +225,20 @@ async function main() {
     assert(unified.length === maintenance.length + incidents.length, `Issues: the list is COMPLETE — ${maintenance.length} Work + ${incidents.length} incidents = ${unified.length} (the old first-100 cap showed 103)`);
     assert(unified.every((u) => originLabel(u.issue) === "Imported record"), "Issues: every imported record is labelled as imported (not 'FM logged')");
     assert(unified.filter((u) => u.issue.status === "unknown").length === 113 + 3 && unified.filter((u) => u.issue.status === "resolved").length === 2, "Issues: 116 show an unknown lifecycle; only the 2 explicitly 'Executed' Work records read as resolved");
+    // Why the Issues lens shows 118, not 147: Requests are gated by the EXPLICIT capability requests.view
+    const withRequests = buildUnifiedIssueList({ requests, maintenances: maintenance, incidents });
+    assert(withRequests.length === 115 + 3 + 29 && withRequests.filter((u) => u.issue.id.startsWith("issue:request:")).length === 29, "Issues: with requests.view the lens is 147 = 115 Work + 3 incidents + ALL 29 Requests (no deduplication removes any Request)");
+    assert(requests.every((r) => (r.maintenanceIds ?? []).length === 0 && (r.incidentIds ?? []).length === 0 && (r.workOrderIds ?? []).length === 0) && maintenance.every((m) => !m.sourceRequestId) && incidents.every((i) => !i.sourceRequestId), "Issues: no Request is linked to any Work/Incident (none was invented), so nothing is collapsed under a Request");
+    const { data: grants } = await admin.from("platform_capability_grants").select("profile_id, capability").eq("organisation_id", organisationId);
+    const byProfile = new Map<string, Set<string>>();
+    for (const g of (grants ?? []) as Array<{ profile_id: string; capability: string }>) byProfile.set(g.profile_id, (byProfile.get(g.profile_id) ?? new Set()).add(g.capability));
+    assert([...byProfile.values()].some((c) => c.has("ops.view") && !c.has("requests.view")) && [...byProfile.values()].some((c) => c.has("requests.view")), "Issues: requests.view is an explicit grant — an operator with ops.view but WITHOUT requests.view sees exactly the 118 Work + incident rows (access authority, not a defect)");
+    assert(/const canReadRequests = can\("requests\.view"\)/.test(readFileSync("src/modules/issues/components/IssuesPage.tsx", "utf8")), "Issues: the page never reads Requests without requests.view (documented gating)");
+    // imported incident-derived Issue rows are read-only evidence
+    const { deriveIssueActions } = await import("../src/lib/operational/issues/actions");
+    const incidentIssues = unified.filter((u) => u.issue.rootIncidentId);
+    assert(incidentIssues.length === 3 && incidentIssues.every((u) => u.issue.treatments.length === 0 && deriveIssueActions(u.issue).map((a) => a.id).join() === "view,view_legacy_record" && deriveIssueActions(u.issue).find((a) => a.id === "view_legacy_record")!.href === `/incidents?id=${u.issue.rootIncidentId}`), "Issues: the 3 imported incident rows offer only View + 'View legacy record' and list no treatment");
+    assert(unified.filter((u) => u.issue.rootMaintenanceId).every((u) => deriveIssueActions(u.issue).filter((a) => a.href).every((a) => a.href!.startsWith("/work"))), "Issues: all 115 Work-root rows route only to /work");
     // period correctness on the real data
     const { scopeSnapshotToPeriod, periodCoverageNotes } = await import("../src/services/reporting/periodScope");
     const snapshotLike = { ...n, kpis, projections: {}, health: {} } as never;

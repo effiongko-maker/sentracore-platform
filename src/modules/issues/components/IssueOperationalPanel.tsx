@@ -1,6 +1,7 @@
 "use client";
 
 import type { IssueAction, IssueOperationalView } from "@/lib/operational/issues";
+import { useFacilityName } from "@/hooks/useEntityLabel";
 import { originLabel } from "../lib/buildUnifiedIssueList";
 
 function StatusPill({ label }: { label: string }) {
@@ -27,6 +28,8 @@ export function IssueOperationalPanel({
   /** ops.edit — treat / cancel style actions */
   canMutate?: boolean;
 }) {
+  const facilityName = useFacilityName(view?.issue.facilityId);
+
   if (loading) {
     return (
       <div className="op-panel rounded-lg border border-[var(--sc-border)] bg-[var(--sc-surface)] p-5">
@@ -48,7 +51,7 @@ export function IssueOperationalPanel({
   const { issue, outcome, executions, actions } = view;
   const primaryActions = actions.filter((a) => {
     if (!a.available || !a.href) return false;
-    if (a.id === "view_treatment") return true;
+    if (a.id === "view_treatment" || a.id === "view_legacy_record") return true;
     if (a.id === "create_work") return canCreate;
     if (a.id === "treat" || a.id === "cancel") return canMutate;
     return false;
@@ -84,7 +87,7 @@ export function IssueOperationalPanel({
         </div>
         <div>
           <dt className="text-[var(--sc-muted)]">Facility</dt>
-          <dd>{issue.facilityId}</dd>
+          <dd>{facilityName || "—"}</dd>
         </div>
         <div>
           <dt className="text-[var(--sc-muted)]">Location</dt>

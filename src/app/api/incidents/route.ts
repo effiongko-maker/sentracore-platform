@@ -4,6 +4,7 @@ import { capabilityForOperationalProxyAction } from "@/lib/access/operationalApi
 import { isActionError } from "@/lib/actions/errors";
 import {
   FmIncidentNotFoundError,
+  FmIncidentReadOnlyError,
   FmIncidentUnavailableError,
   FmIncidentValidationError,
 } from "@/modules/incidents/server/fmIncidentDomain";
@@ -95,6 +96,9 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof FmIncidentValidationError) {
       return fail(400, error.message, { errorClass: "validation" });
+    }
+    if (error instanceof FmIncidentReadOnlyError) {
+      return fail(403, error.message, { errorClass: "read_only" });
     }
     if (error instanceof FmIncidentNotFoundError) {
       return fail(404, error.message, { errorClass: "validation" });

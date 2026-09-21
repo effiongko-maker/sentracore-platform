@@ -145,6 +145,7 @@ export function ViewIncidentModal({
 
   const summary = nextActionSummary(displayIncident);
   const canApplyNextStep =
+    displayIncident.recordOrigin !== "migrated_historical" &&
     !isTerminalStatus(displayIncident.status) &&
     !hasOperationalLinks(displayIncident) &&
     (displayIncident.status === "reported" ||
@@ -215,7 +216,7 @@ export function ViewIncidentModal({
           <Button type="button" variant="outline" onClick={onClose}>
             Close
           </Button>
-          {onEdit ? (
+          {onEdit && displayIncident.recordOrigin !== "migrated_historical" ? (
             <Button
               type="button"
               onClick={() => {
@@ -229,6 +230,12 @@ export function ViewIncidentModal({
         </>
       }
     >
+      {displayIncident.recordOrigin === "migrated_historical" ? (
+        <p className="mb-4 rounded-lg border border-border/70 bg-slate-50 px-3 py-2 text-sm text-muted">
+          Imported historical record — read-only source evidence. Status and severity were not recorded in the
+          source, and this record cannot be edited, investigated or cancelled.
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2 border-b border-border/70 pb-5">
         <Badge variant={INCIDENT_STATUS_VARIANT[displayIncident.status]}>
           {labelize(displayIncident.status)}
