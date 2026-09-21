@@ -3,6 +3,7 @@
 import { Modal } from "@/components/modals/Modal";
 import { Button } from "@/components/ui/Button";
 import { formatDate } from "@/lib/utils";
+import { useFacilityName } from "@/hooks/useEntityLabel";
 import { CONSUMABLES_UPDATE_FIELD_LABELS } from "../constants";
 import { getConsumablesUpdateFlagLabels } from "../utils";
 import type { ConsumablesUpdate } from "../types";
@@ -31,6 +32,7 @@ export function ViewConsumablesUpdateModal({
   onClose,
   onEdit,
 }: ViewConsumablesUpdateModalProps) {
+  const facilityName = useFacilityName(entry?.facilityId);
   if (!entry) return null;
 
   const flags = getConsumablesUpdateFlagLabels(
@@ -73,7 +75,7 @@ export function ViewConsumablesUpdateModal({
           </p>
           <p className="mt-1 text-sm text-muted">
             {entry.date ? formatDate(entry.date) : "—"} · Facility{" "}
-            {entry.facilityId || "—"} · Closing{" "}
+            {facilityName || "—"} · Closing{" "}
             {Number.isFinite(entry.closing) ? entry.closing : "—"}
           </p>
           {flags.length > 0 ? (
@@ -94,7 +96,7 @@ export function ViewConsumablesUpdateModal({
         />
         <Detail
           label={CONSUMABLES_UPDATE_FIELD_LABELS.facilityId}
-          value={entry.facilityId}
+          value={facilityName || "—"}
         />
         <Detail
           label={CONSUMABLES_UPDATE_FIELD_LABELS.itemName}

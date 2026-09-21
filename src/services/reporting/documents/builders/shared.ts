@@ -1,3 +1,4 @@
+import { periodCoverageNotes } from "@/services/reporting/periodScope";
 import type { ReportingSnapshot } from "@/services/reporting/types";
 import type {
   CoverLetterContent,
@@ -168,7 +169,7 @@ export function closureRateLabel(snapshot: ReportingSnapshot): string {
 
 /** Historical records that carry no recorded state, disclosed alongside any "no risks" statement. */
 export function unrecordedStateNotes(snapshot: ReportingSnapshot): string[] {
-  const notes: string[] = [];
+  const notes: string[] = [...periodCoverageNotes(snapshot)];
   const assets = snapshot.assets.filter((a) => a.condition === "unknown").length;
   const work = snapshot.maintenance.filter((m) => m.status === "unknown").length;
   const instructions = snapshot.workOrders.filter((w) => w.status === "unknown").length;

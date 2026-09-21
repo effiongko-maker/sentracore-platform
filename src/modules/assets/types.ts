@@ -44,6 +44,12 @@ export interface Asset {
   assignedTo: string;
   criticality: AssetCriticality;
   /**
+   * operational (product-created) | migrated_historical (imported from a spreadsheet). Derived from the migration
+   * provenance ledger; never set from input. A migrated asset's `pending` status is the schema default written at
+   * import, NOT a recorded status — presentation must not show it as one.
+   */
+  recordOrigin?: "operational" | "migrated_historical";
+  /**
    * Derived client-side (no Assets sheet workload column).
    * activeWorkload = workOrders + maintenance + incidents (active only),
    * keyed by canonical assetId.

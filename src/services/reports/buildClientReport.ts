@@ -3,6 +3,7 @@ import {
   isOpenIncidentStatus,
   isOperationalAssetStatus,
 } from "@/services/reporting/normalize";
+import { scopeSnapshotToPeriod } from "@/services/reporting/periodScope";
 import { unrecordedStateNotes } from "@/services/reporting/documents/builders/shared";
 import {
   computeReportingHealth,
@@ -363,10 +364,11 @@ export function buildClientReport(input: {
     throw new Error(`Unknown report type: ${reportType}`);
   }
 
-  const scoped = scopeSnapshot(
-    input.snapshot,
-    wizard.facilityIds,
-    wizard.allFacilities
+  // Facility scope first, then the report PERIOD as a real scope (dated records outside it are excluded; undated
+  // records belong to no period and are disclosed in the report's risk notes).
+  const scoped = scopeSnapshotToPeriod(
+    scopeSnapshot(input.snapshot, wizard.facilityIds, wizard.allFacilities),
+    wizard.period
   );
   const { label: facilityLabelText, names: facilityNames } = resolveFacilityLabel(
     scoped,

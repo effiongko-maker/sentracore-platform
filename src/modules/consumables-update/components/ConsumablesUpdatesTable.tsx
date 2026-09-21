@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { Package } from "lucide-react";
 import { DataTable, type Column } from "@/components/tables/DataTable";
+import { useFacilityName } from "@/hooks/useEntityLabel";
 import { formatDate } from "@/lib/utils";
 import { getConsumablesUpdateFlagLabels } from "../utils";
 import type { ConsumablesUpdate } from "../types";
@@ -11,6 +12,10 @@ import { ConsumablesUpdateRowActions } from "./ConsumablesUpdateRowActions";
 function formatQty(value: number | undefined): string {
   if (value == null || !Number.isFinite(value)) return "—";
   return String(value);
+}
+
+function FacilityLabel({ id }: { id: string }) {
+  return <>{useFacilityName(id) || "—"}</>;
 }
 
 interface ConsumablesUpdatesTableProps {
@@ -61,7 +66,7 @@ export function ConsumablesUpdatesTable({
         key: "facilityId",
         header: "Facility",
         render: (entry) => (
-          <span className="text-foreground">{entry.facilityId || "—"}</span>
+          <span className="text-foreground"><FacilityLabel id={entry.facilityId} /></span>
         ),
       },
       {

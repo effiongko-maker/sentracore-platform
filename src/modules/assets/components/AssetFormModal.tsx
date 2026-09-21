@@ -208,7 +208,7 @@ export function AssetFormModal({
             <input
               id="asset-id"
               className={inputClassName}
-              value={asset.id}
+              value={asset.code}
               disabled
               readOnly
             />

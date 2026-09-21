@@ -79,7 +79,7 @@ function buildDerived(
   const dieselHighUsage: DieselUsage[] = [];
   const dieselNegativeConsumption: DieselUsage[] = [];
   for (const row of dieselUsage) {
-    const flags = getDieselUsageFlagKinds(row.consumption);
+    const flags = getDieselUsageFlagKinds(row.consumption, row.recordOrigin);
     if (flags.includes("high_usage")) dieselHighUsage.push(row);
     if (flags.includes("negative_consumption")) {
       dieselNegativeConsumption.push(row);

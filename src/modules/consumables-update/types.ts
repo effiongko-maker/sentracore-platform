@@ -82,3 +82,35 @@ export type ConsumablesUpdateModalState =
   | { type: "create" }
   | { type: "edit"; entry: ConsumablesUpdate }
   | { type: "view"; entry: ConsumablesUpdate };
+
+
+/** One quantity exactly as the historical register recorded it. */
+export interface RegisterQuantity {
+  /** null = not recorded (never 0). */
+  quantity: number | null;
+  /** Unit as recorded ("Gallons", "pcs", …); null when no quantity was recorded. */
+  unit: string | null;
+  /** Source cell text, verbatim ("19 Gallons", "-", "12pcs"), when preserved. */
+  raw: string | null;
+}
+
+/**
+ * Migrated historical register EVIDENCE (fm_consumables_register_entries). Not a stock transaction and not a
+ * dated update: the register carries no transaction date, no balance is derived and units are never reconciled
+ * across fields.
+ */
+export interface ConsumablesRegisterEntry {
+  id: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  facilityId: string;
+  /** null = the register states no date (always the case for migrated entries). */
+  snapshotDate: string | null;
+  opening: RegisterQuantity;
+  received: RegisterQuantity;
+  issued: RegisterQuantity;
+  closing: RegisterQuantity;
+  reorderLevel: RegisterQuantity;
+  recordOrigin: "migrated_historical";
+}

@@ -18,6 +18,7 @@ import {
 } from "@/lib/operational/issues";
 import { IncidentService } from "@/services/incidents/IncidentService";
 import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
+import { loadAllPages } from "@/services/reporting/loadAllPages";
 import { RequestService } from "@/services/requests/RequestService";
 import type { RequestRecord } from "@/modules/requests/types";
 import { getRequestTreatmentDetail } from "@/modules/requests/actions/treatRequest";
@@ -98,22 +99,15 @@ export function IssuesPage() {
       // FM-rooted Issues (Work + incidents) load independently of Requests.
       // Requests are an optional augmentation: never read without requests.view,
       // and a Request failure never erases the FM-rooted Issues.
+      // Every source is read to completion: a silent first-page cap would present a partial list as the whole.
       const requestsRead = canReadRequests
-        ? RequestService.listRequests({ page: 1, pageSize: 100, status: "all" })
-            .then((page) => ({ ok: true as const, data: page.data }))
+        ? loadAllPages((page, pageSize) => RequestService.listRequests({ page, pageSize, status: "all" }))
+            .then((data) => ({ ok: true as const, data }))
             .catch(() => ({ ok: false as const, data: [] as RequestRecord[] }))
         : Promise.resolve(null);
       const [maintenances, incidents, requests] = await Promise.all([
-        MaintenanceService.listMaintenance({
-          page: 1,
-          pageSize: 100,
-          status: "all",
-        }),
-        IncidentService.listIncidents({
-          page: 1,
-          pageSize: 100,
-          status: "all",
-        }),
+        loadAllPages((page, pageSize) => MaintenanceService.listMaintenance({ page, pageSize, status: "all" })),
+        loadAllPages((page, pageSize) => IncidentService.listIncidents({ page, pageSize, status: "all" })),
         requestsRead,
       ]);
       setRequestsSource(
@@ -121,8 +115,8 @@ export function IssuesPage() {
       );
       const next = buildUnifiedIssueList({
         requests: requests?.ok ? requests.data : [],
-        maintenances: maintenances.data,
-        incidents: incidents.data,
+        maintenances,
+        incidents,
       });
       setItems(next);
       setError(null);
@@ -239,6 +233,7 @@ export function IssuesPage() {
                   createdAt: maintenance.createdAt,
                   updatedAt: maintenance.updatedAt,
                   createdByUserId: maintenance.createdByUserId,
+                  recordOrigin: maintenance.recordOrigin,
                 },
               })
             )
@@ -273,6 +268,7 @@ export function IssuesPage() {
                   createdAt: incident.createdAt,
                   updatedAt: incident.updatedAt,
                   reportedByUserId: incident.reportedByUserId,
+                  recordOrigin: incident.recordOrigin,
                 },
               })
             )

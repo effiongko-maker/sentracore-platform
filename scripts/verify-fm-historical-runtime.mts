@@ -206,5 +206,67 @@ const workRow = (over: Record<string, unknown>) => ({
   pass("Application consumers: created-today, availability, zero-labels, closure rate, report disclosure, Home activity, notification timestamps, client-report open incidents, generator modal");
 }
 
+// Product reconciliation (identity, asset/diesel semantics, Issues origin, registers layout, consumables register,
+// genuine report periods) — pure regression
+{
+  const { assetStatusPresentation } = await import("../src/modules/assets/utils");
+  const { getDieselUsageFlagKinds, dieselGeneratorPresentation } = await import("../src/modules/diesel-usage/utils");
+  const { originLabel } = await import("../src/modules/issues/lib/buildUnifiedIssueList");
+  const { formatRegisterQuantity } = await import("../src/modules/consumables-update/components/ConsumablesRegisterEvidence");
+  const { resolvePeriodRange, scopeSnapshotToPeriod, periodCoverageNotes } = await import("../src/services/reporting/periodScope");
+
+  // assets
+  assert(assetStatusPresentation({ status: "pending", recordOrigin: "migrated_historical" }).label === "Status not recorded", "asset: a migrated asset's schema-default 'pending' reads 'Status not recorded'");
+  assert(assetStatusPresentation({ status: "pending", recordOrigin: "operational" }).label === "Pending" && assetStatusPresentation({ status: "active", recordOrigin: "migrated_historical" }).label === "Active", "asset: a genuine Pending, and any recorded status, are unchanged");
+  const assetsTable = readFileSync("src/modules/assets/components/AssetsTable.tsx", "utf8");
+  const assetModal = readFileSync("src/modules/assets/components/ViewAssetModal.tsx", "utf8");
+  assert(/\{asset\.code\}/.test(assetsTable) && !/\{asset\.id\}<\/p>/.test(assetsTable) && /description=\{asset\.code\}/.test(assetModal) && /value=\{asset\.code\}/.test(assetModal) && !/value=\{asset\.id\}/.test(assetModal), "asset: the visible identifier is the AST-… code, never the UUID");
+
+  // diesel
+  assert(getDieselUsageFlagKinds(1400, "migrated_historical").length === 0 && getDieselUsageFlagKinds(1400, "operational").includes("high_usage") && getDieselUsageFlagKinds(1400).includes("high_usage"), "diesel: the per-generator 100 L threshold is not applied to whole-site tank rows; operational rows keep it");
+  assert(getDieselUsageFlagKinds(-5, "migrated_historical").includes("negative_consumption"), "diesel: negative consumption is arithmetic and still flags historical rows");
+  const dg = dieselGeneratorPresentation({ generatorId: "MBORA DIESEL Checklist", recordOrigin: "migrated_historical" });
+  assert(dg.primary === "Whole-site tank" && dg.note === "Source: MBORA DIESEL Checklist" && dieselGeneratorPresentation({ generatorId: "Gen 1" }).primary === "Gen 1", "diesel: a migrated row's source label is provenance, not a generator identity; operational generators are unchanged");
+  for (const f of ["src/modules/diesel-usage/components/DieselUsageTable.tsx", "src/modules/diesel-usage/components/ViewDieselUsageModal.tsx", "src/modules/consumables-update/components/ConsumablesUpdatesTable.tsx", "src/modules/consumables-update/components/ViewConsumablesUpdateModal.tsx"]) {
+    const t = readFileSync(f, "utf8");
+    assert(/useFacilityName/.test(t) && !/\{entry\.facilityId \|\| "—"\}/.test(t) && !/value=\{entry\.facilityId\}/.test(t), `facility: ${f.split("/").pop()} resolves the facility name (no raw UUID)`);
+  }
+
+  // Issues
+  assert(originLabel({ recordOrigin: "migrated_historical", source: "facility_manager", rootMaintenanceId: "WRK-1" } as never) === "Imported record" && originLabel({ source: "facility_manager", rootMaintenanceId: "WRK-1" } as never) === "FM logged", "Issues: an imported record is not claimed as 'FM logged'; operational origins are unchanged");
+  const issuesPage = readFileSync("src/modules/issues/components/IssuesPage.tsx", "utf8");
+  assert(!/pageSize: 100,\s*status: "all",\s*\}\)/.test(issuesPage) && (issuesPage.match(/loadAllPages/g) ?? []).length >= 4, "Issues: every source is read to completion (no silent first-100 cap)");
+
+  // registers layout
+  const regs = readFileSync("src/modules/operational-registers/components/OperationalRegistersPage.tsx", "utf8");
+  assert(/sm:grid-cols-2 lg:grid-cols-3/.test(regs) && !/col-span-2/.test(regs) && (regs.match(/href: "\//g) ?? []).length === 6, "registers: 6 cards in a 1 / 2×3 / 3×2 grid with no orphan-stretched card");
+
+  // consumables register
+  assert(formatRegisterQuantity({ quantity: 19, unit: "gallons", raw: "19 Gallons" }) === "19 gallons" && formatRegisterQuantity({ quantity: null, unit: null, raw: null }) === "Not recorded" && formatRegisterQuantity({ quantity: 0, unit: "pcs", raw: "0pcs" }) === "0 pcs", "register: units stay with their field, blank is 'Not recorded', a recorded 0 stays 0");
+  const gate = readFileSync("src/lib/access/operationalApiGate.ts", "utf8");
+  assert(/"getRegisterEntries"/.test(gate) && /getRegisterEntries/.test(readFileSync("src/modules/operational-logs/server/fmLogRoute.ts", "utf8")), "register: served as a READ action (ops.view), never a write");
+
+  // report periods
+  assert(JSON.stringify(resolvePeriodRange({ kind: "month", year: 2026, month: 2 })) === '{"start":"2026-02-01","end":"2026-02-28"}' && JSON.stringify(resolvePeriodRange({ kind: "quarter", year: 2026, quarter: 3 })) === '{"start":"2026-07-01","end":"2026-09-30"}' && resolvePeriodRange({ kind: "year", year: 2026 })!.end === "2026-12-31" && resolvePeriodRange({ kind: "week", weekEnding: "2026-09-20" })!.start === "2026-09-14" && resolvePeriodRange({ kind: "current" }) === null, "periods: month / quarter / year / week resolve to inclusive ranges; a period with no range is null (current state)");
+  const inc = (id: string, reportedAt: string | undefined) => ({ id, reportedAt, status: "unknown", severity: "unknown", createdAt: "2026-09-21T15:37:00Z", updatedAt: "2026-09-21T15:37:00Z" });
+  const base = {
+    asOf: "2026-09-21T16:00:00Z", users: [], facilities: [], assets: [],
+    incidents: [inc("I-AUG", "2026-08-15T00:00:00+01:00"), inc("I-JUL", "2026-07-20T10:00:00Z"), inc("I-NODATE", undefined)],
+    maintenance: [{ id: "W-U", status: "unknown", priority: "unknown", recordOrigin: "migrated_historical", createdAt: "2026-09-21T15:37:00Z", updatedAt: "2026-09-21T15:37:00Z" }, { id: "W-LIVE", status: "requested", priority: "high", reportedAt: "2026-08-20T09:00:00Z", createdAt: "2026-08-20T09:00:00Z", updatedAt: "2026-08-20T09:00:00Z" }],
+    workOrders: [{ id: "WO-U", status: "unknown", priority: "unknown", recordOrigin: "migrated_historical", createdAt: "2026-09-21T15:37:00Z", updatedAt: "2026-09-21T15:37:00Z" }],
+    kpis: {}, projections: {}, health: {},
+  } as never;
+  const aug = scopeSnapshotToPeriod(base, { kind: "month", year: 2026, month: 8 }, { timeZone: "Africa/Lagos" });
+  assert(aug.incidents.map((i) => i.id).join() === "I-AUG" && aug.maintenance.map((m) => m.id).join() === "W-LIVE" && aug.workOrders.length === 0, "periods: only records DATED in August are kept (organisation-local date); July, undated and import-time-only rows are not");
+  assert(aug.periodCoverage!.undated.incidents === 1 && aug.periodCoverage!.undated.maintenance === 1 && aug.periodCoverage!.undated.workOrders === 1 && aug.periodCoverage!.outsidePeriod.incidents === 1, "periods: undated records are counted as undated (not silently assigned), outside-period ones are counted apart");
+  assert(aug.kpis.criticalWork === 1 && aug.kpis.maintenanceBacklog === 1, "periods: KPIs are recomputed from the in-period records only");
+  const sep = scopeSnapshotToPeriod(base, { kind: "month", year: 2026, month: 9 });
+  assert(sep.maintenance.length === 0 && sep.periodCoverage!.undated.maintenance === 1, "periods: the import date (Sep 21) does NOT make undated records part of September");
+  const notes = periodCoverageNotes(aug).join(" ");
+  assert(/2026-08-01 to 2026-08-31/.test(notes) && /carry no recorded date, cannot be assigned to any period/.test(notes), "periods: the disclosure says what cannot be assigned");
+  assert(scopeSnapshotToPeriod(base, { kind: "current" }) === base, "periods: a period with no range leaves the snapshot untouched (current-state)");
+  pass("Product reconciliation: asset code + status, diesel generator label + threshold, facility names, Issues origin + no cap, registers grid, consumables register read, genuine report periods");
+}
+
 console.log(out.join("\n"));
 console.log(`\n${out.length} groups passed`);

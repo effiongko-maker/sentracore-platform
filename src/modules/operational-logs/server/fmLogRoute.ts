@@ -12,7 +12,7 @@ import { FmLogServerService, resolveFmLogOrganisation } from "./FmLogServerServi
  * Reads: ops.view. Creates: ops.create. Updates: ops.edit (unchanged gates).
  * A storage failure is 503 — never an empty list.
  */
-const SERVED = new Set(["getAll", "getById", "create", "update"]);
+const SERVED = new Set(["getAll", "getById", "getRegisterEntries", "create", "update"]);
 
 function fail(status: number, message: string, errorClass?: string) {
   return NextResponse.json(

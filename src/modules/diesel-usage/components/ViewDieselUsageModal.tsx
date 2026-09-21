@@ -4,7 +4,8 @@ import { Modal } from "@/components/modals/Modal";
 import { Button } from "@/components/ui/Button";
 import { formatDate } from "@/lib/utils";
 import { DIESEL_USAGE_FIELD_LABELS } from "../constants";
-import { getDieselUsageFlagLabels } from "../utils";
+import { useFacilityName } from "@/hooks/useEntityLabel";
+import { dieselGeneratorPresentation, getDieselUsageFlagLabels } from "../utils";
 import type { DieselUsage } from "../types";
 
 interface ViewDieselUsageModalProps {
@@ -31,15 +32,17 @@ export function ViewDieselUsageModal({
   onClose,
   onEdit,
 }: ViewDieselUsageModalProps) {
+  const facilityName = useFacilityName(entry?.facilityId);
   if (!entry) return null;
 
-  const flags = getDieselUsageFlagLabels(entry.consumption);
+  const flags = getDieselUsageFlagLabels(entry.consumption, entry.recordOrigin);
+  const generator = dieselGeneratorPresentation(entry);
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={entry.generatorId || "Diesel usage"}
+      title={generator.primary === "—" ? "Diesel usage" : generator.primary}
       description={entry.id}
       size="lg"
       footer={
@@ -70,7 +73,7 @@ export function ViewDieselUsageModal({
           </p>
           <p className="mt-1 text-sm text-muted">
             {entry.date ? formatDate(entry.date) : "—"} · Facility{" "}
-            {entry.facilityId || "—"} · Consumption{" "}
+            {facilityName || "—"} · Consumption{" "}
             {Number.isFinite(entry.consumption) ? entry.consumption : "—"} L
           </p>
           {flags.length > 0 ? (
@@ -87,11 +90,11 @@ export function ViewDieselUsageModal({
         />
         <Detail
           label={DIESEL_USAGE_FIELD_LABELS.facilityId}
-          value={entry.facilityId}
+          value={facilityName || "—"}
         />
         <Detail
           label={DIESEL_USAGE_FIELD_LABELS.generatorId}
-          value={entry.generatorId}
+          value={generator.note ? `${generator.primary} (${generator.note})` : generator.primary}
         />
         <Detail
           label={DIESEL_USAGE_FIELD_LABELS.openingLevel}

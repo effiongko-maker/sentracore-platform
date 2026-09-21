@@ -122,7 +122,7 @@ export const FM_ASSET_SELECT =
 export type AssetRelations = { facilityName?: string; assignedToName?: string };
 
 /** Row → the Asset contract. `id` is the UUID; `code` is display only. */
-export function mapFmAssetRow(row: FmAssetRow, relations: AssetRelations = {}): Asset {
+export function mapFmAssetRow(row: FmAssetRow, relations: AssetRelations = {}, recordOrigin: "operational" | "migrated_historical" = "operational"): Asset {
   return {
     id: row.id,
     code: row.code,
@@ -141,6 +141,7 @@ export function mapFmAssetRow(row: FmAssetRow, relations: AssetRelations = {}): 
     assignedToUserId: row.assigned_to_profile_id ?? "",
     assignedTo: relations.assignedToName ?? "",
     criticality: row.criticality as AssetCriticality,
+    recordOrigin,
   };
 }
 

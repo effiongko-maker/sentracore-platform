@@ -7,9 +7,8 @@ import { DataTable, type Column } from "@/components/tables/DataTable";
 import { useFacilityName } from "@/hooks/useEntityLabel";
 import {
   ASSET_CRITICALITY_VARIANT,
-  ASSET_STATUS_VARIANT,
 } from "../constants";
-import { getAssetInitials, labelize } from "../utils";
+import { assetStatusPresentation, getAssetInitials, labelize } from "../utils";
 import type { Asset } from "../types";
 import { AssetRowActions } from "./AssetRowActions";
 
@@ -55,7 +54,7 @@ export function AssetsTable({
             </div>
             <div>
               <span className="font-medium text-foreground">{asset.name}</span>
-              <p className="text-xs text-muted">{asset.id}</p>
+              <p className="text-xs text-muted">{asset.code}</p>
             </div>
           </div>
         ),
@@ -91,11 +90,10 @@ export function AssetsTable({
       {
         key: "status",
         header: "Status",
-        render: (asset) => (
-          <Badge variant={ASSET_STATUS_VARIANT[asset.status]}>
-            {labelize(asset.status)}
-          </Badge>
-        ),
+        render: (asset) => {
+          const status = assetStatusPresentation(asset);
+          return <Badge variant={status.variant}>{status.label}</Badge>;
+        },
       },
       {
         key: "activeWorkload",

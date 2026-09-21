@@ -174,6 +174,65 @@ async function main() {
     pass("Intelligence: consumes authoritative FM population; imported records emit no events and therefore create no current signals");
   }
 
+  // ── 5. Product reconciliation against the real dataset ────────────────────────
+  {
+    const { FmLogRepository } = await import("../src/modules/operational-logs/server/FmLogRepository");
+    const { FM_LOG_SPECS, parseLogListParams } = await import("../src/modules/operational-logs/server/fmLogDomain");
+    const readAll = async (resource: keyof typeof FM_LOG_SPECS) => {
+      const repo = new FmLogRepository(FM_LOG_SPECS[resource], organisationId);
+      const rows: Record<string, unknown>[] = [];
+      for (let page = 1; ; page++) {
+        const r = await repo.list(parseLogListParams(FM_LOG_SPECS[resource], { page, pageSize: 100 }));
+        rows.push(...r.rows);
+        if (rows.length >= r.total || r.rows.length === 0) return { rows, total: r.total, repo };
+      }
+    };
+    const gen = await readAll("generator-log");
+    const diesel = await readAll("diesel-usage");
+    const cons = await readAll("consumables-update");
+    const dbItems = await count("fm_consumables_items");
+    const dbEntries = await count("fm_consumables_register_entries");
+    assert(maintenance.length === 115 && workOrders.length === 113 && requests.length === 29 && incidents.length === 3 && assets.length === 9 && gen.total === 67 && diesel.total === 14 && dbItems === 31 && dbEntries === 31, `authoritative readers: 115 Work / 113 WI / 29 Requests / 3 Incidents / 9 Assets / 67 generator logs / 14 diesel / 31 items / 31 register entries (got ${maintenance.length}/${workOrders.length}/${requests.length}/${incidents.length}/${assets.length}/${gen.total}/${diesel.total}/${dbItems}/${dbEntries})`);
+    assert(cons.total === 0, "consumables updates (dated transactions) stay empty: the register evidence was not turned into fake transactions");
+
+    // identity
+    assert(assets.every((a) => /^AST-\d{4}-\d{6}$/.test(a.code) && a.facility === "NCC Annex" && a.facilityId === FAC), "assets: canonical AST- codes and the facility NAME are available to the UI (UUIDs stay internal)");
+    // asset status semantics
+    const { assetStatusPresentation } = await import("../src/modules/assets/utils");
+    assert(assets.every((a) => a.recordOrigin === "migrated_historical" && a.status === "pending" && a.condition === "unknown" && a.criticality === "unassessed"), "assets: all 9 are identified as migrated; stored status is the schema default 'pending', condition 'unknown', criticality 'unassessed' (nothing rewritten)");
+    assert(assets.every((a) => assetStatusPresentation(a).label === "Status not recorded"), "assets: the UI presents 'Status not recorded', not 'Pending'; Condition Unknown and Criticality Unassessed are shown as stored");
+    // diesel semantics
+    const { getDieselUsageFlagLabels, dieselGeneratorPresentation } = await import("../src/modules/diesel-usage/utils");
+    assert(diesel.rows.every((r) => r.recordOrigin === "migrated_historical" && r.generatorId === "MBORA DIESEL Checklist"), "diesel: all 14 rows are identified as migrated and carry the source label");
+    assert(diesel.rows.every((r) => getDieselUsageFlagLabels(Number(r.consumption), r.recordOrigin as never).length === 0) && diesel.rows.some((r) => Number(r.consumption) > 100), "diesel: NO row is labelled 'High usage' (the 100 L per-generator threshold does not apply to whole-site tank rows)");
+    assert(diesel.rows.every((r) => dieselGeneratorPresentation(r as never).primary === "Whole-site tank"), "diesel: the UI does not present the checklist label as a generator identity");
+    assert(gen.rows.every((r) => r.assetId !== null && r.recordOrigin === "migrated_historical" && r.startedAt === null && r.endedAt === null), "generator logs: hour-meter rows keep their proven asset link and have no invented clock times");
+    // consumables register
+    const reg = (await cons.repo.listRegisterEntries()) as Array<Record<string, unknown>>;
+    assert(reg.length === 31 && reg.every((e) => e.snapshotDate === null && e.recordOrigin === "migrated_historical" && e.itemName), "consumables register: all 31 entries are readable through the real reader, undated, with item names");
+    const q = (e: Record<string, unknown>, k: string) => e[k] as { quantity: number | null; unit: string | null; raw: string | null };
+    assert(reg.every((e) => ["opening", "received", "issued", "closing", "reorderLevel"].every((k) => (q(e, k).quantity === null) === (q(e, k).unit === null))), "consumables register: a quantity and its unit always travel together; a missing one is null, never 0");
+    assert(reg.every((e) => q(e, "closing").quantity === null && q(e, "reorderLevel").quantity === null), "consumables register: closing and reorder level were not stated by the register and are NOT derived");
+    assert(reg.some((e) => q(e, "opening").quantity !== null && q(e, "opening").unit) && reg.some((e) => q(e, "issued").quantity === null), "consumables register: recorded quantities keep their own unit and unrecorded ones stay null");
+    const { formatRegisterQuantity } = await import("../src/modules/consumables-update/components/ConsumablesRegisterEvidence");
+    assert(reg.every((e) => q(e, "issued").quantity !== null || formatRegisterQuantity(q(e, "issued")) === "Not recorded"), "consumables register: an unrecorded quantity renders 'Not recorded'");
+    // Issues
+    const { buildUnifiedIssueList, originLabel } = await import("../src/modules/issues/lib/buildUnifiedIssueList");
+    const unified = buildUnifiedIssueList({ requests: [], maintenances: maintenance, incidents });
+    assert(unified.length === maintenance.length + incidents.length, `Issues: the list is COMPLETE — ${maintenance.length} Work + ${incidents.length} incidents = ${unified.length} (the old first-100 cap showed 103)`);
+    assert(unified.every((u) => originLabel(u.issue) === "Imported record"), "Issues: every imported record is labelled as imported (not 'FM logged')");
+    assert(unified.filter((u) => u.issue.status === "unknown").length === 113 + 3 && unified.filter((u) => u.issue.status === "resolved").length === 2, "Issues: 116 show an unknown lifecycle; only the 2 explicitly 'Executed' Work records read as resolved");
+    // period correctness on the real data
+    const { scopeSnapshotToPeriod, periodCoverageNotes } = await import("../src/services/reporting/periodScope");
+    const snapshotLike = { ...n, kpis, projections: {}, health: {} } as never;
+    const aug = scopeSnapshotToPeriod(snapshotLike, { kind: "month", year: 2026, month: 8 }, { timeZone: "Africa/Lagos" });
+    const sep = scopeSnapshotToPeriod(snapshotLike, { kind: "month", year: 2026, month: 9 }, { timeZone: "Africa/Lagos" });
+    assert(aug.incidents.length === incidents.filter((i) => (i.reportedAt ?? "").startsWith("2026-08")).length && aug.incidents.length > 0, "reporting period: August contains exactly the incidents dated in August");
+    assert(aug.maintenance.length === 0 && aug.workOrders.length === 0 && sep.maintenance.length === 0 && sep.workOrders.length === 0 && sep.incidents.length === 0, "reporting period: the 115 Work / 113 WI (no recorded date) belong to NO period — not August, not the import month (September)");
+    assert(aug.periodCoverage!.undated.maintenance === 115 && aug.periodCoverage!.undated.workOrders === 113 && /carry no recorded date/.test(periodCoverageNotes(aug).join(" ")), "reporting period: 115 + 113 undated records are counted and disclosed, never zero or all-clear");
+    pass("Product reconciliation (live): nine-domain audit, asset code + 'Status not recorded', diesel label + no false 'High usage', consumables register readable with null/unit semantics, Issues complete + labelled, report periods honest");
+  }
+
   console.log(out.join("\n"));
   console.log(`\n${out.length} groups passed — read-only`);
 }

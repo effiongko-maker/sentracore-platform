@@ -8,6 +8,7 @@ import { buildMonthlyFacilityReportDocument } from "./builders/MonthlyReportBuil
 import { buildQuarterlyReportDocument } from "./builders/QuarterlyReportBuilder";
 import { facilityLabel, periodLabel } from "./builders/shared";
 import { buildWorkOrderReportDocument } from "./builders/WorkOrderReportBuilder";
+import { scopeSnapshotToPeriod } from "@/services/reporting/periodScope";
 import { exportTemplatedDocument } from "./exporters";
 import { TemplateAdapter } from "./templates/TemplateAdapter";
 import type {
@@ -72,7 +73,8 @@ export const DocumentBuilderService = {
     request: DocumentGenerationRequest
   ): ReportDocumentModel {
     const context = resolveContext(snapshot, request);
-    return builders[request.kind](snapshot, context);
+    // The period is a real scope, not a label: dated records outside it are excluded, undated ones are disclosed.
+    return builders[request.kind](scopeSnapshotToPeriod(snapshot, request.period), context);
   },
 
   adapt(

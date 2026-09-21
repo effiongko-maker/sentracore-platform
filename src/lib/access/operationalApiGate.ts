@@ -28,6 +28,7 @@ export type OperationalProxyResource =
 const READ_ACTIONS = new Set([
   "getAll",
   "getById",
+  "getRegisterEntries",
   "getFilterCatalog",
   "listCatalog",
   "buildInfo",

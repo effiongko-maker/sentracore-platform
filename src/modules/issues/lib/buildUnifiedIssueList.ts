@@ -73,6 +73,7 @@ export function buildUnifiedIssueList(input: {
         createdAt: maintenance.createdAt,
         updatedAt: maintenance.updatedAt,
         createdByUserId: maintenance.createdByUserId,
+        recordOrigin: maintenance.recordOrigin,
       },
     });
     items.push({ issue, view: buildIssueOperationalView(issue) });
@@ -100,6 +101,7 @@ export function buildUnifiedIssueList(input: {
         createdAt: incident.createdAt,
         updatedAt: incident.updatedAt,
         reportedByUserId: incident.reportedByUserId,
+        recordOrigin: incident.recordOrigin,
       },
     });
     items.push({ issue, view: buildIssueOperationalView(issue) });
@@ -115,6 +117,8 @@ export function buildUnifiedIssueList(input: {
 }
 
 export function originLabel(issue: Issue): string {
+  // An imported record's origin is not proven: it was NOT necessarily "logged by FM".
+  if (issue.recordOrigin === "migrated_historical") return "Imported record";
   if (issue.source === "staff_request") return "Staff request";
   if (issue.source === "facility_manager" || issue.rootMaintenanceId || issue.rootIncidentId) {
     return "FM logged";

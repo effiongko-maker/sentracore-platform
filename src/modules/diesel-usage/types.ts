@@ -22,6 +22,11 @@ export interface DieselUsage {
    * Never manually entered; recalculated on create/update.
    */
   consumption: number;
+  /**
+   * migrated_historical rows come from the MBORA diesel-tank checklist: `generatorId` is then a SOURCE LABEL for the
+   * whole-site tank, not a generator, and no per-generator threshold applies. Derived from migration provenance.
+   */
+  recordOrigin?: "operational" | "migrated_historical";
   createdAt: string;
   updatedAt: string;
   createdByUserId?: string;

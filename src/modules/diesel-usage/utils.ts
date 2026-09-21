@@ -57,20 +57,42 @@ export function isNegativeConsumption(consumption: number): boolean {
   return Number.isFinite(consumption) && consumption < 0;
 }
 
-/** Spec flags for a calculated consumption value. */
+/**
+ * Spec flags for a calculated consumption value.
+ *
+ * `high_usage` is a per-generator-entry threshold (DIESEL_HIGH_USAGE_THRESHOLD_L litres for one generator's entry).
+ * A migrated historical row is a WHOLE-SITE tank checklist measurement (hundreds to thousands of litres per day
+ * across every generator), so that threshold does not apply and the flag would be a false alarm on every row.
+ * Negative consumption is arithmetic and applies to every row.
+ */
 export function getDieselUsageFlagKinds(
-  consumption: number
+  consumption: number,
+  origin?: "operational" | "migrated_historical"
 ): DieselUsageFlagKind[] {
   const flags: DieselUsageFlagKind[] = [];
   if (isNegativeConsumption(consumption)) flags.push("negative_consumption");
-  if (isHighUsage(consumption)) flags.push("high_usage");
+  if (origin !== "migrated_historical" && isHighUsage(consumption)) flags.push("high_usage");
   return flags;
 }
 
-export function getDieselUsageFlagLabels(consumption: number): string[] {
-  return getDieselUsageFlagKinds(consumption).map(
+export function getDieselUsageFlagLabels(
+  consumption: number,
+  origin?: "operational" | "migrated_historical"
+): string[] {
+  return getDieselUsageFlagKinds(consumption, origin).map(
     (kind) => DIESEL_USAGE_FLAG_LABELS[kind]
   );
+}
+
+/** Presentation of the "generator" field: a migrated row's value is the source checklist label, not a generator. */
+export function dieselGeneratorPresentation(entry: {
+  generatorId?: string;
+  recordOrigin?: "operational" | "migrated_historical";
+}): { primary: string; note?: string } {
+  if (entry.recordOrigin === "migrated_historical") {
+    return { primary: "Whole-site tank", note: entry.generatorId ? `Source: ${entry.generatorId}` : undefined };
+  }
+  return { primary: entry.generatorId || "—" };
 }
 
 export function toCreateFormValues(entry?: DieselUsage | null) {

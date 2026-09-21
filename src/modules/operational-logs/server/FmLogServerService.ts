@@ -28,6 +28,8 @@ export class FmLogServerService {
       }
       case "getById":
         return repo.getById(parseLogIdPayload(payload, spec.label));
+      case "getRegisterEntries":
+        return repo.listRegisterEntries();
       case "create":
         return repo.create(spec.parseCreate(payload), this.ctx.profileId);
       case "update": {

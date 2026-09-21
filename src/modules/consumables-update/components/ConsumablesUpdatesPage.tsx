@@ -14,6 +14,7 @@ import { useQueryRecordId } from "@/hooks/useQueryRecordId";
 import { useConsumablesUpdates } from "../hooks/useConsumablesUpdates";
 import type { ConsumablesUpdateModalState } from "../types";
 import { ConsumablesUpdateService } from "../services/ConsumablesUpdateService";
+import { ConsumablesRegisterEvidence } from "./ConsumablesRegisterEvidence";
 import { ConsumablesUpdateFormModal } from "./ConsumablesUpdateFormModal";
 import { ConsumablesUpdatesTable } from "./ConsumablesUpdatesTable";
 import { ConsumablesUpdatesToolbar } from "./ConsumablesUpdatesToolbar";
@@ -128,6 +129,8 @@ export function ConsumablesUpdatesPage() {
           />
         </StreamSurface>
       )}
+
+      <ConsumablesRegisterEvidence />
 
       <ConsumablesUpdateFormModal
         open={modal.type === "create" || modal.type === "edit"}

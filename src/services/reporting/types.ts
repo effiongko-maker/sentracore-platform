@@ -95,6 +95,16 @@ export interface ReportingSnapshotMeta {
   unavailableSources?: Array<"users" | "facilities" | "maintenance" | "incidents" | "workOrders" | "assets">;
 }
 
+/** What a period-scoped snapshot covers. Undated records belong to NO period and are disclosed, never folded in. */
+export interface ReportingPeriodCoverage {
+  start: string;
+  end: string;
+  timeZone: string;
+  inPeriod: { incidents: number; maintenance: number; workOrders: number };
+  undated: { incidents: number; maintenance: number; workOrders: number };
+  outsidePeriod: { incidents: number; maintenance: number; workOrders: number };
+}
+
 /**
  * Platform-neutral reporting DTO.
  * Consumed by Dashboard, Reports, Exports, Executive views, etc.
@@ -112,6 +122,8 @@ export interface ReportingSnapshot {
   kpis: ReportingKpis;
   projections: ReportingProjections;
   health: ReportingHealth;
+  /** Present only when the snapshot was restricted to a report period (see scopeSnapshotToPeriod). */
+  periodCoverage?: ReportingPeriodCoverage;
   /** Freshness metadata for staleness checks. Safe for consumers to ignore. */
   _snapshotMeta?: ReportingSnapshotMeta;
 }

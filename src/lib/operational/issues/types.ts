@@ -232,6 +232,8 @@ export type IssueOperationalView = {
  * Not persisted as its own sheet/table.
  */
 export type Issue = {
+  /** migrated_historical = an imported record (its `source` origin is not proven); undefined = operational. */
+  recordOrigin?: "operational" | "migrated_historical";
   /**
    * Stable application id for this composition.
    * - Request-backed: `issue:request:{REQ-*}`
@@ -366,6 +368,8 @@ export type ComposeIssueFromMaintenanceInput = {
     createdAt: string;
     updatedAt: string;
     createdByUserId?: string;
+    /** migrated_historical = imported record: its origin ("FM logged") is not proven. */
+    recordOrigin?: "operational" | "migrated_historical";
   };
   workOrders?: Array<ComposeIssueWorkOrderInput | null>;
   /** Optional linked Incident handling — not the root; specialised capability when present. */
@@ -399,6 +403,7 @@ export type ComposeIssueFromIncidentInput = {
     createdAt: string;
     updatedAt: string;
     reportedByUserId?: string;
+    recordOrigin?: "operational" | "migrated_historical";
   };
   maintenances?: Array<{
     id: string;

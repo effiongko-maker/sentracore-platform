@@ -199,18 +199,14 @@ export function OperationalRegistersPage() {
       </header>
 
       <section aria-label="Operational registers">
-        <ul className="grid list-none gap-4 sm:grid-cols-2">
-          {REGISTERS.map((register, index) => {
-            const isLast = index === REGISTERS.length - 1;
-            return (
-              <li
-                key={register.href}
-                className={cn(isLast && "sm:col-span-2")}
-              >
-                <RegisterCard register={register} />
-              </li>
-            );
-          })}
+        {/* Six registers: 1 column on phones, 2×3 on tablets, 3×2 on desktop — every row is complete and every card
+            has the same width (no card is stretched to fill an orphaned slot). */}
+        <ul className="grid list-none gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {REGISTERS.map((register) => (
+            <li key={register.href}>
+              <RegisterCard register={register} />
+            </li>
+          ))}
         </ul>
       </section>
     </ModeFrame>

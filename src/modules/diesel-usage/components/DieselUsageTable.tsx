@@ -4,9 +4,14 @@ import { useMemo } from "react";
 import { Fuel } from "lucide-react";
 import { DataTable, type Column } from "@/components/tables/DataTable";
 import { formatDate } from "@/lib/utils";
-import { getDieselUsageFlagLabels } from "../utils";
+import { useFacilityName } from "@/hooks/useEntityLabel";
+import { dieselGeneratorPresentation, getDieselUsageFlagLabels } from "../utils";
 import type { DieselUsage } from "../types";
 import { DieselUsageRowActions } from "./DieselUsageRowActions";
+
+function FacilityLabel({ id }: { id: string }) {
+  return <>{useFacilityName(id) || "—"}</>;
+}
 
 function formatLitres(value: number | undefined): string {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -52,17 +57,25 @@ export function DieselUsageTable({
       },
       {
         key: "facilityId",
-        header: "Facility ID",
+        header: "Facility",
         render: (entry) => (
-          <span className="text-foreground">{entry.facilityId || "—"}</span>
+          <span className="text-foreground">
+            <FacilityLabel id={entry.facilityId} />
+          </span>
         ),
       },
       {
         key: "generatorId",
         header: "Generator ID",
-        render: (entry) => (
-          <span className="text-foreground">{entry.generatorId || "—"}</span>
-        ),
+        render: (entry) => {
+          const generator = dieselGeneratorPresentation(entry);
+          return (
+            <div>
+              <span className="text-foreground">{generator.primary}</span>
+              {generator.note ? <p className="text-xs text-muted">{generator.note}</p> : null}
+            </div>
+          );
+        },
       },
       {
         key: "openingLevel",
@@ -95,7 +108,7 @@ export function DieselUsageTable({
         key: "consumption",
         header: "Consumption (L)",
         render: (entry) => {
-          const flags = getDieselUsageFlagLabels(entry.consumption);
+          const flags = getDieselUsageFlagLabels(entry.consumption, entry.recordOrigin);
           return (
             <div>
               <span className="tabular-nums font-medium text-foreground">

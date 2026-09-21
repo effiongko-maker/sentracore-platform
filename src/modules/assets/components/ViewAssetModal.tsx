@@ -6,9 +6,8 @@ import { Button } from "@/components/ui/Button";
 import { toDateInputValue } from "../utils";
 import {
   ASSET_CRITICALITY_VARIANT,
-  ASSET_STATUS_VARIANT,
 } from "../constants";
-import { getAssetInitials, labelize } from "../utils";
+import { assetStatusPresentation, getAssetInitials, labelize } from "../utils";
 import type { Asset } from "../types";
 
 interface ViewAssetModalProps {
@@ -42,7 +41,7 @@ export function ViewAssetModal({
       open={open}
       onClose={onClose}
       title={asset.name}
-      description={asset.id}
+      description={asset.code}
       size="lg"
       footer={
         <>
@@ -69,8 +68,8 @@ export function ViewAssetModal({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-base font-semibold text-primary">{asset.name}</p>
-            <Badge variant={ASSET_STATUS_VARIANT[asset.status]}>
-              {labelize(asset.status)}
+            <Badge variant={assetStatusPresentation(asset).variant}>
+              {assetStatusPresentation(asset).label}
             </Badge>
             <Badge variant={ASSET_CRITICALITY_VARIANT[asset.criticality]}>
               {labelize(asset.criticality)}
@@ -83,7 +82,7 @@ export function ViewAssetModal({
       </div>
 
       <div className="mt-5 grid gap-5 sm:grid-cols-2">
-        <Detail label="Asset ID" value={asset.id} />
+        <Detail label="Asset ID" value={asset.code} />
         <Detail label="Category" value={labelize(asset.category)} />
         <Detail label="Facility" value={asset.facility} />
         <Detail label="Manufacturer" value={asset.manufacturer} />
@@ -113,8 +112,8 @@ export function ViewAssetModal({
         <Detail
           label="Status"
           value={
-            <Badge variant={ASSET_STATUS_VARIANT[asset.status]}>
-              {labelize(asset.status)}
+            <Badge variant={assetStatusPresentation(asset).variant}>
+              {assetStatusPresentation(asset).label}
             </Badge>
           }
         />

@@ -62,6 +62,7 @@ export function composeIssueFromMaintenance(
   );
 
   return {
+    recordOrigin: m.recordOrigin,
     id: `issue:maintenance:${m.id}`,
     reference: m.id,
     title: m.title,
@@ -160,6 +161,7 @@ export function composeIssueFromIncident(
   );
 
   return {
+    recordOrigin: inc.recordOrigin,
     id: `issue:incident:${inc.id}`,
     reference: inc.id,
     title: inc.title,

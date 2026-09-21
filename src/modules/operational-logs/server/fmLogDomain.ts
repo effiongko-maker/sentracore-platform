@@ -149,7 +149,7 @@ export type FmLogSpec = {
   parseCreate(payload: unknown): ParsedWrite;
   parseUpdate(payload: unknown): { id: string } & ParsedWrite;
   parseExtras(raw: Record<string, unknown>): ListExtras;
-  map(row: Record<string, unknown>, ctx?: { itemById?: Map<string, { code: string; name: string }> }): Record<string, unknown>;
+  map(row: Record<string, unknown>, ctx?: { itemById?: Map<string, { code: string; name: string }>; migrated?: Set<string> }): Record<string, unknown>;
 };
 
 function updateId(raw: Record<string, unknown>, label: string): string {
@@ -263,7 +263,9 @@ export const DIESEL_SPEC: FmLogSpec = {
     return { id: updateId(r, "Diesel usage"), facilityRef: optionalRequiredText(r, "facilityId", "Facility"), columns: c };
   },
   parseExtras: (r) => ({ eq: eq(r, ["generatorId", "generator_ref"]) }),
-  map: (row) => ({ ...base(row), date: s(row, "log_date"), facilityId: s(row, "facility_id"), generatorId: s(row, "generator_ref"), openingLevel: n(row, "opening_level"), added: n(row, "added"), closingLevel: n(row, "closing_level"), consumption: n(row, "consumption") }),
+  // recordOrigin comes from the migration provenance ledger (the table has no origin column): a migrated row's
+  // generator_ref is a SOURCE LABEL (the tank checklist), not a generator identity.
+  map: (row, ctx) => ({ ...base(row), date: s(row, "log_date"), facilityId: s(row, "facility_id"), generatorId: s(row, "generator_ref"), openingLevel: n(row, "opening_level"), added: n(row, "added"), closingLevel: n(row, "closing_level"), consumption: n(row, "consumption"), recordOrigin: ctx?.migrated?.has(String(row.id)) ? "migrated_historical" : "operational" }),
 };
 
 export const WASTE_SPEC: FmLogSpec = {

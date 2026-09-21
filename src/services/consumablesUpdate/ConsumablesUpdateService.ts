@@ -1,5 +1,6 @@
 import type { PaginatedResult } from "@/types";
 import type {
+  ConsumablesRegisterEntry,
   ConsumablesUpdate,
   ConsumablesUpdateListParams,
   CreateConsumablesUpdateInput,
@@ -134,6 +135,20 @@ function withoutManualClosing<T extends Record<string, unknown>>(input: T): T {
 }
 
 export const ConsumablesUpdateService = {
+  /**
+   * Migrated historical register evidence. A failure REJECTS (the caller shows "unavailable") — an unreadable
+   * register is never rendered as an empty one.
+   */
+  async listRegisterEntries(options?: { signal?: AbortSignal }): Promise<ConsumablesRegisterEntry[]> {
+    const response = await apiClient.post<unknown>(
+      "/consumables-update",
+      { resource: "consumables-update", action: "getRegisterEntries", payload: {} },
+      { signal: options?.signal }
+    );
+    if (!Array.isArray(response.data)) throw new Error("Register entries response was not a list.");
+    return response.data as ConsumablesRegisterEntry[];
+  },
+
   async listConsumablesUpdates(
     params: ConsumablesUpdateListParams = {},
     options?: { signal?: AbortSignal }

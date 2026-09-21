@@ -1,4 +1,5 @@
 import "server-only";
+import { migratedHistoricalIds } from "@/lib/migration/historicalOrigin";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
   FmLogNotFoundError,
@@ -109,8 +110,48 @@ export class FmLogRepository {
 
   // ------------------------------------------------------------------ reads
 
+  /**
+   * Migrated historical consumables REGISTER evidence (read-only). Quantities and units are returned exactly as
+   * stored: NULL stays null (never 0), each unit stays with its own field, and nothing is summed or reconciled.
+   */
+  async listRegisterEntries(): Promise<Record<string, unknown>[]> {
+    if (this.spec.resource !== "consumables-update") throw new FmLogValidationError("Register entries belong to consumables only.");
+    const cols = "id, facility_id, item_id, snapshot_date, opening_quantity, opening_unit, received_quantity, received_unit, issued_quantity, issued_unit, closing_quantity, closing_unit, reorder_level_quantity, reorder_level_unit, raw_opening, raw_received, raw_issued, raw_closing, raw_reorder_level, created_at";
+    const rows: Row[] = [];
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await this.admin.from("fm_consumables_register_entries").select(cols).eq("organisation_id", this.organisationId).order("created_at", { ascending: true }).order("id", { ascending: true }).range(offset, offset + 999);
+      if (error) throwDb(error, "load consumables register entries");
+      const batch = (data ?? []) as unknown as Row[];
+      rows.push(...batch);
+      if (batch.length < 1000) break;
+    }
+    const items = await this.itemMap(rows.map((r) => String(r.item_id)));
+    const qty = (r: Row, key: string, raw: string) => ({
+      quantity: r[`${key}_quantity`] == null ? null : Number(r[`${key}_quantity`]),
+      unit: r[`${key}_unit`] == null ? null : String(r[`${key}_unit`]),
+      raw: r[raw] == null ? null : String(r[raw]),
+    });
+    return rows.map((r) => ({
+      id: String(r.id),
+      itemId: String(r.item_id),
+      itemCode: items.get(String(r.item_id))?.code ?? "",
+      itemName: items.get(String(r.item_id))?.name ?? "",
+      facilityId: String(r.facility_id),
+      snapshotDate: r.snapshot_date == null ? null : String(r.snapshot_date),
+      opening: qty(r, "opening", "raw_opening"),
+      received: qty(r, "received", "raw_received"),
+      issued: qty(r, "issued", "raw_issued"),
+      closing: qty(r, "closing", "raw_closing"),
+      reorderLevel: qty(r, "reorder_level", "raw_reorder_level"),
+      recordOrigin: "migrated_historical",
+    }));
+  }
+
   private async hydrate(rows: Row[]) {
-    const ctx = this.spec.resource === "consumables-update" ? { itemById: await this.itemMap(rows.map((r) => String(r.item_id))) } : undefined;
+    const migrated = this.spec.resource === "diesel-usage"
+      ? await migratedHistoricalIds(this.admin, this.organisationId, this.spec.table, rows.map((r) => String(r.id)))
+      : undefined;
+    const ctx = this.spec.resource === "consumables-update" ? { itemById: await this.itemMap(rows.map((r) => String(r.item_id))) } : migrated ? { migrated } : undefined;
     return rows.map((r) => this.spec.map(r, ctx));
   }
 
