@@ -37,7 +37,7 @@ const SAME = (...names: string[]) => Object.fromEntries(names.map((n) => [n, n])
 export const TARGET_SPECS: Record<ImportTarget, TargetSpec> = {
   fm_assets: {
     prefix: "AST",
-    columns: SAME("facility_id", "name", "category", "manufacturer", "model", "serial_number", "condition", "status", "criticality"),
+    columns: SAME("facility_id", "name", "category", "manufacturer", "model", "serial_number", "condition", "status", "criticality", "record_origin"),
     nonPersisted: ["facility_code", "source_only_preserved"],
     references: {},
   },
@@ -73,7 +73,7 @@ export const TARGET_SPECS: Record<ImportTarget, TargetSpec> = {
   },
   fm_diesel_usage: {
     prefix: "DSLU",
-    columns: SAME("facility_id", "log_date", "generator_ref", "opening_level", "added", "closing_level"),
+    columns: SAME("facility_id", "log_date", "generator_ref", "opening_level", "added", "closing_level", "record_origin"),
     nonPersisted: ["facility_code", "consumption_expected_generated", "source_only_preserved"],
     references: {},
   },
@@ -243,7 +243,14 @@ export function buildImportPlan(manifest: Manifest, options: BuildOptions = {}):
   for (const i of rows.filter((r) => r.target === "fm_incidents")) {
     if (i.columns.record_origin !== "migrated_historical") problems.push(`fm_incidents ${i.id}: record_origin must be migrated_historical`);
   }
+  for (const a of rows.filter((r) => r.target === "fm_assets" || r.target === "fm_diesel_usage")) {
+    if (a.columns.record_origin !== "migrated_historical") problems.push(`${a.target} ${a.id}: record_origin must be migrated_historical`);
+  }
+  for (const d of rows.filter((r) => r.target === "fm_diesel_usage")) {
+    if (d.columns.generator_ref !== null) problems.push(`fm_diesel_usage ${d.id}: no generator is evidenced by the source, generator_ref must be NULL`);
+  }
   for (const a of rows.filter((r) => r.target === "fm_assets")) {
+    if (a.columns.status === "pending") problems.push(`fm_assets ${a.id}: status "pending" is a schema default, not source-evidenced`);
     if (a.columns.condition === "good") problems.push(`fm_assets ${a.id}: condition "good" is not source-evidenced`);
     for (const f of ["manufacturer", "model", "serial_number"]) if (a.columns[f] !== null) problems.push(`fm_assets ${a.id}: ${f} is speculative metadata`);
   }

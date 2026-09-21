@@ -1,6 +1,4 @@
 import "server-only";
-import { createAdminClient } from "@/utils/supabase/admin";
-import { migratedHistoricalIds, originOf } from "@/lib/migration/historicalOrigin";
 import { ActionError } from "@/lib/actions/errors";
 import type { OperatingAccess } from "@/lib/access/resolveAccess";
 import type { PlatformSession } from "@/lib/auth/types";
@@ -42,8 +40,7 @@ export class FmAssetServerService {
   }
   private async hydrate(rows: FmAssetRow[]): Promise<Asset[]> {
     const relations = await this.repo().relations(rows);
-    const migrated = await migratedHistoricalIds(createAdminClient(), this.ctx.organisationId, "fm_assets", rows.map((r) => r.id));
-    return rows.map((row) => mapFmAssetRow(row, relations.get(row.id), originOf(migrated, row.id)));
+    return rows.map((row) => mapFmAssetRow(row, relations.get(row.id)));
   }
 
   async list(payload: unknown): Promise<PaginatedResult<Asset>> {

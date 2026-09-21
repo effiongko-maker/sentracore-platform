@@ -1,4 +1,5 @@
-export type AssetStatus = "active" | "inactive" | "pending" | "suspended";
+/** `unknown` = a migrated historical asset whose source states no status. Never selectable in the product. */
+export type AssetStatus = "active" | "inactive" | "pending" | "suspended" | "unknown";
 
 export type AssetCondition = "excellent" | "good" | "fair" | "poor" | "unknown";
 
@@ -43,11 +44,7 @@ export interface Asset {
   /** Assigned person display name projected from the profile. */
   assignedTo: string;
   criticality: AssetCriticality;
-  /**
-   * operational (product-created) | migrated_historical (imported from a spreadsheet). Derived from the migration
-   * provenance ledger; never set from input. A migrated asset's `pending` status is the schema default written at
-   * import, NOT a recorded status — presentation must not show it as one.
-   */
+  /** operational (product-created, strict) | migrated_historical (explicit migration). Never set from input. */
   recordOrigin?: "operational" | "migrated_historical";
   /**
    * Derived client-side (no Assets sheet workload column).

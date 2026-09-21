@@ -199,13 +199,16 @@ async function main() {
     assert(assets.every((a) => /^AST-\d{4}-\d{6}$/.test(a.code) && a.facility === "NCC Annex" && a.facilityId === FAC), "assets: canonical AST- codes and the facility NAME are available to the UI (UUIDs stay internal)");
     // asset status semantics
     const { assetStatusPresentation } = await import("../src/modules/assets/utils");
-    assert(assets.every((a) => a.recordOrigin === "migrated_historical" && a.status === "pending" && a.condition === "unknown" && a.criticality === "unassessed"), "assets: all 9 are identified as migrated; stored status is the schema default 'pending', condition 'unknown', criticality 'unassessed' (nothing rewritten)");
-    assert(assets.every((a) => assetStatusPresentation(a).label === "Status not recorded"), "assets: the UI presents 'Status not recorded', not 'Pending'; Condition Unknown and Criticality Unassessed are shown as stored");
+    assert(assets.every((a) => a.recordOrigin === "migrated_historical" && a.status === "unknown" && a.condition === "unknown" && a.criticality === "unassessed"), "assets: all 9 are migrated_historical (record_origin) with status 'unknown', condition 'unknown', criticality 'unassessed' — the DATABASE is authoritative");
+    assert(assets.every((a) => assetStatusPresentation(a).label === "Status not recorded"), "assets: the stored 'unknown' reads 'Status not recorded'; Condition Unknown and Criticality Unassessed are shown as stored");
+    assert(!assets.some((a) => a.status === "pending"), "assets: no imported asset carries the importer-default 'pending'");
     // diesel semantics
     const { getDieselUsageFlagLabels, dieselGeneratorPresentation } = await import("../src/modules/diesel-usage/utils");
-    assert(diesel.rows.every((r) => r.recordOrigin === "migrated_historical" && r.generatorId === "MBORA DIESEL Checklist"), "diesel: all 14 rows are identified as migrated and carry the source label");
+    assert(diesel.rows.every((r) => r.recordOrigin === "migrated_historical" && r.generatorId === null), "diesel: all 14 rows are migrated_historical (record_origin) with NO generator — the source sheet name is provenance, not identity");
+    const { data: dprov } = await admin.from("fm_migration_provenance").select("source_sheet").eq("organisation_id", organisationId).eq("target_table", "fm_diesel_usage");
+    assert((dprov ?? []).length === 14 && (dprov ?? []).every((p) => (p as { source_sheet: string }).source_sheet === "MBORA DIESEL Checklist"), "diesel: the source label is preserved as provenance (source_sheet) on all 14 rows");
     assert(diesel.rows.every((r) => getDieselUsageFlagLabels(Number(r.consumption), r.recordOrigin as never).length === 0) && diesel.rows.some((r) => Number(r.consumption) > 100), "diesel: NO row is labelled 'High usage' (the 100 L per-generator threshold does not apply to whole-site tank rows)");
-    assert(diesel.rows.every((r) => dieselGeneratorPresentation(r as never).primary === "Whole-site tank"), "diesel: the UI does not present the checklist label as a generator identity");
+    assert(diesel.rows.every((r) => dieselGeneratorPresentation(r as never).primary === "Whole-site tank"), "diesel: the UI presents a whole-site tank, not a generator identity");
     assert(gen.rows.every((r) => r.assetId !== null && r.recordOrigin === "migrated_historical" && r.startedAt === null && r.endedAt === null), "generator logs: hour-meter rows keep their proven asset link and have no invented clock times");
     // consumables register
     const reg = (await cons.repo.listRegisterEntries()) as Array<Record<string, unknown>>;

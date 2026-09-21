@@ -84,15 +84,17 @@ export function getDieselUsageFlagLabels(
   );
 }
 
-/** Presentation of the "generator" field: a migrated row's value is the source checklist label, not a generator. */
+/**
+ * Presentation of the "generator" field. A migrated historical row is a whole-site tank measurement with no
+ * generator (generatorId is null): it reads "Whole-site tank", never a generator id and never a source label.
+ */
 export function dieselGeneratorPresentation(entry: {
-  generatorId?: string;
+  generatorId?: string | null;
   recordOrigin?: "operational" | "migrated_historical";
 }): { primary: string; note?: string } {
-  if (entry.recordOrigin === "migrated_historical") {
-    return { primary: "Whole-site tank", note: entry.generatorId ? `Source: ${entry.generatorId}` : undefined };
-  }
-  return { primary: entry.generatorId || "—" };
+  if (entry.generatorId) return { primary: entry.generatorId };
+  if (entry.recordOrigin === "migrated_historical") return { primary: "Whole-site tank", note: "No generator recorded" };
+  return { primary: "—" };
 }
 
 export function toCreateFormValues(entry?: DieselUsage | null) {

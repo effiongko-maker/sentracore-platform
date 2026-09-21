@@ -205,7 +205,7 @@ async function main() {
 
   // R. no schema-forced FALSE FACTS remain (20260921110000): unknown is stored as unknown
   {
-    const APPROVED_DIGEST = "271c3b2ab368227737f80f36352ae8d9f298120675142fe34544e589c35e4722";
+    const APPROVED_DIGEST = "86938d1dd1917418462fad463f8a21e36064b96b307c134463fb55c13f604b24";
     assert(manifestDigest(m) === APPROVED_DIGEST, `R: manifest digest is the approved ${APPROVED_DIGEST.slice(0, 16)}… (a change needs a new reviewed approval)`);
     const of = (t: string) => m.records.filter((r) => r.target === t);
     assert(of("fm_incidents").length === 3 && of("fm_incidents").every((r) => r.values.status === "unknown" && r.values.severity === "unknown" && r.values.record_origin === "migrated_historical"), "R: the 3 incidents carry status=unknown, severity=unknown, migrated_historical (the source has no such columns)");

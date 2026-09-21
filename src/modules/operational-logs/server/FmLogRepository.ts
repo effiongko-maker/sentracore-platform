@@ -1,5 +1,4 @@
 import "server-only";
-import { migratedHistoricalIds } from "@/lib/migration/historicalOrigin";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
   FmLogNotFoundError,
@@ -148,10 +147,7 @@ export class FmLogRepository {
   }
 
   private async hydrate(rows: Row[]) {
-    const migrated = this.spec.resource === "diesel-usage"
-      ? await migratedHistoricalIds(this.admin, this.organisationId, this.spec.table, rows.map((r) => String(r.id)))
-      : undefined;
-    const ctx = this.spec.resource === "consumables-update" ? { itemById: await this.itemMap(rows.map((r) => String(r.item_id))) } : migrated ? { migrated } : undefined;
+    const ctx = this.spec.resource === "consumables-update" ? { itemById: await this.itemMap(rows.map((r) => String(r.item_id))) } : undefined;
     return rows.map((r) => this.spec.map(r, ctx));
   }
 

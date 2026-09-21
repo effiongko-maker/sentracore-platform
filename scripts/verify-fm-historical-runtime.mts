@@ -178,7 +178,7 @@ const workRow = (over: Record<string, unknown>) => ({
   const histWi = { id: "WO-H", status: "unknown", priority: "unknown", recordOrigin: "migrated_historical", createdAt: importedAt, updatedAt: importedAt, title: "h" };
   const liveWi = { id: "WO-L", status: "open", priority: "high", recordOrigin: "operational", createdAt: NOW, updatedAt: NOW, title: "l" };
   const histWork = { id: "WRK-H", status: "unknown", priority: "unknown", recordOrigin: "migrated_historical", createdAt: importedAt, updatedAt: importedAt, title: "h" };
-  const asset = (over: Record<string, unknown>) => ({ id: "a", status: "pending", condition: "unknown", ...over });
+  const asset = (over: Record<string, unknown>) => ({ id: "a", status: "unknown", condition: "unknown", ...over });
   const k = kpisOf({ asOf: NOW, facilities: [], users: [], incidents: [], assets: [asset({}), asset({ id: "b" })] as never, maintenance: [histWork] as never, workOrders: [histWi, liveWi] as never });
   assert(k.workOrdersCreatedToday === 1, "KPI: only the LIVE work order is 'created today'; the migrated one (created at import time) is not");
   assert(k.assetsOperationalPercent === null && k.activeAssets === 0, "KPI: assets with no recorded status → availability unknown (null), not 0%");
@@ -216,8 +216,10 @@ const workRow = (over: Record<string, unknown>) => ({
   const { resolvePeriodRange, scopeSnapshotToPeriod, periodCoverageNotes } = await import("../src/services/reporting/periodScope");
 
   // assets
-  assert(assetStatusPresentation({ status: "pending", recordOrigin: "migrated_historical" }).label === "Status not recorded", "asset: a migrated asset's schema-default 'pending' reads 'Status not recorded'");
-  assert(assetStatusPresentation({ status: "pending", recordOrigin: "operational" }).label === "Pending" && assetStatusPresentation({ status: "active", recordOrigin: "migrated_historical" }).label === "Active", "asset: a genuine Pending, and any recorded status, are unchanged");
+  assert(assetStatusPresentation({ status: "unknown" }).label === "Status not recorded" && assetStatusPresentation({ status: "unknown" }).variant === "neutral", "asset: status 'unknown' (stored by the database) reads 'Status not recorded'");
+  assert(assetStatusPresentation({ status: "pending" }).label === "Pending" && assetStatusPresentation({ status: "active" }).label === "Active", "asset: a genuine Pending, and every recorded status, read as themselves (no origin-based workaround remains)");
+  assert(/record_origin: rec\.record_origin != null/.test(readFileSync("src/modules/assets/server/FmAssetRepository.ts", "utf8")) && /record_origin/.test(readFileSync("src/modules/assets/server/fmAssetDomain.ts", "utf8").match(/FM_ASSET_SELECT =[\s\S]*?;/)![0]), "asset reader: record_origin is selected and carried through the repository row (a dropped column reads every asset as operational)");
+  assert(!/historicalOrigin|migratedHistoricalIds/.test(readFileSync("src/modules/assets/server/FmAssetServerService.ts", "utf8") + readFileSync("src/modules/operational-logs/server/FmLogRepository.ts", "utf8")), "the provenance-join presentation workaround is gone: origin is read from record_origin");
   const assetsTable = readFileSync("src/modules/assets/components/AssetsTable.tsx", "utf8");
   const assetModal = readFileSync("src/modules/assets/components/ViewAssetModal.tsx", "utf8");
   assert(/\{asset\.code\}/.test(assetsTable) && !/\{asset\.id\}<\/p>/.test(assetsTable) && /description=\{asset\.code\}/.test(assetModal) && /value=\{asset\.code\}/.test(assetModal) && !/value=\{asset\.id\}/.test(assetModal), "asset: the visible identifier is the AST-… code, never the UUID");
@@ -225,8 +227,8 @@ const workRow = (over: Record<string, unknown>) => ({
   // diesel
   assert(getDieselUsageFlagKinds(1400, "migrated_historical").length === 0 && getDieselUsageFlagKinds(1400, "operational").includes("high_usage") && getDieselUsageFlagKinds(1400).includes("high_usage"), "diesel: the per-generator 100 L threshold is not applied to whole-site tank rows; operational rows keep it");
   assert(getDieselUsageFlagKinds(-5, "migrated_historical").includes("negative_consumption"), "diesel: negative consumption is arithmetic and still flags historical rows");
-  const dg = dieselGeneratorPresentation({ generatorId: "MBORA DIESEL Checklist", recordOrigin: "migrated_historical" });
-  assert(dg.primary === "Whole-site tank" && dg.note === "Source: MBORA DIESEL Checklist" && dieselGeneratorPresentation({ generatorId: "Gen 1" }).primary === "Gen 1", "diesel: a migrated row's source label is provenance, not a generator identity; operational generators are unchanged");
+  const dg = dieselGeneratorPresentation({ generatorId: null, recordOrigin: "migrated_historical" });
+  assert(dg.primary === "Whole-site tank" && dg.note === "No generator recorded" && dieselGeneratorPresentation({ generatorId: "Gen 1" }).primary === "Gen 1" && dieselGeneratorPresentation({ generatorId: "Gen 1", recordOrigin: "operational" }).primary === "Gen 1", "diesel: a migrated whole-site row has NO generator (null); operational generators are unchanged");
   for (const f of ["src/modules/diesel-usage/components/DieselUsageTable.tsx", "src/modules/diesel-usage/components/ViewDieselUsageModal.tsx", "src/modules/consumables-update/components/ConsumablesUpdatesTable.tsx", "src/modules/consumables-update/components/ViewConsumablesUpdateModal.tsx"]) {
     const t = readFileSync(f, "utf8");
     assert(/useFacilityName/.test(t) && !/\{entry\.facilityId \|\| "—"\}/.test(t) && !/value=\{entry\.facilityId\}/.test(t), `facility: ${f.split("/").pop()} resolves the facility name (no raw UUID)`);
@@ -260,11 +262,17 @@ const workRow = (over: Record<string, unknown>) => ({
   assert(aug.incidents.map((i) => i.id).join() === "I-AUG" && aug.maintenance.map((m) => m.id).join() === "W-LIVE" && aug.workOrders.length === 0, "periods: only records DATED in August are kept (organisation-local date); July, undated and import-time-only rows are not");
   assert(aug.periodCoverage!.undated.incidents === 1 && aug.periodCoverage!.undated.maintenance === 1 && aug.periodCoverage!.undated.workOrders === 1 && aug.periodCoverage!.outsidePeriod.incidents === 1, "periods: undated records are counted as undated (not silently assigned), outside-period ones are counted apart");
   assert(aug.kpis.criticalWork === 1 && aug.kpis.maintenanceBacklog === 1, "periods: KPIs are recomputed from the in-period records only");
-  const sep = scopeSnapshotToPeriod(base, { kind: "month", year: 2026, month: 9 });
+  const sep = scopeSnapshotToPeriod(base, { kind: "month", year: 2026, month: 9 }, { timeZone: "UTC" });
   assert(sep.maintenance.length === 0 && sep.periodCoverage!.undated.maintenance === 1, "periods: the import date (Sep 21) does NOT make undated records part of September");
   const notes = periodCoverageNotes(aug).join(" ");
   assert(/2026-08-01 to 2026-08-31/.test(notes) && /carry no recorded date, cannot be assigned to any period/.test(notes), "periods: the disclosure says what cannot be assigned");
+  const noTz = scopeSnapshotToPeriod(base, { kind: "month", year: 2026, month: 8 }, { timeZone: null });
+  assert(noTz.periodCoverage!.applied === false && noTz.periodCoverage!.timeZone === null && noTz.incidents.length === (base as unknown as { incidents: unknown[] }).incidents.length && /could not be applied: the organisation timezone is unavailable/.test(periodCoverageNotes(noTz).join(" ")), "periods: an UNKNOWN timezone is never assumed to be UTC — the period is not applied and the report says so");
+  assert(aug.periodCoverage!.applied === true, "periods: with a configured timezone the period is applied");
   assert(scopeSnapshotToPeriod(base, { kind: "current" }) === base, "periods: a period with no range leaves the snapshot untouched (current-state)");
+  const route = readFileSync("src/app/api/access/me/route.ts", "utf8");
+  const reportsSvc = readFileSync("src/services/reports/ReportsService.ts", "utf8");
+  assert(/organisationTimeZone: timeZone/.test(route) && /session\?\.organisation\?\.timezone/.test(route) && /loadOrganisationTimeZone\(\)/.test(reportsSvc) && !/resolvedOptions/.test(readFileSync("src/services/reports/organisationTimeZone.ts", "utf8")), "timezone: the organisation's authoritative timezone (organisations.timezone) is served and used; the browser zone is never a substitute");
   pass("Product reconciliation: asset code + status, diesel generator label + threshold, facility names, Issues origin + no cap, registers grid, consumables register read, genuine report periods");
 }
 

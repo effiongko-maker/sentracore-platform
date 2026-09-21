@@ -21,6 +21,7 @@ const dir = resolve("supabase/migrations") + "/";
 const CHAIN = ["20260918190000", "20260918200000", "20260918220000", "20260918221000", "20260919120000", "20260919140000", "20260919160000", "20260919180000", "20260919200000", "20260919210000", "20260919230000", "20260919240000"];
 const NEW = "20260921100000";
 const NEW2 = "20260921110000";
+const NEW4 = "20260921130000";
 const sqlOf = (stamp: string) => readFileSync(dir + readdirSync(dir).find((n) => n.startsWith(stamp))!, "utf8");
 const ORG = "00000000-0000-4000-8000-000000000001";
 
@@ -43,7 +44,7 @@ async function freshDb(manifest: Manifest, applyNew: boolean | "first-only" = tr
   `);
   for (const stamp of CHAIN) await db.exec(sqlOf(stamp));
   if (applyNew) await db.exec(sqlOf(NEW));
-  if (applyNew === true) await db.exec(sqlOf(NEW2));
+  if (applyNew === true) { await db.exec(sqlOf(NEW2)); await db.exec(sqlOf(NEW4)); }
   await db.exec(`insert into public.organisations (id, slug) values ('${ORG}', 'o');
     insert into public.fm_facilities (id, organisation_id, code, name) values ('${manifest.facility.id}', '${ORG}', 'FAC-0001', 'NCC Annex');`);
   return db;
@@ -97,6 +98,8 @@ async function main() {
     assert(val("fm_work", "priority").length === 115 && val("fm_work", "priority").every((v) => v === "unknown"), "B: all 115 Work rows have priority=unknown");
     assert(val("fm_work_instructions", "priority").length === 113 && val("fm_work_instructions", "priority").every((v) => v === "unknown"), "B: all 113 Work Instructions have priority=unknown");
     assert(!plan.rows.some((r) => r.forcedDefaults.some((d) => /medium|reported/.test(d))), "B: no forced default asserts medium / reported");
+    assert(val("fm_assets", "status").length === 9 && val("fm_assets", "status").every((v) => v === "unknown") && val("fm_assets", "record_origin").every((v) => v === "migrated_historical"), "B: the 9 assets are status=unknown, migrated_historical (never the schema default 'pending')");
+    assert(val("fm_diesel_usage", "generator_ref").length === 14 && val("fm_diesel_usage", "generator_ref").every((v) => v === null) && val("fm_diesel_usage", "record_origin").every((v) => v === "migrated_historical"), "B: the 14 diesel rows have NO generator (NULL), migrated_historical — the sheet name is provenance, not identity");
     assert(plan.acceptedDisclosures.length === 1 && plan.acceptedDisclosures[0]!.key === "fm_incidents.incident_type=other", "B: incident_type=other is the only accepted disclosure");
     assert(plan.ignoredByDesign.assetAliases === 30 && plan.ignoredByDesign.links === 131, "B: aliases and relationships are never written");
     const aliasNames = new Set(manifest.assetAliases.map((a) => a.asset));
@@ -221,6 +224,10 @@ async function main() {
     await db.exec(`update public.fm_incidents set status = 'reported', severity = 'medium'`);
     await db.exec(`update public.fm_work set priority = 'medium' where id = (select id from public.fm_work limit 1)`);
     assert(!(await reconcile(client, unblocked)).ok, "H: reconciliation detects unknown incident status/severity or Work priority defaulted to reported/medium");
+    await db.exec(`update public.fm_assets set status = 'unknown', updated_at = updated_at`);
+    await db.exec(`update public.fm_diesel_usage set generator_ref = 'MBORA DIESEL Checklist' where id = (select id from public.fm_diesel_usage limit 1)`);
+    assert(!(await reconcile(client, unblocked)).ok, "H: reconciliation detects a source label written back as a generator identity");
+    await db.exec(`update public.fm_diesel_usage set generator_ref = null where generator_ref = 'MBORA DIESEL Checklist'`);
     await db.exec(`update public.fm_incidents set status = 'unknown', severity = 'unknown'`);
     await db.exec(`update public.fm_work set priority = 'unknown' where priority = 'medium'`);
     assert((await reconcile(client, unblocked)).ok, "H: reconciliation passes again after the tampering is reverted");

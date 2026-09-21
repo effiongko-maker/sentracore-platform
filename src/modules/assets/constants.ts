@@ -56,6 +56,8 @@ export const ASSET_STATUS_VARIANT: Record<
   pending: "warning",
   suspended: "danger",
   inactive: "neutral",
+  // Neutral and explicit: unknown is not pending and not active.
+  unknown: "neutral",
 };
 
 export const ASSET_CRITICALITY_VARIANT: Record<

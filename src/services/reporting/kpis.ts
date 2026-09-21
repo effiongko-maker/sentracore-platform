@@ -88,10 +88,10 @@ export function computeReportingKpis(input: {
   const criticalOpen = incidents.filter(isCriticalOpenIncident);
   const criticalWorkOpen = maintenance.filter(isCriticalOpenWork);
 
-  // Availability is measured over assets whose operational posture is KNOWN. A `pending` asset (e.g. a migrated
-  // historical asset whose source states no status) is not "not operational" — it is unassessed, so it is excluded
-  // from the denominator; with nothing assessed the figure is unknown (null), never 0%.
-  const assessedAssets = assets.filter((a) => normalizeToken(a.status) !== "pending");
+  // Availability is measured over assets whose status is KNOWN. An `unknown` status (a migrated historical asset
+  // whose source states none) is unassessed, so it is excluded from the denominator; with nothing assessed the
+  // figure is unknown (null), never 0%. A genuine `pending` asset is a known posture (not yet operational).
+  const assessedAssets = assets.filter((a) => normalizeToken(a.status) !== "unknown");
   const assetsOperationalPercent =
     assessedAssets.length > 0
       ? Math.round((activeAssets / assessedAssets.length) * 100)

@@ -44,11 +44,13 @@ export async function schemaReadiness(db: SqlClient): Promise<string[]> {
   for (const t of ["fm_migration_batches", "fm_migration_provenance", "fm_consumables_register_entries"]) {
     if (!(await db.query<{ ok: boolean }>("select to_regclass($1) is not null ok", [`public.${t}`])).rows[0]!.ok) problems.push(`missing table ${t}`);
   }
-  for (const t of ["fm_work", "fm_work_instructions", "fm_generator_logs", "fm_incidents"]) if (!(await cols(t)).has("record_origin")) problems.push(`${t}.record_origin missing`);
+  for (const t of ["fm_work", "fm_work_instructions", "fm_generator_logs", "fm_incidents", "fm_assets", "fm_diesel_usage"]) if (!(await cols(t)).has("record_origin")) problems.push(`${t}.record_origin missing`);
   const gl = await cols("fm_generator_logs");
   for (const c of ["log_basis", "start_meter_reading", "end_meter_reading", "asset_id"]) if (!gl.has(c)) problems.push(`fm_generator_logs.${c} missing`);
   const assetCons = await cons("fm_assets");
   if (!/unknown/.test(assetCons.get("fm_assets_condition_check") ?? "")) problems.push("fm_assets condition check does not admit 'unknown'");
+  if (!/unknown/.test(assetCons.get("fm_assets_status_check") ?? "") || !assetCons.has("fm_assets_unknown_status_historical_only")) problems.push("fm_assets status does not admit historical-only 'unknown'");
+  if (!(await cons("fm_diesel_usage")).has("fm_diesel_usage_generator_required_operational")) problems.push("fm_diesel_usage generator-required-for-operational constraint missing");
   const workCons = await cons("fm_work");
   if (!workCons.has("fm_work_unknown_status_historical_only")) problems.push("fm_work unknown-status historical-only constraint missing");
   const incCons = await cons("fm_incidents");

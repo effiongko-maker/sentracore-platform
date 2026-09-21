@@ -91,11 +91,27 @@ function bucket<T>(rows: T[], dateOf: (row: T) => string | null, range: { start:
 export function scopeSnapshotToPeriod(
   snapshot: ReportingSnapshot,
   period: ScopePeriod | null | undefined,
-  options: { timeZone?: string } = {}
+  options: { timeZone?: string | null } = {}
 ): ReportingSnapshot {
   const range = resolvePeriodRange(period);
   if (!range) return snapshot;
-  const timeZone = options.timeZone ?? "UTC";
+  const timeZone = options.timeZone?.trim() || null;
+  if (!timeZone) {
+    // The organisation timezone is unknown: an unknown timezone is not UTC. Period boundaries cannot be placed, so
+    // the period is NOT applied — and the report says so instead of pretending to be period-scoped.
+    return {
+      ...snapshot,
+      periodCoverage: {
+        start: range.start,
+        end: range.end,
+        timeZone: null,
+        applied: false,
+        inPeriod: { incidents: snapshot.incidents.length, maintenance: snapshot.maintenance.length, workOrders: snapshot.workOrders.length },
+        undated: { incidents: 0, maintenance: 0, workOrders: 0 },
+        outsidePeriod: { incidents: 0, maintenance: 0, workOrders: 0 },
+      },
+    };
+  }
   const incidents = bucket(snapshot.incidents, incidentDate, range, timeZone);
   const maintenance = bucket(snapshot.maintenance, workDate, range, timeZone);
   const workOrders = bucket(snapshot.workOrders, workOrderDate, range, timeZone);
@@ -119,6 +135,7 @@ export function scopeSnapshotToPeriod(
     start: range.start,
     end: range.end,
     timeZone,
+    applied: true,
     inPeriod: { incidents: incidents.inPeriod.length, maintenance: maintenance.inPeriod.length, workOrders: workOrders.inPeriod.length },
     undated: { incidents: incidents.undated, maintenance: maintenance.undated, workOrders: workOrders.undated },
     outsidePeriod: { incidents: incidents.outside, maintenance: maintenance.outside, workOrders: workOrders.outside },
@@ -139,6 +156,11 @@ export function scopeSnapshotToPeriod(
 export function periodCoverageNotes(snapshot: Pick<ReportingSnapshot, "periodCoverage">): string[] {
   const c = snapshot.periodCoverage;
   if (!c) return [];
+  if (!c.applied) {
+    return [
+      `The report period ${c.start} to ${c.end} could not be applied: the organisation timezone is unavailable, so period boundaries cannot be placed. These figures are NOT restricted to the period.`,
+    ];
+  }
   const notes = [
     `Period ${c.start} to ${c.end} (${c.timeZone} dates): ${c.inPeriod.maintenance} Work, ${c.inPeriod.workOrders} Work Instruction and ${c.inPeriod.incidents} incident record(s) are dated within it. Status figures show each record's current recorded status — no status history exists.`,
   ];

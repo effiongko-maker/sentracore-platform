@@ -13,6 +13,8 @@ const CHAIN = ["20260918190000", "20260918200000", "20260918220000", "2026091822
 const NEW = "20260921100000";
 const NEW2 = "20260921110000";
 const NEW3 = "20260921120000";
+const NEW4 = "20260921130000";
+const NEW5 = "20260921140000";
 const sqlOf = (stamp: string) => readFileSync(dir + readdirSync(dir).find((n) => n.startsWith(stamp))!, "utf8");
 
 function assert(cond: unknown, message: string): asserts cond {
@@ -237,6 +239,56 @@ async function main() {
     assert((await privs()).every((r) => r.p === "INSERT,SELECT"), "re-applying is idempotent");
     assert(/^\s*(--[^\n]*\n|\s)*(revoke|grant)/im.test(sqlOf(NEW3)) && !/\b(drop|alter|create|delete|update)\s/i.test(sqlOf(NEW3).replace(/--[^\n]*/g, "")), "the migration contains privilege statements only");
     pass("least privilege: service_role reduced to SELECT+INSERT on the three migration tables; triggers, RLS, anon/authenticated untouched; idempotent; privilege-only migration");
+  }
+
+  // 10. asset / diesel historical origin + provenance-guarded correction (20260921130000, 20260921140000)
+  {
+    const U = (n: number) => `'00000000-0000-4000-8000-0000000010${String(n).padStart(2, "0")}'`;
+    const sha = "c".repeat(64);
+    const P = "'00000000-0000-4000-8000-0000000010ff'";
+    await db.exec(`insert into public.profiles (id, organisation_id) values (${P}, ${O});
+      insert into public.fm_migration_batches (id, organisation_id, batch_key, rules_version, sources) values ('00000000-0000-4000-8000-0000000010b1', ${O}, 'fmmig-origin-test', 'r1', '[]');`);
+    const asset = (n: number, code: string, extra = "") => `insert into public.fm_assets (id, organisation_id, code, facility_id, name${extra ? ", " + extra.split("|")[0] : ""}) values (${U(n)}, ${O}, '${code}', ${F}, 'a${n}'${extra ? ", " + extra.split("|")[1] : ""});`;
+    const diesel = (n: number, code: string, gen: string, extra = "") => `insert into public.fm_diesel_usage (id, organisation_id, code, log_date, facility_id, generator_ref, opening_level, closing_level${extra ? ", " + extra.split("|")[0] : ""}) values (${U(n)}, ${O}, '${code}', '2026-08-2${n % 10}', ${F}, '${gen}', 1000, 900${extra ? ", " + extra.split("|")[1] : ""});`;
+    const prov = (table: string, n: number, row: number, sheet: string) => `insert into public.fm_migration_provenance (organisation_id, batch_id, workbook, workbook_sha256, source_sheet, source_row, fingerprint, target_table, target_id, classification) values (${O}, '00000000-0000-4000-8000-0000000010b1', 'FM_PACK', '${sha}', '${sheet}', ${row}, '${"d".repeat(64)}', '${table}', ${U(n)}, 'BOOTSTRAP');`;
+    await db.exec([
+      asset(1, "AST-M1"), asset(2, "AST-M2", "updated_by_profile_id|" + P), asset(3, "AST-OP1"),
+      diesel(4, "DSLU-M1", "MBORA DIESEL Checklist"), diesel(5, "DSLU-M2", "MBORA DIESEL Checklist", "updated_by_profile_id|" + P), diesel(6, "DSLU-OP", "Gen 1"), diesel(7, "DSLU-M4", "Gen 2"),
+      prov("fm_assets", 1, 4, "Asset Register"), prov("fm_assets", 2, 5, "Asset Register"),
+      prov("fm_diesel_usage", 4, 2, "MBORA DIESEL Checklist"), prov("fm_diesel_usage", 5, 3, "MBORA DIESEL Checklist"), prov("fm_diesel_usage", 7, 4, "MBORA DIESEL Checklist"),
+    ].join("\n"));
+    const before = (await db.query<{ c: string; o: string }>(`select consumption::text c, opening_level::text o from public.fm_diesel_usage where code='DSLU-M1'`)).rows[0]!;
+    await db.exec(sqlOf(NEW4));
+    const origin = async (t: string, code: string) => (await db.query<{ o: string }>(`select record_origin o from public.${t} where code='${code}'`)).rows[0]!.o;
+    assert((await origin("fm_assets", "AST-M1")) === "migrated_historical" && (await origin("fm_assets", "AST-M2")) === "migrated_historical" && (await origin("fm_assets", "AST-OP1")) === "operational", "assets: origin is backfilled from provenance ONLY (the operational asset stays operational)");
+    assert((await origin("fm_diesel_usage", "DSLU-M1")) === "migrated_historical" && (await origin("fm_diesel_usage", "DSLU-OP")) === "operational", "diesel: origin is backfilled from provenance ONLY");
+    assert(await rejects(db, `update public.fm_assets set record_origin='operational' where code='AST-M1';`) && await rejects(db, `update public.fm_diesel_usage set record_origin='operational' where code='DSLU-M1';`), "origin is immutable on assets and diesel");
+    assert((await db.query<{ s: string }>("select status s from public.fm_assets where code='AST-M1'")).rows[0]!.s === "pending", "before the correction: the migrated asset still carries the importer default 'pending'");
+    await db.exec(sqlOf(NEW5));
+    const st = async (code: string) => (await db.query<{ s: string }>(`select status s from public.fm_assets where code='${code}'`)).rows[0]!.s;
+    const gen = async (code: string) => (await db.query<{ g: string | null }>(`select generator_ref g from public.fm_diesel_usage where code='${code}'`)).rows[0]!.g;
+    assert((await st("AST-M1")) === "unknown", "correction: the unedited migrated asset's importer-default status becomes unknown");
+    assert((await st("AST-M2")) === "pending" && (await st("AST-OP1")) === "pending", "correction: an EDITED migrated asset and an operational asset keep 'pending'");
+    assert((await gen("DSLU-M1")) === null, "correction: the unedited migrated diesel row's sheet-name 'generator' is cleared");
+    assert((await gen("DSLU-M2")) === "MBORA DIESEL Checklist" && (await gen("DSLU-OP")) === "Gen 1" && (await gen("DSLU-M4")) === "Gen 2", "correction: an edited migrated row, an operational generator entry and a row whose value is not the sheet name are untouched");
+    const after = (await db.query<{ c: string; o: string }>(`select consumption::text c, opening_level::text o from public.fm_diesel_usage where code='DSLU-M1'`)).rows[0]!;
+    assert(after.c === before.c && after.o === before.o, "correction: opening / closing / consumption values are exactly as before");
+    await db.exec(sqlOf(NEW5)); // idempotent
+    assert((await st("AST-M1")) === "unknown" && (await gen("DSLU-M1")) === null && (await st("AST-M2")) === "pending", "correction is idempotent");
+    // forward strictness
+    const opAsset = (status: string) => `insert into public.fm_assets (organisation_id, code, facility_id, name, status) values (${O}, 'AST-X${Math.random().toString(36).slice(2, 6)}', ${F}, 'x', '${status}');`;
+    assert(await rejects(db, opAsset("unknown")), "operational asset cannot have status unknown");
+    assert((await rejects(db, opAsset("active"))) === null && (await rejects(db, opAsset("pending"))) === null, "operational assets keep every valid operational status (including a genuine pending)");
+    assert(await rejects(db, opAsset("bogus")), "asset status remains a closed set");
+    assert(await rejects(db, `update public.fm_assets set status='unknown' where code='AST-OP1';`), "an operational asset cannot be flipped to unknown");
+    assert((await rejects(db, `insert into public.fm_assets (organisation_id, code, facility_id, name, status, record_origin) values (${O}, 'AST-H9', ${F}, 'h', 'unknown', 'migrated_historical');`)) === null, "a migrated historical asset may be unknown");
+    assert(await rejects(db, `insert into public.fm_diesel_usage (organisation_id, code, log_date, facility_id, generator_ref, opening_level, closing_level) values (${O}, 'DSLU-N1', '2026-09-01', ${F}, null, 1, 1);`), "an operational diesel entry still REQUIRES a generator");
+    assert((await rejects(db, `insert into public.fm_diesel_usage (organisation_id, code, log_date, facility_id, generator_ref, opening_level, closing_level, record_origin) values (${O}, 'DSLU-H1', '2026-09-01', ${F}, null, 1, 1, 'migrated_historical');`)) === null, "a migrated historical whole-site diesel row may have no generator");
+    assert(await rejects(db, `update public.fm_diesel_usage set generator_ref = null where code='DSLU-OP';`), "an operational diesel entry cannot lose its generator");
+    assert((await rejects(db, `insert into public.fm_diesel_usage (organisation_id, code, log_date, facility_id, generator_ref, opening_level, closing_level) values (${O}, 'DSLU-N2', '2026-09-02', ${F}, 'Gen 3', 5, 4);`)) === null, "operational generator-specific diesel entries are still supported");
+    const stat = readFileSync("supabase/migrations/20260921140000_fm_historical_asset_diesel_correction.sql", "utf8").replace(/--[^\n]*/g, "");
+    assert(/updated_by_profile_id is null/.test(stat) && /provenance/.test(stat) && /source_sheet/.test(stat) && !/delete\s|truncate|drop\s/i.test(stat), "the correction is provenance-keyed, guards against edited rows, and deletes nothing");
+    pass("asset / diesel origin: origin backfilled from provenance only and immutable; unknown status / NULL generator allowed for migrated rows only; provenance-guarded, idempotent correction leaves edited, operational and non-artefact rows untouched; values unchanged");
   }
 
   void historicalWork;

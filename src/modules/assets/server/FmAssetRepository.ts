@@ -49,6 +49,8 @@ function assetRow(rec: Record<string, unknown>): FmAssetRow {
     oem_id: txt(rec, "oem_id"), condition: str(rec, "condition"), status: str(rec, "status"), criticality: str(rec, "criticality"),
     assigned_to_profile_id: txt(rec, "assigned_to_profile_id"), created_by_profile_id: txt(rec, "created_by_profile_id"),
     updated_by_profile_id: txt(rec, "updated_by_profile_id"), created_at: str(rec, "created_at"), updated_at: str(rec, "updated_at"),
+    // NULL/absent = operational; the database column is authoritative (migrated_historical is never inferred).
+    record_origin: rec.record_origin != null ? String(rec.record_origin) : "operational",
   };
 }
 

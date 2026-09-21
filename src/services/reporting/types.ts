@@ -99,7 +99,13 @@ export interface ReportingSnapshotMeta {
 export interface ReportingPeriodCoverage {
   start: string;
   end: string;
-  timeZone: string;
+  /** The organisation-local timezone used for boundaries; null when unknown. */
+  timeZone: string | null;
+  /**
+   * false = the period could NOT be applied (organisation timezone unknown): the figures are NOT restricted to the
+   * period. An unknown timezone is never assumed to be UTC.
+   */
+  applied: boolean;
   inPeriod: { incidents: number; maintenance: number; workOrders: number };
   undated: { incidents: number; maintenance: number; workOrders: number };
   outsidePeriod: { incidents: number; maintenance: number; workOrders: number };

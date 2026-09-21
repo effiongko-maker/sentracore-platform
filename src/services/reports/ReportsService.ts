@@ -6,6 +6,7 @@ import type {
   ReportsHomeSnapshot,
   ReportWizardState,
 } from "@/modules/reports/types";
+import { loadOrganisationTimeZone } from "./organisationTimeZone";
 import { buildClientReport } from "./buildClientReport";
 
 /** Throws on failure — a failed load is never returned as an empty facility list. */
@@ -73,7 +74,7 @@ export const ReportsService = {
       facilityId,
     });
 
-    return buildClientReport({ snapshot, wizard });
+    return buildClientReport({ snapshot, wizard, timeZone: await loadOrganisationTimeZone() });
   },
 };
 

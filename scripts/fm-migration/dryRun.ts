@@ -383,10 +383,13 @@ export function runDryRun(input: DryRunInput): Manifest {
         model: null,
         serial_number: null,
         condition: "unknown",
-        status: "pending",
+        // The Asset Register has NO status column: status is explicitly unknown (historical origin only), never the
+        // schema default 'pending'.
+        status: "unknown",
         criticality: "unassessed",
+        record_origin: "migrated_historical",
         source_only_preserved: { source_label: label, location_text: entry.locationText, oem: null, pm_frequency: null },
-      }, [`source label "${label}" ⇒ canonical name "${entry.name}"`, `category "${entry.category}" from the explicit alias map (label evidence), not inference from text`, "condition unknown: the source condition is blank (explicit 'unknown', never 'good')"], [], label);
+      }, [`source label "${label}" ⇒ canonical name "${entry.name}"`, `category "${entry.category}" from the explicit alias map (label evidence), not inference from text`, "condition unknown: the source condition is blank (explicit 'unknown', never 'good')", "status unknown: the source has no status column (never the default 'pending')"], [], label);
       add("FM_PACK", s, r, "business", "BOOTSTRAP", "ASSET_BOOTSTRAP", "Asset ⇒ fm_assets with explicit aliases; OEM/model/serial/PM frequency remain unknown.", label, [rec.id]);
     }
   }
@@ -582,7 +585,10 @@ export function runDryRun(input: DryRunInput): Manifest {
         facility_code: input.facility.code,
         facility_id: facilityId,
         log_date: d.iso,
-        generator_ref: "MBORA DIESEL Checklist",
+        // The MBORA DIESEL Checklist is a whole-site tank measurement with NO generator column: no generator is
+        // evidenced, so generator_ref is NULL (historical origin only). The sheet name is provenance (source_sheet).
+        generator_ref: null,
+        record_origin: "migrated_historical",
         opening_level: total,
         added: 0,
         closing_level: balance,
@@ -593,6 +599,7 @@ export function runDryRun(input: DryRunInput): Manifest {
         "opening_level = underground + surface (both tank measurements preserved in provenance)",
         "added = 0 is PROVEN by the row's own arithmetic (balance = tanks − consumption ⇒ no receipt)",
         "consumption is a generated column (opening + added − closing) and equals the source value",
+        "no generator column exists in the source: generator_ref is NULL (the sheet name is provenance, not a generator identity)",
       ], [], null);
       add("FM_PACK", s, r, "business", "TRANSFORM_IMPORT", "DIESEL_IMPORT", "Dated tank measurements ⇒ fm_diesel_usage.", null, [rec.id]);
     }

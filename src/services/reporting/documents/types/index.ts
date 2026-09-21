@@ -164,6 +164,8 @@ export interface DocumentGenerationRequest {
   facilityId?: string | "all";
   department?: string;
   period: DocumentPeriod;
+  /** Organisation IANA timezone for period boundaries; absent = unknown (the period is then not applied). */
+  timeZone?: string | null;
   branding?: DocumentBranding;
   generatedBy?: string;
   /** Optional explicit template id / version for future multi-template support */

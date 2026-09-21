@@ -109,6 +109,7 @@ export type FmAssetRow = {
   condition: string;
   status: string;
   criticality: string;
+  record_origin?: string;
   assigned_to_profile_id: string | null;
   created_by_profile_id: string | null;
   updated_by_profile_id: string | null;
@@ -117,12 +118,12 @@ export type FmAssetRow = {
 };
 
 export const FM_ASSET_SELECT =
-  "id, organisation_id, code, facility_id, name, category, manufacturer, model, serial_number, install_date, warranty_expiry, oem_id, condition, status, criticality, assigned_to_profile_id, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
+  "id, organisation_id, code, facility_id, name, category, manufacturer, model, serial_number, install_date, warranty_expiry, oem_id, condition, status, criticality, record_origin, assigned_to_profile_id, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
 
 export type AssetRelations = { facilityName?: string; assignedToName?: string };
 
 /** Row → the Asset contract. `id` is the UUID; `code` is display only. */
-export function mapFmAssetRow(row: FmAssetRow, relations: AssetRelations = {}, recordOrigin: "operational" | "migrated_historical" = "operational"): Asset {
+export function mapFmAssetRow(row: FmAssetRow, relations: AssetRelations = {}): Asset {
   return {
     id: row.id,
     code: row.code,
@@ -141,7 +142,7 @@ export function mapFmAssetRow(row: FmAssetRow, relations: AssetRelations = {}, r
     assignedToUserId: row.assigned_to_profile_id ?? "",
     assignedTo: relations.assignedToName ?? "",
     criticality: row.criticality as AssetCriticality,
-    recordOrigin,
+    recordOrigin: row.record_origin === "migrated_historical" ? "migrated_historical" : "operational",
   };
 }
 

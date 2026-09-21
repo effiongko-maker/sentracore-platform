@@ -2,16 +2,14 @@ import { ASSET_STATUS_VARIANT } from "./constants";
 import type { Asset } from "./types";
 
 /**
- * How an asset's status is presented. A migrated historical asset's `pending` is the schema default written at
- * import — the source stated no status — so it reads "Status not recorded", never "Pending".
+ * How an asset's status is presented. `unknown` (a migrated historical asset whose source states no status) reads
+ * "Status not recorded"; every recorded status reads as itself.
  */
-export function assetStatusPresentation(asset: Pick<Asset, "status" | "recordOrigin">): {
+export function assetStatusPresentation(asset: Pick<Asset, "status">): {
   label: string;
   variant: "success" | "warning" | "danger" | "neutral";
 } {
-  if (asset.recordOrigin === "migrated_historical" && asset.status === "pending") {
-    return { label: "Status not recorded", variant: "neutral" };
-  }
+  if (asset.status === "unknown") return { label: "Status not recorded", variant: "neutral" };
   return { label: labelize(asset.status), variant: ASSET_STATUS_VARIANT[asset.status] };
 }
 

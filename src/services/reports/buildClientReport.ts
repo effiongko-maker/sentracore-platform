@@ -352,6 +352,8 @@ function statusCounts(
 export function buildClientReport(input: {
   snapshot: ReportingSnapshot;
   wizard: ReportWizardState;
+  /** Organisation IANA timezone; null/absent = unknown (the report period is then NOT applied, and says so). */
+  timeZone?: string | null;
 }): ClientReportDocument {
   const { wizard } = input;
   if (!wizard.reportType) {
@@ -368,7 +370,8 @@ export function buildClientReport(input: {
   // records belong to no period and are disclosed in the report's risk notes).
   const scoped = scopeSnapshotToPeriod(
     scopeSnapshot(input.snapshot, wizard.facilityIds, wizard.allFacilities),
-    wizard.period
+    wizard.period,
+    { timeZone: input.timeZone }
   );
   const { label: facilityLabelText, names: facilityNames } = resolveFacilityLabel(
     scoped,

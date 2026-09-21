@@ -74,7 +74,7 @@ export const DocumentBuilderService = {
   ): ReportDocumentModel {
     const context = resolveContext(snapshot, request);
     // The period is a real scope, not a label: dated records outside it are excluded, undated ones are disclosed.
-    return builders[request.kind](scopeSnapshotToPeriod(snapshot, request.period), context);
+    return builders[request.kind](scopeSnapshotToPeriod(snapshot, request.period, { timeZone: request.timeZone }), context);
   },
 
   adapt(

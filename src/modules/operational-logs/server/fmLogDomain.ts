@@ -149,7 +149,7 @@ export type FmLogSpec = {
   parseCreate(payload: unknown): ParsedWrite;
   parseUpdate(payload: unknown): { id: string } & ParsedWrite;
   parseExtras(raw: Record<string, unknown>): ListExtras;
-  map(row: Record<string, unknown>, ctx?: { itemById?: Map<string, { code: string; name: string }>; migrated?: Set<string> }): Record<string, unknown>;
+  map(row: Record<string, unknown>, ctx?: { itemById?: Map<string, { code: string; name: string }> }): Record<string, unknown>;
 };
 
 function updateId(raw: Record<string, unknown>, label: string): string {
@@ -243,7 +243,7 @@ export const ENERGY_SPEC: FmLogSpec = {
 
 export const DIESEL_SPEC: FmLogSpec = {
   resource: "diesel-usage", label: "Diesel usage", table: "fm_diesel_usage", prefix: "DSLU", facility: true,
-  select: `${COMMON}, facility_id, generator_ref, opening_level, added, closing_level, consumption`,
+  select: `${COMMON}, facility_id, generator_ref, opening_level, added, closing_level, consumption, record_origin`,
   searchColumns: ["generator_ref", "code"],
   parseCreate(p) {
     const r = asRecord(p);
@@ -263,9 +263,9 @@ export const DIESEL_SPEC: FmLogSpec = {
     return { id: updateId(r, "Diesel usage"), facilityRef: optionalRequiredText(r, "facilityId", "Facility"), columns: c };
   },
   parseExtras: (r) => ({ eq: eq(r, ["generatorId", "generator_ref"]) }),
-  // recordOrigin comes from the migration provenance ledger (the table has no origin column): a migrated row's
-  // generator_ref is a SOURCE LABEL (the tank checklist), not a generator identity.
-  map: (row, ctx) => ({ ...base(row), date: s(row, "log_date"), facilityId: s(row, "facility_id"), generatorId: s(row, "generator_ref"), openingLevel: n(row, "opening_level"), added: n(row, "added"), closingLevel: n(row, "closing_level"), consumption: n(row, "consumption"), recordOrigin: ctx?.migrated?.has(String(row.id)) ? "migrated_historical" : "operational" }),
+  // A migrated historical row is a whole-site tank measurement: generator_ref is NULL (no generator evidenced) and
+  // stays null — never "" and never a source label.
+  map: (row) => ({ ...base(row), date: s(row, "log_date"), facilityId: s(row, "facility_id"), generatorId: row.generator_ref == null ? null : String(row.generator_ref), openingLevel: n(row, "opening_level"), added: n(row, "added"), closingLevel: n(row, "closing_level"), consumption: n(row, "consumption"), recordOrigin: row.record_origin === "migrated_historical" ? "migrated_historical" : "operational" }),
 };
 
 export const WASTE_SPEC: FmLogSpec = {

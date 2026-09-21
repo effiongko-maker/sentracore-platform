@@ -9,8 +9,11 @@ export interface DieselUsage {
   date: string;
   /** Facility identity (Facility ID). */
   facilityId: string;
-  /** Generator identity (Generator ID) — free label/id for v1 (no asset link). */
-  generatorId: string;
+  /**
+   * Generator identity (Generator ID) — free label/id for v1 (no asset link). null ONLY for a migrated historical
+   * whole-site tank row: no generator is evidenced and none is inferred.
+   */
+  generatorId: string | null;
   /** Opening tank level in litres. */
   openingLevel: number;
   /** Diesel added in litres (optional). */
@@ -23,8 +26,8 @@ export interface DieselUsage {
    */
   consumption: number;
   /**
-   * migrated_historical rows come from the MBORA diesel-tank checklist: `generatorId` is then a SOURCE LABEL for the
-   * whole-site tank, not a generator, and no per-generator threshold applies. Derived from migration provenance.
+   * migrated_historical rows come from the MBORA diesel-tank checklist: a whole-site tank measurement with no
+   * generator (`generatorId` is null) to which no per-generator threshold applies. Never set from input.
    */
   recordOrigin?: "operational" | "migrated_historical";
   createdAt: string;
