@@ -17,7 +17,7 @@ export default async function ResetPasswordPage() {
           : undefined
       }
       footer={
-        <p>Access is by invitation. Public registration is not available.</p>
+        <p>Accounts are created by your administrator. Public registration is not available.</p>
       }
     >
       <ResetPasswordForm hasRecoveryCookie={hasRecoveryCookie} />

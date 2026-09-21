@@ -58,7 +58,7 @@ check("A1: legacy invite mutation path is retired; no caller remains", () => {
   assert(!existsSync(resolve("src/app/api/admin/invite-user/route.ts")), "route still exists");
   const offenders = walk("src").filter((f) => strip(readFileSync(f, "utf8")).includes("/api/admin/invite-user"));
   assert(offenders.length === 0, offenders.join(", "));
-  assert(route.includes("inviteAndAttachUser"), "canonical invite action");
+  assert(route.includes("createAccount") && route.includes("issueTemporaryPassword") && !route.includes("inviteAndAttachUser"), "canonical Create Account / Issue Temporary Password actions replace the invitation");
   assert(existsSync(resolve("src/app/api/admin/bootstrap-first-user/route.ts")), "secret-gated bootstrap must remain");
 });
 check("A2: direct profile-status/organisation mutation is closed (bypass flag only)", () => {
@@ -156,7 +156,7 @@ check("Navigation: Admin Console entry only for Super Admin; five sections; not 
   assert(!ADMIN_NAV_ITEMS.some((i) => /facilit|system/i.test(i.label)), "no fake System / Facilities section");
 });
 check("People / invite / status / offboard use the canonical control plane", () => {
-  assert(views.PeopleView.includes('"listPeople"') && views.PeopleView.includes('"inviteAndAttachUser"'), "people + invite");
+  assert(views.PeopleView.includes('"listPeople"') && views.PeopleView.includes('"createAccount"') && views.PersonView.includes('"issueTemporaryPassword"'), "people + invite");
   assert(views.PersonView.includes('"setProfileStatus"') && views.PersonView.includes('"offboardUser"') && views.PersonView.includes('"setFacilityAssignment"') && views.PersonView.includes('"getPerson"'), "person actions");
   assert(!/\/api\/users|\/api\/admin|UserService/.test(client), "client bypasses the control plane");
   assert(views.PersonView.includes("isSelf") && /disabled=\{isSelf\}/.test(views.PersonView), "self actions disabled");

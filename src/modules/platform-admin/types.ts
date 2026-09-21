@@ -5,6 +5,9 @@ import type { ProfileStatus } from "@/lib/auth/types";
 
 export const PLATFORM_IAM_AUDIT_ACTIONS = [
   "user.invited",
+  "user.account_created",
+  "user.temporary_password_issued",
+  "user.password_changed",
   "profile.attached_to_organisation",
   "profile.activated",
   "profile.suspended",
@@ -110,14 +113,40 @@ export type PlatformIdentityAdminRecord = {
   financeWorkspaceGrantPresent: boolean;
 };
 
-export type InviteAttachResult = {
+/** Result of attaching an EXISTING sign-in identity to an organisation (no email is sent by this action). */
+export type AttachProfileResult = {
   email: string;
   profileId: string | null;
   organisationId: string;
-  inviteSent: boolean;
   attached: boolean;
   alreadyExisted: boolean;
   followUpRequired: PlatformAdminFollowUp[];
+};
+
+/** Result of creating an account. `temporaryPassword` exists ONLY in this response — it is never stored or audited. */
+export type CreateAccountResult = {
+  profileId: string;
+  email: string;
+  organisationId: string;
+  /** Shown to the creating administrator exactly once. Never persisted, logged or audited. */
+  temporaryPassword: string;
+  mustChangePassword: true;
+  accessScope: "platform" | "module";
+  homeModule: string | null;
+  landingWorkspace: string | null;
+  assignment: { facilityId: string; operationalRole: string } | null;
+  capabilityPackage: "facility_manager" | null;
+  grantedCapabilities: string[];
+  /** Always false: account creation sends no Auth email of any kind. */
+  authEmailSent: false;
+};
+
+/** Result of issuing a new temporary password to an existing account. Same one-time contract. */
+export type IssueTemporaryPasswordResult = {
+  profileId: string;
+  email: string;
+  temporaryPassword: string;
+  mustChangePassword: true;
 };
 
 export type ProfileStatusResult = {

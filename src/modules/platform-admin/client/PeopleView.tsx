@@ -8,7 +8,10 @@ import { Modal } from "@/components/modals/Modal";
 import { useToast } from "@/components/ui/Toast";
 import type { ProfileStatus } from "@/lib/auth/types";
 import { v1OperatingRoleLabel } from "@/lib/access/roles";
-import type { AdminPersonSummary, InviteAttachResult, OrganisationAdminRecord } from "../types";
+import type { AdminPersonSummary, CreateAccountResult, OrganisationAdminRecord } from "../types";
+import { FACILITY_MANAGER_OPERATING_PACKAGE } from "@/lib/access/facilityManagerPackage";
+import { V1_OPERATING_ROLES } from "@/lib/access/roles";
+import { TemporaryCredential } from "./TemporaryCredential";
 import { AdminApiError, adminCall } from "./adminApi";
 import { ContextStrip, DataBoundary, OrgGate, PageHead, displayName, useAdminData } from "./ui";
 import { Avatar, Panel, Pill, StatusPill } from "./kit";
@@ -42,7 +45,7 @@ function PeopleBody({ organisation }: { organisation: OrganisationAdminRecord })
     STATUS_FILTERS.some((f) => f.value === initial) ? (initial as ProfileStatus) : "all"
   );
   const [query, setQuery] = useState("");
-  const [inviting, setInviting] = useState(false);
+  const [creating, setCreating] = useState(false);
   const state = useAdminData<AdminPersonSummary[]>(
     (signal) => adminCall<AdminPersonSummary[]>("listPeople", { organisationId: organisation.id }, signal),
     [organisation.id]
@@ -64,9 +67,9 @@ function PeopleBody({ organisation }: { organisation: OrganisationAdminRecord })
         title="People"
         lede={LEDE}
         actions={
-          <button type="button" className="ac-btn ac-btn-primary" onClick={() => setInviting(true)}>
+          <button type="button" className="ac-btn ac-btn-primary" onClick={() => setCreating(true)}>
             <UserPlus className="h-4 w-4" aria-hidden />
-            Invite person
+            Create account
           </button>
         }
       />
@@ -78,7 +81,7 @@ function PeopleBody({ organisation }: { organisation: OrganisationAdminRecord })
         empty={
           <>
             <p className="ac-state-title">No people are attached to this organisation</p>
-            <p>Invite the first person to begin. They receive an email invitation and are attached to {organisation.name}.</p>
+            <p>Create the first account to begin. It is created in {organisation.name} with a temporary password you give them — no email is sent.</p>
           </>
         }
       >
@@ -170,18 +173,18 @@ function PeopleBody({ organisation }: { organisation: OrganisationAdminRecord })
           </Panel>
         )}
       </DataBoundary>
-      <InviteDialog
-        open={inviting}
+      <CreateAccountDialog
+        open={creating}
         organisationId={organisation.id}
         organisationName={organisation.name}
-        onClose={() => setInviting(false)}
+        onClose={() => setCreating(false)}
         onDone={() => state.reload()}
       />
     </>
   );
 }
 
-function InviteDialog({
+function CreateAccountDialog({
   open,
   organisationId,
   organisationName,
@@ -197,18 +200,37 @@ function InviteDialog({
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
+  const [scope, setScope] = useState<"platform" | "module">("module");
+  const [homeModule, setHomeModule] = useState("facility_management");
+  const [landing, setLanding] = useState("");
+  const [facilityId, setFacilityId] = useState("");
+  const [role, setRole] = useState("");
+  const [pkg, setPkg] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<InviteAttachResult | null>(null);
+  const [result, setResult] = useState<CreateAccountResult | null>(null);
+  const facilities = useAdminData<Array<{ id: string; name: string; status: string }>>(
+    (signal) => (open ? adminCall("listFacilities", { organisationId }, signal) : Promise.resolve([])),
+    [open, organisationId]
+  );
 
   function close() {
     if (busy) return;
+    // Discard everything, including the one-time credential.
     setEmail("");
     setFullName("");
+    setScope("module");
+    setHomeModule("facility_management");
+    setLanding("");
+    setFacilityId("");
+    setRole("");
+    setPkg(false);
     setError(null);
     setResult(null);
     onClose();
   }
+
+  const packageAvailable = role === "facility_manager" && Boolean(facilityId);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -216,12 +238,21 @@ function InviteDialog({
     setBusy(true);
     setError(null);
     try {
-      const data = await adminCall<InviteAttachResult>("inviteAndAttachUser", { organisationId, email: email.trim(), fullName: fullName.trim() });
+      const data = await adminCall<CreateAccountResult>("createAccount", {
+        organisationId,
+        email: email.trim(),
+        fullName: fullName.trim(),
+        accessScope: scope,
+        homeModule: scope === "module" ? homeModule : null,
+        landingWorkspace: scope === "platform" && landing ? landing : null,
+        ...(facilityId && role ? { facilityId, operationalRole: role } : {}),
+        capabilityPackage: pkg && packageAvailable ? "facility_manager" : null,
+      });
       setResult(data);
       onDone();
-      toast({ type: "success", title: data.alreadyExisted ? "Person attached" : "Invitation sent", description: data.email });
+      toast({ type: "success", title: "Account created", description: data.email });
     } catch (err) {
-      setError(err instanceof AdminApiError ? err.message : "The invitation could not be completed.");
+      setError(err instanceof AdminApiError ? err.message : "The account could not be created.");
     } finally {
       setBusy(false);
     }
@@ -231,21 +262,21 @@ function InviteDialog({
     <Modal
       open={open}
       onClose={close}
-      title="Invite a person"
-      description={`They will be invited by email and attached to ${organisationName}.`}
+      title="Create account"
+      description={`A sign-in account in ${organisationName}. No email is sent — you give them a temporary password.`}
       size="md"
       footer={
         result ? (
           <button type="button" className="ac-btn ac-btn-primary" onClick={close}>
-            Done
+            I have recorded the password — close
           </button>
         ) : (
           <>
             <button type="button" className="ac-btn ac-btn-secondary" onClick={close} disabled={busy}>
               Cancel
             </button>
-            <button type="submit" form="ac-invite-form" className="ac-btn ac-btn-primary" disabled={busy || !email.trim() || !fullName.trim()}>
-              {busy ? "Sending…" : "Send invitation"}
+            <button type="submit" form="ac-create-form" className="ac-btn ac-btn-primary" disabled={busy || !email.trim() || !fullName.trim()}>
+              {busy ? "Creating…" : "Create account"}
             </button>
           </>
         )
@@ -253,41 +284,98 @@ function InviteDialog({
     >
       {result ? (
         <div>
-          <p className="ac-state-title">{result.alreadyExisted ? "This person already had an identity" : "Invitation sent"}</p>
-          <dl className="ac-kv">
-            <dt>Email</dt>
-            <dd>{result.email}</dd>
+          <TemporaryCredential email={result.email} password={result.temporaryPassword} intro="Account created" />
+          <dl className="ac-kv" style={{ marginTop: 12 }}>
             <dt>Organisation</dt>
             <dd>{organisationName}</dd>
-            <dt>Invitation email</dt>
-            <dd>{result.inviteSent ? "Sent" : "Not sent"}</dd>
-            <dt>Attached</dt>
-            <dd>{result.attached ? "Yes — attached to the organisation" : "Not yet — will attach when they accept"}</dd>
+            <dt>Access scope</dt>
+            <dd>{result.accessScope === "module" ? `Module-bound (${result.homeModule})` : "Platform"}</dd>
+            <dt>Facility assignment</dt>
+            <dd>{result.assignment ? `${v1OperatingRoleLabel(result.assignment.operationalRole as never)} (active)` : "None"}</dd>
+            <dt>Capabilities granted</dt>
+            <dd>{result.grantedCapabilities.length ? result.grantedCapabilities.join(", ") : "None — grant them in Access"}</dd>
+            <dt>Authentication email</dt>
+            <dd>None sent</dd>
           </dl>
-          {result.followUpRequired.length > 0 ? (
-            <p className="ac-form-error" role="alert">
-              Follow-up required: {result.followUpRequired.join(", ").replaceAll("_", " ")}.
-            </p>
-          ) : null}
-          <p className="ac-secondary" style={{ marginTop: 12 }}>
-            They have no access yet. Grant capabilities in Access once they are active.
-          </p>
         </div>
       ) : (
-        <form id="ac-invite-form" onSubmit={submit}>
+        <form id="ac-create-form" onSubmit={submit}>
           <div className="ac-field">
-            <label htmlFor="ac-invite-name">Full name</label>
-            <input id="ac-invite-name" className="ac-input" value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="off" required />
+            <label htmlFor="ac-create-name">Full name</label>
+            <input id="ac-create-name" className="ac-input" value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="off" required />
           </div>
           <div className="ac-field">
-            <label htmlFor="ac-invite-email">Work email</label>
-            <input id="ac-invite-email" type="email" className="ac-input" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" required />
-            <span className="ac-hint">The invitation is sent to this address.</span>
+            <label htmlFor="ac-create-email">Sign-in email</label>
+            <input id="ac-create-email" type="email" className="ac-input" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" required />
+            <span className="ac-hint">Their sign-in identity. No email is sent to this address by SentraCore™.</span>
           </div>
           <div className="ac-field">
-            <label>Organisation</label>
-            <span className="ac-secondary">{organisationName}</span>
+            <label htmlFor="ac-create-scope">Access scope</label>
+            <select id="ac-create-scope" className="ac-select" value={scope} onChange={(e) => setScope(e.target.value as "platform" | "module")}>
+              <option value="module">Module-bound (one workspace)</option>
+              <option value="platform">Platform</option>
+            </select>
           </div>
+          {scope === "module" ? (
+            <div className="ac-field">
+              <label htmlFor="ac-create-module">Home workspace</label>
+              <select id="ac-create-module" className="ac-select" value={homeModule} onChange={(e) => setHomeModule(e.target.value)}>
+                <option value="facility_management">Facility Management</option>
+                <option value="ecc_operations">ECC Operations</option>
+              </select>
+            </div>
+          ) : (
+            <div className="ac-field">
+              <label htmlFor="ac-create-landing">Landing workspace</label>
+              <select id="ac-create-landing" className="ac-select" value={landing} onChange={(e) => setLanding(e.target.value)}>
+                <option value="">Default</option>
+                <option value="command_centre">Command Centre</option>
+                <option value="facility_management">Facility Management</option>
+                <option value="ecc_operations">ECC Operations</option>
+                <option value="platform_finance">Platform Finance</option>
+              </select>
+            </div>
+          )}
+          <div className="ac-field">
+            <label htmlFor="ac-create-facility">Facility (optional)</label>
+            <select id="ac-create-facility" className="ac-select" value={facilityId} onChange={(e) => setFacilityId(e.target.value)} disabled={facilities.loading}>
+              <option value="">{facilities.loading ? "Loading facilities…" : "No facility assignment"}</option>
+              {(facilities.data ?? []).map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {facilityId ? (
+            <div className="ac-field">
+              <label htmlFor="ac-create-role">Operating role</label>
+              <select id="ac-create-role" className="ac-select" value={role} onChange={(e) => setRole(e.target.value)} required>
+                <option value="">Select a role</option>
+                {V1_OPERATING_ROLES.map((r) => (
+                  <option key={r} value={r}>
+                    {v1OperatingRoleLabel(r)}
+                  </option>
+                ))}
+              </select>
+              <span className="ac-hint">Describes their capacity. Permissions come only from explicit grants.</span>
+            </div>
+          ) : null}
+          {packageAvailable ? (
+            <div className="ac-field">
+              <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <input type="checkbox" checked={pkg} onChange={(e) => setPkg(e.target.checked)} />
+                <span>
+                  Grant the Facility Manager operating package
+                  <span className="ac-hint" style={{ display: "block" }}>
+                    Ordinary FM visibility and operating authority ({FACILITY_MANAGER_OPERATING_PACKAGE.join(", ")}). Protected
+                    authority — protected actions, reimbursement authorisation and payment, approvals, people administration —
+                    is never included.
+                  </span>
+                </span>
+              </label>
+            </div>
+          ) : null}
           {error ? (
             <p className="ac-form-error" role="alert">
               {error}

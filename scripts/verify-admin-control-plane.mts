@@ -220,7 +220,7 @@ async function runStatic(results: CheckResult[]) {
 
     const route = readSrc("src/app/api/platform-admin/route.ts");
     assert(route.includes("requirePlatformAdmin"), "API uses SA guard");
-    assert(route.includes("inviteAndAttachUser"), "invite action");
+    assert(route.includes("createAccount") && route.includes("issueTemporaryPassword") && !route.includes("inviteAndAttachUser"), "create-account / issue-temporary-password actions (no invitation)");
     assert(route.includes("offboardUser"), "offboard action");
     assert(
       !route.includes("finance_capability_grants") &&
@@ -244,7 +244,7 @@ async function runStatic(results: CheckResult[]) {
     const service = readSrc(
       "src/modules/platform-admin/server/PlatformAdminServerService.ts"
     );
-    assert(service.includes("inviteUserByEmail"), "uses Auth invite");
+    assert(!service.includes("inviteUserByEmail") && service.includes("auth.admin.createUser") && /email_confirm:\s*true/.test(service), "creates the Auth identity server-side with a pre-confirmed email (no invitation email)");
     assert(
       service.includes("attach_invited_profile_to_organisation") ||
         service.includes("attachInvitedProfile"),

@@ -25,7 +25,7 @@ export function auditCategoryForAction(action: string): AuditCategory | null {
 }
 
 export const AUDIT_ACTIONS_BY_CATEGORY: Record<AuditCategory, string[]> = {
-  people: ["user.invited", "user.offboarded", "profile.attached_to_organisation", "profile.activated", "profile.suspended", "profile.deactivated"],
+  people: ["user.account_created", "user.temporary_password_issued", "user.password_changed", "user.invited", "user.offboarded", "profile.attached_to_organisation", "profile.activated", "profile.suspended", "profile.deactivated"],
   access: ["capability.granted", "capability.revoked", "access_scope.changed", "landing_workspace.changed"],
   modules: ["module.enabled", "module.disabled"],
   operating_context: [
@@ -70,6 +70,15 @@ export function describeAuditEvent(
   const detail: string[] = [];
 
   switch (action) {
+    case "user.account_created":
+      if (str(details, "email")) detail.push(`Sign-in email: ${str(details, "email")}`);
+      detail.push("Credential: temporary password issued once to the administrator; no email sent");
+      return { headline: `Created the account for ${person}`, category, detail };
+    case "user.temporary_password_issued":
+      detail.push("Credential: new temporary password issued once to the administrator; password change required");
+      return { headline: `Issued a temporary password to ${person}`, category, detail };
+    case "user.password_changed":
+      return { headline: `${person} replaced their temporary password`, category, detail };
     case "user.invited":
       if (str(details, "email")) detail.push(`Invited address: ${str(details, "email")}`);
       return { headline: `Invited ${person}`, category, detail };

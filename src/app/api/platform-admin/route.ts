@@ -7,7 +7,8 @@ import { AUDIT_ACTIONS_BY_CATEGORY, type AuditCategory } from "@/modules/platfor
 type PlatformAdminAction =
   | "listOrganisations"
   | "listIdentities"
-  | "inviteAndAttachUser"
+  | "createAccount"
+  | "issueTemporaryPassword"
   | "attachProfileToOrganisation"
   | "setProfileStatus"
   | "setAccessScope"
@@ -44,6 +45,8 @@ type RequestBody = {
   facilityId?: string;
   operationalRole?: string;
   assignmentId?: string;
+  capabilityPackage?: string | null;
+  capabilities?: string[];
 };
 
 function actionErrorStatus(code: string): number {
@@ -112,26 +115,35 @@ export async function POST(request: Request) {
         const data = await service.listIdentities(ctx, body.organisationId);
         return NextResponse.json({ success: true, data });
       }
-      case "inviteAndAttachUser": {
+      case "createAccount": {
         if (!body.email || !body.fullName || !body.organisationId) {
           return NextResponse.json(
-            {
-              success: false,
-              message: "email, fullName, and organisationId are required.",
-            },
+            { success: false, message: "email, fullName, and organisationId are required." },
             { status: 400 }
           );
         }
-        const origin = new URL(request.url).origin;
-        const data = await service.inviteAndAttachUser(ctx, {
+        const data = await service.createAccount(ctx, {
           email: body.email,
           fullName: body.fullName,
-          organisationId: body.organisationId,
           firstName: body.firstName,
           lastName: body.lastName,
-          redirectOrigin: origin,
+          organisationId: body.organisationId,
+          accessScope: body.accessScope,
+          homeModule: body.homeModule,
+          landingWorkspace: body.landingWorkspace,
+          facilityAssignment: body.facilityId ? { facilityId: body.facilityId, operationalRole: body.operationalRole } : null,
+          capabilityPackage: body.capabilityPackage,
+          capabilities: body.capabilities,
         });
-        return NextResponse.json({ success: true, data });
+        // The response carries a one-time credential: never cacheable, never logged.
+        return NextResponse.json({ success: true, data }, { headers: { "Cache-Control": "no-store" } });
+      }
+      case "issueTemporaryPassword": {
+        if (!body.profileId) {
+          return NextResponse.json({ success: false, message: "profileId is required." }, { status: 400 });
+        }
+        const data = await service.issueTemporaryPassword(ctx, { profileId: body.profileId });
+        return NextResponse.json({ success: true, data }, { headers: { "Cache-Control": "no-store" } });
       }
       case "attachProfileToOrganisation": {
         if (!body.email || !body.organisationId) {

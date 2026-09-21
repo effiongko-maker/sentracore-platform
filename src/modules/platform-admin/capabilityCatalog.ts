@@ -59,14 +59,14 @@ export const CAPABILITY_DOMAINS: readonly CapabilityDomain[] = [
   {
     id: "fm_costs",
     label: "Facility Management · Costs and claims",
-    summary: "FM operational costs and reimbursement claims — not Platform Finance.",
+    summary: "FM operational costs and reimbursement claims (the finance.* capabilities). NOT Platform Finance — the separate accounting domain (platform_finance.*), whose access is shown on a person's page and is never granted from here.",
     moduleSlug: "facility_management",
     capabilities: [
-      { key: "finance.view", label: "View costs and claims", detail: "Read cost records, claims, authorisations and payments." },
-      { key: "finance.create", label: "Record costs and draft claims", detail: "Create and edit cost records and draft claims." },
-      { key: "finance.submit", label: "Submit claims", detail: "Move a claim to submitted." },
-      { key: "finance.authorize", label: "Authorise reimbursement", detail: "Record a reimbursement authorisation." },
-      { key: "finance.pay", label: "Record reimbursement payments", detail: "Record amounts received against an authorised claim." },
+      { key: "finance.view", label: "View FM costs and claims", detail: "Read FM cost records, claims, authorisations and payments as records. Read-only; confers no authority to authorise or pay." },
+      { key: "finance.create", label: "Record FM costs and draft claims", detail: "Create and edit FM cost records and draft claims." },
+      { key: "finance.submit", label: "Submit FM claims", detail: "Move an FM claim to submitted." },
+      { key: "finance.authorize", label: "Authorise FM reimbursement", detail: "Record an FM reimbursement authorisation. Protected authority — separate from viewing." },
+      { key: "finance.pay", label: "Record FM reimbursement payments", detail: "Record amounts received against an authorised FM claim. Protected authority — separate from viewing." },
     ],
   },
   {

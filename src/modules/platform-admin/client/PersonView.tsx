@@ -9,11 +9,12 @@ import { V1_OPERATING_ROLES, v1OperatingRoleLabel } from "@/lib/access/roles";
 import type { ProfileStatus } from "@/lib/auth/types";
 import { CAPABILITY_DOMAINS, describeCapability } from "../capabilityCatalog";
 import { LANDING_WORKSPACES, LANDING_WORKSPACE_LABEL, type LandingWorkspace } from "@/lib/access/landingWorkspace";
-import type { AccessScopeResult, LandingWorkspaceResult, AdminAuditPage, AdminFacilityAssignment, AdminPersonDetail, OffboardResult, OrganisationAdminRecord, ProfileStatusResult } from "../types";
+import type { IssueTemporaryPasswordResult, AccessScopeResult, LandingWorkspaceResult, AdminAuditPage, AdminFacilityAssignment, AdminPersonDetail, OffboardResult, OrganisationAdminRecord, ProfileStatusResult } from "../types";
 import { AdminApiError, adminCall } from "./adminApi";
 import { useAdminConsole } from "./AdminConsoleContext";
 import { AuditFeed } from "./AuditFeed";
 import { FinanceAccess } from "./FinanceAccess";
+import { TemporaryCredential } from "./TemporaryCredential";
 import { ContextStrip, DataBoundary, Note, OrgGate, PageHead, displayName, useAdminData } from "./ui";
 import { Avatar, Panel, Pill, StatusPill } from "./kit";
 
@@ -64,6 +65,7 @@ function PersonBody({ organisation, profileId }: { organisation: OrganisationAdm
   );
   const [pending, setPending] = useState<StatusAction | null>(null);
   const [offboarding, setOffboarding] = useState(false);
+  const [reissuing, setReissuing] = useState(false);
   const [scoping, setScoping] = useState(false);
   const [landing, setLanding] = useState(false);
   const [assigning, setAssigning] = useState<{ assignment?: AdminFacilityAssignment } | null>(null);
@@ -100,6 +102,11 @@ function PersonBody({ organisation, profileId }: { organisation: OrganisationAdm
                   <Link href={`/admin/access${q}&person=${p.profileId}`} className="ac-btn ac-btn-secondary">
                     Manage access
                   </Link>
+                  {p.status === "active" ? (
+                    <button type="button" className="ac-btn ac-btn-secondary" disabled={isSelf} onClick={() => setReissuing(true)} title="Replace their password with a new temporary one, shown to you once">
+                      Issue temporary password
+                    </button>
+                  ) : null}
                   {STATUS_ACTIONS[p.status].map((a) => (
                     <button key={a.to} type="button" className="ac-btn ac-btn-secondary" disabled={isSelf} onClick={() => setPending(a)}>
                       {a.label}
@@ -274,6 +281,7 @@ function PersonBody({ organisation, profileId }: { organisation: OrganisationAdm
             <LandingDialog open={landing} person={p} onClose={() => setLanding(false)} onDone={refresh} />
             <ScopeDialog open={scoping} person={p} onClose={() => setScoping(false)} onDone={refresh} />
             <StatusDialog action={pending} person={p} organisationId={organisation.id} onClose={() => setPending(null)} onDone={refresh} />
+            <IssuePasswordDialog open={reissuing} person={p} onClose={() => setReissuing(false)} onDone={refresh} />
             <OffboardDialog open={offboarding} person={p} onClose={() => setOffboarding(false)} onDone={refresh} />
             <AssignmentDialog state={assigning} person={p} organisationId={organisation.id} onClose={() => setAssigning(null)} onDone={refresh} />
           </>
@@ -708,3 +716,79 @@ function AssignmentDialog({
 }
 
 export { CAPABILITY_DOMAINS };
+
+/**
+ * Issue Temporary Password: replaces the credential through the trusted server path, requires a password change at
+ * next sign-in, and shows the new password to the administrator ONCE. An existing password can never be retrieved.
+ */
+function IssuePasswordDialog({ open, person, onClose, onDone }: { open: boolean; person: AdminPersonDetail; onClose: () => void; onDone: () => void }) {
+  const { toast } = useToast();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<IssueTemporaryPasswordResult | null>(null);
+  const name = displayName(person);
+
+  function close() {
+    if (busy) return;
+    setError(null);
+    setResult(null); // discards the one-time credential
+    onClose();
+  }
+  async function confirm() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const data = await adminCall<IssueTemporaryPasswordResult>("issueTemporaryPassword", { profileId: person.profileId });
+      setResult(data);
+      onDone();
+      toast({ type: "success", title: "Temporary password issued", description: name });
+    } catch (err) {
+      setError(err instanceof AdminApiError ? err.message : "The temporary password could not be issued.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={close}
+      title={result ? "Temporary password issued" : `Issue a temporary password to ${name}?`}
+      description={result ? undefined : "Their current password stops working immediately."}
+      size="md"
+      footer={
+        result ? (
+          <button type="button" className="ac-btn ac-btn-primary" onClick={close}>
+            I have recorded the password — close
+          </button>
+        ) : (
+          <>
+            <button type="button" className="ac-btn ac-btn-secondary" onClick={close} disabled={busy}>
+              Cancel
+            </button>
+            <button type="button" className="ac-btn ac-btn-primary" onClick={confirm} disabled={busy}>
+              {busy ? "Issuing…" : "Issue temporary password"}
+            </button>
+          </>
+        )
+      }
+    >
+      {result ? (
+        <TemporaryCredential email={result.email} password={result.temporaryPassword} intro="New temporary password" />
+      ) : (
+        <div>
+          <p>
+            A new temporary password is generated and shown to you <strong>once</strong>. They must change it the next time they sign in.
+            You cannot see or recover their current password, and SentraCore™ does not store the temporary one.
+          </p>
+          {error ? (
+            <p className="ac-form-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
+      )}
+    </Modal>
+  );
+}

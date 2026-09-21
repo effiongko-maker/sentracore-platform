@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 import { PASSWORD_RECOVERY_COOKIE } from "@/lib/auth/urls";
+import { mustChangePassword, passwordChangeGate } from "@/lib/auth/passwordLifecycle";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -122,6 +123,26 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // A temporary (administrator-issued) credential must be replaced before ANYTHING else. This is server-side truth
+  // (Supabase Auth app_metadata, returned fresh by getUser) — not a cookie the user can delete — and it is enforced
+  // for every page and every API call.
+  if (user) {
+    const gate = passwordChangeGate(pathname, mustChangePassword(user));
+    if (gate.action === "redirect") {
+      const url = request.nextUrl.clone();
+      url.pathname = gate.to;
+      url.search = "";
+      url.hash = "";
+      return NextResponse.redirect(url);
+    }
+    if (gate.action === "block_api") {
+      return NextResponse.json(
+        { success: false, code: gate.code, message: "You must change your temporary password before continuing." },
+        { status: 403, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+  }
+
   // Recovery sessions must finish password update before using the app.
   if (
     user &&
@@ -138,7 +159,7 @@ export async function updateSession(request: NextRequest) {
 
   if (user && pathname === "/login") {
     const url = request.nextUrl.clone();
-    url.pathname = inPasswordRecovery ? "/reset-password" : "/";
+    url.pathname = mustChangePassword(user) ? "/change-password" : inPasswordRecovery ? "/reset-password" : "/";
     url.search = "";
     url.hash = "";
     return NextResponse.redirect(url);
