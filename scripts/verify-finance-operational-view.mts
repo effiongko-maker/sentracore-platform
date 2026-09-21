@@ -195,8 +195,8 @@ function staticChecks() {
     header.includes("Create reimbursement claim"),
     "create claim primary action"
   );
-  assert(header.includes("Finance</h1>"), "Finance title");
-  assert(header.includes("In view"), "header not APR-period framed");
+  assert(header.includes("Costs &amp; Claims</h1>"), "Costs & Claims title");
+  assert(!/APR|this period|reporting period/i.test(header), "header not APR-period framed");
   assert(!header.includes("client authorisation records"), "header not APR-centric period");
   assert(
     !header.includes("/finance/submissions/new") ||

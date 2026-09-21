@@ -94,7 +94,7 @@ export function FinanceOperationalCostSection({
           <p className="fin-v13-empty">No recent costs in view.</p>
         )
       ) : (
-        <p className="fin-v13-empty">No cost records yet.</p>
+        <p className="fin-v13-empty">No costs recorded in SentraCore™ yet. Historical costs are not loaded here.</p>
       )}
     </section>
   );

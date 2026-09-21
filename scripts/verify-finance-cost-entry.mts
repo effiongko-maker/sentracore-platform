@@ -65,7 +65,7 @@ function main() {
   assert(modal.includes("facilityId,"), "facilityId still submitted on create");
   assert(modal.includes("COST_CATEGORY_LABELS"), "category validation");
   assert(modal.includes("COST_REIMBURSABILITY_LABELS"), "D reimbursability labels");
-  assert(modal.includes("Cost category (reimbursement)"), "reimbursement eligibility label (current wording)");
+  assert(modal.includes("Reimbursement eligibility") && !modal.includes("Cost category (reimbursement)"), "reimbursement eligibility label (client reimbursement wording)");
   assert(modal.includes("More details"), "secondary details section");
   assert(modal.includes("Receipt or invoice"), "E evidence required label");
   assert(

@@ -529,9 +529,9 @@ export function CostRecordFormModal({
           </FormField>
 
           <FormField
-            label="Cost category (reimbursement)"
+            label="Reimbursement eligibility"
             htmlFor="cost-reimbursability"
-            hint="Independent of Order Type. A Work Order or Job Order may be NCC Reimbursable or Non-Reimbursable. Leave as Unknown if you are not sure yet."
+            hint="Can this cost be claimed back from the client (NCC)? Only costs marked NCC Reimbursable can be added to a reimbursement claim. Independent of Order Type. Leave as Unknown if not decided yet."
             className="sm:col-span-2"
           >
             <select
@@ -663,7 +663,7 @@ export function CostRecordFormModal({
               </FormField>
 
               <FormField
-                label="Maintenance / work classification"
+                label="Related Work / Work Instruction"
                 htmlFor="cost-related-link"
                 className="sm:col-span-2"
               >
@@ -681,7 +681,7 @@ export function CostRecordFormModal({
                 >
                   <option value="none">None</option>
                   <option value="work">Work</option>
-                  <option value="work_order">Work / Job Order</option>
+                  <option value="work_order">Work Instruction (Work Order / Job Order)</option>
                 </select>
               </FormField>
 

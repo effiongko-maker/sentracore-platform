@@ -32,8 +32,8 @@ export function FinanceHeader({
         <div className="min-w-0">
           <h1 className="fin-title fin-title--compact">Costs &amp; Claims</h1>
           <p className="fin-lede fin-lede--compact">
-            Track operational costs, submit reimbursement claims, and record
-            client payments.
+            Record FM execution costs, claim reimbursement from the client, and
+            track the client&apos;s authorisation and the payment reference.
           </p>
           {asOf ? (
             <p className="fin-v13-asof">Last updated {asOf}</p>
@@ -93,9 +93,10 @@ export function FinanceSummaryRow({
   clientAuthorisationsTotal: number | string;
   loading: boolean;
 }) {
+  // Zero is data, but it is only the SentraCore™ record: earlier (historical) execution costs are not loaded here.
   const supportCopy = spendIsSample
-    ? "Sample of recorded operational costs currently in view."
-    : "Recorded operational costs currently in view.";
+    ? "Sample of costs recorded in SentraCore™ currently in view."
+    : "Costs recorded in SentraCore™ so far. Historical costs from before SentraCore™ are not loaded here — NGN 0 means none recorded yet, not that none were incurred.";
 
   return (
     <div className="fin-v13-overview">
@@ -137,7 +138,7 @@ export function FinanceSummaryRow({
             <FileText className="h-4 w-4" strokeWidth={1.75} />
           </span>
           <div className="min-w-0">
-            <p className="fin-v13-metric-label">Costs recorded</p>
+            <p className="fin-v13-metric-label">Costs recorded in SentraCore™</p>
             <p className="fin-v13-support-value">
               {loading ? "—" : costRecordsTotal}
             </p>
@@ -159,7 +160,7 @@ export function FinanceSummaryRow({
             <Users className="h-4 w-4" strokeWidth={1.75} />
           </span>
           <div className="min-w-0">
-            <p className="fin-v13-metric-label">Client authorisations</p>
+            <p className="fin-v13-metric-label">Work Order approvals</p>
             <p className="fin-v13-support-value">
               {loading ? "—" : clientAuthorisationsTotal}
             </p>

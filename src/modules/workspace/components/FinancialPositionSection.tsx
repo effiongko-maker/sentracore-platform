@@ -43,7 +43,7 @@ export function FinancialPositionSection() {
                   ? "Some figures are temporarily unavailable. Open Costs & Claims for the full record."
                   : isSample
                     ? "In-view sample from the current Costs & Claims pool"
-                    : "Operational costs and open reimbursement claims"}
+                    : "Costs and reimbursement claims recorded in SentraCore™ (earlier history is not loaded)"}
           </p>
         </div>
         <div className="sc-fm-finance-header-actions">

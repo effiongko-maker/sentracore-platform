@@ -47,7 +47,7 @@ export function FinanceSubmissionsSection({
       ) : loading ? (
         <div className="fin-v13-skel-block" />
       ) : total === 0 ? (
-        <p className="fin-v13-empty">No claims yet.</p>
+        <p className="fin-v13-empty">No reimbursement claims recorded in SentraCore™ yet.</p>
       ) : (
         <table className="fin-v13-table fin-v13-table--compact">
           <thead>

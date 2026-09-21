@@ -273,7 +273,7 @@ function main() {
     "src/modules/workspace/components/FinancialPositionSection.tsx"
   );
   assert(section.includes('href="/finance"'), "Open Finance → /finance");
-  assert(section.includes("Open Finance"), "Open Finance label");
+  assert(section.includes("Open Costs & Claims"), "Open Costs & Claims label (FM cost domain, not Platform Finance)");
   assert(section.includes("Spent"), "Spent metric");
   assert(
     section.includes("            Reimbursement"),

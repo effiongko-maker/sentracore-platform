@@ -150,7 +150,7 @@ export function SubmissionsPage() {
               total={total}
               onPageChange={setPage}
               emptyIcon={FileStack}
-              emptyTitle="No claims yet"
+              emptyTitle="No reimbursement claims recorded in SentraCore™ yet"
               emptyDescription="Create a claim to group reimbursable costs for reimbursement."
             />
           )}

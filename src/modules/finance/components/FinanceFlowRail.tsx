@@ -4,10 +4,10 @@ type FlowStage = {
 };
 
 const STAGES: FlowStage[] = [
-  { id: "cost", label: "Operational costs" },
-  { id: "submission", label: "Reimbursement" },
-  { id: "authorisation", label: "Client authorisation" },
-  { id: "payment", label: "Payment" },
+  { id: "cost", label: "Cost records" },
+  { id: "submission", label: "Reimbursement claims" },
+  { id: "authorisation", label: "Reimbursement authorisation" },
+  { id: "payment", label: "Payment reference" },
 ];
 
 export function FinanceFlowRail({
@@ -32,8 +32,8 @@ export function FinanceFlowRail({
   return (
     <section className="fin-v13-status" aria-label="Financial status">
       <p className="fin-v13-status-note">
-        Client authorisation is Work Order approval — not reimbursement authority
-        on a CostSubmission.
+        Reimbursement authorisation is the client&apos;s authorisation of a claim
+        — separate from Work Order approvals.
       </p>
       <ul className="fin-v13-status-strip">
         {STAGES.map((stage) => {

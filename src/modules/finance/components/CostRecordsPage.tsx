@@ -188,8 +188,8 @@ export function CostRecordsPage() {
             total={total}
             onPageChange={setPage}
             emptyIcon={ReceiptText}
-            emptyTitle="No cost records yet"
-            emptyDescription="Record a cost from the Costs & Claims overview when an operational expense is incurred."
+            emptyTitle="No costs recorded in SentraCore™ yet"
+            emptyDescription="Record a cost from the Costs & Claims overview when an execution cost is incurred. Historical costs from before SentraCore™ are not loaded here."
           />
         )}
       </StreamSurface>

@@ -81,9 +81,9 @@ function claimNextStep(status: ClaimWorkflowStatus | null): string {
     case "submitted":
       return "Authorize the reimbursement amount for this claim.";
     case "authorized":
-      return "Record payment when funds are received.";
+      return "Record the payment reference once the client confirms reimbursement was received.";
     case "partially_paid":
-      return "Record further payment, or correct an existing receipt if needed.";
+      return "Record a further payment reference, or correct an existing one if needed.";
     case "fully_reimbursed":
       return "This claim is fully reimbursed. No further action required.";
     case "cancelled":
@@ -561,7 +561,7 @@ export function SubmissionDetailPage({
         notes: paymentNotes.trim() || undefined,
         recordedBy: userId,
       });
-      toast({ type: "success", title: "Payment recorded" });
+      toast({ type: "success", title: "Payment reference recorded" });
       closePaymentForm();
       await load();
     } catch (err) {
@@ -602,7 +602,7 @@ export function SubmissionDetailPage({
         },
         protectedProof
       );
-      toast({ type: "success", title: "Payment corrected" });
+      toast({ type: "success", title: "Payment reference corrected" });
       setPendingPaymentDraft(null);
       closePaymentForm();
       await load();
@@ -717,7 +717,7 @@ export function SubmissionDetailPage({
                     </dd>
                   </div>
                   <div>
-                    <dt>Received so far</dt>
+                    <dt>Payment references recorded</dt>
                     <dd className="tabular-nums">
                       {formatFinancialAmount(
                         paymentSummary.amountPaid,
@@ -735,7 +735,7 @@ export function SubmissionDetailPage({
                     </dd>
                   </div>
                   <div>
-                    <dt>Payment</dt>
+                    <dt>Payment reference</dt>
                     <dd>
                       {PAYMENT_OUTCOME_LABELS[paymentSummary.outcome]}
                     </dd>
@@ -862,7 +862,7 @@ export function SubmissionDetailPage({
                     disabled={acting}
                     onClick={() => openCreatePaymentForm()}
                   >
-                    Record payment
+                    Record payment reference
                   </Button>
                 ) : null}
                 </div>
@@ -872,7 +872,8 @@ export function SubmissionDetailPage({
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 max-w-2xl">
                   <p className="sm:col-span-2 fin-form-hint">
                     Reimbursement authorization sets the amount that may be
-                    paid. It is separate from Work Order client authorisation.
+                    paid. It is the client&apos;s authorisation of this claim and is
+                    separate from Work Order approvals.
                     Outstanding and fully reimbursed use the authorized amount.
                   </p>
                   <FormField
@@ -978,6 +979,11 @@ export function SubmissionDetailPage({
                   id="fin-payment-form"
                   className="mt-4 grid gap-3 sm:grid-cols-2 max-w-2xl"
                 >
+                  <p className="sm:col-span-2 fin-form-hint">
+                    This is FM&apos;s operational reference that the client
+                    reimbursed this claim. The actual receipt and accounting
+                    transaction are recorded in Platform Finance.
+                  </p>
                   <div className="sm:col-span-2 fin-payment-context">
                     <div>
                       <p className="fin-metric-kicker">Claim</p>
