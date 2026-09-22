@@ -29,7 +29,7 @@ import { FmCostServerService, resolveFmCostOrganisation, type FmCostResource } f
  * are never reachable through the generic create/update path without it.
  */
 
-const READ_ACTIONS = new Set(["getAll", "getById", "getBySubmissionId"]);
+const READ_ACTIONS = new Set(["getAll", "getById", "getBySubmissionId", "getTotals"]);
 const WRITE_ACTIONS = new Set(["create", "update"]);
 
 /** The only protected action each (resource, action) may carry. */

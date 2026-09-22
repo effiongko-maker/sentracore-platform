@@ -189,6 +189,19 @@ export const CostRecordService = {
     });
   },
 
+  /** The authoritative total over the COMPLETE cost register (never a bounded page/pool). */
+  async getTotals(options?: { signal?: AbortSignal }): Promise<{
+    totalCount: number;
+    totalAmount: number;
+    currency: string;
+    liveUnclassifiedCount: number;
+    historicalUnrecordedReimbursabilityCount: number;
+    reimbursableCount: number;
+    nonReimbursableCount: number;
+  }> {
+    return postCostRecords("getTotals", {}, { signal: options?.signal });
+  },
+
   async getCostRecord(costId: string): Promise<CostRecord | null> {
     try {
       const data = await postCostRecords<RemoteCostRecord>("getById", {

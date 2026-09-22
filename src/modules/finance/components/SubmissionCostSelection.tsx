@@ -137,7 +137,7 @@ export function SubmissionCostSelection({
                   <td className="text-muted">
                     {COST_CATEGORY_LABELS[record.category as CostCategory]}
                   </td>
-                  <td className="text-muted">{record.location ?? "Not recorded"}</td>
+                  <td className="text-muted">{record.location ?? "Location not recorded"}</td>
                   <td className="font-medium">
                     {formatFinancialAmount(record.actualAmount, record.currency)}
                   </td>

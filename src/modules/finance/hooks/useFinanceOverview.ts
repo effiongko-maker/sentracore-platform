@@ -44,6 +44,7 @@ export function useFinanceOverview() {
     const [
       approvalResult,
       costResult,
+      costTotalsResult,
       submissionResult,
       paymentResult,
       authorizationResult,
@@ -65,6 +66,19 @@ export function useFinanceOverview() {
           { signal }
         )
       ),
+      // The authoritative headline total: the COMPLETE register, never the bounded preview pool above.
+      (async (): Promise<{ available: true; data: Awaited<ReturnType<typeof CostRecordService.getTotals>> } | { available: false }> => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), SOURCE_TIMEOUT_MS);
+        try {
+          const data = await CostRecordService.getTotals({ signal: controller.signal });
+          return { available: true, data };
+        } catch {
+          return { available: false };
+        } finally {
+          clearTimeout(timer);
+        }
+      })(),
       settleSource((signal) =>
         CostSubmissionService.listCostSubmissions(
           { page: 1, pageSize: FINANCE_OVERVIEW_FETCH_SIZE },
@@ -109,6 +123,7 @@ export function useFinanceOverview() {
         costRecords: costResult.available ? costResult.data : [],
         totalCostRecords: costResult.available ? costResult.total : 0,
         costRecordsAvailable: costResult.available,
+        costTotals: costTotalsResult.available ? costTotalsResult.data : null,
         submissions: submissionResult.available ? submissionResult.data : [],
         totalSubmissions: submissionResult.available
           ? submissionResult.total

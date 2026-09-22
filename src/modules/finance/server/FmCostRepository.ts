@@ -298,6 +298,46 @@ export class FmCostRepository {
     return { workId: work?.id ?? null, workInstructionId: wi?.id ?? null };
   }
 
+  /**
+   * The authoritative total over the COMPLETE cost register — never a bounded "pool"/page. Pages through every row
+   * (like FmWorkRepository.listRows) so the Costs & Claims headline is never a silent partial sum.
+   */
+  async aggregateTotals(): Promise<{
+    totalCount: number;
+    totalAmount: number;
+    currency: string;
+    liveUnclassifiedCount: number;
+    historicalUnrecordedReimbursabilityCount: number;
+    reimbursableCount: number;
+    nonReimbursableCount: number;
+  }> {
+    let totalCount = 0, totalAmount = 0, liveUnclassifiedCount = 0, historicalUnrecordedReimbursabilityCount = 0, reimbursableCount = 0, nonReimbursableCount = 0;
+    let currency = "NGN";
+    const batchSize = 1000;
+    for (let offset = 0; ; offset += batchSize) {
+      const { data, error } = await this.admin
+        .from("fm_cost_records")
+        .select("actual_amount, currency, reimbursability, record_origin")
+        .eq("organisation_id", this.organisationId)
+        .order("id", { ascending: true })
+        .range(offset, offset + batchSize - 1);
+      if (error) throwDb(error, "Unable to load cost totals.");
+      const batch = (data ?? []) as Array<{ actual_amount: number; currency: string; reimbursability: string; record_origin: string }>;
+      for (const row of batch) {
+        totalCount += 1;
+        totalAmount += Number(row.actual_amount) || 0;
+        currency = row.currency || currency;
+        if (row.reimbursability === "unknown") {
+          if (row.record_origin === "migrated_historical") historicalUnrecordedReimbursabilityCount += 1;
+          else liveUnclassifiedCount += 1;
+        } else if (row.reimbursability === "reimbursable") reimbursableCount += 1;
+        else if (row.reimbursability === "non_reimbursable") nonReimbursableCount += 1;
+      }
+      if (batch.length < batchSize) break;
+    }
+    return { totalCount, totalAmount: Math.round(totalAmount * 100) / 100, currency, liveUnclassifiedCount, historicalUnrecordedReimbursabilityCount, reimbursableCount, nonReimbursableCount };
+  }
+
   async createCost(input: ParsedCreateCostRecord, actorProfileId: string): Promise<FmCostRecordRow> {
     const facilityId = await this.resolveFacilityId(input.facilityRef);
     const ctx = await this.costContext({ facilityId, workRef: input.workRef, workInstructionRef: input.workInstructionRef });

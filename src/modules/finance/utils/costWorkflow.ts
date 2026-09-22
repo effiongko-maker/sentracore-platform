@@ -13,7 +13,9 @@ export type CostReimbursementEligibility =
   | "not_eligible"
   | "eligible"
   | "submitted"
-  | "reimbursed";
+  | "reimbursed"
+  /** A migrated_historical cost whose source states no reimbursement eligibility — a historical fact, not an open question. */
+  | "not_recorded_historically";
 
 /**
  * Operational cost lifecycle for Finance UI.
@@ -21,6 +23,7 @@ export type CostReimbursementEligibility =
  */
 export type CostWorkflowStage =
   | "needs_classification"
+  | "historical_not_recorded"
   | "classified_not_reimbursable"
   | "eligible_for_reimbursement"
   | "submitted"
@@ -34,10 +37,12 @@ export const COST_REIMBURSEMENT_ELIGIBILITY_LABELS: Record<
   eligible: "Eligible",
   submitted: "Submitted",
   reimbursed: "Reimbursed",
+  not_recorded_historically: "Not recorded historically",
 };
 
 export const COST_WORKFLOW_STAGE_LABELS: Record<CostWorkflowStage, string> = {
   needs_classification: "Needs classification",
+  historical_not_recorded: "Historical — not recorded",
   classified_not_reimbursable: "Classified · not reimbursable",
   eligible_for_reimbursement: "Eligible for reimbursement",
   submitted: "Submitted",
@@ -105,12 +110,26 @@ export function costRecordLockReason(
  * `paymentRecorded` stays false until Payment exists in the product.
  */
 export function deriveCostWorkflow(
-  record: Pick<CostRecord, "reimbursability" | "costId">,
+  record: Pick<CostRecord, "reimbursability" | "costId" | "recordOrigin">,
   linkedSubmission: Pick<CostSubmission, "submissionId" | "status"> | null,
   options?: { paymentRecorded?: boolean }
 ): CostWorkflowSnapshot {
   const paymentRecorded = options?.paymentRecorded === true;
   const linkedSubmissionId = linkedSubmission?.submissionId ?? null;
+
+  if (record.reimbursability === "unknown" && record.recordOrigin === "migrated_historical") {
+    // Historical incompleteness is evidence, not an open task: never presented as a live workflow stage.
+    return {
+      stage: "historical_not_recorded",
+      stageLabel: COST_WORKFLOW_STAGE_LABELS.historical_not_recorded,
+      eligibility: "not_recorded_historically",
+      eligibilityLabel: COST_REIMBURSEMENT_ELIGIBILITY_LABELS.not_recorded_historically,
+      needsClassification: false,
+      canStartSubmission: false,
+      linkedSubmissionId: null,
+      reimbursementPaymentRecorded: false,
+    };
+  }
 
   if (record.reimbursability === "unknown") {
     return {

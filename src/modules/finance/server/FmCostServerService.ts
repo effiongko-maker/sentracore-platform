@@ -87,6 +87,11 @@ export class FmCostServerService {
     return paginateRows(await this.hydrateCosts(rows), total, params.page, params.pageSize);
   }
 
+  /** The authoritative total over the COMPLETE cost register (never a bounded page/pool). */
+  async getCostTotals() {
+    return this.repo().aggregateTotals();
+  }
+
   async getCost(idOrCode: string) {
     const row = await this.repo().getCost(idOrCode);
     if (!row) throw new FmCostNotFoundError(`Cost record ${idOrCode} not found.`);
@@ -242,6 +247,7 @@ export class FmCostServerService {
     switch (resource) {
       case "cost-records":
         if (action === "getAll") return this.listCosts(payload);
+        if (action === "getTotals") return this.getCostTotals();
         if (action === "getById") return this.getCost(parseCostIdPayload(payload));
         if (action === "create") return this.createCost(payload);
         if (action === "update") return this.updateCost(payload, options);

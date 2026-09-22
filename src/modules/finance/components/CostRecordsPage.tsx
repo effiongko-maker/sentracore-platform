@@ -12,6 +12,7 @@ import {
   type CostRecord,
 } from "@/lib/operational/finance";
 import { CostRecordService } from "@/services/finance/CostRecordService";
+import { useFacilityName } from "@/hooks/useEntityLabel";
 import { formatFinancialAmount } from "../utils/formatFinancialAmount";
 import { COST_REIMBURSABILITY_LABELS } from "../constants";
 
@@ -26,6 +27,16 @@ function formatRecordedAt(iso?: string): string {
     month: "short",
     year: "numeric",
   });
+}
+
+function FacilityLocationCell({ record }: { record: CostRecord }) {
+  const name = useFacilityName(record.facilityId);
+  return (
+    <span className="text-muted">
+      {name || record.facilityId ? name || "Unknown facility" : "Not recorded"} ·{" "}
+      {record.location ?? "Location not recorded"}
+    </span>
+  );
 }
 
 export function CostRecordsPage() {
@@ -89,11 +100,7 @@ export function CostRecordsPage() {
       {
         key: "facilityId",
         header: "Facility / location",
-        render: (record) => (
-          <span className="text-muted">
-            {record.facilityId} · {record.location ?? "Not recorded"}
-          </span>
-        ),
+        render: (record) => <FacilityLocationCell record={record} />,
       },
       {
         key: "category",
@@ -135,7 +142,9 @@ export function CostRecordsPage() {
         header: "Reimbursement",
         render: (record) => (
           <span className="text-muted">
-            {COST_REIMBURSABILITY_LABELS[record.reimbursability]}
+            {record.reimbursability === "unknown" && record.recordOrigin === "migrated_historical"
+              ? "Not recorded historically"
+              : COST_REIMBURSABILITY_LABELS[record.reimbursability]}
           </span>
         ),
       },

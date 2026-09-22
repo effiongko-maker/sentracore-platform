@@ -95,8 +95,8 @@ export function FinanceSummaryRow({
 }) {
   // Zero is data, but it is only the SentraCore™ record: earlier (historical) execution costs are not loaded here.
   const supportCopy = spendIsSample
-    ? "Sample of costs recorded in SentraCore™ currently in view."
-    : "Costs recorded in SentraCore™ so far. Historical costs from before SentraCore™ are not loaded here — NGN 0 means none recorded yet, not that none were incurred.";
+    ? "The complete total could not be loaded — this is a partial figure from a bounded preview, not the full register."
+    : "The complete cost register recorded in SentraCore™, including imported historical execution costs — NGN 0 means none recorded yet, not that none were incurred.";
 
   return (
     <div className="fin-v13-overview">
@@ -104,7 +104,7 @@ export function FinanceSummaryRow({
         <div className="fin-v13-hero-body">
           <div className="fin-v13-hero-metric">
             <p className="fin-v13-metric-label">
-              Operational spend{spendIsSample ? " (sample)" : ""}
+              Operational spend{spendIsSample ? " (partial)" : ""}
             </p>
             <p className="fin-v13-hero-value">
               {loading ? "—" : operationalSpendLabel}

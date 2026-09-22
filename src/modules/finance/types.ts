@@ -77,13 +77,18 @@ export type FinanceOperationalCostLens = {
 export type FinanceOperationalCostSummary = {
   /** API total when provided — population count, not page length. */
   totalCount: number;
-  /** True when overview only holds a bounded sample of costs. */
+  /** True when the preview pool only holds a bounded subset of costs (recent-activity preview, not the total). */
   truncated: boolean;
-  /** Sum of actualAmount in the loaded sample only — not claimed as sheet-wide. */
+  /** The authoritative sum over the COMPLETE register when completeTotalAvailable; a best-effort partial sum otherwise. */
   sampleAmount: number;
   sampleCount: number;
   currency: string;
+  /** True when sampleAmount is the real complete-register total (not a fallback partial sum). */
+  completeTotalAvailable: boolean;
+  /** Live (operational) costs only — a migrated_historical cost with no recorded eligibility is not "unknown" in this sense. */
   unknownCount: number;
+  /** Historical costs the source states no reimbursement eligibility for. Informational — never an action item. */
+  historicalUnrecordedReimbursabilityCount: number;
   reimbursableCount: number;
 };
 

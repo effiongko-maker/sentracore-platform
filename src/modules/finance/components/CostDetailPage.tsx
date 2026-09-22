@@ -16,6 +16,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { ProtectedActionDialog } from "@/components/security/ProtectedActionDialog";
 import { useFacilityOptions } from "@/hooks/useFacilityOptions";
+import { useDepartmentName } from "@/hooks/useEntityLabel";
 import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { facilityDisplayName } from "@/lib/platform/scopedFacility";
 import type { ProtectedMutationProof } from "@/lib/access/protectedMutationProof";
@@ -80,7 +81,7 @@ type ClassificationForm = {
 type FormErrors = Partial<Record<keyof ClassificationForm, string>>;
 
 function formatTimestamp(iso?: string): string {
-  if (!iso) return "—";
+  if (!iso) return "Not recorded";
   const date = new Date(iso);
   if (!Number.isFinite(date.getTime())) return iso;
   return date.toLocaleString("en-GB", {
@@ -134,6 +135,7 @@ export function CostDetailPage({ costId }: { costId: string }) {
   const { facilities, loading: facilitiesLoading } = useFacilityOptions(true);
 
   const [record, setRecord] = useState<CostRecord | null>(null);
+  const departmentName = useDepartmentName(record?.departmentId);
   const [linkedSubmission, setLinkedSubmission] =
     useState<CostSubmission | null>(null);
   const [linkedPayments, setLinkedPayments] = useState<ReimbursementPayment[]>(
@@ -203,7 +205,8 @@ export function CostDetailPage({ costId }: { costId: string }) {
           : []
       );
       setForm(formFromRecord(cost));
-      setEditing(cost.reimbursability === "unknown");
+      // Historical incompleteness is evidence, not an open task: never auto-open the edit form for an imported record.
+      setEditing(cost.reimbursability === "unknown" && cost.recordOrigin !== "migrated_historical");
     } catch (err) {
       setRecord(null);
       setLinkedSubmission(null);
@@ -311,7 +314,8 @@ export function CostDetailPage({ costId }: { costId: string }) {
     [record, linkedSubmission, paymentSummary?.fullyPaid]
   );
 
-  const canEdit = canEditCostRecord(linkedSubmission) && canMutateFinance;
+  const isHistorical = record?.recordOrigin === "migrated_historical";
+  const canEdit = !isHistorical && canEditCostRecord(linkedSubmission) && canMutateFinance;
   const lockReason = costRecordLockReason(linkedSubmission);
   const primaryPayment = linkedPayments[0] ?? null;
 
@@ -543,13 +547,16 @@ export function CostDetailPage({ costId }: { costId: string }) {
               <div>
                 <dt>Facility</dt>
                 <dd>
-                  {record.facilityId}
-                  {record.location ? ` · ${record.location}` : ""}
+                  {facilitiesLoading && !facilities.length
+                    ? "Loading…"
+                    : facilityDisplayName(facilities, record.facilityId, "Unknown facility")}
+                  {" · "}
+                  {record.location ?? "Location not recorded"}
                 </dd>
               </div>
               <div>
                 <dt>Department</dt>
-                <dd>{record.departmentId ?? "—"}</dd>
+                <dd>{record.departmentId ? departmentName : "Not recorded"}</dd>
               </div>
               <div>
                 <dt>Category</dt>
@@ -618,7 +625,9 @@ export function CostDetailPage({ costId }: { costId: string }) {
               <div>
                 <dt>Stored classification</dt>
                 <dd>
-                  {COST_REIMBURSABILITY_LABELS[record.reimbursability]}
+                  {record.reimbursability === "unknown" && isHistorical
+                    ? "Not recorded historically"
+                    : COST_REIMBURSABILITY_LABELS[record.reimbursability]}
                 </dd>
               </div>
               {linkedSubmission ? (
@@ -667,11 +676,27 @@ export function CostDetailPage({ costId }: { costId: string }) {
                 </>
               ) : null}
             </dl>
-            <p className="fin-form-hint mt-3">
-              Classification is explicit — a cost is not automatically eligible
-              for reimbursement. Reimbursed only when a payment is recorded
-              against the linked submission and the claim is fully paid.
-            </p>
+            {isHistorical ? (
+              <div
+                className="mt-3 rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-sm"
+                role="note"
+              >
+                <p className="font-medium text-foreground">Historical imported record</p>
+                <p className="mt-0.5 text-muted">
+                  This record reflects source evidence migrated into SentraCore™ and is
+                  read-only. Reimbursement eligibility, category, location, evidence and the
+                  recorded date were not established by the source and are shown as
+                  &ldquo;Not recorded historically&rdquo; — they are historical facts, not an
+                  open task, and will not be completed on the Facility Manager&apos;s behalf.
+                </p>
+              </div>
+            ) : (
+              <p className="fin-form-hint mt-3">
+                Classification is explicit — a cost is not automatically eligible
+                for reimbursement. Reimbursed only when a payment is recorded
+                against the linked submission and the claim is fully paid.
+              </p>
+            )}
             <div className="mt-4 flex flex-wrap gap-2">
               {canEdit && !editing ? (
                 <Button

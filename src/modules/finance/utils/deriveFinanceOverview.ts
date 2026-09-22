@@ -266,6 +266,9 @@ function buildPendingActions(options: {
   }
 
   for (const record of options.costRecords) {
+    // Historical incompleteness is evidence, not an operational exception: an imported cost whose source states no
+    // reimbursement eligibility never becomes a "needs classification" action item.
+    if (record.recordOrigin === "migrated_historical") continue;
     if (record.reimbursability === "unknown") {
       items.push({
         id: `cost-unknown-${record.costId}`,
@@ -368,6 +371,16 @@ function buildPendingActions(options: {
     .slice(0, FINANCE_UI_LIST_LIMIT);
 }
 
+type CostTotals = {
+  totalCount: number;
+  totalAmount: number;
+  currency: string;
+  liveUnclassifiedCount: number;
+  historicalUnrecordedReimbursabilityCount: number;
+  reimbursableCount: number;
+  nonReimbursableCount: number;
+};
+
 function buildRecentCostRows(records: CostRecord[]): FinanceRecentCostRow[] {
   return records.slice(0, FINANCE_RECENT_COSTS_LIMIT).map((record) => ({
     costId: record.costId,
@@ -376,7 +389,10 @@ function buildRecentCostRows(records: CostRecord[]): FinanceRecentCostRow[] {
     categoryLabel: record.category ? COST_CATEGORY_LABELS[record.category as CostCategory] : "Not recorded",
     facilityId: record.facilityId,
     amountLabel: formatFinancialAmount(record.actualAmount, record.currency),
-    reimbursabilityLabel: COST_REIMBURSABILITY_LABELS[record.reimbursability],
+    reimbursabilityLabel:
+      record.reimbursability === "unknown" && record.recordOrigin === "migrated_historical"
+        ? "Not recorded historically"
+        : COST_REIMBURSABILITY_LABELS[record.reimbursability],
   }));
 }
 
@@ -400,6 +416,7 @@ function buildPosition(options: {
   costTruncated: boolean;
   sampleAmount: number;
   currency: string;
+  costTotals: CostTotals | null;
   submissions: FinanceSubmissionSnapshot;
   approvals: Approval[];
   payments: FinancePaymentSnapshot;
@@ -407,12 +424,20 @@ function buildPosition(options: {
   submissionsAvailable: boolean;
   approvalsAvailable: boolean;
 }): FinancePositionMetric[] {
-  const unknownCount = options.costRecords.filter(
-    (r) => r.reimbursability === "unknown"
-  ).length;
-  const reimbursableCount = options.costRecords.filter(
-    (r) => r.reimbursability === "reimbursable"
-  ).length;
+  // The COMPLETE register is authoritative when available; the bounded preview pool is only a best-effort fallback
+  // (e.g. the aggregate call itself failed) — it is never presented as the total without qualification.
+  const complete = options.costTotals;
+  const totalAmount = complete ? complete.totalAmount : options.sampleAmount;
+  const totalCurrency = complete ? complete.currency : options.currency;
+  // "Needs classification" counts LIVE unclassified costs only — a migrated_historical cost whose source states no
+  // reimbursement eligibility is a historical fact, not an open task, and must never appear here.
+  const liveUnclassifiedCount = complete
+    ? complete.liveUnclassifiedCount
+    : options.costRecords.filter((r) => r.reimbursability === "unknown" && r.recordOrigin !== "migrated_historical").length;
+  const historicalUnrecordedCount = complete?.historicalUnrecordedReimbursabilityCount ?? 0;
+  const reimbursableCount = complete
+    ? complete.reimbursableCount
+    : options.costRecords.filter((r) => r.reimbursability === "reimbursable").length;
 
   const awaitingDecision = options.approvals.filter(
     (a) => canonicalStatus(a) === "awaiting_decision"
@@ -433,10 +458,10 @@ function buildPosition(options: {
           : "None yet",
       detail: !options.costRecordsAvailable
         ? "Temporarily unavailable"
-        : options.costTruncated
-        ? `${options.costRecords.length} newest in view · sample ${formatFinancialAmount(options.sampleAmount, options.currency)}`
         : options.costTotal > 0
-          ? formatFinancialAmount(options.sampleAmount, options.currency)
+          ? complete
+            ? formatFinancialAmount(totalAmount, totalCurrency)
+            : `${formatFinancialAmount(totalAmount, totalCurrency)} (partial — the complete total could not be loaded)`
           : "Record costs as they are incurred",
       emphasis: "primary",
       available: options.costRecordsAvailable,
@@ -445,23 +470,27 @@ function buildPosition(options: {
       id: "cost_classification",
       group: "cost",
       label: "Needs classification",
-      value: options.costRecordsAvailable ? String(unknownCount) : null,
+      value: options.costRecordsAvailable ? String(liveUnclassifiedCount) : null,
       detail: !options.costRecordsAvailable
         ? "Temporarily unavailable"
-        : unknownCount > 0
-          ? "Unknown reimbursability in the cost sample"
-          : "No unknown classifications in view",
-      emphasis: unknownCount > 0 ? "primary" : "muted",
+        : liveUnclassifiedCount > 0
+          ? "Live costs awaiting reimbursement classification"
+          : historicalUnrecordedCount > 0
+            ? `No live costs need classification (${historicalUnrecordedCount} historical cost${historicalUnrecordedCount === 1 ? "" : "s"} recorded reimbursement eligibility as not recorded historically — not an open task)`
+            : "No unknown classifications",
+      emphasis: liveUnclassifiedCount > 0 ? "primary" : "muted",
       available: options.costRecordsAvailable,
     },
     {
       id: "cost_reimbursable",
       group: "cost",
-      label: "Reimbursable in view",
+      label: "Reimbursable",
       value: options.costRecordsAvailable ? String(reimbursableCount) : null,
       detail: !options.costRecordsAvailable
         ? "Temporarily unavailable"
-        : "From the bounded cost sample",
+        : complete
+          ? "Across the complete cost register"
+          : "From the loaded cost preview",
       emphasis: "secondary",
       available: options.costRecordsAvailable,
     },
@@ -561,6 +590,8 @@ export type DeriveFinanceOverviewInput = {
   totalApprovals: number;
   costRecords: CostRecord[];
   totalCostRecords: number;
+  /** The authoritative COMPLETE-register total; null only when it could not be loaded. */
+  costTotals?: CostTotals | null;
   submissions: CostSubmission[];
   totalSubmissions: number;
   payments?: ReimbursementPayment[];
@@ -586,6 +617,7 @@ export function deriveFinanceOverview(
   const totalApprovals = approvalsAvailable ? input.totalApprovals : 0;
   const costRecords = costRecordsAvailable ? input.costRecords : [];
   const totalCostRecords = costRecordsAvailable ? input.totalCostRecords : 0;
+  const costTotals = costRecordsAvailable ? (input.costTotals ?? null) : null;
   const submissions = submissionsAvailable ? input.submissions : [];
   const totalSubmissions = submissionsAvailable ? input.totalSubmissions : 0;
   const payments = paymentsAvailable ? input.payments ?? [] : [];
@@ -638,10 +670,10 @@ export function deriveFinanceOverview(
     paymentSnapshot.positionDetail = "Temporarily unavailable";
   }
 
-  const unknownCount = costRecords.filter(
-    (r) => r.reimbursability === "unknown"
+  const unknownCount = costTotals ? costTotals.liveUnclassifiedCount : costRecords.filter(
+    (r) => r.reimbursability === "unknown" && r.recordOrigin !== "migrated_historical"
   ).length;
-  const reimbursableCount = costRecords.filter(
+  const reimbursableCount = costTotals ? costTotals.reimbursableCount : costRecords.filter(
     (r) => r.reimbursability === "reimbursable"
   ).length;
 
@@ -686,6 +718,7 @@ export function deriveFinanceOverview(
       costTruncated,
       sampleAmount,
       currency,
+      costTotals,
       submissions: submissionSnapshot,
       approvals,
       payments: paymentSnapshot,
@@ -720,10 +753,13 @@ export function deriveFinanceOverview(
         ? {
             totalCount: totalCostRecords,
             truncated: costTruncated,
-            sampleAmount,
+            // The authoritative complete-register amount when available; the bounded preview sum only as a fallback.
+            sampleAmount: costTotals ? costTotals.totalAmount : sampleAmount,
             sampleCount: costRecords.length,
             currency,
+            completeTotalAvailable: Boolean(costTotals),
             unknownCount,
+            historicalUnrecordedReimbursabilityCount: costTotals?.historicalUnrecordedReimbursabilityCount ?? 0,
             reimbursableCount,
           }
         : null,

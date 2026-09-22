@@ -72,7 +72,7 @@ export function FinancePage() {
 
         <FinanceSummaryRow
           operationalSpendLabel={loading ? "—" : spendLabel}
-          spendIsSample={Boolean(summary?.truncated)}
+          spendIsSample={Boolean(summary) && !summary!.completeTotalAvailable}
           costRecordsTotal={
             loading ? "—" : costTotal == null ? "Unavailable" : costTotal
           }
@@ -137,7 +137,7 @@ export function FinancePage() {
         />
 
         <div className="fin-v13-footer">
-          <FinanceIntelligencePreview />
+          <FinanceIntelligencePreview summary={overview?.operationalCostSummary ?? null} />
         </div>
 
         <CostRecordFormModal
