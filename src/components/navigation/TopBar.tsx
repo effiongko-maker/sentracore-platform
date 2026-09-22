@@ -4,6 +4,7 @@ import { LogOut, Menu } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { getNavContextByPath } from "@/lib/navigation";
+import { fmOperatingIdentityName } from "@/lib/platform/workspaces";
 import { signOut } from "@/lib/auth/actions";
 import { UserService } from "@/services/users/UserService";
 import type { CurrentUser } from "@/types";
@@ -19,6 +20,7 @@ export function TopBar() {
 
   const isIntelligence = archetype === "briefing";
   const isHome = group?.id === "home";
+  const operatingCompanyName = fmOperatingIdentityName(pathname, user?.organisationName);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,7 +84,7 @@ export function TopBar() {
           title={
             user
               ? `${user.name} · ${user.role}${
-                  user.organisationName ? ` · ${user.organisationName}` : ""
+                  operatingCompanyName ? ` · ${operatingCompanyName}` : ""
                 }`
               : undefined
           }
@@ -95,8 +97,8 @@ export function TopBar() {
               {user?.name ?? "Loading..."}
             </p>
             <p className="truncate text-[11px] text-muted">
-              {user?.organisationName
-                ? `${user.role} · ${user.organisationName}`
+              {operatingCompanyName
+                ? `${user?.role ?? ""} · ${operatingCompanyName}`
                 : (user?.role ?? "")}
             </p>
           </div>

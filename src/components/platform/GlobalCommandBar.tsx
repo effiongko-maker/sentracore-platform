@@ -7,6 +7,7 @@ import {
   resolveBreadcrumbSegments,
 } from "@/lib/platform/layers";
 import {
+  fmOperatingIdentityName,
   isCommandCentrePath,
   isPlatformHomePath,
   isPlatformWorkspaceSurfacePath,
@@ -24,6 +25,7 @@ export function GlobalCommandBar() {
   const [pending, startTransition] = useTransition();
 
   const breadcrumb = resolveBreadcrumbSegments(pathname);
+  const operatingCompanyName = fmOperatingIdentityName(pathname, user?.organisationName);
   const isPlatformSurface =
     isPlatformHomePath(pathname) || isPlatformWorkspaceSurfacePath(pathname);
   const showCommandSearch =
@@ -92,12 +94,12 @@ export function GlobalCommandBar() {
 
       <div className="os-command-actions">
         {showCommandSearch ? <GlobalNotificationBell /> : null}
-        {user?.organisationName ? (
+        {operatingCompanyName ? (
           <span className="hidden text-xs text-[var(--os-ink-faint)] lg:inline">
-            {user.organisationName}
+            {operatingCompanyName}
           </span>
         ) : null}
-        <div className="os-command-user" title={user?.organisationName ?? undefined}>
+        <div className="os-command-user" title={operatingCompanyName ?? undefined}>
           <span className="os-command-avatar">{user?.avatarInitials ?? "—"}</span>
           <span className="hidden max-w-[8rem] truncate md:inline">
             {user?.name ?? "Loading"}

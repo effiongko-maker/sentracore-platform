@@ -401,6 +401,27 @@ export function isOperationsPath(pathname: string): boolean {
   );
 }
 
+/**
+ * FM operating-company identity — presentation only. Trivnet Services Limited is the operating company
+ * Facility Management users see; the underlying organisation/tenant identity (PayChex International Marketing
+ * Limited) is unchanged and still authoritative everywhere architecture requires it (IAM, Platform Finance,
+ * Command Centre, provenance). Never a tenant rename — swap the DISPLAYED name only, on FM-scoped surfaces.
+ */
+export const FM_OPERATING_COMPANY_NAME = "Trivnet Services Limited";
+
+/**
+ * Resolves the operating-company name to display for a given pathname: FM_OPERATING_COMPANY_NAME within the FM
+ * workspace (isOperationsPath), otherwise the underlying organisation name, unchanged. Inside FM this never
+ * falls back to the underlying name, even when it is null/undefined — the FM identity is fixed, not derived.
+ */
+export function fmOperatingIdentityName(
+  pathname: string,
+  underlyingOrganisationName: string | null | undefined
+): string | null {
+  if (isOperationsPath(pathname)) return FM_OPERATING_COMPANY_NAME;
+  return underlyingOrganisationName ?? null;
+}
+
 export function isWorkspacePreviewPath(pathname: string): boolean {
   return pathname.startsWith("/workspaces/");
 }
