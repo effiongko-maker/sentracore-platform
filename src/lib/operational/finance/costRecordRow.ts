@@ -3,6 +3,7 @@
  * Keeps spreadsheet representation separate from domain types.
  */
 
+import { readRecordOrigin } from "@/services/recordOrigin";
 import type { CostCategory, CostEvidence, CostRecord } from "./types";
 
 /** Human-readable sheet headers for COST_RECORDS (21 columns). */
@@ -67,11 +68,8 @@ function mapEvidence(raw: RemoteCostRecord): CostEvidence {
     raw.evidence && typeof raw.evidence === "object"
       ? (raw.evidence as Record<string, unknown>)
       : null;
-  const reference = String(
-    nested?.reference ??
-      pickField(raw, "evidenceReference", "Evidence Reference") ??
-      ""
-  ).trim();
+  // Undefined (not "") when the source states no reference — an empty string could pass for "no evidence recorded".
+  const reference = optionalString(raw, "reference") ?? (nested ? optionalString(nested as RemoteCostRecord, "reference") : undefined) ?? optionalString(raw, "evidenceReference", "Evidence Reference");
   return {
     reference,
     fileId:
@@ -109,9 +107,8 @@ export function readRemoteBudgetedAmount(raw: RemoteCostRecord): number | undefi
 
 /** Deserialize Apps Script / sheet payload into domain CostRecord. */
 export function mapRemoteCostRecord(raw: RemoteCostRecord): CostRecord {
-  const recordedAt = String(
-    pickField(raw, "recordedAt", "Recorded At") ?? new Date().toISOString()
-  );
+  // Missing stays missing: never the current time, and never any other date.
+  const recordedAt = optionalString(raw, "recordedAt", "Recorded At");
   const actualAmount = parseAmount(pickField(raw, "actualAmount", "Actual Amount"));
   if (actualAmount == null || actualAmount < 0) {
     throw new Error("Invalid actualAmount in remote CostRecord");
@@ -120,16 +117,16 @@ export function mapRemoteCostRecord(raw: RemoteCostRecord): CostRecord {
   return {
     costId: String(pickField(raw, "costId", "Cost ID", "id") ?? ""),
     recordedAt,
+    recordOrigin: readRecordOrigin(raw),
     facilityId: String(pickField(raw, "facilityId", "Facility ID") ?? ""),
-    location: String(pickField(raw, "location", "Location") ?? ""),
+    location: optionalString(raw, "location", "Location"),
     departmentId: optionalString(raw, "departmentId", "Department ID"),
     workId: optionalString(raw, "workId", "Work ID"),
     workOrderId: optionalString(raw, "workOrderId", "Work Order ID"),
     jobOrderId: optionalString(raw, "jobOrderId", "Job Order ID"),
     description: String(pickField(raw, "description", "Description") ?? ""),
-    category: String(
-      pickField(raw, "category", "Category") ?? "other"
-    ) as CostCategory,
+    // Source evidence, not a default: "other" is never invented for a record the source states no category for.
+    category: optionalString(raw, "category", "Category") as CostCategory | undefined,
     budgetedAmount: readRemoteBudgetedAmount(raw),
     actualAmount,
     currency: String(pickField(raw, "currency", "Currency") ?? "NGN"),
@@ -156,20 +153,20 @@ export function costRecordToRemotePayload(
 export function costRecordToRow(record: CostRecord): CostRecordRow {
   return {
     "Cost ID": record.costId,
-    "Recorded At": record.recordedAt,
+    "Recorded At": record.recordedAt ?? "",
     "Facility ID": record.facilityId,
     "Department ID": record.departmentId ?? "",
-    Location: record.location,
+    Location: record.location ?? "",
     "Work ID": record.workId ?? "",
     "Work Order ID": record.workOrderId ?? "",
     "Job Order ID": record.jobOrderId ?? "",
     Description: record.description,
-    Category: record.category,
+    Category: record.category ?? "",
     "Budgeted Amount": record.budgetedAmount ?? "",
     "Actual Amount": record.actualAmount,
     Currency: record.currency,
     Reimbursability: record.reimbursability,
-    "Evidence Reference": record.evidence.reference,
+    "Evidence Reference": record.evidence.reference ?? "",
     "Evidence File ID": record.evidence.fileId ?? "",
     "Evidence File Name": record.evidence.fileName ?? "",
     "Evidence MIME Type": record.evidence.mimeType ?? "",

@@ -101,20 +101,20 @@ function formFromRecord(record: CostRecord): ClassificationForm {
       : "none";
   return {
     description: record.description,
-    category: record.category,
+    category: record.category ?? "",
     actualAmount: formatMonetaryFromNumber(record.actualAmount),
     budgetedAmount:
       record.budgetedAmount != null
         ? formatMonetaryFromNumber(record.budgetedAmount)
         : "",
     facilityId: record.facilityId,
-    location: record.location,
+    location: record.location ?? "",
     departmentId: record.departmentId ?? "",
     relatedLink,
     workId: record.workId ?? "",
     workOrderId: record.workOrderId ?? "",
     reimbursability: record.reimbursability,
-    evidenceReference: record.evidence.reference,
+    evidenceReference: record.evidence.reference ?? "",
   };
 }
 
@@ -554,7 +554,9 @@ export function CostDetailPage({ costId }: { costId: string }) {
               <div>
                 <dt>Category</dt>
                 <dd>
-                  {COST_CATEGORY_LABELS[record.category as CostCategory]}
+                  {record.category
+                    ? COST_CATEGORY_LABELS[record.category as CostCategory]
+                    : "Not recorded"}
                 </dd>
               </div>
               <div>

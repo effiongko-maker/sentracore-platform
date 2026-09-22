@@ -373,7 +373,7 @@ function buildRecentCostRows(records: CostRecord[]): FinanceRecentCostRow[] {
     costId: record.costId,
     recordedAt: record.recordedAt,
     description: record.description,
-    categoryLabel: COST_CATEGORY_LABELS[record.category as CostCategory],
+    categoryLabel: record.category ? COST_CATEGORY_LABELS[record.category as CostCategory] : "Not recorded",
     facilityId: record.facilityId,
     amountLabel: formatFinancialAmount(record.actualAmount, record.currency),
     reimbursabilityLabel: COST_REIMBURSABILITY_LABELS[record.reimbursability],

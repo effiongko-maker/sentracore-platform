@@ -7,7 +7,8 @@ import { formatFinancialAmount } from "../utils/formatFinancialAmount";
 import { computeActualCostTotal } from "../utils/submissionClaim";
 import { filterCostsBySearch } from "../utils/submissionEligibility";
 
-function formatRecordedAt(iso: string): string {
+function formatRecordedAt(iso?: string): string {
+  if (!iso) return "Not recorded";
   const date = new Date(iso);
   if (!Number.isFinite(date.getTime())) return iso;
   return date.toLocaleDateString("en-GB", {
@@ -136,7 +137,7 @@ export function SubmissionCostSelection({
                   <td className="text-muted">
                     {COST_CATEGORY_LABELS[record.category as CostCategory]}
                   </td>
-                  <td className="text-muted">{record.location}</td>
+                  <td className="text-muted">{record.location ?? "Not recorded"}</td>
                   <td className="font-medium">
                     {formatFinancialAmount(record.actualAmount, record.currency)}
                   </td>

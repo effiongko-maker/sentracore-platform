@@ -12,6 +12,7 @@ import { isActionError } from "@/lib/actions/errors";
 import {
   FmCostNotFoundError,
   FmCostProtectedRequiredError,
+  FmCostReadOnlyError,
   FmCostUnavailableError,
   FmCostValidationError,
 } from "./fmCostDomain";
@@ -111,6 +112,7 @@ export async function handleFmCostRoute(options: {
     if (error instanceof FmCostProtectedRequiredError) {
       return fail(403, error.message, { errorClass: "protected", protectedActionId: error.actionId });
     }
+    if (error instanceof FmCostReadOnlyError) return fail(403, error.message, { errorClass: "read_only" });
     if (error instanceof FmCostValidationError) return fail(400, error.message, { errorClass: "validation" });
     if (error instanceof FmCostNotFoundError) return fail(404, error.message, { errorClass: "validation" });
     if (error instanceof FmCostUnavailableError) {

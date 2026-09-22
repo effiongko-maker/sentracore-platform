@@ -391,7 +391,7 @@ export function CostRecordFormModal({
       toast({
         type: "success",
         title: "Cost recorded",
-        description: `${formatFinancialAmount(created.actualAmount, created.currency)} · ${COST_CATEGORY_LABELS[created.category]}`,
+        description: `${formatFinancialAmount(created.actualAmount, created.currency)} · ${created.category ? COST_CATEGORY_LABELS[created.category] : "Not recorded"}`,
       });
       await onSaved?.();
     } catch (error) {
@@ -452,7 +452,7 @@ export function CostRecordFormModal({
               createdRecord.actualAmount,
               createdRecord.currency
             )}{" "}
-            · {COST_CATEGORY_LABELS[createdRecord.category]}
+            · {createdRecord.category ? COST_CATEGORY_LABELS[createdRecord.category] : "Not recorded"}
           </p>
           <p className="text-sm text-muted">{createdRecord.description}</p>
           {createdRecord.evidence.fileName ? (

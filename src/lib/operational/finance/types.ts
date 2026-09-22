@@ -47,7 +47,8 @@ export type CostReimbursability = "unknown" | "reimbursable" | "non_reimbursable
  */
 export type CostEvidence = {
   /** Primary audit reference (invoice no., receipt id, PO reference, etc.). */
-  reference: string;
+  /** Undefined ONLY for migrated_historical rows the source states no receipt/invoice reference for. */
+  reference?: string;
   /** Google Drive id when a receipt or invoice has been uploaded. */
   fileId?: string;
   /** Original filename of the uploaded evidence. */
@@ -76,13 +77,15 @@ export type CostEvidence = {
 export type CostRecord = {
   /** Canonical cost identity (e.g. COST-2026-000001 when persisted). */
   costId: string;
-  /** When the cost was recorded in SentraCore (ISO datetime). */
-  recordedAt: string;
+  /** When the cost was recorded in SentraCore (ISO datetime). Undefined ONLY for migrated_historical rows whose source states no such date — never substituted with the import time or "now". */
+  recordedAt?: string;
+  /** operational (product-created, strict) | migrated_historical (explicit migration). Never set from input. */
+  recordOrigin?: "operational" | "migrated_historical";
 
-  /** Operational context — facility and location are required; execution links are optional. */
+  /** Operational context — facility is required; execution links are optional. */
   facilityId: string;
-  /** Operational place within/around the facility (free text). */
-  location: string;
+  /** Operational place within/around the facility (free text). Undefined ONLY for migrated_historical rows the source does not state a location for. */
+  location?: string;
   departmentId?: string;
   /** Work backing store id (Maintenance / MNT-* in current architecture). */
   workId?: string;
@@ -91,7 +94,8 @@ export type CostRecord = {
   jobOrderId?: string;
 
   description: string;
-  category: CostCategory;
+  /** Undefined ONLY for migrated_historical rows whose source states no category. Never defaulted to "other". */
+  category?: CostCategory;
   /** Optional amount budgeted/planned for this cost when a budget exists. */
   budgetedAmount?: number;
   /** Authoritative incurred amount once confirmed. */
@@ -99,6 +103,7 @@ export type CostRecord = {
   currency: FinancialCurrencyCode;
 
   reimbursability: CostReimbursability;
+  /** `evidence.reference` is undefined ONLY for migrated_historical rows — never a fabricated placeholder. */
   evidence: CostEvidence;
 
   /** User id of the person who recorded the cost. */

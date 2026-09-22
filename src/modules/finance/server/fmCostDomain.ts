@@ -32,6 +32,19 @@ export class FmCostValidationError extends Error {
     this.name = "FmCostValidationError";
   }
 }
+/**
+ * Migrated historical FM execution costs are source evidence, never current operational state — never editable, even
+ * with the protected step-up that unlocks a claim-locked LIVE cost. Refused at the repository — the single choke
+ * point for cost writes.
+ */
+export class FmCostReadOnlyError extends Error {
+  readonly errorClass = "read_only" as const;
+  constructor(message = "Imported historical costs are read-only source records and cannot be changed.") {
+    super(message);
+    this.name = "FmCostReadOnlyError";
+  }
+}
+
 export class FmCostNotFoundError extends Error {
   readonly errorClass = "validation" as const;
   constructor(message: string) {
@@ -139,17 +152,17 @@ export const generateNextPaymentCode = (latest: string | null | undefined, now =
 // ------------------------------------------------------------- Cost Records
 
 export type FmCostRecordRow = {
-  id: string; organisation_id: string; code: string; recorded_at: string; facility_id: string;
-  department_id: string | null; location: string; work_id: string | null; work_instruction_id: string | null;
-  description: string; category: string; budgeted_amount: number | null; actual_amount: number;
-  currency: string; reimbursability: string; evidence_reference: string;
+  id: string; organisation_id: string; code: string; recorded_at: string | null; facility_id: string;
+  department_id: string | null; location: string | null; work_id: string | null; work_instruction_id: string | null;
+  description: string; category: string | null; budgeted_amount: number | null; actual_amount: number;
+  currency: string; reimbursability: string; evidence_reference: string | null;
   evidence_file_id: string | null; evidence_file_name: string | null; evidence_file_mime: string | null;
   evidence_file_size: number | null; evidence_file_url: string | null; notes: string | null;
   recorded_by_profile_id: string | null; created_by_profile_id: string | null; updated_by_profile_id: string | null;
-  created_at: string; updated_at: string;
+  created_at: string; updated_at: string; record_origin: string;
 };
 export const FM_COST_RECORD_SELECT =
-  "id, organisation_id, code, recorded_at, facility_id, department_id, location, work_id, work_instruction_id, description, category, budgeted_amount, actual_amount, currency, reimbursability, evidence_reference, evidence_file_id, evidence_file_name, evidence_file_mime, evidence_file_size, evidence_file_url, notes, recorded_by_profile_id, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
+  "id, organisation_id, code, recorded_at, facility_id, department_id, location, work_id, work_instruction_id, description, category, budgeted_amount, actual_amount, currency, reimbursability, evidence_reference, evidence_file_id, evidence_file_name, evidence_file_mime, evidence_file_size, evidence_file_url, notes, recorded_by_profile_id, created_by_profile_id, updated_by_profile_id, created_at, updated_at, record_origin";
 
 export type CostRecordFields = {
   recordedAt?: string;
@@ -260,20 +273,21 @@ export function mapFmCostRecordRow(row: FmCostRecordRow, relations: CostRecordRe
   return {
     costUuid: row.id,
     costId: row.code,
-    recordedAt: row.recorded_at,
+    recordedAt: row.recorded_at ?? undefined,
+    recordOrigin: row.record_origin === "migrated_historical" ? "migrated_historical" : "operational",
     facilityId: row.facility_id,
-    location: row.location,
+    location: row.location ?? undefined,
     departmentId: row.department_id ?? undefined,
     workId: relations.workCode,
     workOrderId: relations.workInstructionCode,
     description: row.description,
-    category: row.category as CostCategory,
+    category: row.category ? (row.category as CostCategory) : undefined,
     budgetedAmount: row.budgeted_amount != null ? Number(row.budgeted_amount) : undefined,
     actualAmount: Number(row.actual_amount),
     currency: row.currency,
     reimbursability: row.reimbursability as CostReimbursability,
     evidence: {
-      reference: row.evidence_reference,
+      reference: row.evidence_reference ?? undefined,
       fileId: row.evidence_file_id ?? undefined,
       fileName: row.evidence_file_name ?? undefined,
       mimeType: row.evidence_file_mime ?? undefined,

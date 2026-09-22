@@ -89,7 +89,7 @@ export type FinanceOperationalCostSummary = {
 
 export type FinanceRecentCostRow = {
   costId: string;
-  recordedAt: string;
+  recordedAt?: string;
   description: string;
   categoryLabel: string;
   facilityId: string;

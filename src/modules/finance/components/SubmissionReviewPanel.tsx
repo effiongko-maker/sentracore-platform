@@ -12,7 +12,8 @@ import { formatFinancialAmount } from "../utils/formatFinancialAmount";
 import type { SubmissionDetailsValues } from "./SubmissionDetailsForm";
 import { detailsToPackage } from "./SubmissionDetailsForm";
 
-function formatRecordedAt(iso: string): string {
+function formatRecordedAt(iso?: string): string {
+  if (!iso) return "Not recorded";
   const date = new Date(iso);
   if (!Number.isFinite(date.getTime())) return iso;
   return date.toLocaleDateString("en-GB", {

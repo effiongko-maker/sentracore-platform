@@ -79,7 +79,7 @@ const costRow: FmCostRecordRow = {
   budgeted_amount: null, actual_amount: 0, currency: "NGN", reimbursability: "unknown", evidence_reference: "INV-1",
   evidence_file_id: null, evidence_file_name: null, evidence_file_mime: null, evidence_file_size: null, evidence_file_url: null,
   notes: null, recorded_by_profile_id: U(5), created_by_profile_id: U(5), updated_by_profile_id: U(5),
-  created_at: "2026-09-19T10:00:00Z", updated_at: "2026-09-19T10:00:00Z",
+  created_at: "2026-09-19T10:00:00Z", updated_at: "2026-09-19T10:00:00Z", record_origin: "operational",
 };
 
 function main() {

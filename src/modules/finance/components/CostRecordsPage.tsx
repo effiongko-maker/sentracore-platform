@@ -17,7 +17,8 @@ import { COST_REIMBURSABILITY_LABELS } from "../constants";
 
 const COST_RECORDS_PAGE_SIZE = 25;
 
-function formatRecordedAt(iso: string): string {
+function formatRecordedAt(iso?: string): string {
+  if (!iso) return "Not recorded";
   const date = new Date(iso);
   if (!Number.isFinite(date.getTime())) return iso;
   return date.toLocaleDateString("en-GB", {
@@ -78,7 +79,10 @@ export function CostRecordsPage() {
         render: (record) => (
           <div>
             <p className="font-medium text-foreground">{record.description}</p>
-            <p className="text-xs text-muted">{record.costId}</p>
+            <p className="text-xs text-muted">
+              {record.costId}
+              {record.recordOrigin === "migrated_historical" ? <span> · Imported record</span> : null}
+            </p>
           </div>
         ),
       },
@@ -87,7 +91,7 @@ export function CostRecordsPage() {
         header: "Facility / location",
         render: (record) => (
           <span className="text-muted">
-            {record.facilityId} · {record.location}
+            {record.facilityId} · {record.location ?? "Not recorded"}
           </span>
         ),
       },
@@ -96,7 +100,7 @@ export function CostRecordsPage() {
         header: "Category",
         render: (record) => (
           <span className="text-muted">
-            {COST_CATEGORY_LABELS[record.category as CostCategory]}
+            {record.category ? COST_CATEGORY_LABELS[record.category as CostCategory] : "Not recorded"}
           </span>
         ),
       },
@@ -123,7 +127,7 @@ export function CostRecordsPage() {
               {record.evidence.fileName ?? "Open receipt"}
             </a>
           ) : (
-            <span className="text-muted">{record.evidence.reference}</span>
+            <span className="text-muted">{record.evidence.reference ?? "Not recorded"}</span>
           ),
       },
       {

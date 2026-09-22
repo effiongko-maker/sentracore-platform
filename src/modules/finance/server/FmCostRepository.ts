@@ -6,6 +6,7 @@ import {
   FM_COST_SUBMISSION_SELECT,
   FM_PAYMENT_SELECT,
   FmCostNotFoundError,
+  FmCostReadOnlyError,
   FmCostUnavailableError,
   FmCostValidationError,
   LOCKING_SUBMISSION_STATUSES,
@@ -70,16 +71,17 @@ const str = (rec: Record<string, unknown>, key: string) => String(rec[key] ?? ""
 
 function costRow(rec: Record<string, unknown>): FmCostRecordRow {
   return {
-    id: str(rec, "id"), organisation_id: str(rec, "organisation_id"), code: str(rec, "code"), recorded_at: str(rec, "recorded_at"),
-    facility_id: str(rec, "facility_id"), department_id: txt(rec, "department_id"), location: str(rec, "location"),
+    id: str(rec, "id"), organisation_id: str(rec, "organisation_id"), code: str(rec, "code"), recorded_at: txt(rec, "recorded_at"),
+    facility_id: str(rec, "facility_id"), department_id: txt(rec, "department_id"), location: txt(rec, "location"),
     work_id: txt(rec, "work_id"), work_instruction_id: txt(rec, "work_instruction_id"), description: str(rec, "description"),
-    category: str(rec, "category"), budgeted_amount: num(rec.budgeted_amount), actual_amount: Number(rec.actual_amount),
-    currency: str(rec, "currency"), reimbursability: str(rec, "reimbursability"), evidence_reference: str(rec, "evidence_reference"),
+    category: txt(rec, "category"), budgeted_amount: num(rec.budgeted_amount), actual_amount: Number(rec.actual_amount),
+    currency: str(rec, "currency"), reimbursability: str(rec, "reimbursability"), evidence_reference: txt(rec, "evidence_reference"),
     evidence_file_id: txt(rec, "evidence_file_id"), evidence_file_name: txt(rec, "evidence_file_name"),
     evidence_file_mime: txt(rec, "evidence_file_mime"), evidence_file_size: num(rec.evidence_file_size),
     evidence_file_url: txt(rec, "evidence_file_url"), notes: txt(rec, "notes"),
     recorded_by_profile_id: txt(rec, "recorded_by_profile_id"), created_by_profile_id: txt(rec, "created_by_profile_id"),
     updated_by_profile_id: txt(rec, "updated_by_profile_id"), created_at: str(rec, "created_at"), updated_at: str(rec, "updated_at"),
+    record_origin: rec.record_origin != null ? String(rec.record_origin) : "operational",
   };
 }
 function submissionRow(rec: Record<string, unknown>): FmCostSubmissionRow {
@@ -324,6 +326,7 @@ export class FmCostRepository {
   async updateCost(input: ParsedUpdateCostRecord, actorProfileId: string): Promise<FmCostRecordRow> {
     const existing = await this.getCost(input.id);
     if (!existing) throw new FmCostNotFoundError(`Cost record ${input.id} not found.`);
+    if (existing.record_origin === "migrated_historical") throw new FmCostReadOnlyError();
     const facilityId = input.facilityRef ? await this.resolveFacilityId(input.facilityRef) : existing.facility_id;
     const workRef = input.workRef !== undefined ? input.workRef : existing.work_id;
     const wiRef = input.workInstructionRef !== undefined ? input.workInstructionRef : existing.work_instruction_id;
