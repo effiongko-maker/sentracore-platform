@@ -385,6 +385,9 @@ function buildRecentCostRows(records: CostRecord[]): FinanceRecentCostRow[] {
   return records.slice(0, FINANCE_RECENT_COSTS_LIMIT).map((record) => ({
     costId: record.costId,
     recordedAt: record.recordedAt,
+    // recordedAt ("Cost") is always preferred; compactDate ("Payment") only ever fills in when recordedAt is
+    // absent — never copied into fm_cost_records, never relabelled.
+    compactDate: record.recordedAt ? undefined : record.compactDate,
     description: record.description,
     categoryLabel: record.category ? COST_CATEGORY_LABELS[record.category as CostCategory] : "Not recorded",
     facilityId: record.facilityId,

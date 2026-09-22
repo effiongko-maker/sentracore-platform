@@ -139,6 +139,10 @@ export function mapRemoteCostRecord(raw: RemoteCostRecord): CostRecord {
       raw.commercialPosition && typeof raw.commercialPosition === "object"
         ? (raw.commercialPosition as CostRecord["commercialPosition"])
         : undefined,
+    compactDate:
+      raw.compactDate && typeof raw.compactDate === "object"
+        ? (raw.compactDate as CostRecord["compactDate"])
+        : undefined,
   };
 }
 

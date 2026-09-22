@@ -85,15 +85,27 @@ export function CostRecordsPage() {
       {
         key: "recordedAt",
         header: "Date",
-        render: (record) =>
-          // No historical row carries an independently sourced FM cost date (verified against provenance) —
-          // repeating "Not recorded" down an entire column of imported rows is noise, not truth. A quiet dash
-          // stands in for historical rows; live rows keep their real recorded date unchanged.
-          record.recordOrigin === "migrated_historical" ? (
-            <span className="text-muted">—</span>
-          ) : (
-            <span className="text-muted">{formatRecordedAt(record.recordedAt)}</span>
-          ),
+        render: (record) => {
+          // recordedAt ("Cost") is always preferred when it exists. A migrated_historical row with no
+          // authoritative FM cost date falls back to its CERTAIN-linked commercial fact's payment_datetime
+          // ("Payment") only when one exists — never relabelled as a Cost date, never copied into
+          // fm_cost_records. Neither exists: a quiet dash, not repeated "Not recorded" noise.
+          if (record.recordedAt) {
+            return (
+              <span className="text-muted">
+                {formatRecordedAt(record.recordedAt)} · Cost
+              </span>
+            );
+          }
+          if (record.compactDate) {
+            return (
+              <span className="text-muted">
+                {formatRecordedAt(record.compactDate.value)} · {record.compactDate.label}
+              </span>
+            );
+          }
+          return <span className="text-muted">—</span>;
+        },
       },
       {
         key: "description",

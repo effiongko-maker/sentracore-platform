@@ -100,6 +100,12 @@ export type FinanceRecentCostRow = {
   facilityId: string;
   amountLabel: string;
   reimbursabilityLabel: string;
+  /**
+   * Compact-surface date fallback — mirrors CostRecord.compactDate. Present only when recordedAt is absent
+   * (migrated_historical, no authoritative FM cost date) and a CERTAIN-linked Platform Finance historical
+   * commercial fact establishes a payment_datetime. recordedAt ("Cost") is always preferred when present.
+   */
+  compactDate?: { value: string; label: "Payment" };
 };
 
 export type FinanceSubmissionPreviewRow = {

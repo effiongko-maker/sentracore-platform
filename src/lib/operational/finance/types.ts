@@ -118,6 +118,15 @@ export type CostRecord = {
    * navigation pointer.
    */
   commercialPosition?: FmCostCommercialPosition;
+  /**
+   * Compact-surface date fallback (register/overview only — never the Detail page, which composes its own
+   * Commercial Position). Present ONLY when recordedAt is absent (a migrated_historical row with no
+   * authoritative FM cost date) AND a CERTAIN-linked Platform Finance historical commercial fact independently
+   * establishes a payment_datetime. Never a substitute for recordedAt — the caller must prefer recordedAt
+   * ("Cost") when present and fall back to this ("Payment") only when it is not, never mixing the two or
+   * inferring one from the other.
+   */
+  compactDate?: { value: string; label: "Payment" };
 };
 
 export type FmCostCommercialPosition = {

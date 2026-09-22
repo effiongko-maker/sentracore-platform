@@ -41,7 +41,7 @@ export function FinanceOperationalCostSection({
       <div className="fin-v13-section-head">
         <div>
           <h2 className="fin-v13-section-title">Operational costs</h2>
-          <p className="fin-v13-section-lede">Latest recorded spend.</p>
+          <p className="fin-v13-section-lede">Recorded operational costs.</p>
         </div>
         <Link href="/finance/costs" className="fin-v13-text-action">
           View all →
@@ -68,7 +68,15 @@ export function FinanceOperationalCostSection({
               {visible.map((row) => (
                 <tr key={row.costId}>
                   <td className="fin-v13-muted">
-                    {formatRecordedAt(row.recordedAt)}
+                    {row.recordedAt ? (
+                      <>{formatRecordedAt(row.recordedAt)} · Cost</>
+                    ) : row.compactDate ? (
+                      <>
+                        {formatRecordedAt(row.compactDate.value)} · {row.compactDate.label}
+                      </>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td>
                     <span className="fin-v13-item-title">{row.description}</span>
