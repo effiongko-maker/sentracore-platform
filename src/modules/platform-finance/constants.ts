@@ -47,6 +47,8 @@ export const PLATFORM_FINANCE_CAPABILITY_LABELS: Record<
   [PLATFORM_FINANCE_CAPABILITIES.receipt_view]: "View receipts",
   [PLATFORM_FINANCE_CAPABILITIES.receipt_record]: "Record receipts",
   [PLATFORM_FINANCE_CAPABILITIES.receipt_post]: "Post receipts",
+  [PLATFORM_FINANCE_CAPABILITIES.historical_view]: "View historical commercial facts",
+  [PLATFORM_FINANCE_CAPABILITIES.historical_manage]: "Import historical commercial facts",
 };
 
 export const PLATFORM_FINANCE_ENTITY_STATUS_LABELS: Record<

@@ -58,6 +58,12 @@ export const PLATFORM_FINANCE_CAPABILITIES = {
   receipt_view: "platform_finance.receipt.view",
   receipt_record: "platform_finance.receipt.record",
   receipt_post: "platform_finance.receipt.post",
+  // Historical (pre-SentraCore™) commercial facts — a dedicated read/import pair, deliberately separate from
+  // invoice/receivable/receipt capabilities above (this table is not any of those; see
+  // platform_finance_historical_commercial_facts). No correct/manage-edit capability: the foundation has no
+  // in-app correction path (immutable after import).
+  historical_view: "platform_finance.historical.view",
+  historical_manage: "platform_finance.historical.manage",
 } as const;
 
 export {
