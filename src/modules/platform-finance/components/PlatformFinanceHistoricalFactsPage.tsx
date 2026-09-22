@@ -12,6 +12,10 @@ import {
 /** Organisation timezone — this register's dates/times are always presented here, never the viewer's local zone. */
 const ORG_TIME_ZONE = "Africa/Lagos";
 
+/** Presentation pagination only — fixed page size, no selector. Search/filter runs over the complete dataset
+ * first; this only paginates the resulting matches. */
+const PAGE_SIZE = 10;
+
 function formatAmount(amount: number | null | undefined, currency: string): string {
   if (amount == null || !Number.isFinite(amount)) return "Not established";
   return `${currency} ${amount.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -53,6 +57,7 @@ export function PlatformFinanceHistoricalFactsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
   // Deep link from the FM Cost Detail reference (?code=HIST-2026-000143) — read once, lazily, as the initial
   // state itself rather than via an effect that sets state on mount.
   const [selectedCode, setSelectedCode] = useState<string | null>(() => searchParams.get("code"));
@@ -117,6 +122,17 @@ export function PlatformFinanceHistoricalFactsPage() {
     );
   }, [query, rows]);
 
+  // Presentation pagination over the already-filtered (complete-dataset) results. currentPage is clamped so a
+  // narrower search (or any other change to the match count) never leaves the view on a now-empty page.
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(Math.max(1, page), pageCount);
+  const pageRows = useMemo(
+    () => filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [filtered, currentPage]
+  );
+  const rangeStart = filtered.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0;
+  const rangeEnd = Math.min(currentPage * PAGE_SIZE, filtered.length);
+
   const settledCount = rows.filter((r) => r.amountReceived != null).length;
   const withDatetimeCount = rows.filter((r) => r.paymentDatetime != null).length;
   // Never show a previous selection's detail while a different one is loading.
@@ -140,7 +156,10 @@ export function PlatformFinanceHistoricalFactsPage() {
           <label className="pf-req-search">
             <input
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setPage(1);
+              }}
               placeholder="Search code, description, reference…"
             />
           </label>
@@ -148,6 +167,7 @@ export function PlatformFinanceHistoricalFactsPage() {
         {loading ? <div className="pf-req-empty">Loading historical commercial facts…</div> : null}
         {error ? <div className="pf-vb-alert is-danger">{error}</div> : null}
         {!loading && !error ? (
+          <>
           <div className="pf-req-table-wrap">
             <table className="pf-req-table">
               <thead>
@@ -164,7 +184,7 @@ export function PlatformFinanceHistoricalFactsPage() {
               </thead>
               <tbody>
                 {filtered.length ? (
-                  filtered.map((row) => (
+                  pageRows.map((row) => (
                     <tr key={row.id} onClick={() => setSelectedCode(row.code)}>
                       <td>
                         <span className="pf-req-primary">{row.code}</span>
@@ -205,6 +225,35 @@ export function PlatformFinanceHistoricalFactsPage() {
               </tbody>
             </table>
           </div>
+          {filtered.length ? (
+            <footer className="pf-journal-pager">
+              <span>
+                Showing {rangeStart}–{rangeEnd} of {filtered.length}
+              </span>
+              <div className="pf-journal-pager-controls">
+                <button
+                  type="button"
+                  className="pf-btn-secondary"
+                  disabled={currentPage <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  Previous
+                </button>
+                <span>
+                  {currentPage} / {pageCount}
+                </span>
+                <button
+                  type="button"
+                  className="pf-btn-secondary"
+                  disabled={currentPage >= pageCount}
+                  onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                >
+                  Next
+                </button>
+              </div>
+            </footer>
+          ) : null}
+          </>
         ) : null}
       </div>
 
