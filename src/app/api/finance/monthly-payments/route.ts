@@ -50,7 +50,8 @@ export async function POST() {
           commercialReference: f.commercialReference ?? undefined,
         };
       })
-      .sort((a, b) => (a.month ?? "").localeCompare(b.month ?? ""));
+      // Chronological ascending by the "YYYY-MM" slug (not the alphabetical month label); unparseable periods last.
+      .sort((a, b) => (a.slug ?? "9999-99").localeCompare(b.slug ?? "9999-99"));
 
     return NextResponse.json({ success: true, data: monthly }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
