@@ -46,9 +46,6 @@ export function MonthlyContractPaymentsSection() {
       <div className="fin-v13-section-head">
         <div>
           <h2 className="fin-v13-section-title">Monthly contract payments</h2>
-          <p className="fin-v13-section-lede">
-            Fixed monthly FM fee under the NCC contract, separate from Work Order / Job Order payments.
-          </p>
         </div>
         <Link href="/finance/monthly-payments" className="fin-v13-text-action">
           View all →
