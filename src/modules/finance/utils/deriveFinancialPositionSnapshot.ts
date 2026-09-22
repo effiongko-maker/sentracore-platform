@@ -24,6 +24,13 @@ export type FinancialPositionSnapshotInput = {
   submissions: FinancialPositionSourcePool<CostSubmission>;
   payments: FinancialPositionSourcePool<ReimbursementPayment>;
   authorizations: FinancialPositionSourcePool<ReimbursementAuthorization>;
+  /**
+   * The authoritative total over the COMPLETE cost register (never a bounded pool) —
+   * same source Costs & Claims itself prefers. When present, Spent uses this exact
+   * figure instead of summing the bounded preview pool, so Home never presents a
+   * partial in-view total as if it were the whole register.
+   */
+  costTotals?: { totalAmount: number; currency: string } | null;
   currency?: string;
 };
 
@@ -40,6 +47,8 @@ export type FinancialPositionSnapshot = {
   outstandingLabel: string | null;
   /** True when any available source pool is truncated relative to API totals. */
   isSample: boolean;
+  /** True when spentAmount is the authoritative complete-register total, not a bounded-pool sum. */
+  spentComplete: boolean;
   costsTruncated: boolean;
   submissionsTruncated: boolean;
   paymentsTruncated: boolean;
@@ -104,15 +113,23 @@ export function deriveFinancialPositionSnapshot(
 
   const currency =
     input.currency ??
+    input.costTotals?.currency ??
     costRecords[0]?.currency ??
     payments[0]?.currency ??
     authorizations[0]?.currency ??
     "NGN";
 
-  const spentAvailable = costsAvailable;
-  const spentAmount = spentAvailable
-    ? sumAmounts(costRecords.map((row) => ({ amount: row.actualAmount })))
-    : null;
+  // The complete register total (Costs & Claims' own authoritative source) is preferred
+  // whenever it loaded successfully. The bounded preview pool is only a best-effort
+  // fallback — e.g. the complete-total request itself failed — and is never presented
+  // as the full register without the (sample) qualification below.
+  const spentComplete = input.costTotals != null;
+  const spentAvailable = spentComplete || costsAvailable;
+  const spentAmount = spentComplete
+    ? input.costTotals!.totalAmount
+    : costsAvailable
+      ? sumAmounts(costRecords.map((row) => ({ amount: row.actualAmount })))
+      : null;
 
   // Expected needs open claims + authorization pool (auth ?? claim basis).
   // Outstanding also needs payments (received amounts). Missing any required
@@ -169,6 +186,7 @@ export function deriveFinancialPositionSnapshot(
       currency
     ),
     isSample,
+    spentComplete,
     costsTruncated,
     submissionsTruncated,
     paymentsTruncated,

@@ -67,7 +67,12 @@ export function FinancialPositionSection() {
         <div className="sc-fm-finance-metric" role="listitem">
           <p className="sc-fm-finance-label">
             Spent
-            {!loading && isSample && snapshot?.costsTruncated ? " (sample)" : ""}
+            {!loading &&
+            !snapshot?.spentComplete &&
+            isSample &&
+            snapshot?.costsTruncated
+              ? " (sample)"
+              : ""}
           </p>
           <MetricValue
             loading={loading}

@@ -49,6 +49,33 @@ async function settleSource<T>(
 }
 
 /**
+ * The complete cost register total — same authoritative source Costs & Claims itself
+ * prefers (never a bounded pool). Isolated the same way as every other source: a
+ * failure here falls back to the bounded pool sum in deriveFinancialPositionSnapshot,
+ * it never blocks the other Financial Position metrics, and it never invents a figure.
+ */
+async function settleCostTotals(): Promise<{
+  totalAmount: number;
+  currency: string;
+} | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort();
+  }, HOME_FINANCE_SOURCE_TIMEOUT_MS);
+
+  try {
+    const result = await CostRecordService.getTotals({
+      signal: controller.signal,
+    });
+    return { totalAmount: result.totalAmount, currency: result.currency };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Bounded Finance pools for Home Financial Position — same sizes as Finance overview.
  * Does not load Approvals (not used by the three metrics).
  *
@@ -70,44 +97,46 @@ export function useFinancialPosition() {
     setError(null);
 
     try {
-      const [costs, submissions, payments, authorizations] = await Promise.all([
-        settleSource((signal) =>
-          CostRecordService.listCostRecords(
-            {
-              page: 1,
-              pageSize: FINANCE_COST_POOL_FETCH_SIZE,
-            },
-            { signal }
-          )
-        ),
-        settleSource((signal) =>
-          CostSubmissionService.listCostSubmissions(
-            {
-              page: 1,
-              pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
-            },
-            { signal }
-          )
-        ),
-        settleSource((signal) =>
-          ReimbursementPaymentService.listPayments(
-            {
-              page: 1,
-              pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
-            },
-            { signal }
-          )
-        ),
-        settleSource((signal) =>
-          ReimbursementAuthorizationService.listAuthorizations(
-            {
-              page: 1,
-              pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
-            },
-            { signal }
-          )
-        ),
-      ]);
+      const [costs, submissions, payments, authorizations, costTotals] =
+        await Promise.all([
+          settleSource((signal) =>
+            CostRecordService.listCostRecords(
+              {
+                page: 1,
+                pageSize: FINANCE_COST_POOL_FETCH_SIZE,
+              },
+              { signal }
+            )
+          ),
+          settleSource((signal) =>
+            CostSubmissionService.listCostSubmissions(
+              {
+                page: 1,
+                pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
+              },
+              { signal }
+            )
+          ),
+          settleSource((signal) =>
+            ReimbursementPaymentService.listPayments(
+              {
+                page: 1,
+                pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
+              },
+              { signal }
+            )
+          ),
+          settleSource((signal) =>
+            ReimbursementAuthorizationService.listAuthorizations(
+              {
+                page: 1,
+                pageSize: FINANCE_OVERVIEW_FETCH_SIZE,
+              },
+              { signal }
+            )
+          ),
+          settleCostTotals(),
+        ]);
 
       if (id !== requestId.current) return;
 
@@ -116,6 +145,7 @@ export function useFinancialPosition() {
         submissions,
         payments,
         authorizations,
+        costTotals,
       });
 
       const anyAvailable =
