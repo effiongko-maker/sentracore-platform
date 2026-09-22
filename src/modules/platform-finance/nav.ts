@@ -13,6 +13,7 @@ import {
   CalendarRange,
   Receipt,
   Building2,
+  Archive,
   type LucideIcon,
 } from "lucide-react";
 
@@ -163,6 +164,17 @@ export const PLATFORM_FINANCE_NAV_ITEMS: readonly PlatformFinanceNavItem[] = [
     label: "Financial Requests",
     match: "prefix",
     icon: FolderOpen,
+  },
+  {
+    /**
+     * Pre-SentraCore™ commercial evidence (platform_finance_historical_commercial_facts) — deliberately a
+     * standalone top-level item, never nested under Billing & Invoicing or Payables: it is not part of either
+     * native workflow and must stay visually distinguishable from them.
+     */
+    href: "/platform-finance/historical-facts",
+    label: "Historical Commercial Facts",
+    match: "prefix",
+    icon: Archive,
   },
   {
     href: null,

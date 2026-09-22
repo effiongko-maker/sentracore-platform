@@ -109,6 +109,13 @@ export type CostRecord = {
   /** User id of the person who recorded the cost. */
   recordedBy: string;
   notes?: string;
+  /**
+   * Restrained cross-domain reference only — id + code of any linked Platform Finance historical commercial
+   * fact (platform_finance_historical_commercial_facts), resolved via the CERTAIN fm_work_id relationship.
+   * Never carries a financial value: Platform Finance remains the only place those figures are shown. Present
+   * (possibly empty) only from the Cost Record DETAIL read path — never populated on list/table reads.
+   */
+  linkedHistoricalCommercialFacts?: Array<{ id: string; code: string }>;
 };
 
 /**

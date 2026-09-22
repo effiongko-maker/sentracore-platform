@@ -697,6 +697,35 @@ export function CostDetailPage({ costId }: { costId: string }) {
                 against the linked submission and the claim is fully paid.
               </p>
             )}
+            {record.linkedHistoricalCommercialFacts?.length ? (
+              <div
+                className="mt-3 rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-sm"
+                role="note"
+              >
+                <p className="font-medium text-foreground">
+                  Linked historical commercial record
+                </p>
+                <p className="mt-0.5 text-muted">
+                  Platform Finance holds{" "}
+                  {record.linkedHistoricalCommercialFacts.length === 1
+                    ? "a pre-SentraCore™ commercial record"
+                    : `${record.linkedHistoricalCommercialFacts.length} pre-SentraCore™ commercial records`}{" "}
+                  for the same Work. Platform Finance remains authoritative for
+                  that record — no value from it is included in this cost.
+                </p>
+                <p className="mt-1 flex flex-wrap gap-x-3">
+                  {record.linkedHistoricalCommercialFacts.map((ref) => (
+                    <Link
+                      key={ref.id}
+                      href={`/platform-finance/historical-facts?code=${encodeURIComponent(ref.code)}`}
+                      className="text-primary hover:underline"
+                    >
+                      {ref.code} · View in Platform Finance
+                    </Link>
+                  ))}
+                </p>
+              </div>
+            ) : null}
             <div className="mt-4 flex flex-wrap gap-2">
               {canEdit && !editing ? (
                 <Button

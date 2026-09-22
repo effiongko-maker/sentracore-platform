@@ -981,8 +981,7 @@ export function SubmissionDetailPage({
                 >
                   <p className="sm:col-span-2 fin-form-hint">
                     This is FM&apos;s operational reference that the client
-                    reimbursed this claim. The actual receipt and accounting
-                    transaction are recorded in Platform Finance.
+                    reimbursed this claim. It is not an accounting transaction.
                   </p>
                   <div className="sm:col-span-2 fin-payment-context">
                     <div>

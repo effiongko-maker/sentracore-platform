@@ -186,4 +186,97 @@ export class PlatformFinanceHistoricalFactsRepository {
         : null,
     }));
   }
+
+  /**
+   * Minimal cross-domain reference lookup — id + code ONLY, never any financial value. Intended for another
+   * domain's own read path (e.g. FM Cost Record detail) to show "a linked historical commercial record exists"
+   * without exposing Platform Finance figures outside Platform Finance's own capability-gated surface. This
+   * repository has no capability check of its own (that lives in PlatformFinanceHistoricalFactsServerService) —
+   * the calling domain's server layer is responsible for deciding whether its own surface may reveal even this
+   * bare reference, and for never copying the amounts across.
+   */
+  async listRefsByWorkIds(workIds: string[]): Promise<Map<string, Array<{ id: string; code: string }>>> {
+    const map = new Map<string, Array<{ id: string; code: string }>>();
+    if (!workIds.length) return map;
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("platform_finance_historical_commercial_facts")
+      .select("id,code,fm_work_id")
+      .eq("organisation_id", this.organisationId)
+      .in("fm_work_id", workIds);
+    if (error) throw new ActionError("INTERNAL_ERROR", error.message);
+    for (const row of data ?? []) {
+      const workId = row.fm_work_id as string | null;
+      if (!workId) continue;
+      const list = map.get(workId) ?? [];
+      list.push({ id: row.id as string, code: row.code as string });
+      map.set(workId, list);
+    }
+    return map;
+  }
+
+  /**
+   * Human-readable reference for a CERTAIN FM Work/WI link — code (+ title) only, never exposing a raw UUID to
+   * the client. Cross-domain read (fm_work / fm_work_instructions are FM-owned), mirroring how FmCostServerService
+   * reads this repository in reverse for its own restrained reference.
+   */
+  async resolveWorkRef(
+    workId: string | null,
+    workInstructionId: string | null
+  ): Promise<{ workCode: string | null; workTitle: string | null; workInstructionCode: string | null }> {
+    const admin = createAdminClient();
+    let workCode: string | null = null;
+    let workTitle: string | null = null;
+    let workInstructionCode: string | null = null;
+    if (workId) {
+      const { data } = await admin
+        .from("fm_work")
+        .select("code,title")
+        .eq("organisation_id", this.organisationId)
+        .eq("id", workId)
+        .maybeSingle();
+      workCode = (data?.code as string | undefined) ?? null;
+      workTitle = (data?.title as string | undefined) ?? null;
+    }
+    if (workInstructionId) {
+      const { data } = await admin
+        .from("fm_work_instructions")
+        .select("code")
+        .eq("organisation_id", this.organisationId)
+        .eq("id", workInstructionId)
+        .maybeSingle();
+      workInstructionCode = (data?.code as string | undefined) ?? null;
+    }
+    return { workCode, workTitle, workInstructionCode };
+  }
+
+  /**
+   * Source lineage for a single fact — human-readable only (workbook/sheet/row/reference/classification), never
+   * the raw fingerprint or batch id. Detail-view only; never batched across a list.
+   */
+  async getProvenance(factId: string): Promise<{
+    workbook: string;
+    sourceSheet: string;
+    sourceRow: number;
+    sourceReference: string | null;
+    classification: string;
+  } | null> {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("fm_migration_provenance")
+      .select("workbook,source_sheet,source_row,source_reference,classification")
+      .eq("organisation_id", this.organisationId)
+      .eq("target_table", "platform_finance_historical_commercial_facts")
+      .eq("target_id", factId)
+      .maybeSingle();
+    if (error) throw new ActionError("INTERNAL_ERROR", error.message);
+    if (!data) return null;
+    return {
+      workbook: data.workbook as string,
+      sourceSheet: data.source_sheet as string,
+      sourceRow: data.source_row as number,
+      sourceReference: (data.source_reference as string | null) ?? null,
+      classification: data.classification as string,
+    };
+  }
 }

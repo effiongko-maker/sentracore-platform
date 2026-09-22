@@ -48,6 +48,16 @@ export class PlatformFinanceHistoricalFactsServerService {
     return this.repo.listWithDerivedSpread();
   }
 
+  async getProvenance(actor: Actor, factId: string) {
+    await this.assertView(actor);
+    return this.repo.getProvenance(factId);
+  }
+
+  async resolveWorkRef(actor: Actor, workId: string | null, workInstructionId: string | null) {
+    await this.assertView(actor);
+    return this.repo.resolveWorkRef(workId, workInstructionId);
+  }
+
   async get(actor: Actor, id: string): Promise<PlatformFinanceHistoricalCommercialFact> {
     await this.assertView(actor);
     const fact = await this.repo.get(id);
