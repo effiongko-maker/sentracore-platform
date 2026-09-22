@@ -103,7 +103,7 @@ for (const role of ["public", "anon, authenticated", "service_role"]) {
 }
 
 const forbidden = `${migration}\n${remediation}\n${service}`;
-assert.doesNotMatch(forbidden, /void|reversal journal|intercompany|batcave|kaiso/i);
+assert.doesNotMatch(forbidden, /void|reversal journal|intercompany|batcave|private.office|kaiso/i);
 assert.doesNotMatch(forbidden, /payment_account_number_ciphertext|payment_account_number_auth_tag/);
 
 console.log("PASS verify-platform-finance-phase2d");

@@ -30,9 +30,9 @@ export const PLATFORM_HOME = {
   href: "/",
 } as const;
 
-/** CEO Command Centre — platform-level orchestration surface. */
+/** CEO Executive Office — platform-level orchestration surface. */
 export const COMMAND_CENTRE_HOME = {
-  label: "Command Centre",
+  label: "Executive Office",
   href: "/command-centre",
 } as const;
 

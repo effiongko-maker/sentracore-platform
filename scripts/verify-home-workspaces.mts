@@ -1,6 +1,6 @@
 /**
  * Create Account → Home workspace model. One authoritative registry; Platform Finance is a valid module-bound home;
- * Command Centre / Admin Console / Batcave are not; a home is a boundary, never authority.
+ * Command Centre / Admin Console / Private Office are not; a home is a boundary, never authority.
  *
  *   NODE_PATH=<dir with empty server-only/> npx tsx --tsconfig tsconfig.json scripts/verify-home-workspaces.mts
  */
@@ -23,17 +23,17 @@ async function main() {
   // A. classification
   {
     const by = Object.fromEntries(WORKSPACE_REGISTRY.map((w) => [w.id, w]));
-    assert(WORKSPACE_REGISTRY.length === 6 && ["facility_management", "ecc_operations", "platform_finance", "command_centre", "admin_console", "batcave"].every((id) => by[id]), "all six workspaces are classified");
+    assert(WORKSPACE_REGISTRY.length === 6 && ["facility_management", "ecc_operations", "platform_finance", "command_centre", "admin_console", "private_office"].every((id) => by[id]), "all six workspaces are classified");
     assert([...BOUND_MODULES].sort().join() === "ecc_operations,facility_management,platform_finance", "module-bound homes are exactly FM, ECC Operations and Platform Finance");
-    assert(!BOUND_MODULES.some((m) => ["command_centre", "admin_console", "batcave"].includes(m as string)), "Command Centre, Admin Console and Batcave are never module-bound homes");
+    assert(!BOUND_MODULES.some((m) => ["command_centre", "admin_console", "private_office"].includes(m as string)), "Command Centre, Admin Console and Private Office are never module-bound homes");
     assert([...LANDING_WORKSPACES].sort().join() === "command_centre,ecc_operations,facility_management,platform_finance", "landing preferences: the four business/executive workspaces");
-    assert(by.batcave!.kind === "private_nested" && !by.batcave!.moduleBoundHome && !by.batcave!.landingSelectable, "Batcave is private/nested: no home, no landing");
+    assert(by.private_office!.kind === "private_nested" && !by.private_office!.moduleBoundHome && !by.private_office!.landingSelectable, "Private Office is private/nested: no home, no landing");
     assert(by.admin_console!.kind === "authority_derived" && !by.admin_console!.moduleBoundHome && !by.admin_console!.landingSelectable, "Admin Console is authority-derived: no home, no landing");
     assert(by.command_centre!.kind === "executive_landing" && !by.command_centre!.moduleBoundHome && by.command_centre!.landingSelectable, "Command Centre is a platform-scope landing only");
     assert(by.platform_finance!.moduleBoundHome && (by.platform_finance!.requiresExplicit as readonly string[]).includes("finance_company_access") && (by.platform_finance!.requiresExplicit as readonly string[]).includes("capability_grants") && !by.platform_finance!.facilityContext, "Platform Finance: home, needs explicit company access + capabilities, no facility context");
     assert(by.facility_management!.facilityContext && !by.ecc_operations!.facilityContext, "only Facility Management carries facility context");
     assert(MODULE_HOME_ROUTE.platform_finance === "/platform-finance" && LANDING_WORKSPACE_ROUTE.platform_finance === "/platform-finance" && MODULE_BOUND_HOME_OPTIONS.length === 3 && LANDING_OPTIONS.length === 4, "routes/options derive from the registry");
-    pass("A classification: FM, ECC and Platform Finance are module-bound homes; Command Centre is landing-only; Admin Console and Batcave are neither");
+    pass("A classification: FM, ECC and Platform Finance are module-bound homes; Command Centre is landing-only; Admin Console and Private Office are neither");
   }
 
   // B. drift: the DB constraints/RPC mirror the registry (constraint executed in PGlite)
@@ -49,7 +49,7 @@ async function main() {
     await db.exec(`alter table profiles add constraint profiles_access_scope_valid check (${constraint});`);
     const ok = async (scope: string, home: string | null) => { try { await db.query("insert into profiles (access_scope, home_module) values ($1,$2)", [scope, home]); return true; } catch { return false; } };
     assert((await ok("module", "platform_finance")) && (await ok("module", "facility_management")) && (await ok("module", "ecc_operations")), "the DB accepts a module-bound identity for all three homes");
-    for (const bad of ["command_centre", "admin_console", "batcave", "finance"]) assert(!(await ok("module", bad)), `the DB refuses module-bound home '${bad}'`);
+    for (const bad of ["command_centre", "admin_console", "private_office", "finance"]) assert(!(await ok("module", bad)), `the DB refuses module-bound home '${bad}'`);
     assert(!(await ok("platform", "platform_finance")) && (await ok("platform", null)), "platform scope still must not carry a home module");
     await db.close();
     pass("B drift: DB constraint (executed), audited RPC and landing constraint all equal the registry");
@@ -60,11 +60,11 @@ async function main() {
     const fin = resolveModuleBoundary({ accessScope: "module", homeModule: "platform_finance" });
     assert(fin.valid && homeRouteForBoundary(fin) === "/platform-finance", "a Finance-bound identity lands directly in Platform Finance");
     const t = (b: ReturnType<typeof resolveModuleBoundary>) => (["platform_finance", "facility_management", "ecc_operations", "platform"] as const).map((x) => (boundaryAllows(b, x) ? x : "-")).join(",");
-    assert(t(fin) === "platform_finance,-,-,-", `Finance-bound: Platform Finance only — no FM, no ECC, and no platform surface (Command Centre / Admin Console / Batcave) (got ${t(fin)})`);
+    assert(t(fin) === "platform_finance,-,-,-", `Finance-bound: Platform Finance only — no FM, no ECC, and no platform surface (Command Centre / Admin Console / Private Office) (got ${t(fin)})`);
     assert(t(resolveModuleBoundary({ accessScope: "module", homeModule: "facility_management" })) === "-,facility_management,-,-", "FM-bound cannot reach Platform Finance");
     assert(t(resolveModuleBoundary({ accessScope: "module", homeModule: "ecc_operations" })) === "-,-,ecc_operations,-", "ECC-bound cannot reach Platform Finance");
     assert(t(resolveModuleBoundary({ accessScope: "platform" })) === "platform_finance,facility_management,ecc_operations,platform", "platform scope is unchanged (grants still decide)");
-    assert(!resolveModuleBoundary({ accessScope: "module", homeModule: "command_centre" }).valid && !resolveModuleBoundary({ accessScope: "module", homeModule: "batcave" }).valid && !resolveModuleBoundary({ accessScope: "module", homeModule: "admin_console" }).valid, "Command Centre / Batcave / Admin Console as a home fail closed");
+    assert(!resolveModuleBoundary({ accessScope: "module", homeModule: "command_centre" }).valid && !resolveModuleBoundary({ accessScope: "module", homeModule: "private_office" }).valid && !resolveModuleBoundary({ accessScope: "module", homeModule: "admin_console" }).valid, "Command Centre / Private Office / Admin Console as a home fail closed");
     const chromeAll = { facilityManagement: true, eccOperations: true, platformFinance: true, commandCentre: true };
     assert(resolveLandingRoute({ boundary: fin, landingWorkspace: "command_centre", chrome: chromeAll }) === null, "a landing preference can never move a module-bound identity");
     pass("C boundary: Finance-bound lands in Platform Finance and is refused FM, ECC and every platform-wide surface");
@@ -76,14 +76,14 @@ async function main() {
     assert(g("src/modules/platform-finance/server/requirePlatformFinanceAccess.ts") === "platform_finance", "Platform Finance API gate admits platform scope or a Finance home only");
     assert(g("src/modules/command-centre/server/requireCommandCentreAccess.ts") === "platform", "Command Centre stays platform-scope only");
     assert(g("src/modules/platform-admin/server/requirePlatformAdmin.ts") === "platform", "Admin Console stays platform-scope (and Super Admin) only");
-    assert(g("src/modules/batcave/server/requireBatcaveAccess.ts") === "platform", "Batcave stays platform-scope only");
+    assert(g("src/modules/private-office/server/requirePrivateOfficeAccess.ts") === "platform", "Private Office stays platform-scope only");
     assert(g("src/modules/ecc-operations/server/requireEccAccess.ts") === "ecc_operations", "ECC gate unchanged");
     assert(/boundaryAllows\(boundaryForSession\(session\), "facility_management"\)/.test(read("src/lib/access/server.ts")), "FM operating gate unchanged");
     const chrome = read("src/lib/access/workspaceAccessChrome.ts");
     assert(/platformFinance:\s*boundaryAllows\(input\.boundary, "platform_finance"\) &&\s*financeModuleOn &&\s*hasAnyFinanceGrant/.test(chrome), "Platform Finance is enterable only with the module ON and an explicit finance grant — the home alone is not enough");
     assert(/commandCentre:\s*boundaryAllows\(input\.boundary, "platform"\) && hasCommandCentreGrant/.test(chrome), "Command Centre chrome unchanged");
     assert(/assertBoundaryAllows\(session, "platform"\)/.test(read("src/modules/platform-finance/server/requirePlatformFinanceAccess.ts")) === false, "no leftover platform-only assertion in the Platform Finance gate");
-    pass("D gates: Platform Finance admits Finance homes; FM, ECC, Command Centre, Admin Console and Batcave gates are unchanged");
+    pass("D gates: Platform Finance admits Finance homes; FM, ECC, Command Centre, Admin Console and Private Office gates are unchanged");
   }
 
   // E. createAccount: home ≠ authority; facility context only where it applies; finance authority never inferred
@@ -125,7 +125,7 @@ async function main() {
       try { await svc.createAccount(ctx, { ...base, email: `x.${home}@example.test`, homeModule: home, facilityAssignment: { facilityId: "f", operationalRole: "facility_manager" } }); } catch (e) { err = e; }
       assert(err !== null && created.length === n, `a facility assignment / FM role is refused (and nothing is created) for a ${home} home`);
     }
-    for (const bad of ["command_centre", "batcave", "admin_console"]) {
+    for (const bad of ["command_centre", "private_office", "admin_console"]) {
       const n = created.length;
       let err: unknown = null;
       try { await svc.createAccount(ctx, { ...base, email: `y.${bad}@example.test`, homeModule: bad }); } catch (e) { err = e; }

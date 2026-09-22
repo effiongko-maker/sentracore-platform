@@ -1,14 +1,22 @@
 /**
- * Batcave Private Executive Notes V1 verification. Non-mutating: source inspection + pure checks.
- * `--live-read` adds READ-ONLY checks against the linked database (privilege denial, no grants).
- * Behavioural RLS proof is done by rollback-only SQL probe (see the pass report).
+ * Private Office Private Executive Notes V1 verification (formerly "Batcave"). Non-mutating: source
+ * inspection + pure checks. `--live-read` adds READ-ONLY checks against the linked database (privilege
+ * denial, no grants). Behavioural RLS proof is done by rollback-only SQL probe (see the pass report).
+ *
+ * The underlying table (batcave_notes) and its policies/trigger/function names are UNCHANGED by the
+ * Command Centre -> Executive Office / Batcave -> Private Office rename — only the capability STRING moved
+ * (platform.batcave.access -> platform.executive.private_office.access, see
+ * 20260922220000_executive_private_office_capability_rename.sql). The original
+ * 20260920240000_batcave_private_notes.sql migration file is checked for table/policy/trigger structure
+ * (unchanged, historical); the capability string enforced by batcave_note_actor_ok is checked against the
+ * LATEST migration that defines it (the rename migration replaced the function body).
  *
  *   NODE_PATH=<dir containing an empty server-only/ stub> \
- *     npx tsx --tsconfig tsconfig.json scripts/verify-batcave-private-notes.mts [--live-read]
+ *     npx tsx --tsconfig tsconfig.json scripts/verify-private-office-notes.mts [--live-read]
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { NOTE_BODY_MAX, NOTE_TITLE_MAX, isNoteId, validateNoteInput } from "../src/modules/batcave/notes/domain";
+import { NOTE_BODY_MAX, NOTE_TITLE_MAX, isNoteId, validateNoteInput } from "../src/modules/private-office/notes/domain";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);
@@ -40,7 +48,8 @@ async function main() {
   const pass = (m: string) => out.push(`PASS ${m}`);
   const migRaw = src("supabase/migrations/20260920240000_batcave_private_notes.sql");
   const mig = strip(migRaw);
-  const notesFiles = [...walk("src/modules/batcave/notes"), "src/app/api/batcave/notes/route.ts"];
+  const renameMig = strip(src("supabase/migrations/20260922220000_executive_private_office_capability_rename.sql"));
+  const notesFiles = [...walk("src/modules/private-office/notes"), "src/app/api/private-office/notes/route.ts"];
   const notesCode = notesFiles.map((f) => strip(src(f))).join("\n");
 
   // ── A. Domain ─────────────────────────────────────────────────────────────
@@ -66,34 +75,37 @@ async function main() {
     const policies = mig.slice(mig.indexOf("create policy batcave_notes_select_own"));
     assert((policies.match(/owner_profile_id = auth\.uid\(\)/g) ?? []).length >= 5, "B: every policy (incl. with-check) pins owner_profile_id = auth.uid()");
     assert(!/is_platform_super_admin|is_org_member|can_manage_organisation|admin_override|platform_super_admin/i.test(mig), "B: no Super Admin / org-admin / override path anywhere in the migration");
-    const actorOk = mig.slice(mig.indexOf("function public.batcave_note_actor_ok"), mig.indexOf("alter table public.batcave_notes enable row level security"));
-    assert(/has_platform_capability\(p_organisation_id, 'platform\.batcave\.access'\)/.test(actorOk) && /has_platform_capability\(p_organisation_id, 'platform\.command_centre\.view'\)/.test(actorOk), "B: requires Command Centre entry AND the explicit Batcave grant");
+    // batcave_note_actor_ok's LATEST definition is the rename migration (it replaced the function body to
+    // check the new capability key) — this is the live/current authority check, not the original file.
+    const actorOk = renameMig.slice(renameMig.indexOf("function public.batcave_note_actor_ok"), renameMig.indexOf("revoke all on function public.batcave_note_actor_ok"));
+    assert(/has_platform_capability\(p_organisation_id, 'platform\.command_centre\.view'\)/.test(actorOk) && /has_platform_capability\(p_organisation_id, 'platform\.executive\.private_office\.access'\)/.test(actorOk), "B: requires Executive Office entry AND the explicit Private Office grant (current capability key)");
+    assert(!/platform\.batcave\.access/.test(actorOk), "B: the LIVE actor-ok check no longer references the retired platform.batcave.access key");
     assert(/p\.access_scope = 'platform'/.test(actorOk) && /p\.status = 'active'/.test(actorOk), "B: module-bound / inactive identities fail closed at the database");
     assert(/p\.organisation_id = p_organisation_id/.test(actorOk), "B: cross-organisation access fails");
     assert(/revoke all on table public\.batcave_notes from public, anon, authenticated, service_role/.test(mig) && /grant select, insert, update, delete on table public\.batcave_notes to authenticated;/.test(mig) && !/to[^;]*service_role;/.test(mig.slice(mig.indexOf("grant select, insert"))), "B: service_role and anon hold NO privilege on the table — no administrative read path");
     assert(/enable row level security/.test(mig) && !/force row level security/.test(mig) === true, "B: RLS enabled");
-    const repo = strip(src("src/modules/batcave/notes/server/BatcaveNotesRepository.ts"));
+    const repo = strip(src("src/modules/private-office/notes/server/PrivateOfficeNotesRepository.ts"));
     assert(!/createAdminClient|SERVICE_ROLE/.test(notesCode), "B: the notes code never uses the service-role client");
     assert(/createClient\(await cookies\(\)\)/.test(repo), "B: only the signed-in user's own session client is used (RLS applies)");
     assert(!/async\s+(listAll|listByOwner|getByOwner|readAny|listForProfile)\b/.test(repo) && !/\(\s*(owner|ownerId|ownerProfileId|profileId)\s*[:,)]/.test(repo.replace(/constructor\([^)]*\)/, "")), "B: no arbitrary-owner or bulk reader exists");
     assert((repo.match(/\.eq\("owner_profile_id", this\.actor\.profileId\)/g) ?? []).length >= 3, "B: every read/update/delete query also pins the acting owner and organisation");
-    const route = src("src/app/api/batcave/notes/route.ts");
-    assert(route.indexOf("requireBatcaveAccess()") < route.indexOf("switch (body.action)"), "B: the API is authorised before dispatch");
-    const page = src("src/app/(app)/command-centre/batcave/page.tsx");
-    assert(page.indexOf("requireBatcaveAccess()") < page.indexOf("new BatcaveNotesService("), "B: the page is gated before notes are loaded");
-    assert(!/isPlatformSuperAdmin|roleSlugs|admin_override/i.test(notesCode + strip(src("src/modules/batcave/server/requireBatcaveAccess.ts"))), "B: no Super Admin / override consulted");
-    pass("B authority: owner-only via RLS, service_role has no privilege, no Super Admin path, module-bound & cross-org fail closed, gated route/API");
+    const route = src("src/app/api/private-office/notes/route.ts");
+    assert(route.indexOf("requirePrivateOfficeAccess()") < route.indexOf("switch (body.action)"), "B: the API is authorised before dispatch");
+    const page = src("src/app/(app)/command-centre/private-office/page.tsx");
+    assert(page.indexOf("requirePrivateOfficeAccess()") < page.indexOf("new PrivateOfficeNotesService("), "B: the page is gated before notes are loaded");
+    assert(!/isPlatformSuperAdmin|roleSlugs|admin_override/i.test(notesCode + strip(src("src/modules/private-office/server/requirePrivateOfficeAccess.ts"))), "B: no Super Admin / override consulted");
+    pass("B authority: owner-only via RLS, service_role has no privilege, no Super Admin path, module-bound & cross-org fail closed, gated route/API, LIVE capability key enforced");
   }
 
   // ── C. Ownership ─────────────────────────────────────────────────────────
   {
-    const route = src("src/app/api/batcave/notes/route.ts");
+    const route = src("src/app/api/private-office/notes/route.ts");
     assert(/const input = \{ title: body\.input\?\.title, body: body\.input\?\.body \}/.test(route) && !/body\.(input\??\.)?(owner|organisation)|input\??\.(owner|organisation)/i.test(strip(route)), "C: only title and body are read from the client");
     const forged = validateNoteInput({ title: "t", body: "b", ownerProfileId: "x", organisationId: "y" } as never, { requireTitle: true });
     assert(forged.ok && Object.keys(forged.value).sort().join() === "body,title", "C: any client-supplied owner/organisation is discarded by validation");
     assert(!isNoteId("not-a-uuid") && isNoteId("11111111-1111-4111-8111-111111111111"), "C: note ids are UUIDs");
     assert(/new\.owner_profile_id is distinct from old\.owner_profile_id/.test(mig) && /new\.organisation_id is distinct from old\.organisation_id/.test(mig), "C: ownership and organisation are immutable (no transfer)");
-    const svc = strip(src("src/modules/batcave/notes/server/BatcaveNotesService.ts"));
+    const svc = strip(src("src/modules/private-office/notes/server/PrivateOfficeNotesService.ts"));
     assert(/profileId: access\.profileId/.test(svc) && /organisationId: access\.organisationId/.test(svc), "C: the owner comes from the authenticated session");
     pass("C ownership: session-derived owner/organisation; client cannot choose; no transfer");
   }
@@ -101,20 +113,20 @@ async function main() {
   // ── D. Separation ─────────────────────────────────────────────────────────
   {
     const allowed = (f: string) =>
-      f.startsWith("src/modules/batcave/") || f.startsWith("src/app/api/batcave/") || f === "src/app/(app)/command-centre/batcave/page.tsx";
-    const offenders = walk("src").filter((f) => /\.(ts|tsx)$/.test(f) && !allowed(f) && /batcave_notes|BatcaveNote|batcave\/notes/i.test(src(f)));
-    assert(offenders.length === 0, `D: nothing outside Batcave touches notes (${offenders.join(", ")})`);
+      f.startsWith("src/modules/private-office/") || f.startsWith("src/app/api/private-office/") || f === "src/app/(app)/command-centre/private-office/page.tsx";
+    const offenders = walk("src").filter((f) => /\.(ts|tsx)$/.test(f) && !allowed(f) && /batcave_notes|PrivateOfficeNote|private-office\/notes/i.test(src(f)));
+    assert(offenders.length === 0, `D: nothing outside Private Office touches notes (${offenders.join(", ")})`);
     for (const dir of ["src/modules/command-centre", "src/modules/platform-finance", "src/modules/intelligence", "src/lib/intelligence", "src/modules/ecc-operations", "src/lib/events"]) {
-      assert(!/batcave/i.test(walk(dir).filter((f) => !f.endsWith("financialAccounts.ts")).map(src).join("\n")), `D: ${dir} is blind to Batcave`);
+      assert(!/batcave|private.office/i.test(walk(dir).filter((f) => !f.endsWith("financialAccounts.ts")).map(src).join("\n")), `D: ${dir} is blind to Private Office`);
     }
     assert(!/operational_events|recordOperationalEvent|emitActionEvent/.test(notesCode), "D: no operational_events / event emission for notes");
-    assert(!/kaiso|embedding|vector|openai|anthropic|llm|summari[sz]e/i.test(notesCode + strip(src("src/modules/batcave/components/BatcaveNotes.tsx"))), "D: no Kaiso / AI / embeddings / indexing");
+    assert(!/kaiso|embedding|vector|openai|anthropic|llm|summari[sz]e/i.test(notesCode + strip(src("src/modules/private-office/components/PrivateOfficeNotes.tsx"))), "D: no Kaiso / AI / embeddings / indexing");
     const commitments = walk("src/modules/command-centre/commitments").map(src).join("\n");
-    assert(!/batcave|note/i.test(strip(commitments).replace(/notes?:\s*string/gi, "")), "D: Executive Commitments consume no note data");
-    assert(!/batcave/i.test(src("src/modules/command-centre/presentationTypes.ts")) && !/batcave/i.test(src("src/modules/command-centre/server/CommandCentreServerService.ts")), "D: Command Centre is content-blind (no note count, latest, titles or existence)");
-    const door = src("src/modules/batcave/components/BatcaveDoorway.tsx");
-    assert(!/note|count|latest|\{/.test(strip(door).replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/export function BatcaveDoorway\(\) \{/, "").replace(/href="[^"]*"/, "")), "D: the doorway shows no note data");
-    pass("D separation: Command Centre, Finance, Intelligence, Commitments, events and Kaiso are blind to notes");
+    assert(!/batcave|private.office|note/i.test(strip(commitments).replace(/notes?:\s*string/gi, "")), "D: Executive Commitments consume no note data");
+    assert(!/batcave|private.office/i.test(src("src/modules/command-centre/presentationTypes.ts")) && !/batcave|private.office/i.test(src("src/modules/command-centre/server/CommandCentreServerService.ts")), "D: Executive Office is content-blind (no note count, latest, titles or existence)");
+    const door = src("src/modules/private-office/components/PrivateOfficeDoorway.tsx");
+    assert(!/note|count|latest|\{/.test(strip(door).replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/export function PrivateOfficeDoorway\(\) \{/, "").replace(/href="[^"]*"/, "")), "D: the doorway shows no note data");
+    pass("D separation: Executive Office, Finance, Intelligence, Commitments, events and Kaiso are blind to notes");
   }
 
   // ── E. Audit privacy ──────────────────────────────────────────────────────
@@ -126,15 +138,15 @@ async function main() {
 
   // ── F. UI ─────────────────────────────────────────────────────────────────
   {
-    const page = src("src/modules/batcave/components/BatcavePage.tsx");
-    const notes = src("src/modules/batcave/components/BatcaveNotes.tsx");
+    const page = src("src/modules/private-office/components/PrivateOfficePage.tsx");
+    const notes = src("src/modules/private-office/components/PrivateOfficeNotes.tsx");
     assert(/notes === null/.test(page) && /could not be loaded/.test(page) && /No private notes yet\./.test(notes), "F: a failed read is an error; a loaded empty list is 'No private notes yet.'");
-    assert(page.indexOf("notes === null") < page.indexOf("<BatcaveNotes"), "F: failure is never rendered as an empty notebook");
+    assert(page.indexOf("notes === null") < page.indexOf("<PrivateOfficeNotes"), "F: failure is never rendered as an empty notebook");
     assert(/window\.confirm\("Permanently delete this note/.test(notes), "F: deletion needs explicit confirmation");
     assert(!/tiptap|quill|draft-js|slate|markdown|contenteditable|dangerouslySetInnerHTML/i.test(page + notes) && !/<textarea/.test(page), "F: plain text — no rich-text editor");
     assert(!/search|filter|tag|folder|priority|pin\b|due|reminder|share/i.test(strip(notes).replace(/input|textarea/g, "")), "F: no search / tags / folders / reminders / sharing creep");
     assert(!/Strategic|Private Finance|CEO Notes|Confidential|Coming soon|Kaiso/i.test(page + notes), "F: no fake feature cards");
-    assert(!/only you can|encrypted|end-to-end|secret/i.test(page + notes) && /Private to your Batcave workspace\./.test(page), "F: privacy copy matches reality (no cryptographic or absolute claims)");
+    assert(!/only you can|encrypted|end-to-end|secret/i.test(page + notes) && /Private to your Private Office workspace\./.test(page), "F: privacy copy matches reality (no cryptographic or absolute claims)");
     assert(!/\d+ (private )?notes?\b/.test(page), "F: no fake metrics");
     pass("F UI: empty ≠ failure, confirmed deletion, plain text, no creep, honest privacy copy");
   }
@@ -146,9 +158,11 @@ async function main() {
     const c = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
     const svc = await c.from("batcave_notes").select("id", { head: true, count: "exact" });
     assert(svc.error, "live: the service role cannot read private notes at all");
-    const g = await c.from("platform_capability_grants").select("profile_id").eq("capability", "platform.batcave.access");
-    assert(!g.error && (g.data ?? []).length === 0, "live: no identity holds Batcave access");
-    pass("live-read: service role denied; 0 Batcave grants");
+    const old = await c.from("platform_capability_grants").select("profile_id").eq("capability", "platform.batcave.access");
+    assert(!old.error && (old.data ?? []).length === 0, "live: no identity holds the retired platform.batcave.access key");
+    const g = await c.from("platform_capability_grants").select("profile_id").eq("capability", "platform.executive.private_office.access");
+    assert(!g.error, "live: platform.executive.private_office.access is queryable");
+    pass(`live-read: service role denied; 0 retired-key grants; ${g.data?.length ?? 0} current Private Office grant(s)`);
   }
 
   console.log(out.join("\n"));

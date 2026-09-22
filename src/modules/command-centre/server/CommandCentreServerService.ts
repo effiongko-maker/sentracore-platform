@@ -269,7 +269,7 @@ export class CommandCentreServerService {
         label: "Projects & Construction",
         state: "unavailable",
         statusLabel: "Not available yet",
-        lines: ["Coming soon to your Command Centre."],
+        lines: ["Coming soon to your Executive Office."],
         href: null,
         disabledNavigationLabel: null,
       },
@@ -658,7 +658,7 @@ export class CommandCentreServerService {
           items: [],
           viewAllHref: null,
           reason:
-            "Finance decisions are shown to people with Finance approval authority and Command Centre decision access.",
+            "Finance decisions are shown to people with Finance approval authority and Executive Office decision access.",
           scopeNote: null,
         };
       case "unavailable":
@@ -966,7 +966,7 @@ export class CommandCentreServerService {
         state: firstVisitError ? "error" : "empty",
         message: firstVisitError
           ? "Your visit marker could not be created."
-          : "This is your first tracked Command Centre visit.",
+          : "This is your first tracked Executive Office visit.",
         detail: firstVisitError
           ? "Changes cannot be measured yet."
           : "Changes will be measured from this visit onward.",

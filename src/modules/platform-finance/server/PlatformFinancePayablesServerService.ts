@@ -226,7 +226,7 @@ export class PlatformFinancePayablesServerService {
       .eq("capability", "platform.command_centre.view")
       .maybeSingle();
     if (error || !grant) {
-      throw new ActionError("FORBIDDEN", "Command Centre composition is not authorised.");
+      throw new ActionError("FORBIDDEN", "Executive Office composition is not authorised.");
     }
     const { data: companies, error: companiesError } = await admin
       .from("finance_companies")

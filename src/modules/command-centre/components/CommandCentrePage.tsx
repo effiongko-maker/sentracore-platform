@@ -375,7 +375,7 @@ export function CommandCentrePage({
         <div className="scc-hero-veil" aria-hidden />
         <div className="scc-hero-inner">
           <div className="scc-hero-copy">
-            <p className="scc-eyebrow">Command Centre</p>
+            <p className="scc-eyebrow">Executive Office</p>
             <h1 className="scc-greeting">{snapshot.greeting}</h1>
             <p className="scc-lede">{snapshot.lede}</p>
           </div>

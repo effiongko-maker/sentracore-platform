@@ -1,5 +1,5 @@
 /**
- * Batcave Private Executive Notes — pure domain rules (no I/O).
+ * Private Office Private Executive Notes — pure domain rules (no I/O).
  * A note is private executive thinking: a title and a plain-text body, owned by one profile.
  * Deliberately tiny — no tags, folders, sharing, reminders, attachments, versions or AI metadata.
  */
@@ -7,7 +7,7 @@
 export const NOTE_TITLE_MAX = 200;
 export const NOTE_BODY_MAX = 20000;
 
-export type BatcaveNote = {
+export type PrivateOfficeNote = {
   id: string;
   title: string;
   body: string;

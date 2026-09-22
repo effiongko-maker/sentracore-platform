@@ -5,7 +5,7 @@
  *   - HOME WORKSPACE / MODULE BOUNDARY ≠ BUSINESS AUTHORITY. Choosing a home establishes an operating boundary and a
  *     default destination. It grants no capability and no data scope.
  *   - Only genuine operating environments can be a MODULE-BOUND HOME. Executive landing, administration and the
- *     private Batcave are not roles a person is "bound" to.
+ *     private Private Office surface are not roles a person is "bound" to.
  *
  * Everything that lists workspaces — the DB-mirrored bound-module set (moduleBoundary.ts), the landing preference
  * set (landingWorkspace.ts), the Admin Console's Create Account / access-scope UI — derives from this file. The two DB
@@ -78,7 +78,7 @@ export const WORKSPACE_REGISTRY = [
   },
   {
     id: "command_centre",
-    label: "Command Centre",
+    label: "Executive Office",
     route: "/command-centre",
     kind: "executive_landing",
     moduleBoundHome: false,
@@ -99,9 +99,9 @@ export const WORKSPACE_REGISTRY = [
     note: "Administrative functionality derived from Super Admin authority. Not a business home workspace.",
   },
   {
-    id: "batcave",
-    label: "Batcave",
-    route: "/batcave",
+    id: "private_office",
+    label: "Private Office",
+    route: "/command-centre/private-office",
     kind: "private_nested",
     moduleBoundHome: false,
     landingSelectable: false,

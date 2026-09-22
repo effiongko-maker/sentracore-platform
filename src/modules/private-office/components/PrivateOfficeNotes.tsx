@@ -2,10 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { BatcaveNote } from "@/modules/batcave/notes/domain";
+import type { PrivateOfficeNote } from "@/modules/private-office/notes/domain";
 
 async function call(action: string, payload: Record<string, unknown>): Promise<void> {
-  const res = await fetch("/api/batcave/notes", {
+  const res = await fetch("/api/private-office/notes", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action, ...payload }),
@@ -25,7 +25,7 @@ function when(iso: string, timeZone: string | null): string {
 type Draft = { id: string | null; title: string; body: string };
 
 /** Plain-text private notes: a chronological list and one editor. No search, tags or rich text. */
-export function BatcaveNotes({ notes, timeZone }: { notes: BatcaveNote[]; timeZone: string | null }) {
+export function PrivateOfficeNotes({ notes, timeZone }: { notes: PrivateOfficeNote[]; timeZone: string | null }) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);

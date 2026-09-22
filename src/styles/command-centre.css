@@ -1058,14 +1058,14 @@ a.scc-decision-row:hover {
   color: var(--scc-gold);
 }
 
-/* Batcave doorway + foundation page — restrained, same visual DNA, no imagery. */
-.scc-batcave-door {
+/* Private Office doorway + foundation page — restrained, same visual DNA, no imagery. */
+.scc-private-office-door {
   display: flex;
   justify-content: flex-end;
   padding: 0.5rem 0.25rem 0;
 }
 
-.scc-batcave-door-link {
+.scc-private-office-door-link {
   display: inline-flex;
   flex-direction: column;
   align-items: flex-end;
@@ -1078,12 +1078,12 @@ a.scc-decision-row:hover {
   text-decoration: none;
 }
 
-.scc-batcave-door-link:hover {
+.scc-private-office-door-link:hover {
   text-decoration: underline;
   text-underline-offset: 4px;
 }
 
-.scc-batcave-door-sub {
+.scc-private-office-door-sub {
   font-size: 0.62rem;
   font-weight: 500;
   letter-spacing: 0.04em;
@@ -1091,7 +1091,7 @@ a.scc-decision-row:hover {
   color: var(--scc-ink-faint);
 }
 
-.scc-batcave {
+.scc-private-office {
   display: grid;
   gap: 1rem;
   max-width: 48rem;
@@ -1099,7 +1099,7 @@ a.scc-decision-row:hover {
   padding: 3rem 1.25rem;
 }
 
-.scc-batcave-title {
+.scc-private-office-title {
   margin: 0.25rem 0;
   font-family: var(--scc-serif);
   font-size: clamp(1.8rem, 3vw, 2.4rem);
@@ -1107,22 +1107,22 @@ a.scc-decision-row:hover {
   color: var(--scc-ink);
 }
 
-.scc-batcave-body {
+.scc-private-office-body {
   min-height: 0;
 }
 
-.scc-batcave-note {
+.scc-private-office-note {
   margin: 0;
   font-size: 0.85rem;
   color: var(--scc-ink-soft);
 }
 
-.scc-batcave-back {
+.scc-private-office-back {
   margin: 0;
 }
 
-/* Batcave private notes — quiet, plain-text workspace. */
-.scc-batcave { max-width: 64rem; }
+/* Private Office private notes — quiet, plain-text workspace. */
+.scc-private-office { max-width: 64rem; }
 
 .scc-notes {
   display: grid;

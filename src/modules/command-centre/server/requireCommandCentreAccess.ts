@@ -81,7 +81,7 @@ export async function requireCommandCentreAccess(
   if (capError) {
     throw new ActionError(
       "INTERNAL_ERROR",
-      "Unable to verify Command Centre capability."
+      "Unable to verify Executive Office capability."
     );
   }
   if (!capRow) {
@@ -121,7 +121,7 @@ export async function requireCommandCentreAccessAny(
   if (capError) {
     throw new ActionError(
       "INTERNAL_ERROR",
-      "Unable to verify Command Centre capability."
+      "Unable to verify Executive Office capability."
     );
   }
 

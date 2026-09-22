@@ -38,7 +38,7 @@ async function main() {
     assert([...PKG].join() === "ops.view,ops.create,ops.edit,ops.submit,requests.view,finance.view,finance.create,finance.submit,users.view", "the canonical Facility Manager package is exactly the nine approved capabilities");
     assert(PKG.includes("finance.create") && PKG.includes("finance.submit") && !FACILITY_MANAGER_EXCLUDED.some((e) => e.capability === "finance.create" || e.capability === "finance.submit"), "FM costs/claims: the Facility Manager may record costs, draft and submit claims");
     assert(!PKG.some((c) => c.startsWith("platform_finance.")), "no Platform Finance capability is in the package");
-    assert(!PKG.some((c) => c.startsWith("platform.")), "no platform-scope (Command Centre / ECC / Batcave / override) capability is in the package");
+    assert(!PKG.some((c) => c.startsWith("platform.")), "no platform-scope (Command Centre / ECC / Private Office / override) capability is in the package");
     assert(facilityManagerPackageGaps(PREVIOUS).join() === "requests.view,finance.view,finance.create,finance.submit", "the previous package was missing requests.view, finance.view and the ordinary cost/claim authority");
     pass("A package: every FM view capability, ordinary operating authority; protected and mutation-only powers explicitly excluded");
   }

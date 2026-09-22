@@ -332,7 +332,7 @@ export function resolveBreadcrumbSegments(pathname: string): string[] {
       pathname === "/command-centre" ||
       pathname.startsWith("/command-centre/")
     ) {
-      return ["Command Centre"];
+      return ["Executive Office"];
     }
     return ["Platform Home"];
   }

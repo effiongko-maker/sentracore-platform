@@ -510,7 +510,7 @@ export function OrganisationalCompass() {
             ) : (
               <>
                 <div className="os-compass-command-block">
-                  <p className="os-compass-workspace-caption">Command Centre</p>
+                  <p className="os-compass-workspace-caption">Executive Office</p>
                   {sessionLoading || workspaceAccess == null ? (
                     <p className="os-compass-nav-status" role="status">
                       Checking access…

@@ -137,7 +137,7 @@ async function main() {
     assert(/accessible\.includes\(payment\.company_id as string\)\) throw new ActionError\("FORBIDDEN", "No company access\."/.test(svc.replace(/\s+/g, " ").replace(/\) throw/, ") throw")) || /No company access/.test(svc), "F: company access is enforced on every review/post");
     assert(/finance_payable_actor_has_company_access/.test(mig) && /platform_finance\.accounting\.create_transaction/.test(mig), "F: the database RPCs independently enforce capability and company access");
     assert(/visibility: "restricted", label: "Restricted corporate financial account"/.test(svc), "F: restricted source accounts stay hidden in the review");
-    assert(!/isPlatformSuperAdmin|roleSlugs|command_centre|admin_override|platform\.batcave/i.test(svc + route.replace(/PLATFORM_FINANCE_CAPABILITIES/g, "")), "F: Super Admin / CEO / Command Centre identity never bypasses posting authority");
+    assert(!/isPlatformSuperAdmin|roleSlugs|command_centre|admin_override|platform\.batcave|platform\.executive\.private_office/i.test(svc + route.replace(/PLATFORM_FINANCE_CAPABILITIES/g, "")), "F: Super Admin / CEO / Command Centre / Private Office identity never bypasses posting authority");
     const journalPage = src("src/modules/platform-finance/components/PlatformFinanceJournalPage.tsx");
     assert(/cause\.status === 403/.test(journalPage) && /restricted for your access/.test(journalPage), "F: a restricted actor sees 'restricted' — not failure, not empty");
     assert(/companies you can access/.test(journalPage) && !/No confirmed payments are awaiting accounting\./.test(journalPage), "F: the empty message never claims more than the actor's company scope");
@@ -162,9 +162,9 @@ async function main() {
     assert(!existsSync(resolve("src/app/(app)/platform-finance/payments/page.tsx")), "H: no new Payments register");
     const changed = [svcRaw, src("src/modules/platform-finance/domain/paymentAccounting.ts"), src("src/modules/platform-finance/components/PlatformFinanceJournalPage.tsx"), src("src/modules/platform-finance/components/PlatformFinancePaymentReviewDrawer.tsx")].join("\n");
     assert(!/reconcil|bank statement|liquidity|treasury forecast|free cash/i.test(strip(changed)), "H: no treasury / reconciliation implementation");
-    assert(!/batcave|command_centre|ecc_|fm_/i.test(strip(changed)), "H: no Command Centre / Batcave / FM / ECC coupling");
+    assert(!/batcave|private.office|command_centre|ecc_|fm_/i.test(strip(changed)), "H: no Command Centre / Private Office / FM / ECC coupling");
     assert(!/approvalPolic|multi-line|recurring/i.test(strip(changed)), "H: no approval or manual-journal redesign");
-    pass("H separation: no Payments register, treasury, Command Centre/Batcave/FM/ECC, approval or journal redesign");
+    pass("H separation: no Payments register, treasury, Command Centre/Private Office/FM/ECC, approval or journal redesign");
   }
 
   console.log(out.join("\n"));

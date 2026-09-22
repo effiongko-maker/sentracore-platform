@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { isActionError } from "@/lib/actions/errors";
-import { requireBatcaveAccess } from "@/modules/batcave/server/requireBatcaveAccess";
-import { BatcaveNotesService } from "@/modules/batcave/notes/server/BatcaveNotesService";
+import { requirePrivateOfficeAccess } from "@/modules/private-office/server/requirePrivateOfficeAccess";
+import { PrivateOfficeNotesService } from "@/modules/private-office/notes/server/PrivateOfficeNotesService";
 
 type Body = { action?: "create" | "update" | "delete"; id?: string; input?: { title?: unknown; body?: unknown } };
 
 /**
- * Private notes mutations. Authorised server-side (Command Centre gate + explicit Batcave grant)
+ * Private notes mutations. Authorised server-side (Executive Office gate + explicit Private Office grant)
  * before any action. Only `title` and `body` are read from the client — owner and organisation
  * always come from the authenticated session. Unauthorised callers get a plain 404.
  */
@@ -18,8 +18,8 @@ export async function POST(request: Request) {
     } catch {
       return NextResponse.json({ success: false, message: "Invalid request." }, { status: 400 });
     }
-    const access = await requireBatcaveAccess();
-    const service = new BatcaveNotesService(access);
+    const access = await requirePrivateOfficeAccess();
+    const service = new PrivateOfficeNotesService(access);
     const input = { title: body.input?.title, body: body.input?.body };
     switch (body.action) {
       case "create":

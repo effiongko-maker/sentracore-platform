@@ -100,7 +100,7 @@ export function describeAuditEvent(
     }
     case "landing_workspace.changed": {
       const label = (v: string) =>
-        v === "command_centre" ? "Command Centre" : v === "facility_management" ? "Facility Management" : v === "ecc_operations" ? "ECC Operations" : v === "platform_finance" ? "Platform Finance" : "Platform Home";
+        v === "command_centre" ? "Executive Office" : v === "facility_management" ? "Facility Management" : v === "ecc_operations" ? "ECC Operations" : v === "platform_finance" ? "Platform Finance" : "Platform Home";
       detail.push(`Landing workspace: ${label(str(details, "previousLandingWorkspace"))} → ${label(str(details, "landingWorkspace"))}`);
       return { headline: `Changed landing workspace for ${person}`, category, detail };
     }

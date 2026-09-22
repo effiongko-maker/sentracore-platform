@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { isActionError } from "@/lib/actions/errors";
-import { BatcaveDoorway } from "@/modules/batcave/components/BatcaveDoorway";
-import { canEnterBatcave } from "@/modules/batcave/server/requireBatcaveAccess";
+import { PrivateOfficeDoorway } from "@/modules/private-office/components/PrivateOfficeDoorway";
+import { canEnterPrivateOffice } from "@/modules/private-office/server/requirePrivateOfficeAccess";
 import {
   requireCommandCentreAccess,
 } from "@/modules/command-centre";
@@ -11,12 +11,12 @@ import { CommandCentreServerService } from "@/modules/command-centre/server/Comm
 
 export default async function CommandCentreRoute() {
   let snapshot;
-  let batcaveDoorway = false;
+  let privateOfficeDoorway = false;
   try {
     const access = await requireCommandCentreAccess();
     snapshot = await new CommandCentreServerService().load(access);
-    // Doorway only: a boolean from Batcave's own gate. Command Centre never loads Batcave data.
-    batcaveDoorway = await canEnterBatcave();
+    // Doorway only: a boolean from Private Office's own gate. Executive Office never loads Private Office data.
+    privateOfficeDoorway = await canEnterPrivateOffice();
   } catch (error) {
     if (isActionError(error)) {
       if (error.code === "UNAUTHENTICATED") {
@@ -31,10 +31,10 @@ export default async function CommandCentreRoute() {
         return (
           <div className="scc">
             <div className="scc-access-denied" role="alert">
-              <h1>Command Centre unavailable</h1>
+              <h1>Executive Office unavailable</h1>
               <p>
                 {error.message ||
-                  "You do not have Command Centre access for this organisation."}
+                  "You do not have Executive Office access for this organisation."}
               </p>
               <Link href="/">Return to Platform Home</Link>
             </div>
@@ -47,7 +47,7 @@ export default async function CommandCentreRoute() {
   return (
     <CommandCentrePage
       snapshot={snapshot}
-      footer={batcaveDoorway ? <BatcaveDoorway /> : null}
+      footer={privateOfficeDoorway ? <PrivateOfficeDoorway /> : null}
     />
   );
 }

@@ -66,7 +66,7 @@ async function main() {
   assert(forbidden(() => assertBoundaryAllows(fm, "platform_finance")), "5: FM-bound blocked from Platform Finance");
   assertBoundaryAllows(fm, "facility_management");
   const fin = sess("module", "platform_finance");
-  for (const target of ["facility_management", "ecc_operations", "platform"] as const) assert(forbidden(() => assertBoundaryAllows(fin, target)), `5: Finance-bound blocked from ${target} (FM / ECC / Command Centre / Admin Console / Batcave)`);
+  for (const target of ["facility_management", "ecc_operations", "platform"] as const) assert(forbidden(() => assertBoundaryAllows(fin, target)), `5: Finance-bound blocked from ${target} (FM / ECC / Command Centre / Admin Console / Private Office)`);
   assertBoundaryAllows(fin, "platform_finance");
   pass("5 FM-bound cannot reach ECC or platform-wide surfaces; Finance-bound reaches Platform Finance only");
   // 6. accidental grants cannot bypass: boundary is independent of capabilities and ANDed by every gate

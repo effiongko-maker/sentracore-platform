@@ -1168,7 +1168,7 @@ export class PlatformFinanceServerService {
       .eq("capability", "platform.command_centre.view")
       .maybeSingle();
     if (error || !grant) {
-      throw new ActionError("FORBIDDEN", "Command Centre composition is not authorised.");
+      throw new ActionError("FORBIDDEN", "Executive Office composition is not authorised.");
     }
     return this.getOverviewForCompanyScope(input, true);
   }

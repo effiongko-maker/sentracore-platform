@@ -138,8 +138,8 @@ async function main() {
     assert(/commitments\.canManage && !form/.test(panel) && /New Commitment/.test(panel), "D: New Commitment is offered only with manage authority");
     assert(!/kanban|drag|swimlane|priority|subtask|\btags?\b/i.test(panel.replace(/\/\*[\s\S]*?\*\//g, "")), "D: no task-manager concepts");
     const all = [...walk("src/modules/command-centre"), ...walk("src/app/api/command-centre")].filter((f) => /\.(ts|tsx)$/.test(f));
-    assert(all.every((f) => !/batcave/i.test(src(f))), "D: no Batcave coupling");
-    pass("D UI: restricted hidden, empty ≠ failure, manage-gated creation, no task-manager concepts, no Batcave");
+    assert(all.every((f) => !/batcave/i.test(src(f))), "D: no Private Office coupling");
+    pass("D UI: restricted hidden, empty ≠ failure, manage-gated creation, no task-manager concepts, no Private Office");
   }
 
   // ── E. Attention ─────────────────────────────────────────────────────────

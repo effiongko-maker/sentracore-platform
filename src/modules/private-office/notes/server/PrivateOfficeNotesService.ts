@@ -1,19 +1,19 @@
 import "server-only";
 import { ActionError } from "@/lib/actions/errors";
-import { isNoteId, validateNoteInput, type NoteInput } from "@/modules/batcave/notes/domain";
-import { BatcaveNotesRepository } from "@/modules/batcave/notes/server/BatcaveNotesRepository";
-import type { BatcaveAccessContext } from "@/modules/batcave/server/requireBatcaveAccess";
+import { isNoteId, validateNoteInput, type NoteInput } from "@/modules/private-office/notes/domain";
+import { PrivateOfficeNotesRepository } from "@/modules/private-office/notes/server/PrivateOfficeNotesRepository";
+import type { PrivateOfficeAccessContext } from "@/modules/private-office/server/requirePrivateOfficeAccess";
 
 /**
- * Private notes for the authenticated Batcave user. The actor is always the session behind
- * `requireBatcaveAccess()`; clients never supply an owner or organisation. Note activity and
+ * Private notes for the authenticated Private Office user. The actor is always the session behind
+ * `requirePrivateOfficeAccess()`; clients never supply an owner or organisation. Note activity and
  * content are deliberately NOT written to any audit, event or reporting stream.
  */
-export class BatcaveNotesService {
-  private readonly repo: BatcaveNotesRepository;
+export class PrivateOfficeNotesService {
+  private readonly repo: PrivateOfficeNotesRepository;
 
-  constructor(access: Pick<BatcaveAccessContext, "organisationId" | "profileId">) {
-    this.repo = new BatcaveNotesRepository({
+  constructor(access: Pick<PrivateOfficeAccessContext, "organisationId" | "profileId">) {
+    this.repo = new PrivateOfficeNotesRepository({
       organisationId: access.organisationId,
       profileId: access.profileId,
     });

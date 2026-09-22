@@ -2,10 +2,10 @@ import "server-only";
 import { cookies } from "next/headers";
 import { ActionError } from "@/lib/actions/errors";
 import { createClient } from "@/utils/supabase/server";
-import type { BatcaveNote } from "@/modules/batcave/notes/domain";
+import type { PrivateOfficeNote } from "@/modules/private-office/notes/domain";
 
 /**
- * Batcave private notes persistence — deliberately built to make bulk/administrative access hard.
+ * Private Office private notes persistence — deliberately built to make bulk/administrative access hard.
  *
  *  - Uses ONLY the signed-in user's own session client (never the service-role client): the
  *    database's row-level security is what enforces "owner only". service_role and anon have
@@ -13,18 +13,21 @@ import type { BatcaveNote } from "@/modules/batcave/notes/domain";
  *  - There is no method that reads by arbitrary owner, lists across owners, or accepts an owner
  *    argument other than the authenticated actor. Every query additionally pins the actor's
  *    organisation and profile (belt and braces on top of RLS).
+ *
+ * The underlying table is still named batcave_notes — a pure rename/refactor of the Private Office
+ * surface does not touch the physical schema; renaming a live table is a separate, unrequested change.
  */
 
 type Row = { id: string; title: string; body: string; created_at: string; updated_at: string };
 const COLUMNS = "id, title, body, created_at, updated_at";
 
-function toNote(row: Row): BatcaveNote {
+function toNote(row: Row): PrivateOfficeNote {
   return { id: row.id, title: row.title, body: row.body, createdAt: row.created_at, updatedAt: row.updated_at };
 }
 
 export type NoteActor = { organisationId: string; profileId: string };
 
-export class BatcaveNotesRepository {
+export class PrivateOfficeNotesRepository {
   constructor(private readonly actor: NoteActor) {}
 
   private async db() {
@@ -32,7 +35,7 @@ export class BatcaveNotesRepository {
   }
 
   /** The acting profile's own notes, newest edit first. */
-  async listMine(): Promise<BatcaveNote[]> {
+  async listMine(): Promise<PrivateOfficeNote[]> {
     const { data, error } = await (await this.db())
       .from("batcave_notes")
       .select(COLUMNS)
@@ -44,7 +47,7 @@ export class BatcaveNotesRepository {
     return (data as Row[]).map(toNote);
   }
 
-  async create(input: { title: string; body: string }): Promise<BatcaveNote> {
+  async create(input: { title: string; body: string }): Promise<PrivateOfficeNote> {
     const { data, error } = await (await this.db())
       .from("batcave_notes")
       .insert({
@@ -59,7 +62,7 @@ export class BatcaveNotesRepository {
     return toNote(data as Row);
   }
 
-  async update(id: string, changes: { title?: string; body?: string }): Promise<BatcaveNote> {
+  async update(id: string, changes: { title?: string; body?: string }): Promise<PrivateOfficeNote> {
     const { data, error } = await (await this.db())
       .from("batcave_notes")
       .update(changes)

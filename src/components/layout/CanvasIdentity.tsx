@@ -22,7 +22,7 @@ export function CanvasIdentity() {
   const line = isAdminConsolePath(pathname)
     ? "SentraCore™ · Admin Console"
     : inCommandCentre
-    ? "SentraCore™ · Command Centre"
+    ? "SentraCore™ · Executive Office"
     : onPlatform
       ? "SentraCore™ · Enterprise Operating Platform"
       : inFacilityManagement

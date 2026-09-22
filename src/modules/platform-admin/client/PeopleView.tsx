@@ -351,7 +351,7 @@ function CreateAccountDialog({
                 <strong>Finance authority is not granted here.</strong> Platform Finance company access and platform_finance.*
                 capabilities are assigned explicitly through Platform Finance&apos;s own access model. Until they are, this person
                 signs in and lands in Platform Finance but sees &ldquo;No access&rdquo;. They cannot open Facility Management, ECC
-                Operations, Command Centre or the Admin Console.
+                Operations, Executive Office or the Admin Console.
               </p>
             </div>
           ) : null}

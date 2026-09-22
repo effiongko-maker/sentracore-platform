@@ -71,7 +71,7 @@ export function financialAccountIsVisible(input: {
 
 /**
  * Corporate restricted accounts remain in company books and Platform Finance.
- * A future private, user-owned Finance domain (internally "Batcave") must not
+ * A future private, user-owned Finance domain (internally "Private Office") must not
  * use this entity, its GL control account, its visibility grants, or reporting.
  */
 export const CORPORATE_FINANCIAL_ACCOUNT_BOUNDARY =

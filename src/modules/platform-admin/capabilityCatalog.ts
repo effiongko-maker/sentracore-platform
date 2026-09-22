@@ -18,7 +18,7 @@ export type CapabilityDomainId =
   | "fm_protected"
   | "ecc"
   | "command_centre"
-  | "batcave";
+  | "private_office";
 
 export type CapabilityDomain = {
   id: CapabilityDomainId;
@@ -104,23 +104,23 @@ export const CAPABILITY_DOMAINS: readonly CapabilityDomain[] = [
   },
   {
     id: "command_centre",
-    label: "Command Centre",
+    label: "Executive Office",
     summary: "Executive orchestration. Domain actions still need their own domain capability.",
     moduleSlug: null,
     capabilities: [
-      { key: "platform.command_centre.view", label: "View Command Centre", detail: "Open pulse, exceptions, decisions and assignments." },
-      { key: "platform.command_centre.decide", label: "Take Command Centre decisions", detail: "Act on decisions surfaced by Command Centre." },
+      { key: "platform.command_centre.view", label: "View Executive Office", detail: "Open pulse, exceptions, decisions and assignments." },
+      { key: "platform.command_centre.decide", label: "Take Executive Office decisions", detail: "Act on decisions surfaced by Executive Office." },
       { key: "platform.command_centre.commitments.view", label: "View executive commitments", detail: "See the commitments they created or own. Being assigned a commitment does not grant this." },
       { key: "platform.command_centre.commitments.manage", label: "Manage executive commitments", detail: "Create, edit, complete and cancel executive commitments. Separate from taking decisions." },
     ],
   },
   {
-    id: "batcave",
-    label: "Batcave",
-    summary: "Private executive domain. Independent of Command Centre and of administrative authority.",
+    id: "private_office",
+    label: "Private Office",
+    summary: "Private executive domain. Independent of Executive Office and of administrative authority.",
     moduleSlug: null,
     capabilities: [
-      { key: "platform.batcave.access", label: "Enter Batcave", detail: "Private executive workspace. Not implied by Command Centre, Super Admin or any other capability, and granting it does not let the administrator enter." },
+      { key: "platform.executive.private_office.access", label: "Enter Private Office", detail: "Private executive workspace. Not implied by Executive Office, Super Admin or any other capability, and granting it does not let the administrator enter." },
     ],
   },
 ] as const;

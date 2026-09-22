@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "@/styles/command-centre.css";
 
 export const metadata: Metadata = {
-  title: "Command Centre",
+  title: "Executive Office",
 };
 
 export default function CommandCentreLayout({

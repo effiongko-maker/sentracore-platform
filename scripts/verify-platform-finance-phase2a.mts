@@ -166,10 +166,10 @@ function mainStatic() {
     "minimal Cash & Banks surface has no fabricated treasury features"
   );
   assert(
-    !/create\s+table[^;]*(batcave|private_finance|user_financial_account)/i.test(
+    !/create\s+table[^;]*(batcave|private_office|private_finance|user_financial_account)/i.test(
       migration
     ),
-    "no private/Batcave entity"
+    "no private/Private Office entity"
   );
   assert(
     !migration.includes("create or replace function public.finance_post_transaction") &&

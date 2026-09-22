@@ -203,7 +203,7 @@ async function main() {
     assert(resolveLandingRoute({ boundary: platform, landingWorkspace: "command_centre", chrome: chrome({ commandCentre: true }) }) === "/command-centre", "E: platform user + accessible preference redirects");
     assert(resolveLandingRoute({ boundary: platform, landingWorkspace: "command_centre", chrome: chrome() }) === null, "E: inaccessible preference falls back to Platform Home (never a forbidden page)");
     assert(resolveLandingRoute({ boundary: platform, landingWorkspace: null, chrome: chrome({ commandCentre: true }) }) === null, "E: NULL preference keeps Platform Home");
-    assert(resolveLandingRoute({ boundary: platform, landingWorkspace: "batcave", chrome: chrome({ commandCentre: true }) }) === null && resolveLandingRoute({ boundary: platform, landingWorkspace: "admin", chrome: chrome({ commandCentre: true }) }) === null, "E: unsupported values (incl. admin/batcave) are ignored");
+    assert(resolveLandingRoute({ boundary: platform, landingWorkspace: "private_office", chrome: chrome({ commandCentre: true }) }) === null && resolveLandingRoute({ boundary: platform, landingWorkspace: "admin", chrome: chrome({ commandCentre: true }) }) === null, "E: unsupported values (incl. admin/private_office) are ignored");
     assert(resolveLandingRoute({ boundary: platform, landingWorkspace: "facility_management", chrome: null }) === null, "E: unresolved workspace flags fail to Platform Home");
     assert(resolveLandingRoute({ boundary: eccBound, landingWorkspace: "command_centre", chrome: chrome({ commandCentre: true }) }) === null, "E/F: a module-bound identity ignores landing_workspace entirely");
     assert(resolveLandingRoute({ boundary: resolveModuleBoundary({ accessScope: "platform", homeModule: "ecc_operations" }), landingWorkspace: "command_centre", chrome: chrome({ commandCentre: true }) }) === null, "F: an invalid boundary never redirects");
@@ -237,7 +237,7 @@ async function main() {
     const calls: unknown[] = [];
     const svc = new PlatformAdminServerService({ getProfile: async () => ({ id: "p" }), setLandingWorkspace: async (i: unknown) => (calls.push(i), { changed: true }) } as never, {} as never);
     let rejected = 0;
-    for (const bad of ["batcave", "admin", "/command-centre", "COMMAND_CENTRE"]) {
+    for (const bad of ["private_office", "admin", "/command-centre", "COMMAND_CENTRE"]) {
       await svc.setLandingWorkspace({ actorProfileId: "a" } as never, { profileId: "p", landingWorkspace: bad }).catch(() => rejected++);
     }
     assert(rejected === 4 && (calls as unknown[]).length === 0, "F: invalid values are rejected server-side before any RPC");
@@ -250,15 +250,15 @@ async function main() {
     pass("F IAM: nullable, constrained, audited (old/new), canonical RPC only, invalid rejected, existing users unchanged by the migration");
   }
 
-  // ── G. Batcave (foundation now exists — see verify-batcave-boundary; this pass must stay clear of it) ──
+  // ── G. Private Office (foundation now exists — see verify-private-office-boundary; this pass must stay clear of it) ──
   {
     const ccFiles = walk("src/modules/command-centre").filter((f) => /\.(ts|tsx)$/.test(f));
-    assert(ccFiles.every((f) => !/batcave/i.test(src(f))), "G: Command Centre modules know nothing of Batcave (doorway is composed by the route)");
+    assert(ccFiles.every((f) => !/batcave/i.test(src(f))), "G: Command Centre modules know nothing of Private Office (doorway is composed by the route)");
     for (const f of walk("supabase/migrations")) {
-      assert(!/(create table|create schema)[^;]*batcave/i.test(src(f)) || f.endsWith("20260920240000_batcave_private_notes.sql"), `G: Batcave schema exists only in its own private-notes migration (${f})`);
+      assert(!/(create table|create schema)[^;]*batcave/i.test(src(f)) || f.endsWith("20260920240000_batcave_private_notes.sql"), `G: Private Office schema exists only in its own private-notes migration (${f})`);
     }
-    assert(!/batcave/i.test(src("src/lib/access/landingWorkspace.ts")), "G: landing values exclude Batcave");
-    pass("G Command Centre executive console remains free of Batcave data or knowledge");
+    assert(!/batcave/i.test(src("src/lib/access/landingWorkspace.ts")), "G: landing values exclude Private Office");
+    pass("G Command Centre executive console remains free of Private Office data or knowledge");
   }
 
   console.log(out.join("\n"));
