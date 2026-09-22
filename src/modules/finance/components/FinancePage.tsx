@@ -12,6 +12,7 @@ import { CostRecordFormModal } from "./CostRecordFormModal";
 import { FinanceHeader, FinanceSummaryRow } from "./FinanceHeader";
 import { FinanceIntelligencePreview } from "./FinanceIntelligencePreview";
 import { FinanceOperationalCostSection } from "./FinanceOperationalCostSection";
+import { MonthlyContractPaymentsSection } from "./MonthlyContractPaymentsSection";
 import { FinancePendingActionSection } from "./FinancePendingActionSection";
 import { FinancePositionSection } from "./FinancePositionSection";
 import { FinanceSubmissionsSection } from "./FinanceSubmissionsSection";
@@ -122,6 +123,8 @@ export function FinancePage() {
             />
           </div>
         </section>
+
+        <MonthlyContractPaymentsSection />
 
         <FinancePositionSection
           approvals={overview?.sourceApprovals ?? []}
