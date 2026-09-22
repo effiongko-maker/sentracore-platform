@@ -19,6 +19,7 @@ import {
   type OrganisationModuleResult,
   type PlatformAdminFollowUp,
   type PlatformCapabilityGrantResult,
+  type PlatformCapabilityBatchResult,
   type PlatformIdentityAdminRecord,
   type AccessScopeResult,
   type LandingWorkspaceResult,
@@ -584,6 +585,87 @@ export class PlatformAdminServerService {
       targetProfileId: input.profileId,
       capability: input.capability,
     });
+  }
+
+  /**
+   * Batch capability edit for Admin Console Access → Edit access: a single administrator confirmation applies
+   * every grant and revoke from one edit session in one server-side call. Not a new SQL transaction — each item
+   * still goes through the SAME audited, per-capability platform_iam_grant_platform_capability /
+   * platform_iam_revoke_platform_capability RPC as a standalone change (same actor/allowlist/tenant checks,
+   * same audit row per change), applied sequentially. This reuses the existing, already-proven multi-grant
+   * pattern (see applyFacilityManagerOperatingPackage below) rather than adding a new SQL surface — the
+   * capability set is small and per-item failure must remain individually visible and reconcilable, which a
+   * single atomic transaction would hide (an all-or-nothing rollback cannot tell the caller which one item was
+   * the problem). Every capability is validated against the administrable allowlist BEFORE anything is
+   * written, and grant/revoke may not both target the same capability — both reject the whole batch with no
+   * side effects. Once validated, a failure on one item never aborts the rest.
+   */
+  async batchUpdateCapabilities(
+    ctx: PlatformAdminContext,
+    input: {
+      organisationId: string;
+      profileId: string;
+      grant: unknown[];
+      revoke: unknown[];
+    }
+  ): Promise<PlatformCapabilityBatchResult> {
+    const grant = Array.isArray(input.grant) ? input.grant : [];
+    const revoke = Array.isArray(input.revoke) ? input.revoke : [];
+    for (const capability of [...grant, ...revoke]) {
+      if (!isPlatformAdministrableCapability(capability)) {
+        throw new ActionError(
+          "VALIDATION_ERROR",
+          `Capability "${String(capability)}" is not administrable on the platform control plane.`
+        );
+      }
+    }
+    const grantSet = new Set(grant as PlatformAdministrableCapability[]);
+    const revokeSet = new Set(revoke as PlatformAdministrableCapability[]);
+    for (const capability of grantSet) {
+      if (revokeSet.has(capability)) {
+        throw new ActionError(
+          "VALIDATION_ERROR",
+          `Capability "${capability}" cannot be both granted and revoked in the same batch.`
+        );
+      }
+    }
+
+    const result: PlatformCapabilityBatchResult = { granted: [], revoked: [], failed: [] };
+    for (const capability of grantSet) {
+      try {
+        await this.repo.grantPlatformCapability({
+          actorProfileId: ctx.actorProfileId,
+          organisationId: input.organisationId,
+          targetProfileId: input.profileId,
+          capability,
+        });
+        result.granted.push(capability);
+      } catch (error) {
+        result.failed.push({
+          capability,
+          action: "grant",
+          message: error instanceof ActionError ? error.message : "The grant could not be applied.",
+        });
+      }
+    }
+    for (const capability of revokeSet) {
+      try {
+        await this.repo.revokePlatformCapability({
+          actorProfileId: ctx.actorProfileId,
+          organisationId: input.organisationId,
+          targetProfileId: input.profileId,
+          capability,
+        });
+        result.revoked.push(capability);
+      } catch (error) {
+        result.failed.push({
+          capability,
+          action: "revoke",
+          message: error instanceof ActionError ? error.message : "The revoke could not be applied.",
+        });
+      }
+    }
+    return result;
   }
 
   /** The capabilities a profile currently holds in an organisation (explicit grants only). */

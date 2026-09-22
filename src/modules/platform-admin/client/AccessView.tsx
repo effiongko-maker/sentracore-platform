@@ -9,7 +9,7 @@ import { v1OperatingRoleLabel } from "@/lib/access/roles";
 import { cn } from "@/lib/utils";
 import { CAPABILITY_DOMAINS, type CapabilityDomain } from "../capabilityCatalog";
 import { PLATFORM_ADMINISTRABLE_CAPABILITIES } from "../types";
-import type { AdminModuleRecord, AdminPersonDetail, AdminPersonSummary, OrganisationAdminRecord, PlatformCapabilityGrantResult } from "../types";
+import type { AdminModuleRecord, AdminPersonDetail, AdminPersonSummary, OrganisationAdminRecord, PlatformCapabilityBatchResult } from "../types";
 import { AdminApiError, adminCall } from "./adminApi";
 import { FinanceAccess } from "./FinanceAccess";
 import { ContextStrip, DataBoundary, Note, OrgGate, PageHead, displayName, moduleStatusMark, useAdminData } from "./ui";
@@ -84,6 +84,7 @@ function AccessBody({ organisation }: { organisation: OrganisationAdminRecord })
 }
 
 function PersonAccess({ organisationId, profileId, onChanged }: { organisationId: string; profileId: string; onChanged: () => void }) {
+  const { toast } = useToast();
   const person = useAdminData<AdminPersonDetail>(
     (signal) => adminCall<AdminPersonDetail>("getPerson", { organisationId, profileId }, signal),
     [organisationId, profileId]
@@ -93,6 +94,106 @@ function PersonAccess({ organisationId, profileId, onChanged }: { organisationId
     [organisationId]
   );
   const [open, setOpen] = useState<Record<string, boolean>>({});
+
+  // Batch access-edit state. pending holds ONLY capabilities whose staged state differs from what is
+  // currently persisted (p.capabilities) — toggling a row back to its original value removes its entry, so
+  // "no pending changes" is always just an empty map, never inferred from anything else.
+  const [editing, setEditing] = useState(false);
+  const [pending, setPending] = useState<Map<string, boolean>>(new Map());
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const held = useMemo(() => new Set(person.data?.capabilities ?? []), [person.data?.capabilities]);
+
+  function startEdit() {
+    setPending(new Map());
+    setSaveError(null);
+    setEditing(true);
+  }
+  function cancelEdit() {
+    // Discards every staged change; no backend call. The persisted state (held) was never touched.
+    setPending(new Map());
+    setSaveError(null);
+    setEditing(false);
+  }
+  function toggleCapability(key: string) {
+    if (saving) return;
+    setPending((cur) => {
+      const next = new Map(cur);
+      const originalHeld = held.has(key);
+      const proposedHeld = next.has(key) ? next.get(key)! : originalHeld;
+      const flipped = !proposedHeld;
+      if (flipped === originalHeld) next.delete(key);
+      else next.set(key, flipped);
+      return next;
+    });
+  }
+  function setDomainAll(keys: string[], value: boolean) {
+    if (saving) return;
+    setPending((cur) => {
+      const next = new Map(cur);
+      for (const key of keys) {
+        const originalHeld = held.has(key);
+        if (value === originalHeld) next.delete(key);
+        else next.set(key, value);
+      }
+      return next;
+    });
+  }
+
+  const grantList = [...pending.entries()].filter(([, v]) => v).map(([k]) => k);
+  const revokeList = [...pending.entries()].filter(([, v]) => !v).map(([k]) => k);
+  const pendingCount = pending.size;
+
+  async function saveChanges() {
+    if (saving || pendingCount === 0) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const result = await adminCall<PlatformCapabilityBatchResult>("batchUpdateCapabilities", {
+        organisationId,
+        profileId,
+        grantCapabilities: grantList,
+        revokeCapabilities: revokeList,
+      });
+      // Always reload after the call, whether it fully succeeded or not, so the UI reflects the authoritative
+      // backend state rather than an assumed one.
+      await person.reload();
+      onChanged();
+      if (result.failed.length > 0) {
+        // Reconcile: keep only the items that genuinely still need applying (the ones that failed); drop the
+        // ones that succeeded, since the reload above already reflects them.
+        setPending((cur) => {
+          const next = new Map<string, boolean>();
+          for (const f of result.failed) {
+            if (cur.has(f.capability)) next.set(f.capability, cur.get(f.capability)!);
+          }
+          return next;
+        });
+        setSaveError(
+          `${result.failed.length} of ${grantList.length + revokeList.length} change${grantList.length + revokeList.length === 1 ? "" : "s"} could not be applied: ` +
+            result.failed.map((f) => `${f.capability} (${f.action}) — ${f.message}`).join("; ")
+        );
+        toast({ type: "error", title: "Some changes could not be applied", description: "Review the remaining pending changes below." });
+        // Stay in edit mode so the administrator can see and retry the failed items.
+      } else {
+        setPending(new Map());
+        setEditing(false);
+        toast({
+          type: "success",
+          title: "Access updated",
+          description: `${result.granted.length} granted · ${result.revoked.length} revoked. Recorded in administrative history.`,
+        });
+      }
+    } catch (err) {
+      // The whole call failed before anything could be attempted (e.g. validation) — nothing was written, so
+      // there is nothing to reconcile; the staged changes are preserved for the administrator to retry/adjust.
+      setSaveError(err instanceof AdminApiError ? err.message : "The batch change could not be applied.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <DataBoundary state={person} onRetry={person.reload} what="this person’s access">
       {(p) => {
@@ -146,23 +247,63 @@ function PersonAccess({ organisationId, profileId, onChanged }: { organisationId
               )}
             </Panel>
 
-            <Panel title="Business capabilities" icon={KeyRound} flush aside="Explicit grants — the only source of business authority">
+            <Panel
+              title="Business capabilities"
+              icon={KeyRound}
+              flush
+              aside={
+                editing ? (
+                  <span className="ac-cap-edit-bar">
+                    {pendingCount > 0 ? (
+                      <span className="ac-cap-edit-summary">
+                        {grantList.length > 0 ? `${grantList.length} to grant` : null}
+                        {grantList.length > 0 && revokeList.length > 0 ? " · " : null}
+                        {revokeList.length > 0 ? `${revokeList.length} to revoke` : null}
+                      </span>
+                    ) : (
+                      <span className="ac-cap-edit-summary ac-secondary">No pending changes</span>
+                    )}
+                    <button type="button" className="ac-btn ac-btn-quiet ac-btn-sm" onClick={cancelEdit} disabled={saving}>
+                      Cancel
+                    </button>
+                    <button type="button" className="ac-btn ac-btn-primary ac-btn-sm" onClick={saveChanges} disabled={saving || pendingCount === 0}>
+                      {saving ? "Saving…" : "Save changes"}
+                    </button>
+                  </span>
+                ) : (
+                  <span className="ac-cap-edit-bar">
+                    <span className="ac-secondary">Explicit grants — the only source of business authority</span>
+                    <button type="button" className="ac-btn ac-btn-secondary ac-btn-sm" onClick={startEdit}>
+                      Edit access
+                    </button>
+                  </span>
+                )
+              }
+            >
+              {saveError ? (
+                <p className="ac-form-error" role="alert" style={{ padding: "10px 16px", margin: 0 }}>
+                  {saveError}
+                </p>
+              ) : null}
               {CAPABILITY_DOMAINS.map((d) => {
-                const count = d.capabilities.filter((c) => p.capabilities.includes(c.key)).length;
+                const count = d.capabilities.filter((c) => {
+                  const proposed = pending.has(c.key) ? pending.get(c.key)! : p.capabilities.includes(c.key);
+                  return proposed;
+                }).length;
                 return (
                   <DomainBlock
                     key={d.id}
                     domain={d}
                     person={p}
-                    organisationId={organisationId}
                     module={modules.data?.find((m) => m.slug === d.moduleSlug) ?? null}
                     modulesFailed={modules.error !== null}
                     open={open[d.id] ?? count > 0}
                     onToggle={() => setOpen((cur) => ({ ...cur, [d.id]: !(cur[d.id] ?? count > 0) }))}
-                    onChanged={() => {
-                      person.reload();
-                      onChanged();
-                    }}
+                    editing={editing}
+                    saving={saving}
+                    pending={pending}
+                    onToggleCapability={toggleCapability}
+                    onSetDomainAll={setDomainAll}
                   />
                 );
               })}
@@ -199,49 +340,33 @@ function PersonAccess({ organisationId, profileId, onChanged }: { organisationId
 function DomainBlock({
   domain,
   person,
-  organisationId,
   module,
   modulesFailed,
   open,
   onToggle,
-  onChanged,
+  editing,
+  saving,
+  pending,
+  onToggleCapability,
+  onSetDomainAll,
 }: {
   domain: CapabilityDomain;
   person: AdminPersonDetail;
-  organisationId: string;
   module: AdminModuleRecord | null;
   modulesFailed: boolean;
   open: boolean;
   onToggle: () => void;
-  onChanged: () => void;
+  editing: boolean;
+  saving: boolean;
+  pending: Map<string, boolean>;
+  onToggleCapability: (key: string) => void;
+  onSetDomainAll: (keys: string[], value: boolean) => void;
 }) {
-  const { toast } = useToast();
-  const [confirming, setConfirming] = useState<{ key: string; grant: boolean } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const held = useMemo(() => new Set(person.capabilities), [person.capabilities]);
-  const count = domain.capabilities.filter((c) => held.has(c.key)).length;
+  const proposedHeld = (key: string) => (pending.has(key) ? pending.get(key)! : held.has(key));
+  const count = domain.capabilities.filter((c) => proposedHeld(c.key)).length;
   const moduleOff = module !== null && module.status !== "enabled";
-
-  async function apply() {
-    if (!confirming || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await adminCall<PlatformCapabilityGrantResult>(confirming.grant ? "grantPlatformCapability" : "revokePlatformCapability", {
-        organisationId,
-        profileId: person.profileId,
-        capability: confirming.key,
-      });
-      toast({ type: "success", title: confirming.grant ? "Capability granted" : "Capability revoked", description: "Recorded in administrative history." });
-      setConfirming(null);
-      onChanged();
-    } catch (err) {
-      setError(err instanceof AdminApiError ? err.message : "The change could not be applied.");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const domainKeys = domain.capabilities.map((c) => c.key);
 
   const mark = module ? moduleStatusMark(module.status) : null;
   const panelId = `ac-domain-${domain.id}`;
@@ -262,11 +387,11 @@ function DomainBlock({
             ) : null
           ) : null}
         </span>
-        <span className="ac-domain-count" aria-label={`${count} of ${domain.capabilities.length} granted`}>
+        <span className="ac-domain-count" aria-label={`${count} of ${domain.capabilities.length} granted${editing ? " (proposed)" : ""}`}>
           {count} / {domain.capabilities.length}
           <span className="ac-pips" aria-hidden>
             {domain.capabilities.map((c) => (
-              <span key={c.key} className={cn("ac-pip", held.has(c.key) && "ac-pip-on")} />
+              <span key={c.key} className={cn("ac-pip", proposedHeld(c.key) && "ac-pip-on")} />
             ))}
           </span>
         </span>
@@ -274,41 +399,45 @@ function DomainBlock({
       {open ? (
         <div id={panelId} className="ac-domain-body">
           {moduleOff ? <p className="ac-domain-warn">The module is not enabled for this organisation, so its workspace is unavailable to members. Grants are kept and apply again once it is enabled.</p> : null}
+          {editing ? (
+            <div className="ac-domain-batch-controls">
+              <button type="button" className="ac-btn ac-btn-quiet ac-btn-sm" disabled={saving} onClick={() => onSetDomainAll(domainKeys, true)}>
+                Select all
+              </button>
+              <button type="button" className="ac-btn ac-btn-quiet ac-btn-sm" disabled={saving} onClick={() => onSetDomainAll(domainKeys, false)}>
+                Clear
+              </button>
+            </div>
+          ) : null}
           {domain.capabilities.map((c) => {
-            const isHeld = held.has(c.key);
-            const isConfirming = confirming?.key === c.key;
+            const originalHeld = held.has(c.key);
+            const proposed = proposedHeld(c.key);
+            const isStaged = pending.has(c.key);
+            // Four distinct states: currently granted (unchanged) / will be granted / will be revoked /
+            // unchanged, not granted. Never collapsed into a plain on/off.
+            const tone = isStaged ? (proposed ? "accent" : "warn") : proposed ? "ok" : "plain";
+            const label = isStaged ? (proposed ? "Will grant" : "Will revoke") : proposed ? "Granted" : "Not granted";
             return (
-              <div key={c.key} className="ac-cap">
+              <div key={c.key} className={cn("ac-cap", isStaged && "ac-cap-staged")}>
                 <div className="ac-cap-label">
                   {c.label} <span className="ac-cap-key">{c.key}</span>
                 </div>
                 <div className="ac-cap-side">
-                  <Pill tone={isHeld ? "ok" : "plain"}>{isHeld ? "Granted" : "Not granted"}</Pill>
-                  {isHeld ? (
-                    <button type="button" className="ac-btn ac-btn-danger-quiet ac-btn-sm" disabled={busy} onClick={() => { setError(null); setConfirming({ key: c.key, grant: false }); }} aria-label={`Revoke ${c.label}`}>
-                      Revoke
+                  <Pill tone={tone}>{label}</Pill>
+                  {editing ? (
+                    <button
+                      type="button"
+                      className={cn("ac-btn ac-btn-sm", proposed ? "ac-btn-danger-quiet" : "ac-btn-secondary")}
+                      disabled={saving}
+                      onClick={() => onToggleCapability(c.key)}
+                      aria-pressed={proposed !== originalHeld}
+                      aria-label={proposed ? `Stage revoke for ${c.label}` : `Stage grant for ${c.label}`}
+                    >
+                      {proposed ? "Revoke" : "Grant"}
                     </button>
-                  ) : (
-                    <button type="button" className="ac-btn ac-btn-secondary ac-btn-sm" disabled={busy} onClick={() => { setError(null); setConfirming({ key: c.key, grant: true }); }} aria-label={`Grant ${c.label}`}>
-                      Grant
-                    </button>
-                  )}
+                  ) : null}
                 </div>
                 <span className="ac-cap-detail">{c.detail}</span>
-                {isConfirming ? (
-                  <div className={cn("ac-cap-confirm", !confirming.grant && "ac-cap-confirm-critical")} role="group" aria-label="Confirm change">
-                    <span>
-                      {confirming.grant ? "Grant" : "Revoke"} <strong>{c.label}</strong> {confirming.grant ? "to" : "from"} {displayName(person)}? Takes effect immediately and is recorded in history.
-                    </span>
-                    <button type="button" className={cn("ac-btn ac-btn-sm", confirming.grant ? "ac-btn-primary" : "ac-btn-danger")} onClick={apply} disabled={busy}>
-                      {busy ? "Applying…" : confirming.grant ? "Confirm grant" : "Confirm revoke"}
-                    </button>
-                    <button type="button" className="ac-btn ac-btn-quiet ac-btn-sm" onClick={() => setConfirming(null)} disabled={busy}>
-                      Cancel
-                    </button>
-                    {error ? <span className="ac-form-error" role="alert">{error}</span> : null}
-                  </div>
-                ) : null}
               </div>
             );
           })}

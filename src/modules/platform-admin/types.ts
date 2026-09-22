@@ -173,6 +173,24 @@ export type PlatformCapabilityGrantResult = {
   changed: boolean;
 };
 
+/**
+ * Result of a batch capability edit (Admin Console Access → Edit access). Best-effort, per-item: each grant/
+ * revoke is applied through the same audited platform_iam_grant_platform_capability /
+ * platform_iam_revoke_platform_capability RPCs used for a single change, one at a time, in one server-side
+ * call. A failure on one item does not abort the rest — granted/revoked list what actually succeeded; failed
+ * lists exactly what did not, with the reason, so the client can reconcile the UI with reality rather than
+ * assume success.
+ */
+export type PlatformCapabilityBatchResult = {
+  granted: PlatformAdministrableCapability[];
+  revoked: PlatformAdministrableCapability[];
+  failed: Array<{
+    capability: PlatformAdministrableCapability;
+    action: "grant" | "revoke";
+    message: string;
+  }>;
+};
+
 export type FmOperationalDeactivation =
   | { state: "deactivated" }
   | { state: "not_applicable" }

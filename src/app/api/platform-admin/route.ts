@@ -16,6 +16,7 @@ type PlatformAdminAction =
   | "setOrganisationModule"
   | "grantPlatformCapability"
   | "revokePlatformCapability"
+  | "batchUpdateCapabilities"
   | "offboardUser"
   | "getOverview"
   | "listPeople"
@@ -47,6 +48,8 @@ type RequestBody = {
   assignmentId?: string;
   capabilityPackage?: string | null;
   capabilities?: string[];
+  grantCapabilities?: string[];
+  revokeCapabilities?: string[];
 };
 
 function actionErrorStatus(code: string): number {
@@ -247,6 +250,24 @@ export async function POST(request: Request) {
                 profileId: body.profileId,
                 capability: body.capability,
               });
+        return NextResponse.json({ success: true, data });
+      }
+      case "batchUpdateCapabilities": {
+        if (!body.organisationId || !body.profileId) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: "organisationId and profileId are required.",
+            },
+            { status: 400 }
+          );
+        }
+        const data = await service.batchUpdateCapabilities(ctx, {
+          organisationId: body.organisationId,
+          profileId: body.profileId,
+          grant: body.grantCapabilities ?? [],
+          revoke: body.revokeCapabilities ?? [],
+        });
         return NextResponse.json({ success: true, data });
       }
       case "offboardUser": {
