@@ -31,10 +31,13 @@ function formatRecordedAt(iso?: string): string {
 
 function FacilityLocationCell({ record }: { record: CostRecord }) {
   const name = useFacilityName(record.facilityId);
+  const facilityLabel = name || record.facilityId ? name || "Unknown facility" : "Not recorded";
   return (
     <span className="text-muted">
-      {name || record.facilityId ? name || "Unknown facility" : "Not recorded"} ·{" "}
-      {record.location ?? "Location not recorded"}
+      {/* Facility identity is known authoritatively; only finer-grained location may be absent — never append
+          a "Location not recorded" suffix onto a known facility. */}
+      {facilityLabel}
+      {record.location ? ` · ${record.location}` : ""}
     </span>
   );
 }
@@ -107,7 +110,11 @@ export function CostRecordsPage() {
         header: "Category",
         render: (record) => (
           <span className="text-muted">
-            {record.category ? COST_CATEGORY_LABELS[record.category as CostCategory] : "Not recorded"}
+            {record.category && (record.category as string) !== "unknown"
+              ? COST_CATEGORY_LABELS[record.category as CostCategory]
+              : record.recordOrigin === "migrated_historical"
+                ? "Not recorded historically"
+                : "Not recorded"}
           </span>
         ),
       },

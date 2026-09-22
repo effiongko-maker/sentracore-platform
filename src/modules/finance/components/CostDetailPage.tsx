@@ -507,8 +507,11 @@ export function CostDetailPage({ costId }: { costId: string }) {
       <OperateHeader
         title={record.costId}
         description={record.description}
-        signalValue={workflow.stageLabel}
-        signalLabel="Workflow"
+        // Historical records are an imported fact, not an unknown live workflow — the primary identity of the
+        // page must not read as a broken/incomplete workflow status. Live records keep their real stage exactly
+        // as before.
+        signalValue={isHistorical ? "Imported historical record" : workflow.stageLabel}
+        signalLabel={isHistorical ? "Record type" : "Workflow"}
       />
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
@@ -550,8 +553,9 @@ export function CostDetailPage({ costId }: { costId: string }) {
                   {facilitiesLoading && !facilities.length
                     ? "Loading…"
                     : facilityDisplayName(facilities, record.facilityId, "Unknown facility")}
-                  {" · "}
-                  {record.location ?? "Location not recorded"}
+                  {/* Facility identity is known authoritatively; only finer-grained location may be absent —
+                      never append a "Location not recorded" suffix onto a known facility. */}
+                  {record.location ? ` · ${record.location}` : ""}
                 </dd>
               </div>
               <div>
@@ -561,9 +565,11 @@ export function CostDetailPage({ costId }: { costId: string }) {
               <div>
                 <dt>Category</dt>
                 <dd>
-                  {record.category
+                  {record.category && (record.category as string) !== "unknown"
                     ? COST_CATEGORY_LABELS[record.category as CostCategory]
-                    : "Not recorded"}
+                    : isHistorical
+                      ? "Not recorded historically"
+                      : "Not recorded"}
                 </dd>
               </div>
               <div>
@@ -598,13 +604,15 @@ export function CostDetailPage({ costId }: { costId: string }) {
                       {record.evidence.fileName ?? record.evidence.reference}
                     </a>
                   ) : (
-                    record.evidence.reference
+                    record.evidence.reference ?? (isHistorical ? "Not recorded historically" : "Not recorded")
                   )}
                 </dd>
               </div>
               <div>
                 <dt>Recorded by</dt>
-                <dd className="font-mono text-sm">{record.recordedBy}</dd>
+                <dd className="font-mono text-sm">
+                  {record.recordedBy || (isHistorical ? "Not recorded historically" : "Not recorded")}
+                </dd>
               </div>
             </dl>
           </div>
@@ -614,22 +622,29 @@ export function CostDetailPage({ costId }: { costId: string }) {
           <div className="fin-submission-review-block">
             <p className="fin-form-kicker">Workflow</p>
             <dl className="fin-submission-review-dl">
-              <div>
-                <dt>Lifecycle</dt>
-                <dd>{workflow.stageLabel}</dd>
-              </div>
-              <div>
-                <dt>Reimbursement</dt>
-                <dd>{workflow.eligibilityLabel}</dd>
-              </div>
-              <div>
-                <dt>Stored classification</dt>
-                <dd>
-                  {record.reimbursability === "unknown" && isHistorical
-                    ? "Not recorded historically"
-                    : COST_REIMBURSABILITY_LABELS[record.reimbursability]}
-                </dd>
-              </div>
+              {!isHistorical ? (
+                <>
+                  <div>
+                    <dt>Lifecycle</dt>
+                    <dd>{workflow.stageLabel}</dd>
+                  </div>
+                  <div>
+                    <dt>Reimbursement</dt>
+                    <dd>{workflow.eligibilityLabel}</dd>
+                  </div>
+                  <div>
+                    <dt>Stored classification</dt>
+                    <dd>{COST_REIMBURSABILITY_LABELS[record.reimbursability]}</dd>
+                  </div>
+                </>
+              ) : (
+                // Historical: one quiet mention, not three — the note below explains why. Live records above
+                // are entirely unaffected.
+                <div>
+                  <dt>Reimbursement</dt>
+                  <dd>Not recorded historically</dd>
+                </div>
+              )}
               {linkedSubmission ? (
                 <div>
                   <dt>Submission</dt>
@@ -684,8 +699,7 @@ export function CostDetailPage({ costId }: { costId: string }) {
                 <p className="font-medium text-foreground">Historical imported record</p>
                 <p className="mt-0.5 text-muted">
                   This record reflects source evidence migrated into SentraCore™ and is
-                  read-only. Reimbursement eligibility, category, location, evidence and the
-                  recorded date were not established by the source and are shown as
+                  read-only. Fields the source did not establish are shown as
                   &ldquo;Not recorded historically&rdquo; — they are historical facts, not an
                   open task, and will not be completed on the Facility Manager&apos;s behalf.
                 </p>
