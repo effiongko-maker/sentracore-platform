@@ -135,9 +135,10 @@ export function mapRemoteCostRecord(raw: RemoteCostRecord): CostRecord {
     ) as CostRecord["reimbursability"],
     evidence: mapEvidence(raw),
     recordedBy: String(pickField(raw, "recordedBy", "Recorded By") ?? ""),
-    linkedHistoricalCommercialFacts: Array.isArray(raw.linkedHistoricalCommercialFacts)
-      ? (raw.linkedHistoricalCommercialFacts as Array<{ id: string; code: string }>)
-      : undefined,
+    commercialPosition:
+      raw.commercialPosition && typeof raw.commercialPosition === "object"
+        ? (raw.commercialPosition as CostRecord["commercialPosition"])
+        : undefined,
   };
 }
 

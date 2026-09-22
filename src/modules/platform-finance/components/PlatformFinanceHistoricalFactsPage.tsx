@@ -9,7 +9,8 @@ import {
   type PresentedHistoricalFactDetail,
 } from "@/services/platform-finance/PlatformFinanceHistoricalFactsService";
 
-/** Organisation timezone — this register's dates/times are always presented here, never the viewer's local zone. */
+/** Organisation timezone label — this register's dates/times are always presented here, never the viewer's
+ * local zone. See formatPaymentDatetime for why the value is read back via UTC, not an Africa/Lagos conversion. */
 const ORG_TIME_ZONE = "Africa/Lagos";
 
 /** Presentation pagination only — fixed page size, no selector. Search/filter runs over the complete dataset
@@ -22,22 +23,28 @@ function formatAmount(amount: number | null | undefined, currency: string): stri
 }
 
 /**
- * payment_datetime is authoritative for display — date AND time-of-day, in the organisation timezone. Only a
- * genuinely NULL payment_datetime may render "Not recorded"; payment_datetime_source_text is never substituted
- * in as the primary value (it is shown separately, as source evidence).
+ * payment_datetime is authoritative for display — date AND time-of-day, labelled WAT (organisation timezone).
+ * Only a genuinely NULL payment_datetime may render "Not recorded"; payment_datetime_source_text is never
+ * substituted in as the primary value (it is shown separately, as source evidence).
+ *
+ * The stored value is UTC-labelled but deliberately carries the source's wall-clock digits verbatim — the
+ * import (scripts/fm-migration/paymentDatetime.ts) never invents a UTC offset for a source cell that states no
+ * timezone. Formatting through an Africa/Lagos Intl conversion would shift the displayed clock by a further +1h
+ * on top of digits that already ARE the WAT wall-clock time (source "08:01 August 29, 2026" would incorrectly
+ * render "09:01"). Reading the stored digits back out via UTC (no further shift) is the correct read path.
  */
 function formatPaymentDatetime(iso: string | null): string {
   if (!iso) return "Not recorded";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "Not recorded";
   const datePart = date.toLocaleDateString("en-GB", {
-    timeZone: ORG_TIME_ZONE,
+    timeZone: "UTC",
     day: "numeric",
     month: "short",
     year: "numeric",
   });
   const timePart = date.toLocaleTimeString("en-GB", {
-    timeZone: ORG_TIME_ZONE,
+    timeZone: "UTC",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,

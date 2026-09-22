@@ -85,7 +85,15 @@ export function CostRecordsPage() {
       {
         key: "recordedAt",
         header: "Date",
-        render: (record) => <span className="text-muted">{formatRecordedAt(record.recordedAt)}</span>,
+        render: (record) =>
+          // No historical row carries an independently sourced FM cost date (verified against provenance) —
+          // repeating "Not recorded" down an entire column of imported rows is noise, not truth. A quiet dash
+          // stands in for historical rows; live rows keep their real recorded date unchanged.
+          record.recordOrigin === "migrated_historical" ? (
+            <span className="text-muted">—</span>
+          ) : (
+            <span className="text-muted">{formatRecordedAt(record.recordedAt)}</span>
+          ),
       },
       {
         key: "description",

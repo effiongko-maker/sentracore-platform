@@ -90,6 +90,26 @@ function formatTimestamp(iso?: string): string {
   });
 }
 
+/**
+ * A commercial payment date/time is always presented with time-of-day preserved (never reduced to date-only),
+ * labelled WAT (organisation timezone, Africa/Lagos).
+ *
+ * The stored value is UTC-labelled but deliberately carries the source's wall-clock digits verbatim — the
+ * import (scripts/fm-migration/paymentDatetime.ts) never invents a UTC offset for a source cell that states no
+ * timezone. Formatting through an Africa/Lagos Intl conversion would therefore shift the displayed clock by a
+ * further +1h on top of digits that already ARE the WAT wall-clock time, silently disagreeing with the
+ * preserved raw source text (e.g. source "08:01 August 29, 2026" would incorrectly render "09:01"). Reading the
+ * stored digits back out via UTC (no further shift) is the correct read path for this storage convention.
+ */
+function formatOrgDatetime(iso?: string): string {
+  if (!iso) return "Not recorded";
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return iso;
+  const datePart = date.toLocaleDateString("en-GB", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" });
+  const timePart = date.toLocaleTimeString("en-GB", { timeZone: "UTC", hour: "2-digit", minute: "2-digit", hour12: false });
+  return `${datePart} · ${timePart} WAT`;
+}
+
 function parseOptionalAmount(value: string): number | undefined {
   return parseMonetaryInput(value);
 }
@@ -523,10 +543,17 @@ export function CostDetailPage({ costId }: { costId: string }) {
                 <dt>Cost ID</dt>
                 <dd className="font-mono text-sm">{record.costId}</dd>
               </div>
-              <div>
-                <dt>Date recorded</dt>
-                <dd>{formatTimestamp(record.recordedAt)}</dd>
-              </div>
+              {!isHistorical ? (
+                // Historical rows carry no independently sourced FM cost/execution date (verified against the
+                // migration provenance) — every one of the 107 imported rows has recorded_at NULL, with zero
+                // exception. Showing "Not recorded" on every historical row is repetitive noise, not useful
+                // truth; the field is simply omitted here rather than rendered empty. Live records are
+                // unaffected — this date is real and required for them.
+                <div>
+                  <dt>Date recorded</dt>
+                  <dd>{formatTimestamp(record.recordedAt)}</dd>
+                </div>
+              ) : null}
               <div>
                 <dt>Amount</dt>
                 <dd className="font-semibold tabular-nums">
@@ -558,20 +585,24 @@ export function CostDetailPage({ costId }: { costId: string }) {
                   {record.location ? ` · ${record.location}` : ""}
                 </dd>
               </div>
-              <div>
-                <dt>Department</dt>
-                <dd>{record.departmentId ? departmentName : "Not recorded"}</dd>
-              </div>
-              <div>
-                <dt>Category</dt>
-                <dd>
-                  {record.category && (record.category as string) !== "unknown"
-                    ? COST_CATEGORY_LABELS[record.category as CostCategory]
-                    : isHistorical
-                      ? "Not recorded historically"
+              {record.departmentId || !isHistorical ? (
+                <div>
+                  <dt>Department</dt>
+                  <dd>{record.departmentId ? departmentName : "Not recorded"}</dd>
+                </div>
+              ) : null}
+              {!isHistorical ? (
+                // Category is "unknown" (never a real category) on every one of the 107 historical rows — same
+                // reasoning as the date above: omitted rather than repeated as "Not recorded historically".
+                <div>
+                  <dt>Category</dt>
+                  <dd>
+                    {record.category && (record.category as string) !== "unknown"
+                      ? COST_CATEGORY_LABELS[record.category as CostCategory]
                       : "Not recorded"}
-                </dd>
-              </div>
+                  </dd>
+                </div>
+              ) : null}
               <div>
                 <dt>Work</dt>
                 <dd>{record.workId ?? "—"}</dd>
@@ -591,29 +622,31 @@ export function CostDetailPage({ costId }: { costId: string }) {
                   )}
                 </dd>
               </div>
-              <div>
-                <dt>Evidence</dt>
-                <dd>
-                  {record.evidence.fileUrl ? (
-                    <a
-                      href={record.evidence.fileUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-primary hover:underline"
-                    >
-                      {record.evidence.fileName ?? record.evidence.reference}
-                    </a>
-                  ) : (
-                    record.evidence.reference ?? (isHistorical ? "Not recorded historically" : "Not recorded")
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt>Recorded by</dt>
-                <dd className="font-mono text-sm">
-                  {record.recordedBy || (isHistorical ? "Not recorded historically" : "Not recorded")}
-                </dd>
-              </div>
+              {record.evidence.fileUrl || record.evidence.reference || !isHistorical ? (
+                <div>
+                  <dt>Evidence</dt>
+                  <dd>
+                    {record.evidence.fileUrl ? (
+                      <a
+                        href={record.evidence.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        {record.evidence.fileName ?? record.evidence.reference}
+                      </a>
+                    ) : (
+                      record.evidence.reference ?? "Not recorded"
+                    )}
+                  </dd>
+                </div>
+              ) : null}
+              {record.recordedBy || !isHistorical ? (
+                <div>
+                  <dt>Recorded by</dt>
+                  <dd className="font-mono text-sm">{record.recordedBy || "Not recorded"}</dd>
+                </div>
+              ) : null}
             </dl>
           </div>
         </StreamSurface>
@@ -711,33 +744,76 @@ export function CostDetailPage({ costId }: { costId: string }) {
                 against the linked submission and the claim is fully paid.
               </p>
             )}
-            {record.linkedHistoricalCommercialFacts?.length ? (
+            {record.commercialPosition ? (
               <div
                 className="mt-3 rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-sm"
                 role="note"
               >
-                <p className="font-medium text-foreground">
-                  Linked historical commercial record
-                </p>
-                <p className="mt-0.5 text-muted">
-                  Platform Finance holds{" "}
-                  {record.linkedHistoricalCommercialFacts.length === 1
-                    ? "a pre-SentraCore™ commercial record"
-                    : `${record.linkedHistoricalCommercialFacts.length} pre-SentraCore™ commercial records`}{" "}
-                  for the same Work. Platform Finance remains authoritative for
-                  that record — no value from it is included in this cost.
-                </p>
-                <p className="mt-1 flex flex-wrap gap-x-3">
-                  {record.linkedHistoricalCommercialFacts.map((ref) => (
-                    <Link
-                      key={ref.id}
-                      href={`/platform-finance/historical-facts?code=${encodeURIComponent(ref.code)}`}
-                      className="text-primary hover:underline"
-                    >
-                      {ref.code} · View in Platform Finance
-                    </Link>
-                  ))}
-                </p>
+                <p className="font-medium text-foreground">Commercial position</p>
+                <dl className="fin-submission-review-dl mt-1">
+                  <div>
+                    <dt>Actual execution cost</dt>
+                    <dd>{formatFinancialAmount(record.actualAmount, record.currency)}</dd>
+                  </div>
+                  {record.commercialPosition.submittedAmount != null ? (
+                    <div>
+                      <dt>Submitted amount</dt>
+                      <dd>
+                        {formatFinancialAmount(
+                          record.commercialPosition.submittedAmount,
+                          record.commercialPosition.currency
+                        )}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {record.commercialPosition.authorisedAmount != null ? (
+                    <div>
+                      <dt>Authorised amount</dt>
+                      <dd>
+                        {formatFinancialAmount(
+                          record.commercialPosition.authorisedAmount,
+                          record.commercialPosition.currency
+                        )}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {record.commercialPosition.amountReceived != null ? (
+                    <div>
+                      <dt>Amount received</dt>
+                      <dd>
+                        {formatFinancialAmount(
+                          record.commercialPosition.amountReceived,
+                          record.commercialPosition.currency
+                        )}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {record.commercialPosition.sourcePaymentStatus ? (
+                    <div>
+                      <dt>Source payment status</dt>
+                      <dd>{record.commercialPosition.sourcePaymentStatus}</dd>
+                    </div>
+                  ) : null}
+                  {record.commercialPosition.paymentDatetime ? (
+                    <div>
+                      <dt>Payment date/time</dt>
+                      <dd>{formatOrgDatetime(record.commercialPosition.paymentDatetime)}</dd>
+                    </div>
+                  ) : null}
+                  {record.commercialPosition.derivedSpread ? (
+                    <div>
+                      <dt>Derived commercial spread</dt>
+                      <dd>
+                        {formatFinancialAmount(
+                          record.commercialPosition.derivedSpread.spread,
+                          record.commercialPosition.currency
+                        )}{" "}
+                        <span className="text-xs italic text-muted">(derived, not source-stated)</span>
+                      </dd>
+                    </div>
+                  ) : null}
+                </dl>
+                <p className="mt-1 text-xs text-muted">Commercial values sourced from Platform Finance.</p>
               </div>
             ) : null}
             <div className="mt-4 flex flex-wrap gap-2">

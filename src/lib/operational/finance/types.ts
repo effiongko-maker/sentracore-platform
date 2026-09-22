@@ -110,12 +110,36 @@ export type CostRecord = {
   recordedBy: string;
   notes?: string;
   /**
-   * Restrained cross-domain reference only — id + code of any linked Platform Finance historical commercial
-   * fact (platform_finance_historical_commercial_facts), resolved via the CERTAIN fm_work_id relationship.
-   * Never carries a financial value: Platform Finance remains the only place those figures are shown. Present
-   * (possibly empty) only from the Cost Record DETAIL read path — never populated on list/table reads.
+   * An operationally useful read-only summary composed from a CERTAIN-linked Platform Finance historical
+   * commercial fact (platform_finance_historical_commercial_facts), resolved via the CERTAIN fm_work_id
+   * relationship. Platform Finance remains the sole authority for every value here — nothing is copied into
+   * fm_cost_records, and this is never populated on list/table reads, only the Cost Record DETAIL read path.
+   * No Historical Commercial Fact id/code is included — this is a composed fact summary, not a cross-domain
+   * navigation pointer.
    */
-  linkedHistoricalCommercialFacts?: Array<{ id: string; code: string }>;
+  commercialPosition?: FmCostCommercialPosition;
+};
+
+export type FmCostCommercialPosition = {
+  submittedAmount?: number;
+  authorisedAmount?: number;
+  amountReceived?: number;
+  currency: string;
+  /** The source's own payment status text, verbatim (e.g. "Paid", "Pending") — never a derived label. */
+  sourcePaymentStatus?: string;
+  /** ISO datetime, authoritative from Platform Finance's payment_datetime. */
+  paymentDatetime?: string;
+  /**
+   * Read-time only, never a source-stated fact — present only when the Platform Finance domain helper itself
+   * establishes a valid derivation (an authorised/submitted amount independently evidenced alongside the
+   * execution cost for the same Work). Must always be labelled "Derived" wherever shown.
+   */
+  derivedSpread?: {
+    basis: "authorised" | "submitted";
+    commercialAmount: number;
+    executionCost: number;
+    spread: number;
+  };
 };
 
 /**
