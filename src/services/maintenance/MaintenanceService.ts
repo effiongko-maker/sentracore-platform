@@ -185,6 +185,11 @@ function toPaginatedMaintenance(
       typeof criticalRaw === "number" && Number.isFinite(criticalRaw)
         ? criticalRaw
         : undefined;
+    const unrecordedRaw = page.maintenanceUnrecordedTotal;
+    const maintenanceUnrecordedTotal =
+      typeof unrecordedRaw === "number" && Number.isFinite(unrecordedRaw)
+        ? unrecordedRaw
+        : undefined;
     return {
       data: rows.map((row) => mapRemoteMaintenance(row as RemoteMaintenance)),
       page: Number(page.page ?? params.page ?? 1),
@@ -194,6 +199,9 @@ function toPaginatedMaintenance(
       ...(criticalWorkTotal !== undefined ? { criticalWorkTotal } : {}),
       ...(page.operationalPictureMaintenance !== undefined
         ? { operationalPictureMaintenance: page.operationalPictureMaintenance }
+        : {}),
+      ...(maintenanceUnrecordedTotal !== undefined
+        ? { maintenanceUnrecordedTotal }
         : {}),
     };
   }

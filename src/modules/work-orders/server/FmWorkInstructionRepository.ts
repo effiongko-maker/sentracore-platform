@@ -512,6 +512,22 @@ export class FmWorkInstructionRepository {
     }
   }
 
+  /**
+   * Complete-register count of Work Instructions with no recorded lifecycle status
+   * (migrated historical) — distinct from and never counted toward the Operational
+   * Picture / assigned totals. Lets Home show "N historical records" instead of a
+   * bare, unexplained zero. One lightweight COUNT query, no row data transferred.
+   */
+  async countUnrecordedStatus(): Promise<number> {
+    const { count, error } = await this.admin
+      .from("fm_work_instructions")
+      .select("id", { count: "exact", head: true })
+      .eq("organisation_id", this.organisationId)
+      .eq("status", "unknown");
+    if (error) throwDb(error, "Unable to load Work Instruction historical total.");
+    return count ?? 0;
+  }
+
   /** Active instructions assigned to a profile (Command Centre / Home). */
   async countAssignedForProfile(profileId: string): Promise<number> {
     const { count, error } = await this.admin

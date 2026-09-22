@@ -169,6 +169,15 @@ export interface PaginatedResult<T> {
   operationalPictureMaintenance?: unknown;
   operationalPictureWorkOrders?: unknown;
   operationalPictureApprovals?: unknown;
+  /**
+   * Optional Home additive from Maintenance getAll when includeOperationalPictureTotals
+   * is set — exact count of Work rows with no recorded lifecycle status (migrated
+   * historical) across the complete register, before pagination. Absent on normal list
+   * responses. Never implies these rows are open/active.
+   */
+  maintenanceUnrecordedTotal?: number;
+  /** Same as maintenanceUnrecordedTotal, for the Work Order / Work Instruction register. */
+  workOrdersUnrecordedTotal?: number;
 }
 
 /** @deprecated Prefer module-specific params (e.g. UserListParams). */

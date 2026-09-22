@@ -107,6 +107,23 @@ function formatMetric(value: number | null | undefined): string {
   return String(value);
 }
 
+/**
+ * Distinguishes "no active X" from "no X ever recorded" — only rendered when the
+ * headline is genuinely zero AND historical (unrecorded-status) records exist, so a
+ * truthful zero never reads as a contradiction of what the register actually holds.
+ * Never shown when the domain itself is unavailable or the headline is nonzero.
+ */
+function unrecordedMeta(
+  active: number | null,
+  unrecordedTotal: number | null
+): string | null {
+  if (active !== 0) return null;
+  if (!unrecordedTotal) return null;
+  return unrecordedTotal === 1
+    ? "1 historical record — none active"
+    : `${unrecordedTotal} historical records — none active`;
+}
+
 function heroCriticalWorkMeta(
   criticalWork: number | null,
   attentionTotal: number,
@@ -387,12 +404,30 @@ function CommandHero({
               {formatMetric(pulse.openWork)}
             </p>
             <p className="sc-fm-hero-metric-label">Open work</p>
+            {(() => {
+              const meta = unrecordedMeta(
+                pulse.openWork,
+                pulse.maintenanceUnrecordedTotal
+              );
+              return meta ? (
+                <p className="sc-fm-hero-metric-meta">{meta}</p>
+              ) : null;
+            })()}
           </div>
           <div className="sc-fm-hero-metric">
             <p className="sc-fm-hero-metric-value">
               {formatMetric(pulse.openWorkOrders)}
             </p>
             <p className="sc-fm-hero-metric-label">Work orders</p>
+            {(() => {
+              const meta = unrecordedMeta(
+                pulse.openWorkOrders,
+                pulse.workOrdersUnrecordedTotal
+              );
+              return meta ? (
+                <p className="sc-fm-hero-metric-meta">{meta}</p>
+              ) : null;
+            })()}
           </div>
         </div>
       </div>

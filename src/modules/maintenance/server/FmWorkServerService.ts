@@ -72,6 +72,7 @@ export class FmWorkServerService {
       operationalPictureMaintenance?: ReturnType<
         typeof summarizeWorkOperationalPicture
       >;
+      maintenanceUnrecordedTotal?: number;
     }
   > {
     const parsed = parseWorkListParams(params);
@@ -90,6 +91,7 @@ export class FmWorkServerService {
       operationalPictureMaintenance?: ReturnType<
         typeof summarizeWorkOperationalPicture
       >;
+      maintenanceUnrecordedTotal?: number;
     } = { ...page, operationalPictureMaintenance: undefined };
 
     if (parsed.includeOperationalPictureTotals) {
@@ -101,6 +103,12 @@ export class FmWorkServerService {
       );
       result.criticalWorkTotal =
         result.operationalPictureMaintenance.critical;
+      // Complete-register count of Work with no recorded lifecycle status (migrated
+      // historical) — distinct from and never counted toward criticalWorkTotal/open.
+      // Lets Home show "N historical records" instead of a bare, unexplained zero.
+      result.maintenanceUnrecordedTotal = mapped.filter(
+        (row) => row.status === "unknown"
+      ).length;
     } else if (parsed.includeCriticalWorkTotal) {
       result.criticalWorkTotal = countCriticalWork(filtered);
     }

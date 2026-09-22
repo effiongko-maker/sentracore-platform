@@ -58,6 +58,7 @@ export class FmWorkInstructionServerService {
       page.operationalPictureWorkOrders = await this.operationalPicture(
         parsed.asOf?.trim() || new Date().toISOString()
       );
+      page.workOrdersUnrecordedTotal = await this.repo().countUnrecordedStatus();
     }
     return page;
   }

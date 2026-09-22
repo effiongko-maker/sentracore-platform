@@ -133,6 +133,14 @@ export interface OrganisationalPulse {
   legacyCriticalIncidents: number | null;
   recentActivity: number;
   /**
+   * Complete-register count of Work rows with no recorded lifecycle status (migrated
+   * historical) — never counted toward openWork. null when the Maintenance domain is
+   * unavailable. Distinguishes "no active work" from "no work ever recorded" on Home.
+   */
+  maintenanceUnrecordedTotal: number | null;
+  /** Same as maintenanceUnrecordedTotal, for the Work Order / Work Instruction register. */
+  workOrdersUnrecordedTotal: number | null;
+  /**
    * Operational Picture state metrics (Home panel).
    * Distinct from hero open-work / work-order register counts.
    */

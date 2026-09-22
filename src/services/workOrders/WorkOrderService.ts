@@ -271,6 +271,11 @@ function toPaginatedWorkOrders(
   if (payload && typeof payload === "object") {
     const page = payload as Record<string, unknown>;
     const rows = Array.isArray(page.data) ? page.data : [];
+    const unrecordedRaw = page.workOrdersUnrecordedTotal;
+    const workOrdersUnrecordedTotal =
+      typeof unrecordedRaw === "number" && Number.isFinite(unrecordedRaw)
+        ? unrecordedRaw
+        : undefined;
     return {
       data: rows.map((row) => mapRemoteWorkOrder(row as RemoteWorkOrder)),
       page: Number(page.page ?? params.page ?? 1),
@@ -279,6 +284,9 @@ function toPaginatedWorkOrders(
       totalPages: Number(page.totalPages ?? 1),
       ...(page.operationalPictureWorkOrders !== undefined
         ? { operationalPictureWorkOrders: page.operationalPictureWorkOrders }
+        : {}),
+      ...(workOrdersUnrecordedTotal !== undefined
+        ? { workOrdersUnrecordedTotal }
         : {}),
     };
   }

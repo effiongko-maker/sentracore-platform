@@ -270,7 +270,11 @@ function buildPulse(
   activity: WorkspaceActivityItem[],
   asOf: string,
   /** Exact register count from filtered getAll total; null when unavailable. */
-  criticalWorkCount: number | null
+  criticalWorkCount: number | null,
+  /** Complete-register Work rows with no recorded status; null when unavailable. */
+  maintenanceUnrecordedTotal: number | null,
+  /** Complete-register Work Order rows with no recorded status; null when unavailable. */
+  workOrdersUnrecordedTotal: number | null
 ): OrganisationalPulse {
   const openWork = maintenance
     ? maintenance.filter((r) => OPEN_MAINTENANCE.has(r.status)).length
@@ -294,6 +298,8 @@ function buildPulse(
     legacyOpenIncidents,
     legacyCriticalIncidents,
     recentActivity: activity.length,
+    maintenanceUnrecordedTotal,
+    workOrdersUnrecordedTotal,
     picture: buildOperationalPictureMetrics({
       asOf,
       criticalWork,
@@ -500,6 +506,14 @@ type CoreDomainLists = {
   pictureWorkOrders?: PictureFragment<
     Extract<OperationalPictureAggregate["workOrders"], { state: "healthy" }>
   >;
+  /**
+   * Complete-register count of Work with no recorded lifecycle status (migrated
+   * historical). Never implies these rows are open/active — distinct from criticalWork
+   * and openWork. Lets Home distinguish "no active work" from "no work ever recorded".
+   */
+  maintenanceUnrecorded?: DomainCountResult;
+  /** Same as maintenanceUnrecorded, for the Work Order / Work Instruction register. */
+  workOrdersUnrecorded?: DomainCountResult;
 };
 
 /**
@@ -515,7 +529,8 @@ export function parseHomeCriticalWorkTotal(raw: unknown): number | null {
 /**
  * Map one Home Maintenance list response into pool + Critical Work domain results.
  * Pool rows stay usable even when criticalWorkTotal is absent; Critical Work then
- * ok:false → pulse null (never 0, never sampled from the page rows).
+ * ok:false → pulse null (never 0, never sampled from the page rows). Same treatment
+ * for maintenanceUnrecordedTotal (historical inventory disclosure).
  *
  * @internal Exported for Home settle verifies.
  */
@@ -523,18 +538,23 @@ export function mapHomeMaintenancePageResult(page: {
   data?: Maintenance[] | null;
   criticalWorkTotal?: unknown;
   operationalPictureMaintenance?: unknown;
+  maintenanceUnrecordedTotal?: unknown;
 }): {
   maintenance: DomainResult<Maintenance>;
   criticalWork: DomainCountResult;
   pictureMaintenance: PictureFragment<
     Extract<OperationalPictureAggregate["maintenance"], { state: "healthy" }>
   >;
+  maintenanceUnrecorded: DomainCountResult;
 } {
   const data = page.data ?? [];
   const pictureMaintenance = parseMaintenancePicture(
     page.operationalPictureMaintenance
   );
   const total = parseHomeCriticalWorkTotal(page.criticalWorkTotal);
+  const unrecordedTotal = parseHomeCriticalWorkTotal(
+    page.maintenanceUnrecordedTotal
+  );
   return {
     maintenance: { ok: true, data },
     criticalWork:
@@ -542,6 +562,10 @@ export function mapHomeMaintenancePageResult(page: {
         ? { ok: false, total: 0 }
         : { ok: true, total },
     pictureMaintenance,
+    maintenanceUnrecorded:
+      unrecordedTotal === null
+        ? { ok: false, total: 0 }
+        : { ok: true, total: unrecordedTotal },
   };
 }
 
@@ -626,12 +650,14 @@ function settleMaintenanceHome(
   pictureMaintenance: PictureFragment<
     Extract<OperationalPictureAggregate["maintenance"], { state: "healthy" }>
   >;
+  maintenanceUnrecorded: DomainCountResult;
 }> {
   const emptyMnt: Maintenance[] = [];
   const failed = {
     maintenance: { ok: false as const, data: emptyMnt },
     criticalWork: { ok: false as const, total: 0 },
     pictureMaintenance: { present: true, healthy: false } as const,
+    maintenanceUnrecorded: { ok: false as const, total: 0 },
   };
 
   return new Promise((resolve) => {
@@ -644,6 +670,7 @@ function settleMaintenanceHome(
       pictureMaintenance: PictureFragment<
         Extract<OperationalPictureAggregate["maintenance"], { state: "healthy" }>
       >;
+      maintenanceUnrecorded: DomainCountResult;
     }) => {
       if (settled) return;
       settled = true;
@@ -699,17 +726,27 @@ function startCoreDomainLists(asOf: string): Promise<CoreDomainLists> {
             asOf,
           },
           { signal }
-        ).then((page) => ({
-          ok: true as const,
-          data: page.data ?? emptyWo,
-          pictureWorkOrders: parseWorkOrderPicture(
-            page.operationalPictureWorkOrders
-          ),
-        })),
+        ).then((page) => {
+          const unrecordedTotal = parseHomeCriticalWorkTotal(
+            page.workOrdersUnrecordedTotal
+          );
+          return {
+            ok: true as const,
+            data: page.data ?? emptyWo,
+            pictureWorkOrders: parseWorkOrderPicture(
+              page.operationalPictureWorkOrders
+            ),
+            workOrdersUnrecorded:
+              unrecordedTotal === null
+                ? ({ ok: false, total: 0 } as const)
+                : ({ ok: true, total: unrecordedTotal } as const),
+          };
+        }),
       {
         ok: false as const,
         data: emptyWo,
         pictureWorkOrders: { present: true, healthy: false } as const,
+        workOrdersUnrecorded: { ok: false, total: 0 } as const,
       }
     ),
     settleDomain(
@@ -727,6 +764,8 @@ function startCoreDomainLists(asOf: string): Promise<CoreDomainLists> {
     criticalWork: maintenanceHome.criticalWork,
     pictureMaintenance: maintenanceHome.pictureMaintenance,
     pictureWorkOrders: workOrders.pictureWorkOrders,
+    maintenanceUnrecorded: maintenanceHome.maintenanceUnrecorded,
+    workOrdersUnrecorded: workOrders.workOrdersUnrecorded,
   }));
 }
 
@@ -851,6 +890,14 @@ export function composeWorkspaceSnapshot(
   const criticalWorkCount = lists.criticalWork.ok
     ? lists.criticalWork.total
     : null;
+  // Optional-chained: absent on older/hand-built domain-list fixtures — absence means
+  // "unavailable" (null), the same safe default as every other unset totals field here.
+  const maintenanceUnrecordedTotal = lists.maintenanceUnrecorded?.ok
+    ? lists.maintenanceUnrecorded.total
+    : null;
+  const workOrdersUnrecordedTotal = lists.workOrdersUnrecorded?.ok
+    ? lists.workOrdersUnrecorded.total
+    : null;
   const pulseBase = buildPulse(
     domains.incidents ? incidents : null,
     domains.maintenance ? maintenance : null,
@@ -858,7 +905,9 @@ export function composeWorkspaceSnapshot(
     lists.approvals.ok ? approvals : null,
     activity,
     asOf,
-    criticalWorkCount
+    criticalWorkCount,
+    domains.maintenance ? maintenanceUnrecordedTotal : null,
+    domains.workOrders ? workOrdersUnrecordedTotal : null
   );
   const pulse = {
     ...pulseBase,
