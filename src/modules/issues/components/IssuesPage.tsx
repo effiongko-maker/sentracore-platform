@@ -408,11 +408,18 @@ export function IssuesPage() {
                           <tr
                             key={issue.id}
                             className={`cursor-pointer border-b border-[var(--sc-border)] ${
-                              selected ? "bg-[var(--sc-surface)]" : ""
+                              selected ? "bg-[var(--sc-accent-soft)]" : ""
                             }`}
+                            aria-selected={selected}
                             onClick={() => setSelectedIssueId(issue.id)}
                           >
-                            <td className="px-3 py-2 font-mono text-xs">
+                            <td
+                              className={`px-3 py-2 font-mono text-xs ${
+                                selected
+                                  ? "font-semibold shadow-[inset_3px_0_0_var(--sc-accent)]"
+                                  : ""
+                              }`}
+                            >
                               {issue.reference}
                             </td>
                             <td className="px-3 py-2">{issue.title}</td>
