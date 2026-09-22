@@ -107,3 +107,11 @@ export function deriveCommercialSpread(
 export function isValidHistoricalCommercialFactAmount(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
+
+/** Mirrors the HIST/COST/SUB/... nextCode(prefix, latest, now) convention used across fmCostDomain.ts. */
+export function generateNextHistoricalFactCode(latest: string | null | undefined, now = new Date()): string {
+  const year = now.getUTCFullYear();
+  const match = String(latest ?? "").match(new RegExp(`^HIST-${year}-(\\d+)$`, "i"));
+  const max = match ? parseInt(match[1]!, 10) || 0 : 0;
+  return `HIST-${year}-${String(max + 1).padStart(6, "0")}`;
+}

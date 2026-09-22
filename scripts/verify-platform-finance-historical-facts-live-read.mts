@@ -9,7 +9,9 @@
  * model (listWithDerivedSpread). Proves the exact PostgREST queries the repository
  * sends — including the fm_cost_records.work_id / actual_amount join columns — are
  * accepted by the live schema, not just by the PGlite migration stub. Performs NO
- * writes; the table has zero rows (no import has run), so this proves shape, not data.
+ * writes. Post-import (152 rows, batch platform-finance-historical-facts-bootstrap-1):
+ * asserts against the real imported shape, including deriveCommercialSpread() against
+ * genuine linked execution costs.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -48,19 +50,30 @@ async function main() {
   assert(!error && org, "organisation not readable");
   const orgId = String((org as { id: string }).id);
 
-  // --- Repository: real schema shape (no data expected yet) ---
+  // --- Repository: real schema shape against the imported population -----------------------------------
   const repo = new PlatformFinanceHistoricalFactsRepository(orgId);
   const listed = await repo.list();
   assert(Array.isArray(listed), "list() shape");
-  assert(listed.length === 0, "table has zero rows (no import has run yet)");
+  assert(listed.length === 152, `expected exactly 152 imported historical commercial facts, found ${listed.length}`);
+  assert(listed.every((f) => f.recordOrigin === "migrated_historical"), "every row is migrated_historical");
+  assert(listed.filter((f) => f.paymentDatetime != null).length === 138, "138 rows carry a parsed payment datetime");
+  assert(listed.filter((f) => f.fmWorkId != null).length === 110, "110 rows carry a CERTAIN fm_work_id link");
   assert((await repo.get(NIL)) === null, "get() missing uuid → null");
   assert((await repo.getByCode("HIST-DOES-NOT-EXIST")) === null, "getByCode() missing → null");
+  const first = await repo.getByCode("HIST-2026-000001");
+  assert(first !== null && first.amountReceived === 23460532.79 && first.description === "Cooporative Offices (WRC)", "HIST-2026-000001 (2025 JOB ORDERS r2, first row processed) amount_received matches source Income exactly");
 
-  // Cross-service join: proves fm_cost_records.work_id / actual_amount resolve against the
-  // live schema exactly as the repository's PostgREST query assumes.
+  // Cross-service join: proves fm_cost_records.work_id / actual_amount resolve against the live schema, and
+  // that deriveCommercialSpread() only fires when BOTH sides are genuinely evidenced for the same transaction.
   const withSpread = await repo.listWithDerivedSpread();
   assert(Array.isArray(withSpread), "listWithDerivedSpread() shape");
-  assert(withSpread.length === 0, "listWithDerivedSpread() empty (no facts imported yet)");
+  assert(withSpread.length === 152, "listWithDerivedSpread() returns every fact, spread computed only where evidenced");
+  const spreadRows = withSpread.filter((r) => r.spread != null);
+  assert(spreadRows.length === 7, `expected 7 rows with a computable spread (8 Group-A-linked open candidates minus the one with no execution cost evidenced), found ${spreadRows.length}`);
+  const a5 = withSpread.find((r) => r.fact.commercialReference === "TRV150");
+  assert(a5?.spread != null && a5.spread.basis === "authorised" && Math.abs(a5.spread.spread - (1856159.5 - 987000)) < 0.01, "TRV150 (Digital Park roof leak) derived spread = authorised − execution cost, computed correctly");
+  const a3NoSpread = withSpread.find((r) => r.fact.commercialReference?.includes("Invoice 0048"));
+  assert(a3NoSpread?.spread == null, "the one Group-A candidate with no evidenced execution cost (Tables/Chairs canteen) has spread=null, never 0");
 
   // --- Service: capability gate really refuses an ungranted actor (RLS/authority behaviour) ---
   const service = new PlatformFinanceHistoricalFactsServerService(orgId);
