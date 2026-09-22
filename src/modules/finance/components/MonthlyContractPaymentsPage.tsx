@@ -125,7 +125,6 @@ export function MonthlyContractPaymentsPage() {
       </div>
       <OperateHeader
         title="Monthly contract payments"
-        description="Fixed monthly FM fee under the NCC contract, separate from Work Order / Job Order payments. Read-only projection of Platform Finance's historical commercial facts."
         signalValue={loading ? "—" : rows.length}
         signalLabel="Recorded"
       />
