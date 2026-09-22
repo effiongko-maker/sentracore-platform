@@ -1,28 +1,20 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { MonthlyPaymentsService, type MonthlyContractPayment } from "@/services/finance/MonthlyPaymentsService";
-
-function formatAmount(amount: number | undefined, currency: string): string {
-  if (amount == null) return "Not established";
-  return `${currency} ${amount.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function formatPaymentDatetime(iso?: string): string {
-  if (!iso) return "Not recorded";
-  const date = new Date(iso);
-  if (!Number.isFinite(date.getTime())) return "Not recorded";
-  // Stored digits are already the WAT wall-clock time verbatim (see CostDetailPage.formatOrgDatetime) — read via
-  // UTC, never a further Africa/Lagos shift.
-  const datePart = date.toLocaleDateString("en-GB", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" });
-  const timePart = date.toLocaleTimeString("en-GB", { timeZone: "UTC", hour: "2-digit", minute: "2-digit", hour12: false });
-  return `${datePart} · ${timePart} WAT`;
-}
+import {
+  formatMonthlyPaymentAmount,
+  formatMonthlyPaymentDatetime,
+} from "../utils/monthlyContractPayments";
 
 /**
  * Fixed monthly FM fee under the NCC contract — a governed, read-only projection of Platform Finance historical
  * commercial facts identified by their own source description text. Never a duplicate transaction; no value is
  * stored in FM. Self-contained (own fetch) so it doesn't touch the shared Finance Overview composition.
+ *
+ * This is the compact Home/overview snapshot only. The full register (sortable, one row per period, openable
+ * into a detail view) lives at /finance/monthly-payments.
  */
 export function MonthlyContractPaymentsSection() {
   const [rows, setRows] = useState<MonthlyContractPayment[]>([]);
@@ -58,6 +50,9 @@ export function MonthlyContractPaymentsSection() {
             Fixed monthly FM fee under the NCC contract, separate from Work Order / Job Order payments.
           </p>
         </div>
+        <Link href="/finance/monthly-payments" className="fin-v13-text-action">
+          View all →
+        </Link>
       </div>
 
       {loading ? (
@@ -77,14 +72,16 @@ export function MonthlyContractPaymentsSection() {
           </thead>
           <tbody>
             {rows.map((row, i) => (
-              <tr key={row.month ?? i}>
+              <tr key={row.slug ?? row.month ?? i}>
                 <td>{row.month ?? "Not established"}</td>
-                <td className="fin-v13-num">{formatAmount(row.requestedAmount, row.currency)}</td>
-                <td className="fin-v13-num">{formatAmount(row.amountReceived, row.currency)}</td>
+                <td className="fin-v13-num">{formatMonthlyPaymentAmount(row.requestedAmount, row.currency)}</td>
+                <td className="fin-v13-num">{formatMonthlyPaymentAmount(row.amountReceived, row.currency)}</td>
                 <td>
-                  <span className="fin-v13-pill fin-v13-pill--neutral">{row.sourcePaymentStatus ?? "Not recorded"}</span>
+                  <span className={`fin-v13-pill fin-v13-pill--${row.status?.tone ?? "neutral"}`}>
+                    {row.status?.label ?? "Not recorded"}
+                  </span>
                 </td>
-                <td className="fin-v13-muted">{formatPaymentDatetime(row.paymentDatetime)}</td>
+                <td className="fin-v13-muted">{formatMonthlyPaymentDatetime(row.paymentDatetime)}</td>
               </tr>
             ))}
           </tbody>

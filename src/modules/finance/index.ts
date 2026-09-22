@@ -1,6 +1,8 @@
 export { FinancePage } from "./components/FinancePage";
 export { CostRecordsPage } from "./components/CostRecordsPage";
 export { CostDetailPage } from "./components/CostDetailPage";
+export { MonthlyContractPaymentsPage } from "./components/MonthlyContractPaymentsPage";
+export { MonthlyContractPaymentDetailPage } from "./components/MonthlyContractPaymentDetailPage";
 export { SubmissionsPage } from "./components/SubmissionsPage";
 export { SubmissionWorkflowPage } from "./components/SubmissionWorkflowPage";
 export { SubmissionDetailPage } from "./components/SubmissionDetailPage";
