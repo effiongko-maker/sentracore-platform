@@ -8,6 +8,8 @@ import type { Approval, ApprovalListParams } from "@/modules/approvals/types";
 import { resolveFmWorkOrganisation } from "@/modules/maintenance/server/FmWorkServerService";
 import {
   FmApprovalNotFoundError,
+  FmApprovalValidationError,
+  approvalStatusChangeBlock,
   mapFmApprovalRowToApproval,
   paginateApprovalRows,
   parseApprovalActivity,
@@ -41,6 +43,8 @@ export type ApprovalWriteOptions = {
   allowDecision?: boolean;
   /** Append-only activity recorded with the write. */
   activity?: unknown;
+  /** TRUE only for approval.revise_rejected: reopen a rejected Work-level Approval (rejected → draft). */
+  reopenRejected?: boolean;
 };
 
 export class FmApprovalServerService {
@@ -94,6 +98,14 @@ export class FmApprovalServerService {
     return row ? (await this.hydrate([row]))[0]! : null;
   }
 
+  /** The Work-level client Approval of a Work (UUID or code), or null. */
+  async findByWork(ref: string): Promise<Approval | null> {
+    const repo = this.repo();
+    const work = await repo.resolveWork(ref);
+    const row = await repo.getByWork(work.id);
+    return row ? (await this.hydrate([row]))[0]! : null;
+  }
+
   async create(payload: unknown, options: ApprovalWriteOptions = {}): Promise<Approval> {
     const input = parseCreateApprovalInput(payload, { allowDecision: options.allowDecision === true });
     const repo = this.repo();
@@ -103,8 +115,28 @@ export class FmApprovalServerService {
   }
 
   async update(payload: unknown, options: ApprovalWriteOptions = {}): Promise<Approval> {
-    const input = parseUpdateApprovalInput(payload, { allowDecision: options.allowDecision === true });
+    const input = parseUpdateApprovalInput(payload, {
+      allowDecision: options.allowDecision === true,
+      clearDecision: options.reopenRejected === true,
+    });
     const repo = this.repo();
+    if (options.reopenRejected === true) {
+      // Reopening clears the recorded decision from the row: its snapshot (the activity) is written FIRST, so the
+      // prior rejection can never be lost even if the row update then fails.
+      const existing = await repo.getByIdOrCode(input.id);
+      if (!existing) throw new FmApprovalNotFoundError(`Approval ${input.id} not found.`);
+      // Same preconditions the repository enforces — checked before any write so no stray history is recorded.
+      const block = approvalStatusChangeBlock({
+        from: existing.status,
+        to: input.status ?? existing.status,
+        reopenRejected: true,
+        isWorkLevel: Boolean(existing.work_id),
+      });
+      if (block) throw new FmApprovalValidationError(block);
+      if (options.activity) await this.recordActivity(existing.id, options.activity);
+      const { row } = await repo.update(input, this.ctx.profileId, { reopenRejected: true });
+      return (await this.hydrate([row]))[0]!;
+    }
     const { row } = await repo.update(input, this.ctx.profileId);
     if (options.activity) await this.recordActivity(row.id, options.activity);
     return (await this.hydrate([row]))[0]!;

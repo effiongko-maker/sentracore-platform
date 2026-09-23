@@ -88,10 +88,14 @@ function sampleRow(overrides: Partial<FmWorkRow> = {}): FmWorkRow {
     incident_id: null,
     incident_code: null,
     work_instruction_codes: [],
+    job_order_codes: [],
+    client_approval_code: null,
+    client_approval_status: null,
     assigned_to_profile_id: null,
     reported_by_profile_id: null,
     hold_reason: null,
     requires_work_instruction: false,
+    commercial_route: null,
     operational_event_id: null,
     reported_at: "2026-09-18T00:00:00.000Z",
     due_at: null,
@@ -236,6 +240,7 @@ function runStatic(results: CheckResult[]) {
       priority: "medium",
       status: "requested",
       source: "manual",
+      commercialRoute: "work_order",
       reportedAt: "2026-09-18T00:00:00.000Z",
     });
     assert(input.workKind === null, "no invented work_kind");
@@ -246,6 +251,7 @@ function runStatic(results: CheckResult[]) {
       priority: "medium",
       status: "requested",
       source: "manual",
+      commercialRoute: "work_order",
       reportedAt: "2026-09-18T00:00:00.000Z",
       assignedToUserId: "USR-0001",
     });
@@ -262,6 +268,7 @@ function runStatic(results: CheckResult[]) {
         priority: "medium",
         status: "requested",
         source: "manual",
+        commercialRoute: "work_order",
         reportedAt: "2026-09-18T00:00:00.000Z",
         assignedToUserId: "not-a-uuid",
       });

@@ -45,6 +45,7 @@ async function main() {
     description: `Location: Test bay\n\nP8 ordinary`,
     facilityId: "FAC-0001",
     type: "corrective",
+    commercialRoute: "work_order",
     source: "manual",
     priority: "medium",
     status: "requested",

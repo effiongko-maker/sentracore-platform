@@ -88,6 +88,7 @@ function main() {
   const logInput: LogIssueInput = {
     title: "AC not cooling",
     facilityId: "FAC-0001",
+    commercialRoute: "work_order",
   };
   assert(logInput.classification === undefined, "no taxonomy on log input");
   assert(INCIDENT_DOMAIN_LEGACY.newFmLogIssueCreatesIncident === false, "no INC from log");

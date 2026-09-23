@@ -22,6 +22,7 @@ import {
 } from "../src/modules/work-orders/server/fmWorkInstructionDomain";
 import { composeWorkloadSummary } from "../src/lib/operational/workload/composeWorkloadSummary";
 import { resolveWorkInstructionKind, validateOrderTypeSelection } from "../src/modules/work-orders/instructionKind";
+import { resolveInstructionOrderType } from "../src/modules/maintenance/commercialRoute";
 
 type CheckResult = { name: string; status: "PASS" | "FAIL"; detail?: string };
 
@@ -95,6 +96,7 @@ function sampleRow(overrides: Partial<FmWorkInstructionRow> = {}): FmWorkInstruc
     completion_notes: null,
     work_performed: null,
     requires_approval: false,
+    client_reference: null,
     operational_event_id: null,
     created_by_profile_id: null,
     updated_by_profile_id: null,
@@ -153,10 +155,13 @@ function main() {
     assert(throws(() => parseOrderType(undefined)), "missing rejected");
     assert(throws(() => parseOrderType("undetermined")), "undetermined rejected");
     assert(parseOrderType("Job Order") === "job_order" && parseOrderType("work_order") === "work_order", "both accepted");
-    assert(throws(() => parseCreateInstructionInput({ title: "x", maintenanceId: "WRK-1", estimatedCost: 5_000_000 })), "cost does NOT supply a missing order type");
+    // Order Type is no longer asked at parse time for classified Work (it IS the Work's execution basis); a cost never
+    // supplies it, and legacy-unclassified Work still requires the explicit selection (commercialRoute.ts).
+    assert(parseCreateInstructionInput({ title: "x", maintenanceId: "WRK-1", estimatedCost: 5_000_000 }).orderType === undefined, "cost does NOT supply a missing order type");
+    assert(resolveInstructionOrderType(null, undefined).ok === false, "legacy Work still requires an explicit Order Type");
     assert(validateOrderTypeSelection("").ok === false, "UI selection validator requires a choice");
     const action = readSrc("src/modules/work-orders/actions/createWorkOrderFromMaintenance.ts");
-    assert(action.includes("validateOrderTypeSelection") && !/orderType:\s*"work_order"/.test(action), "one-click create requires a manual choice");
+    assert(action.includes("validateOrderTypeSelection") && !/orderType:\s*"work_order"/.test(action), "one-click create validates a supplied choice, never hardcodes one");
     const orch = readSrc("src/lib/operational/orchestration/index.ts");
     assert(!/orderType:\s*"work_order"/.test(orch), "orchestration never hardcodes an Order Type");
     for (const ui of [

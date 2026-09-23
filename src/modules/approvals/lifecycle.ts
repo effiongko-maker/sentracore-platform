@@ -84,6 +84,8 @@ export type ApprovalLifecycleActions = {
   canFollowUp: boolean;
   canRecordDecision: boolean;
   canCancel: boolean;
+  /** Rejected → revise and resubmit the same Approval (Work-level client approvals; the caller checks workId). */
+  canReviseAfterRejection: boolean;
 };
 
 export function getApprovalLifecycleActions(
@@ -102,6 +104,7 @@ export function getApprovalLifecycleActions(
     canFollowUp: n === "awaiting_decision" || n === "returned",
     canRecordDecision: n === "awaiting_decision" || n === "returned",
     canCancel: !terminal && n !== "closed",
+    canReviseAfterRejection: n === "rejected",
   };
 }
 

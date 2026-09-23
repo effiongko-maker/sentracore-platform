@@ -13,6 +13,7 @@ import {
   FmApprovalUnavailableError,
   FmApprovalValidationError,
   UUID_RE,
+  approvalStatusChangeBlock,
   generateNextApprovalCode,
   sanitizeSearchTerm,
   type ApprovalFields,
@@ -23,6 +24,7 @@ import {
   type ParsedCreateApproval,
   type ParsedUpdateApproval,
 } from "./fmApprovalDomain";
+import { instructionApprovalBlock, workApprovalBlock } from "@/modules/maintenance/commercialRoute";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 const CODE_RETRY_LIMIT = 5;
@@ -54,6 +56,9 @@ function violation(error: { code?: string; message?: string } | null, index?: st
 function throwDb(error: { code?: string; message?: string } | null, fallback: string): never {
   const message = error?.message?.trim() || fallback;
   if (violation(error, "fm_approvals_org_work_instruction_uidx")) throw new FmApprovalAlreadyExistsError();
+  if (violation(error, "fm_approvals_org_work_uidx")) {
+    throw new FmApprovalAlreadyExistsError("This Work already has a client approval request.");
+  }
   if (error?.code === "23505" || /duplicate key|unique constraint/i.test(message)) {
     throw new FmApprovalValidationError("An approval with this reference already exists in the organisation.");
   }
@@ -80,6 +85,7 @@ function asRow(value: unknown): FmApprovalRow {
     organisation_id: String(rec.organisation_id),
     code: String(rec.code ?? ""),
     work_instruction_id: txt(rec, "work_instruction_id"),
+    work_id: txt(rec, "work_id"),
     title: String(rec.title ?? ""),
     approval_type: txt(rec, "approval_type"),
     status: String(rec.status ?? "draft"),
@@ -158,7 +164,15 @@ function toColumns(f: ApprovalFields): Record<string, unknown> {
   return out;
 }
 
-type InstructionRef = { id: string; code: string; facility_id: string; asset_id: string | null; record_origin: string };
+type InstructionRef = {
+  id: string;
+  code: string;
+  facility_id: string;
+  asset_id: string | null;
+  record_origin: string;
+  work_id: string;
+};
+type WorkRef = { id: string; code: string; facility_id: string; record_origin: string; commercial_route: string | null };
 
 function assertWorkInstructionNotHistorical(wi: InstructionRef): void {
   if (wi.record_origin === "migrated_historical") {
@@ -185,23 +199,28 @@ export class FmApprovalRepository {
     if (read.unrestricted) return null;
     const parts: string[] = [];
     if (read.facilityIds.length) {
-      const ids: string[] = [];
-      for (let offset = 0; ; offset += 1000) {
-        const { data, error } = await this.admin
-          .from("fm_work_instructions")
-          .select("id")
-          .eq("organisation_id", this.organisationId)
-          .in("facility_id", read.facilityIds)
-          .order("id", { ascending: true })
-          .range(offset, offset + 999);
-        if (error) throwDb(error, "Unable to resolve facility scope.");
-        const batch = (data ?? []).map((r) => String((r as { id: string }).id));
-        ids.push(...batch);
-        if (batch.length < 1000) break;
-      }
-      if (ids.length) parts.push(`work_instruction_id.in.(${ids.join(",")})`);
+      const idsIn = async (table: "fm_work_instructions" | "fm_work") => {
+        const ids: string[] = [];
+        for (let offset = 0; ; offset += 1000) {
+          const { data, error } = await this.admin
+            .from(table)
+            .select("id")
+            .eq("organisation_id", this.organisationId)
+            .in("facility_id", read.facilityIds)
+            .order("id", { ascending: true })
+            .range(offset, offset + 999);
+          if (error) throwDb(error, "Unable to resolve facility scope.");
+          const batch = (data ?? []).map((r) => String((r as { id: string }).id));
+          ids.push(...batch);
+          if (batch.length < 1000) return ids;
+        }
+      };
+      const [instructionIds, workIds] = await Promise.all([idsIn("fm_work_instructions"), idsIn("fm_work")]);
+      if (instructionIds.length) parts.push(`work_instruction_id.in.(${instructionIds.join(",")})`);
+      // A Work-level client Approval inherits the facility of its Work.
+      if (workIds.length) parts.push(`work_id.in.(${workIds.join(",")})`);
     }
-    if (read.includeUnattributed) parts.push("work_instruction_id.is.null");
+    if (read.includeUnattributed) parts.push("and(work_instruction_id.is.null,work_id.is.null)");
     return parts.length ? parts.join(",") : `id.eq.${NO_FACILITY_MATCH}`;
   }
 
@@ -210,12 +229,12 @@ export class FmApprovalRepository {
     if (!row) return null;
     const read = this.scope.read;
     if (read.unrestricted) return row;
-    if (!row.work_instruction_id) return read.includeUnattributed ? row : null;
+    if (!row.work_instruction_id && !row.work_id) return read.includeUnattributed ? row : null;
     const { data, error } = await this.admin
-      .from("fm_work_instructions")
+      .from(row.work_instruction_id ? "fm_work_instructions" : "fm_work")
       .select("facility_id")
       .eq("organisation_id", this.organisationId)
-      .eq("id", row.work_instruction_id)
+      .eq("id", (row.work_instruction_id ?? row.work_id)!)
       .maybeSingle();
     if (error) throwDb(error, "Unable to resolve facility scope.");
     const facilityId = (data as { facility_id?: string } | null)?.facility_id;
@@ -227,7 +246,7 @@ export class FmApprovalRepository {
     const target = ref.trim();
     const query = this.admin
       .from("fm_work_instructions")
-      .select("id, code, facility_id, asset_id, record_origin")
+      .select("id, code, facility_id, asset_id, record_origin, work_id")
       .eq("organisation_id", this.organisationId);
     const { data, error } = UUID_RE.test(target)
       ? await query.eq("id", target).maybeSingle()
@@ -241,7 +260,53 @@ export class FmApprovalRepository {
       facility_id: String(rec.facility_id),
       asset_id: rec.asset_id != null ? String(rec.asset_id) : null,
       record_origin: rec.record_origin != null ? String(rec.record_origin) : "operational",
+      work_id: String(rec.work_id),
     };
+  }
+
+  /** Resolve Work by UUID or display code — inside this organisation only. */
+  async resolveWork(ref: string): Promise<WorkRef> {
+    const target = ref.trim();
+    const query = this.admin
+      .from("fm_work")
+      .select("id, code, facility_id, record_origin, commercial_route")
+      .eq("organisation_id", this.organisationId);
+    const { data, error } = UUID_RE.test(target)
+      ? await query.eq("id", target).maybeSingle()
+      : await query.ilike("code", target).maybeSingle();
+    if (error) throwDb(error, "Unable to resolve Work.");
+    if (!data) throw new FmApprovalValidationError(`Work ${target} not found in this organisation.`);
+    const rec = data as Record<string, unknown>;
+    return {
+      id: String(rec.id),
+      code: String(rec.code),
+      facility_id: String(rec.facility_id),
+      record_origin: rec.record_origin != null ? String(rec.record_origin) : "operational",
+      commercial_route: rec.commercial_route != null ? String(rec.commercial_route) : null,
+    };
+  }
+
+  private async workRoute(workId: string): Promise<string | null> {
+    const { data, error } = await this.admin
+      .from("fm_work")
+      .select("commercial_route")
+      .eq("organisation_id", this.organisationId)
+      .eq("id", workId)
+      .maybeSingle();
+    if (error) throwDb(error, "Unable to resolve Work.");
+    const route = (data as { commercial_route?: string | null } | null)?.commercial_route;
+    return route != null ? String(route) : null;
+  }
+
+  async getByWork(workId: string): Promise<FmApprovalRow | null> {
+    const { data, error } = await this.admin
+      .from("fm_approvals")
+      .select(FM_APPROVAL_SELECT)
+      .eq("organisation_id", this.organisationId)
+      .eq("work_id", workId)
+      .maybeSingle();
+    if (error) throwDb(error, "Unable to load approval.");
+    return this.scoped(data ? asRow(data) : null);
   }
 
   async getByIdOrCode(idOrCode: string): Promise<FmApprovalRow | null> {
@@ -272,6 +337,17 @@ export class FmApprovalRepository {
     if (filter.codeLike) query = query.ilike("code", `%${filter.codeLike}%`);
     const { data, error } = await query.limit(1000);
     if (error) throwDb(error, "Unable to resolve Work Instructions.");
+    return (data ?? []).map((row) => String((row as { id: string }).id));
+  }
+
+  private async workIdsInFacility(facilityId: string): Promise<string[]> {
+    const { data, error } = await this.admin
+      .from("fm_work")
+      .select("id")
+      .eq("organisation_id", this.organisationId)
+      .eq("facility_id", facilityId)
+      .limit(1000);
+    if (error) throwDb(error, "Unable to resolve Work.");
     return (data ?? []).map((row) => String((row as { id: string }).id));
   }
 
@@ -312,8 +388,12 @@ export class FmApprovalRepository {
       // Facility is inherited through the Work Instruction (never stored on the Approval).
       const facilityId = await this.facilityIdOrNull(params.facilityId);
       const ids = facilityId ? await this.instructionIds({ facilityId }) : [];
-      if (ids.length === 0) return { rows: [], total: 0 };
-      query = query.in("work_instruction_id", ids);
+      const workIds = facilityId ? await this.workIdsInFacility(facilityId) : [];
+      if (ids.length === 0 && workIds.length === 0) return { rows: [], total: 0 };
+      const clauses: string[] = [];
+      if (ids.length) clauses.push(`work_instruction_id.in.(${ids.join(",")})`);
+      if (workIds.length) clauses.push(`work_id.in.(${workIds.join(",")})`);
+      query = query.or(clauses.join(","));
     }
 
     const search = params.search ? sanitizeSearchTerm(params.search) : "";
@@ -346,13 +426,21 @@ export class FmApprovalRepository {
     if (rows.length === 0) return out;
     // Source-register Approvals carry no Work Instruction: they simply have no Work Order / facility context.
     const instructionIds = [...new Set(rows.flatMap((r) => (r.work_instruction_id ? [r.work_instruction_id] : [])))];
-    const [instructions, activities, provenance] = await Promise.all([
+    const workIds = [...new Set(rows.flatMap((r) => (r.work_id ? [r.work_id] : [])))];
+    const [instructions, works, activities, provenance] = await Promise.all([
       instructionIds.length
         ? this.admin
             .from("fm_work_instructions")
             .select("id, code, facility_id, asset_id")
             .eq("organisation_id", this.organisationId)
             .in("id", instructionIds)
+        : Promise.resolve({ data: [], error: null }),
+      workIds.length
+        ? this.admin
+            .from("fm_work")
+            .select("id, code, facility_id, asset_id")
+            .eq("organisation_id", this.organisationId)
+            .in("id", workIds)
         : Promise.resolve({ data: [], error: null }),
       this.admin
         .from("fm_approval_activities")
@@ -368,6 +456,13 @@ export class FmApprovalRepository {
         .in("target_id", rows.map((r) => r.id)),
     ]);
     if (instructions.error) throwDb(instructions.error, "Unable to load Work Instruction context.");
+    if (works.error) throwDb(works.error, "Unable to load Work context.");
+    const byWork = new Map(
+      (works.data ?? []).map((w) => {
+        const rec = w as { id: string; code: string; facility_id: string; asset_id: string | null };
+        return [rec.id, rec] as const;
+      })
+    );
     if (activities.error) throwDb(activities.error, "Unable to load approval activity.");
     if (provenance.error) throwDb(provenance.error, "Unable to load approval provenance.");
     const sourceByApproval = new Map(
@@ -385,10 +480,12 @@ export class FmApprovalRepository {
     );
     for (const row of rows) {
       const wi = row.work_instruction_id ? byInstruction.get(row.work_instruction_id) : undefined;
+      const work = row.work_id ? byWork.get(row.work_id) : undefined;
       out.set(row.id, {
         workInstructionCode: wi?.code,
-        facilityId: wi?.facility_id,
-        assetRef: wi?.asset_id ?? undefined,
+        workCode: work?.code,
+        facilityId: wi?.facility_id ?? work?.facility_id,
+        assetRef: wi?.asset_id ?? work?.asset_id ?? undefined,
         sourceRecord: sourceByApproval.get(row.id),
         activities: [],
       });
@@ -412,13 +509,32 @@ export class FmApprovalRepository {
     return ((data ?? [])[0] as { code?: string } | undefined)?.code ?? null;
   }
 
-  async create(input: ParsedCreateApproval, actorProfileId: string): Promise<FmApprovalRow> {
-    const wi = await this.resolveWorkInstruction(input.workInstructionRef);
-    if (!this.scope.canOperateIn(wi.facility_id)) {
-      throw new FmApprovalValidationError("You are not authorised to raise approvals in this facility.");
+  /**
+   * Resolve what the Approval is for. Job Order route: the client decision belongs to the Work and precedes any Job
+   * Order. Classified Work never takes an instruction-level Approval; legacy-unclassified Work keeps it.
+   */
+  private async resolveSubject(
+    input: ParsedCreateApproval
+  ): Promise<{ facilityId: string; work_instruction_id: string | null; work_id: string | null }> {
+    if (input.workRef) {
+      const work = await this.resolveWork(input.workRef);
+      const block = workApprovalBlock({ route: work.commercial_route, recordOrigin: work.record_origin });
+      if (block) throw new FmApprovalValidationError(block);
+      return { facilityId: work.facility_id, work_instruction_id: null, work_id: work.id };
     }
+    const wi = await this.resolveWorkInstruction(input.workInstructionRef!);
     // Imported historical Work Instructions are read-only evidence: no Approval is raised against them.
     assertWorkInstructionNotHistorical(wi);
+    const block = instructionApprovalBlock(await this.workRoute(wi.work_id));
+    if (block) throw new FmApprovalValidationError(block);
+    return { facilityId: wi.facility_id, work_instruction_id: wi.id, work_id: null };
+  }
+
+  async create(input: ParsedCreateApproval, actorProfileId: string): Promise<FmApprovalRow> {
+    const subject = await this.resolveSubject(input);
+    if (!this.scope.canOperateIn(subject.facilityId)) {
+      throw new FmApprovalValidationError("You are not authorised to raise approvals in this facility.");
+    }
     const columns = toColumns(input);
     const now = new Date().toISOString();
     for (let attempt = 0; attempt < CODE_RETRY_LIMIT; attempt += 1) {
@@ -429,7 +545,8 @@ export class FmApprovalRepository {
           ...columns,
           organisation_id: this.organisationId,
           code,
-          work_instruction_id: wi.id,
+          work_instruction_id: subject.work_instruction_id,
+          work_id: subject.work_id,
           generated_at: columns.generated_at ?? (["draft", "awaiting_decision"].includes(input.status) ? now : undefined),
           requested_by_profile_id: columns.requested_by_profile_id ?? actorProfileId,
           created_by_profile_id: actorProfileId,
@@ -439,7 +556,14 @@ export class FmApprovalRepository {
         .single();
       if (error) {
         // A code collision retries; a second Approval for the instruction is an error.
-        if (violation(error) && !violation(error, "fm_approvals_org_work_instruction_uidx") && attempt < CODE_RETRY_LIMIT - 1) continue;
+        if (
+          violation(error) &&
+          !violation(error, "fm_approvals_org_work_instruction_uidx") &&
+          !violation(error, "fm_approvals_org_work_uidx") &&
+          attempt < CODE_RETRY_LIMIT - 1
+        ) {
+          continue;
+        }
         throwDb(error, "Unable to create approval.");
       }
       if (!data) throw new FmApprovalUnavailableError("Approval create returned no row.");
@@ -450,11 +574,30 @@ export class FmApprovalRepository {
 
   async update(
     input: ParsedUpdateApproval,
-    actorProfileId: string
+    actorProfileId: string,
+    options: { reopenRejected?: boolean } = {}
   ): Promise<{ row: FmApprovalRow; previousStatus: string }> {
     const existing = await this.getByIdOrCode(input.id);
     if (!existing) throw new FmApprovalNotFoundError(`Approval ${input.id} not found.`);
+    // A recorded client decision is left only through an explicit path (approval.revise_rejected snapshots it first).
+    if (options.reopenRejected === true || input.status !== undefined) {
+      const block = approvalStatusChangeBlock({
+        from: existing.status,
+        to: input.status ?? existing.status,
+        reopenRejected: options.reopenRejected === true,
+        isWorkLevel: Boolean(existing.work_id),
+      });
+      if (block) throw new FmApprovalValidationError(block);
+    }
     const patch = toColumns(input);
+    if (input.workRef) {
+      throw new FmApprovalValidationError("An approval's Work cannot be changed.");
+    }
+    if (input.workInstructionRef && existing.work_id) {
+      throw new FmApprovalValidationError(
+        "This client approval belongs to its Work: the Job Order is recorded from the Work once approval is granted."
+      );
+    }
     if (input.workInstructionRef) {
       const wi = await this.resolveWorkInstruction(input.workInstructionRef);
       if (wi.id !== existing.work_instruction_id) {

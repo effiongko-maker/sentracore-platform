@@ -238,6 +238,7 @@ async function verifyLiveContracts(context: ActionContext): Promise<string[]> {
     description: "quick wins verify",
     facilityId: "FAC-0001",
     type: "corrective",
+    commercialRoute: "work_order",
     source: "manual",
     priority: "medium",
     status: "in_progress",

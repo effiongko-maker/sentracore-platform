@@ -31,6 +31,14 @@ export type MaintenanceSource =
   | "request"
   | "system";
 
+/**
+ * Execution basis (fm_work.commercial_route) — the route this Work follows. An explicit operator selection, never
+ * inferred (not from amount, cost, Approval, Work Order / Job Order, status or facility).
+ *   work_order : no prior client approval required (Work Order is raised after execution)
+ *   job_order  : client approval required before execution (Job Order issued after approval)
+ */
+export type WorkCommercialRoute = "work_order" | "job_order";
+
 export type MaintenanceSort =
   | "newest"
   | "oldest"
@@ -74,6 +82,13 @@ export interface Maintenance {
   status: MaintenanceStatus;
   holdReason?: string;
   requiresWorkOrder?: boolean;
+  /** Execution basis. Undefined = legacy-unclassified Work (created before the route existed). Never inferred. */
+  commercialRoute?: WorkCommercialRoute;
+  /** Work-level client Approval (Job Order route) — code and status, derived through fm_approvals.work_id. */
+  clientApprovalId?: string;
+  clientApprovalStatus?: string;
+  /** Codes of this Work's issued Job Orders (derived). */
+  jobOrderIds?: string[];
 
   /** Undefined ONLY for migrated_historical Work whose reporting date is not in the source. */
   reportedAt?: string;
@@ -117,6 +132,8 @@ export interface CreateMaintenanceInput {
   status: MaintenanceStatus;
   holdReason?: string;
   requiresWorkOrder?: boolean;
+  /** Execution basis — required for new Work (validated at the Work create boundary). */
+  commercialRoute: WorkCommercialRoute;
   reportedAt: string;
   scheduledStartAt?: string;
   scheduledEndAt?: string;

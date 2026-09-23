@@ -48,7 +48,13 @@ import {
   labelize,
   optionalString,
   toCreateFormValues,
+  type MaintenanceFormValues,
 } from "../utils";
+import { ExecutionBasisField } from "./ExecutionBasisField";
+import { jobOrderExecutionBlock } from "../commercialRoute";
+import { requestWorkApproval } from "@/modules/approvals/actions/requestWorkApproval";
+import { labelizeApprovalStatus } from "@/modules/approvals/utils";
+import type { ApprovalStatus } from "@/modules/approvals/types";
 import type {
   CreateMaintenanceInput,
   Maintenance,
@@ -56,6 +62,7 @@ import type {
   MaintenanceSource,
   MaintenanceStatus,
   MaintenanceType,
+  WorkCommercialRoute,
 } from "../types";
 
 interface MaintenanceFormModalProps {
@@ -80,9 +87,9 @@ export function MaintenanceFormModal({
   onSaved,
 }: MaintenanceFormModalProps) {
   const { toast } = useToast();
-  const [form, setForm] = useState<CreateMaintenanceInput>(toCreateFormValues());
+  const [form, setForm] = useState<MaintenanceFormValues>(toCreateFormValues());
   const [errors, setErrors] = useState<
-    Partial<Record<keyof CreateMaintenanceInput, string>>
+    Partial<Record<keyof MaintenanceFormValues, string>>
   >({});
   const [saving, setSaving] = useState(false);
   // Independent reference catalogs: one failure never erases the others.
@@ -114,12 +121,22 @@ export function MaintenanceFormModal({
   const [newOrderType, setNewOrderType] = useState<WorkInstructionKind | "">("");
   const [linkMode, setLinkMode] = useState<"choose" | "link">("choose");
   const [completing, setCompleting] = useState(false);
+  // Job Order route: the Work's client Approval (derived on read) and the issued Job Order's client reference.
+  const [workApproval, setWorkApproval] = useState<{ id: string; status: string } | null>(null);
+  const [requestingApproval, setRequestingApproval] = useState(false);
+  const [jobOrderClientReference, setJobOrderClientReference] = useState("");
 
   useEffect(() => {
     if (!open) return;
     setForm(toCreateFormValues(mode === "edit" ? maintenance : null));
     setErrors({});
     setCompleting(false);
+    setWorkApproval(
+      mode === "edit" && maintenance?.clientApprovalId
+        ? { id: maintenance.clientApprovalId, status: maintenance.clientApprovalStatus ?? "draft" }
+        : null
+    );
+    setJobOrderClientReference("");
     setLinkMode(
       mode === "edit" && maintenance?.workOrderId ? "link" : "choose"
     );
@@ -143,9 +160,9 @@ export function MaintenanceFormModal({
       )
     : assets;
 
-  function updateField<K extends keyof CreateMaintenanceInput>(
+  function updateField<K extends keyof MaintenanceFormValues>(
     key: K,
-    value: CreateMaintenanceInput[K]
+    value: MaintenanceFormValues[K]
   ) {
     setForm((current) => {
       const next = { ...current, [key]: value };
@@ -158,16 +175,26 @@ export function MaintenanceFormModal({
   }
 
   function validate() {
-    const next: Partial<Record<keyof CreateMaintenanceInput, string>> = {};
+    const next: Partial<Record<keyof MaintenanceFormValues, string>> = {};
     if (!form.title.trim()) next.title = "Title is required";
+    // Required for new Work; legacy-unclassified Work may be saved without one (never defaulted).
+    if (mode !== "edit" && !form.commercialRoute) {
+      next.commercialRoute = "Execution basis is required";
+    }
     if (!form.facilityId.trim()) next.facilityId = "Facility is required";
     if (!form.reportedAt) next.reportedAt = "Reported at is required";
-    if (form.requiresWorkOrder === false && form.workOrderId) {
+    if (!effectiveRequiresWorkOrder() && form.workOrderId) {
       next.workOrderId =
         "Work order must be empty when requires work order is false";
     }
     setErrors(next);
     return Object.keys(next).length === 0;
+  }
+
+  // Classified Work always leads to a Work Order / Job Order (its execution basis answers the question), so the legacy
+  // requires_work_instruction flag is neither asked nor written; this only drives the form's own link validation.
+  function effectiveRequiresWorkOrder(): boolean {
+    return form.commercialRoute ? true : Boolean(form.requiresWorkOrder);
   }
 
   const isEdit = mode === "edit";
@@ -177,6 +204,11 @@ export function MaintenanceFormModal({
   const isCancelled = recordStatus === "cancelled";
   const isTerminalLifecycle = isCompleted || isCancelled;
   const busy = saving || completing;
+  // The basis cannot change once a Work Order / Job Order exists for this Work (the server refuses it too).
+  const linkedInstructionCodes = isEdit ? (maintenance?.workOrderIds ?? []) : [];
+  const executionBasisLockedReason = linkedInstructionCodes.length
+    ? `Cannot be changed: ${linkedInstructionCodes.join(", ")} already exists for this Work.`
+    : undefined;
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -218,6 +250,10 @@ export function MaintenanceFormModal({
         workPerformed: optionalString(form.workPerformed),
         createdByUserId: optionalString(form.createdByUserId),
         updatedByUserId: optionalString(form.updatedByUserId),
+        // Sent only when chosen: an unchosen (legacy) basis is left untouched, never cleared or defaulted.
+        commercialRoute: form.commercialRoute || undefined,
+        // Legacy flag: sent for unclassified Work only; classified Work never writes it.
+        requiresWorkOrder: form.commercialRoute ? undefined : form.requiresWorkOrder,
         ...(isCompleted
           ? {
               status: "completed" as const,
@@ -314,6 +350,7 @@ export function MaintenanceFormModal({
       } else {
         const result = await requestMaintenance({
           ...payload,
+          commercialRoute: form.commercialRoute as WorkCommercialRoute,
           status: form.status,
           completedAt: undefined,
           completionNotes: undefined,
@@ -367,7 +404,7 @@ export function MaintenanceFormModal({
   async function handleMarkCompleted() {
     if (!isEdit || !maintenance || isTerminalLifecycle) return;
 
-    const nextErrors: Partial<Record<keyof CreateMaintenanceInput, string>> =
+    const nextErrors: Partial<Record<keyof MaintenanceFormValues, string>> =
       {};
     if (!form.title.trim()) nextErrors.title = "Title is required";
     if (!form.facilityId.trim()) nextErrors.facilityId = "Facility is required";
@@ -415,6 +452,9 @@ export function MaintenanceFormModal({
         workPerformed: optionalString(form.workPerformed),
         createdByUserId: optionalString(form.createdByUserId),
         updatedByUserId: optionalString(form.updatedByUserId),
+        commercialRoute: form.commercialRoute || undefined,
+        // Legacy flag: sent for unclassified Work only; classified Work never writes it.
+        requiresWorkOrder: form.commercialRoute ? undefined : form.requiresWorkOrder,
         status: "completed" as MaintenanceStatus,
         completedAt: completedAtIso,
         completionNotes: optionalString(form.completionNotes) ?? "",
@@ -498,6 +538,7 @@ export function MaintenanceFormModal({
           workPerformed: optionalString(form.workPerformed),
           createdByUserId: optionalString(form.createdByUserId),
           updatedByUserId: optionalString(form.updatedByUserId),
+          commercialRoute: form.commercialRoute || undefined,
           status: form.status,
           completedAt: "",
           completionNotes: "",
@@ -512,7 +553,13 @@ export function MaintenanceFormModal({
         }
       }
 
-      const result = await createWorkOrderFromMaintenance(maintenance.id, newOrderType);
+      // Classified Work: the Order Type is its execution basis (server-derived); a Job Order carries the client's own
+      // reference when supplied. Legacy Work keeps the explicit Order Type selection.
+      const result = await createWorkOrderFromMaintenance(
+        maintenance.id,
+        form.commercialRoute ? "" : newOrderType,
+        form.commercialRoute === "job_order" ? jobOrderClientReference.trim() || undefined : undefined
+      );
       if (!result.success) {
         throw new Error(result.error.message);
       }
@@ -543,7 +590,41 @@ export function MaintenanceFormModal({
     }
   }
 
-  const requiresWo = Boolean(form.requiresWorkOrder);
+  async function handleRequestClientApproval() {
+    if (!maintenance?.id) return;
+    setRequestingApproval(true);
+    try {
+      const result = await requestWorkApproval(maintenance.workUuid ?? maintenance.id);
+      if (!result.success) throw new Error(result.error.message);
+      setWorkApproval({ id: result.data.approval.id, status: result.data.approval.status });
+      toast({
+        type: "success",
+        title: result.data.created ? "Client approval requested" : "Client approval already requested",
+        description: `${result.data.approval.id} — prepare and submit it to the client from Approvals.`,
+      });
+    } catch (err) {
+      toast({
+        type: "error",
+        title: "Unable to request client approval",
+        description: err instanceof Error ? err.message : "Please try again in a moment.",
+      });
+    } finally {
+      setRequestingApproval(false);
+    }
+  }
+
+  const route = form.commercialRoute || undefined;
+  const hasJobOrder =
+    (maintenance?.jobOrderIds?.length ?? 0) > 0 ||
+    Boolean(route === "job_order" && optionalString(form.workOrderId));
+  // Same rule the server enforces: Job Order Work cannot start or complete before approval + issued Job Order.
+  const executionBlockedReason = jobOrderExecutionBlock({
+    route,
+    status: "in_progress",
+    approvalStatus: workApproval?.status,
+    hasJobOrder,
+  });
+  const requiresWo = route ? true : Boolean(form.requiresWorkOrder);
   const linkedWorkOrderId = optionalString(form.workOrderId);
   const linkedWorkOrder = linkedWorkOrderId
     ? workOrders.find((row) => row.id === linkedWorkOrderId)
@@ -608,6 +689,16 @@ export function MaintenanceFormModal({
             onChange={(event) => updateField("title", event.target.value)}
           />
         </FormField>
+
+        <ExecutionBasisField
+          id="mnt-execution-basis"
+          className="sm:col-span-2"
+          value={form.commercialRoute}
+          onChange={(value) => updateField("commercialRoute", value)}
+          error={errors.commercialRoute}
+          disabled={isTerminalLifecycle}
+          lockedReason={executionBasisLockedReason}
+        />
 
         <FormField label="Type" htmlFor="mnt-type" required>
           <select
@@ -718,12 +809,19 @@ export function MaintenanceFormModal({
               }
             >
               {MAINTENANCE_ACTIVE_WORKFLOW_STATUSES.map((value) => (
-                <option key={value} value={value}>
+                <option
+                  key={value}
+                  value={value}
+                  disabled={Boolean(executionBlockedReason) && value === "in_progress"}
+                >
                   {labelize(value)}
                 </option>
               ))}
             </select>
           )}
+          {executionBlockedReason && !isTerminalLifecycle ? (
+            <p className="text-xs text-muted">{executionBlockedReason}</p>
+          ) : null}
         </FormField>
 
         <FormField label="Assigned to" htmlFor="mnt-assignee">
@@ -806,6 +904,7 @@ export function MaintenanceFormModal({
           />
         </FormField>
 
+        {!route ? (
         <FormField label="Requires work order" htmlFor="mnt-requires-wo">
           <select
             id="mnt-requires-wo"
@@ -824,6 +923,7 @@ export function MaintenanceFormModal({
             <option value="true">Yes</option>
           </select>
         </FormField>
+        ) : null}
 
         <FormField
           label="Work order"
@@ -865,11 +965,74 @@ export function MaintenanceFormModal({
             </div>
           ) : (
             <div className="space-y-3 rounded-md border border-border/80 bg-muted/20 p-3">
+              {route === "job_order" ? (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-foreground">
+                    Client approval comes before the Job Order
+                  </p>
+                  {!workApproval ? (
+                    <>
+                      <p className="text-xs text-muted">
+                        Request the client&apos;s approval. The Job Order is recorded after the client approves, and
+                        work starts once it is issued.
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        loading={requestingApproval}
+                        disabled={!isEdit || requestingApproval || busy || isTerminalLifecycle}
+                        onClick={() => void handleRequestClientApproval()}
+                      >
+                        Request client approval
+                      </Button>
+                    </>
+                  ) : workApproval.status === "rejected" ? (
+                    <p className="text-xs text-muted">
+                      {workApproval.id} — rejected by the client. Revise &amp; resubmit it in Approvals; the Job Order
+                      can be recorded once the client approves.
+                    </p>
+                  ) : workApproval.status !== "approved" ? (
+                    <p className="text-xs text-muted">
+                      {workApproval.id} — {labelizeApprovalStatus(workApproval.status as ApprovalStatus)}. Submit and
+                      follow it up in Approvals; the Job Order can be recorded once the client approves.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-xs text-muted">
+                        {workApproval.id} — approved by the client. Record the Job Order the client issued.
+                      </p>
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <input
+                          aria-label="Client Job Order reference"
+                          className={inputClassName}
+                          placeholder="Client's Job Order reference (optional)"
+                          value={jobOrderClientReference}
+                          disabled={creatingWorkOrder}
+                          onChange={(event) => setJobOrderClientReference(event.target.value)}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="sm:flex-1"
+                          loading={creatingWorkOrder}
+                          disabled={!isEdit || creatingWorkOrder || busy || isTerminalLifecycle}
+                          onClick={() => void handleCreateWorkOrder()}
+                        >
+                          Record issued Job Order
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : (
+              <>
               <p className="text-sm font-medium text-foreground">
                 No work order linked yet
               </p>
               <div className="flex flex-col gap-2 sm:flex-row">
-                <OrderTypePicker value={newOrderType} onChange={setNewOrderType} disabled={creatingWorkOrder} />
+                {!route ? (
+                  <OrderTypePicker value={newOrderType} onChange={setNewOrderType} disabled={creatingWorkOrder} />
+                ) : null}
                 <Button
                   type="button"
                   size="sm"
@@ -877,14 +1040,14 @@ export function MaintenanceFormModal({
                   loading={creatingWorkOrder}
                   disabled={
                     !isEdit ||
-                    !newOrderType ||
+                    (!route && !newOrderType) ||
                     creatingWorkOrder ||
                     busy ||
                     isTerminalLifecycle
                   }
                   onClick={() => void handleCreateWorkOrder()}
                 >
-                  Create new work order
+                  {route === "work_order" ? "Create Work Order" : "Create new work order"}
                 </Button>
                 <Button
                   type="button"
@@ -897,6 +1060,8 @@ export function MaintenanceFormModal({
                   Link existing work order
                 </Button>
               </div>
+              </>
+              )}
               {!isEdit ? (
                 <p className="text-xs text-muted">
                   Save this maintenance record first to create a work order from
@@ -990,7 +1155,7 @@ export function MaintenanceFormModal({
                   type="button"
                   onClick={() => void handleMarkCompleted()}
                   loading={completing}
-                  disabled={busy}
+                  disabled={busy || Boolean(executionBlockedReason)}
                 >
                   Mark as completed
                 </Button>

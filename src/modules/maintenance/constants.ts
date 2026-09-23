@@ -4,6 +4,7 @@ import type {
   MaintenanceSource,
   MaintenanceStatus,
   MaintenanceType,
+  WorkCommercialRoute,
 } from "./types";
 
 export const MAINTENANCE_TYPES: MaintenanceType[] = [
@@ -88,3 +89,26 @@ export const MAINTENANCE_SORT_OPTIONS: Array<{
 ];
 
 export const DEFAULT_MAINTENANCE_SORT: MaintenanceSort = "newest";
+
+/** Execution basis options (fm_work.commercial_route). Order is presentation only — there is no default. */
+export const WORK_COMMERCIAL_ROUTE_OPTIONS: Array<{
+  value: WorkCommercialRoute;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "work_order",
+    label: "Work Order",
+    description: "No prior client approval required",
+  },
+  {
+    value: "job_order",
+    label: "Job Order",
+    description: "Client approval required before execution",
+  },
+];
+
+export const WORK_COMMERCIAL_ROUTE_LABELS: Record<WorkCommercialRoute, string> = {
+  work_order: "Work Order",
+  job_order: "Job Order",
+};

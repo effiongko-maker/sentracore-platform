@@ -144,7 +144,7 @@ export function displayWorkOrderTitle(
 
 export function toCreateFormValues(
   workOrder?: WorkOrder | null
-): CreateWorkOrderInput {
+): CreateWorkOrderInput & { orderType: NonNullable<CreateWorkOrderInput["orderType"]> } {
   return {
     title: workOrder ? displayWorkOrderTitle(workOrder) : "",
     description: workOrder?.description ?? "",

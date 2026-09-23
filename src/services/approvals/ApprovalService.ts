@@ -148,6 +148,7 @@ function mapRemoteApproval(raw: RemoteApproval): Approval {
     title: String(pickField(raw, "title", "Title") ?? ""),
     type: mapType(pickField(raw, "type", "Type")),
     workOrderId: String(pickField(raw, "workOrderId", "Work Order ID") ?? ""),
+    workId: pickField(raw, "workId") != null ? String(pickField(raw, "workId")) : undefined,
     facilityId: String(pickField(raw, "facilityId", "Facility ID") ?? ""),
     assetId: optionalMappedString(raw, "assetId", "Asset ID"),
     status: mapStatus(

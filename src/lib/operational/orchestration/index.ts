@@ -39,6 +39,7 @@ import type {
   CreateMaintenanceInput,
   Maintenance,
   UpdateMaintenanceInput,
+  WorkCommercialRoute,
 } from "@/modules/maintenance/types";
 import type {
   CreateWorkOrderInput,
@@ -293,8 +294,10 @@ export async function orchestrateCreateWorkOrder(options: {
  */
 export async function orchestrateCreateWorkOrderFromMaintenance(options: {
   maintenanceId: string;
-  /** Explicit manual selection (Work Order | Job Order). Never inferred. */
-  orderType: WorkOrderOrderType;
+  /** Explicit selection for legacy-unclassified Work; classified Work derives it from its execution basis. */
+  orderType?: WorkOrderOrderType;
+  /** The client's own reference for an issued Job Order, as supplied. */
+  clientReference?: string;
   context: ActionContext;
   title?: string;
 }): Promise<{ maintenance: Maintenance; workOrder: WorkOrder }> {
@@ -382,16 +385,17 @@ export async function orchestrateCreateWorkOrderFromMaintenance(options: {
         assignedToUserId: maintenance.assignedToUserId,
         priority: maintenance.priority || "medium",
         orderType: options.orderType,
+        clientReference: options.clientReference,
         status: "open",
         requestedAt: options.context.now,
         createdByUserId: options.context.userId,
         updatedByUserId: options.context.userId,
       });
 
-      const updated = await MaintenanceService.updateMaintenance(
-        maintenance.id,
-        { requiresWorkOrder: true }
-      );
+      // Legacy requires-work-order flag: kept in step for unclassified Work only (classified Work never writes it).
+      const updated = maintenance.commercialRoute
+        ? maintenance
+        : await MaintenanceService.updateMaintenance(maintenance.id, { requiresWorkOrder: true });
       linkedMaintenance = {
         ...updated,
         requiresWorkOrder: true,
@@ -458,6 +462,8 @@ export type TriageIncidentInput = {
   workOrderTitle?: string;
   /** Explicit manual selection — required for create_work_order / create_both. */
   orderType?: WorkOrderOrderType;
+  /** Execution basis of the Work — required for create_maintenance / create_both (never defaulted). */
+  commercialRoute?: WorkCommercialRoute;
   assignedToUserId?: string;
   resolveIncident?: boolean;
 };
@@ -480,14 +486,36 @@ export async function orchestrateTriageIncident(options: {
   const wantsWorkOrder =
     options.input.response === "create_work_order" ||
     options.input.response === "create_both";
-  // Order Type is a manual selection — validated before anything is written.
+  // Execution basis is a manual selection — checked before anything is written.
+  const wantsWork =
+    options.input.response === "create_maintenance" ||
+    options.input.response === "create_both";
+  if (wantsWork && !options.input.commercialRoute) {
+    throw new ActionError("VALIDATION_ERROR", "Execution basis is required.");
+  }
+  // Order Type: for Work created here it IS the execution basis (never asked twice); a Job Order cannot be created
+  // alongside new Work because the client's approval must come first. For the Incident's existing Work the
+  // repository derives it from that Work's basis (legacy-unclassified Work still needs the explicit selection).
   let triageOrderType: WorkOrderOrderType | undefined;
   if (wantsWorkOrder) {
-    const selection = validateOrderTypeSelection(options.input.orderType);
-    if (!selection.ok) {
-      throw new ActionError("VALIDATION_ERROR", selection.message);
+    if (options.input.response === "create_both") {
+      if (options.input.commercialRoute === "job_order") {
+        throw new ActionError(
+          "VALIDATION_ERROR",
+          "Create the Work first: a Job Order is issued only after the client approves."
+        );
+      }
+      if (options.input.orderType && options.input.orderType !== options.input.commercialRoute) {
+        throw new ActionError("VALIDATION_ERROR", "Order Type must match the Work's execution basis.");
+      }
+      triageOrderType = options.input.commercialRoute;
+    } else if (options.input.orderType) {
+      const selection = validateOrderTypeSelection(options.input.orderType);
+      if (!selection.ok) {
+        throw new ActionError("VALIDATION_ERROR", selection.message);
+      }
+      triageOrderType = selection.kind;
     }
-    triageOrderType = selection.kind;
   }
 
   // Idempotent resolve: do not re-triage a terminal incident (would recreate resolve events).
@@ -577,6 +605,7 @@ export async function orchestrateTriageIncident(options: {
           title:
             options.input.maintenanceTitle ??
             `Maintenance: ${current.title}`.slice(0, 200),
+          commercialRoute: options.input.commercialRoute!,
           context: options.context,
         });
         // Phase 2D: Work carries fm_work.incident_id (FK); Incident
@@ -632,7 +661,7 @@ export async function orchestrateTriageIncident(options: {
               `Work order: ${current.title}`.slice(0, 200),
             description: current.description,
             type: "corrective",
-            orderType: triageOrderType!,
+            orderType: triageOrderType,
             source: "incident",
             facilityId: current.facilityId,
             assetId: current.assetId,
@@ -679,6 +708,7 @@ export async function orchestrateTriageIncident(options: {
 export async function orchestrateCreateMaintenanceFromIncident(options: {
   incident: Incident;
   title: string;
+  commercialRoute: WorkCommercialRoute;
   context: ActionContext;
 }): Promise<Maintenance> {
   const reporterCandidate =
@@ -694,6 +724,7 @@ export async function orchestrateCreateMaintenanceFromIncident(options: {
       description: options.incident.description,
       type: "corrective",
       source: "incident",
+      commercialRoute: options.commercialRoute,
       facilityId: options.incident.facilityId,
       assetId: options.incident.assetId,
       incidentId: options.incident.id,

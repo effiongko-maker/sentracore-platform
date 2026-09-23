@@ -8,7 +8,8 @@ import {
 import { FmAssetRepository } from "@/modules/assets/server/FmAssetRepository";
 import { uuidsOnly } from "@/modules/assets/server/fmAssetDomain";
 import { createAdminClient } from "@/utils/supabase/admin";
-import type { WorkOrderListParams } from "@/modules/work-orders/types";
+import type { WorkOrderListParams, WorkOrderOrderType } from "@/modules/work-orders/types";
+import { jobOrderIssueBlock, resolveInstructionOrderType } from "@/modules/maintenance/commercialRoute";
 import {
   ACTIVE_INSTRUCTION_STATUSES,
   ASSIGNED_INSTRUCTION_STATUSES,
@@ -104,6 +105,7 @@ function asRow(value: unknown): FmWorkInstructionRow {
     completion_notes: txt(rec, "completion_notes"),
     work_performed: txt(rec, "work_performed"),
     requires_approval: Boolean(rec.requires_approval),
+    client_reference: txt(rec, "client_reference"),
     operational_event_id: txt(rec, "operational_event_id"),
     created_by_profile_id: txt(rec, "created_by_profile_id"),
     updated_by_profile_id: txt(rec, "updated_by_profile_id"),
@@ -112,7 +114,14 @@ function asRow(value: unknown): FmWorkInstructionRow {
   };
 }
 
-type WorkRef = { id: string; code: string; facility_id: string; incident_id: string | null; record_origin: string };
+type WorkRef = {
+  id: string;
+  code: string;
+  facility_id: string;
+  incident_id: string | null;
+  record_origin: string;
+  commercial_route: string | null;
+};
 
 function toColumns(f: InstructionFields): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -148,6 +157,7 @@ function toColumns(f: InstructionFields): Record<string, unknown> {
   set("completion_notes", f.completionNotes);
   set("work_performed", f.workPerformed);
   set("requires_approval", f.requiresApproval);
+  set("client_reference", f.clientReference);
   set("operational_event_id", f.operationalEventId);
   return out;
 }
@@ -172,7 +182,7 @@ export class FmWorkInstructionRepository {
     const target = workRef.trim();
     const query = this.admin
       .from("fm_work")
-      .select("id, code, facility_id, incident_id, record_origin")
+      .select("id, code, facility_id, incident_id, record_origin, commercial_route")
       .eq("organisation_id", this.organisationId);
     const { data, error } = UUID_RE.test(target)
       ? await query.eq("id", target).maybeSingle()
@@ -188,7 +198,36 @@ export class FmWorkInstructionRepository {
       facility_id: String(rec.facility_id),
       incident_id: rec.incident_id != null ? String(rec.incident_id) : null,
       record_origin: rec.record_origin != null ? String(rec.record_origin) : "operational",
+      commercial_route: rec.commercial_route != null ? String(rec.commercial_route) : null,
     };
+  }
+
+  /** Status of the Work-level client Approval (fm_approvals.work_id), or null when none was requested. */
+  private async workApprovalStatus(workId: string): Promise<string | null> {
+    const { data, error } = await this.admin
+      .from("fm_approvals")
+      .select("status")
+      .eq("organisation_id", this.organisationId)
+      .eq("work_id", workId)
+      .maybeSingle();
+    if (error) throwDb(error, "Unable to load the Work's client approval.");
+    return data ? String((data as { status: string }).status) : null;
+  }
+
+  /**
+   * Order Type follows the Work's execution basis (a mismatch is refused; legacy Work keeps the explicit selection),
+   * and a Job Order on Job Order-route Work is recorded only after the client's Approval is granted.
+   */
+  private async resolveOrderTypeFor(work: WorkRef, supplied: WorkOrderOrderType | undefined): Promise<WorkOrderOrderType> {
+    const resolved = resolveInstructionOrderType(work.commercial_route, supplied);
+    if (!resolved.ok) throw new FmWorkInstructionValidationError(resolved.message);
+    const issueBlock = jobOrderIssueBlock({
+      route: work.commercial_route,
+      orderType: resolved.orderType,
+      approvalStatus: work.commercial_route === "job_order" ? await this.workApprovalStatus(work.id) : null,
+    });
+    if (issueBlock) throw new FmWorkInstructionValidationError(issueBlock);
+    return resolved.orderType;
   }
 
   private async facilityCode(facilityId: string): Promise<string | null> {
@@ -348,7 +387,7 @@ export class FmWorkInstructionRepository {
     const [work, parents, approvals] = await Promise.all([
       this.admin
         .from("fm_work")
-        .select("id, code, incident_id")
+        .select("id, code, incident_id, commercial_route")
         .eq("organisation_id", this.organisationId)
         .in("id", workIds),
       parentIds.length
@@ -358,12 +397,13 @@ export class FmWorkInstructionRepository {
             .eq("organisation_id", this.organisationId)
             .in("id", parentIds)
         : Promise.resolve({ data: [], error: null }),
-      // Approval is a separate downstream domain related by UUID (one per instruction).
+      // Approval is a separate domain related by UUID: one per instruction, or the Work's client Approval (Job Order
+      // route — it precedes the Job Order, so it belongs to the Work).
       this.admin
         .from("fm_approvals")
-        .select("code, work_instruction_id")
+        .select("code, work_instruction_id, work_id")
         .eq("organisation_id", this.organisationId)
-        .in("work_instruction_id", rows.map((r) => r.id)),
+        .or(`work_instruction_id.in.(${rows.map((r) => r.id).join(",")}),work_id.in.(${workIds.join(",")})`),
     ]);
     if (work.error) throwDb(work.error, "Unable to load Work context.");
     if (approvals.error) throwDb(approvals.error, "Unable to load Approval context.");
@@ -384,24 +424,32 @@ export class FmWorkInstructionRepository {
     const incidentCode = new Map((incidents.data ?? []).map((i) => [String((i as { id: string }).id), String((i as { code: string }).code)]));
     const workById = new Map(
       (work.data ?? []).map((w) => {
-        const rec = w as { id: string; code: string; incident_id: string | null };
-        return [rec.id, { code: rec.code, incident: rec.incident_id ? incidentCode.get(rec.incident_id) : undefined }];
+        const rec = w as { id: string; code: string; incident_id: string | null; commercial_route: string | null };
+        const route =
+          rec.commercial_route === "work_order" || rec.commercial_route === "job_order"
+            ? (rec.commercial_route as WorkOrderOrderType)
+            : undefined;
+        return [rec.id, { code: rec.code, incident: rec.incident_id ? incidentCode.get(rec.incident_id) : undefined, route }];
       })
     );
     const parentCode = new Map((parents.data ?? []).map((p) => [String((p as { id: string }).id), String((p as { code: string }).code)]));
-    const approvalCodeByInstruction = new Map(
-      (approvals.data ?? []).map((a) => [
-        String((a as { work_instruction_id: string }).work_instruction_id),
-        String((a as { code: string }).code),
-      ])
-    );
+    const approvalCodeByInstruction = new Map<string, string>();
+    const approvalCodeByWork = new Map<string, string>();
+    for (const entry of approvals.data ?? []) {
+      const rec = entry as { code: string; work_instruction_id: string | null; work_id: string | null };
+      if (rec.work_instruction_id) approvalCodeByInstruction.set(rec.work_instruction_id, String(rec.code));
+      if (rec.work_id) approvalCodeByWork.set(rec.work_id, String(rec.code));
+    }
     for (const row of rows) {
       const w = workById.get(row.work_id);
       out.set(row.id, {
         workCode: w?.code,
         incidentCode: w?.incident,
         parentCode: row.parent_instruction_id ? parentCode.get(row.parent_instruction_id) : undefined,
-        approvalCode: approvalCodeByInstruction.get(row.id),
+        approvalCode:
+          approvalCodeByInstruction.get(row.id) ??
+          (row.order_type === "job_order" ? approvalCodeByWork.get(row.work_id) : undefined),
+        workCommercialRoute: w?.route,
       });
     }
     return out;
@@ -427,8 +475,9 @@ export class FmWorkInstructionRepository {
     // A Work Instruction cannot be attached to imported historical Work (that would alter the historical relationship).
     if (work.record_origin === "migrated_historical") throw new FmWorkInstructionReadOnlyError();
     await this.assertInherited(work, input);
+    const orderType = await this.resolveOrderTypeFor(work, input.orderType);
     const parentId = input.parentRef ? await this.resolveParentId(input.parentRef) : null;
-    const columns = toColumns({ ...input, assetRef: await this.resolveAssetRef(input.assetRef) });
+    const columns = toColumns({ ...input, orderType, assetRef: await this.resolveAssetRef(input.assetRef) });
     const now = new Date().toISOString();
 
     for (let attempt = 0; attempt < CODE_RETRY_LIMIT; attempt += 1) {
@@ -483,6 +532,14 @@ export class FmWorkInstructionRepository {
     }
     if (input.assertFacilityRef || input.assertIncidentRef) {
       await this.assertInherited(workRow ?? (await this.resolveWork(workId)), input);
+    }
+    // An Order Type change, or a move to other Work, must still agree with that Work's execution basis.
+    if (input.orderType !== undefined || workId !== existing.work_id) {
+      const target = workRow ?? (await this.resolveWork(workId));
+      const orderType = input.orderType ?? (existing.order_type as WorkOrderOrderType);
+      if (orderType !== existing.order_type || workId !== existing.work_id) {
+        patch.order_type = await this.resolveOrderTypeFor(target, orderType);
+      }
     }
     if (input.parentRef !== undefined) {
       patch.parent_instruction_id = input.parentRef ? await this.resolveParentId(input.parentRef) : null;

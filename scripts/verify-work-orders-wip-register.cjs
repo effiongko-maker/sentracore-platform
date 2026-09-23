@@ -69,7 +69,8 @@ assert(
   "scope uses classifier"
 );
 assert(types.includes("orderType?: WorkOrderOrderType"), "persisted orderType on WorkOrder");
-assert(types.includes("orderType: WorkOrderOrderType"), "orderType on create input");
+// Create input: explicit for legacy-unclassified Work, derived from the Work's execution basis when classified.
+assert(types.includes("orderType?: WorkOrderOrderType"), "orderType on create input");
 
 assert(
   kind.includes("Does not inspect estimatedCost") ||

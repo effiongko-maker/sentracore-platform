@@ -13,6 +13,7 @@ import {
 } from "@/lib/operational/issues";
 import { orchestrateRequestMaintenance } from "@/lib/operational/orchestration";
 import { MAINTENANCE_PRIORITIES } from "@/modules/maintenance/constants";
+import type { WorkCommercialRoute } from "@/modules/maintenance/types";
 
 /**
  * @deprecated Phase 15 — Log Issue no longer classifies Issues.
@@ -26,6 +27,8 @@ export type LogIssueInput = {
   facilityId: string;
   locationDetail?: string;
   urgency?: "low" | "medium" | "high" | "critical";
+  /** Execution basis of the Work this Issue creates — required, never defaulted (validated at the Work boundary). */
+  commercialRoute: WorkCommercialRoute;
   /**
    * @deprecated Ignored. FM Log Issue always creates Work (Maintenance backing).
    */
@@ -103,6 +106,7 @@ export async function logIssue(
           status: "requested",
           reportedAt: context.now,
           requiresWorkOrder: false,
+          commercialRoute: raw.commercialRoute,
           createdByUserId: context.userId,
           updatedByUserId: context.userId,
           reportedByUserId: context.operatingAccess?.sheetUserId,

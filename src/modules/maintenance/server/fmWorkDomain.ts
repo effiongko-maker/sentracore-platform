@@ -9,6 +9,7 @@ import type {
   MaintenanceStatus,
   MaintenanceType,
   UpdateMaintenanceInput,
+  WorkCommercialRoute,
 } from "@/modules/maintenance/types";
 import { ACTIVE_MAINTENANCE_STATUSES } from "@/lib/operational/workload/activeStatuses";
 
@@ -44,6 +45,9 @@ export const WORK_SOURCES: MaintenanceSource[] = [
   "schedule",
   "system",
 ];
+
+/** fm_work.commercial_route (UI: Execution basis). NULL on legacy-unclassified Work only. */
+export const WORK_COMMERCIAL_ROUTES: readonly WorkCommercialRoute[] = ["work_order", "job_order"];
 
 export const WORK_KINDS: MaintenanceType[] = [
   "preventive",
@@ -114,10 +118,17 @@ export type FmWorkRow = {
   incident_code: string | null;
   /** Codes of the Work Instructions whose work_id is this Work (derived, not a column). */
   work_instruction_codes: string[];
+  /** Codes of this Work's Job Orders (order_type = job_order) — derived, not a column. */
+  job_order_codes: string[];
+  /** The Work-level client Approval (fm_approvals.work_id) — derived, not columns. */
+  client_approval_code: string | null;
+  client_approval_status: string | null;
   assigned_to_profile_id: string | null;
   reported_by_profile_id: string | null;
   hold_reason: string | null;
   requires_work_instruction: boolean;
+  /** work_order | job_order | NULL (legacy-unclassified). */
+  commercial_route: string | null;
   operational_event_id: string | null;
   reported_at: string | null;
   record_origin?: string;
@@ -136,7 +147,7 @@ export type FmWorkRow = {
 };
 
 export const FM_WORK_SELECT =
-  "id, organisation_id, code, facility_id, title, description, work_kind, source, priority, status, asset_id, source_request_id, incident_id, assigned_to_profile_id, reported_by_profile_id, hold_reason, requires_work_instruction, operational_event_id, reported_at, record_origin, due_at, scheduled_start_at, scheduled_end_at, started_at, completed_at, completion_notes, category_id, department, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
+  "id, organisation_id, code, facility_id, title, description, work_kind, source, priority, status, asset_id, source_request_id, incident_id, assigned_to_profile_id, reported_by_profile_id, hold_reason, requires_work_instruction, commercial_route, operational_event_id, reported_at, record_origin, due_at, scheduled_start_at, scheduled_end_at, started_at, completed_at, completion_notes, category_id, department, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -215,6 +226,43 @@ function parseWorkKind(value: unknown): MaintenanceType | null {
   return normalized;
 }
 
+/**
+ * Execution basis is an explicit selection: only work_order | job_order. Blank is "not chosen" (never a default);
+ * anything else is invalid. Nothing else (amount, Approval, Work Instruction, status, facility) is consulted.
+ */
+function parseCommercialRoute(value: unknown): WorkCommercialRoute | undefined {
+  const raw = optionalTrimmed(value);
+  if (!raw) return undefined;
+  const normalized = normalizeEnum(raw);
+  if (!(WORK_COMMERCIAL_ROUTES as readonly string[]).includes(normalized)) {
+    throw new FmWorkValidationError(`Invalid execution basis: ${raw}`);
+  }
+  return normalized as WorkCommercialRoute;
+}
+
+function readStoredCommercialRoute(value: string | null): WorkCommercialRoute | undefined {
+  return value && (WORK_COMMERCIAL_ROUTES as readonly string[]).includes(value)
+    ? (value as WorkCommercialRoute)
+    : undefined;
+}
+
+/**
+ * The route may be set or corrected only while no downstream workflow exists for the Work. A Work Instruction
+ * (Work Order / Job Order) belongs to the Work via fm_work_instructions.work_id; an Approval reaches Work only through
+ * its Work Instruction (fm_approvals.work_instruction_id), so the Work's Work Instructions cover both.
+ */
+export function assertCommercialRouteChangeAllowed(
+  existing: Pick<FmWorkRow, "commercial_route" | "work_instruction_codes">,
+  next: WorkCommercialRoute | undefined
+): void {
+  if (next === undefined || next === existing.commercial_route) return;
+  if (existing.work_instruction_codes.length > 0) {
+    throw new FmWorkValidationError(
+      `Execution basis cannot be changed: ${existing.work_instruction_codes.join(", ")} already exists for this Work.`
+    );
+  }
+}
+
 function rejectUsrIdentity(value: string | undefined, label: string): string | undefined {
   if (!value) return undefined;
   if (/^USR-/i.test(value)) {
@@ -276,6 +324,10 @@ export function mapFmWorkRowToMaintenance(row: FmWorkRow): Maintenance {
     status: row.status as MaintenanceStatus,
     holdReason: row.hold_reason ?? undefined,
     requiresWorkOrder: row.requires_work_instruction,
+    commercialRoute: readStoredCommercialRoute(row.commercial_route),
+    clientApprovalId: row.client_approval_code ?? undefined,
+    clientApprovalStatus: row.client_approval_status ?? undefined,
+    jobOrderIds: [...row.job_order_codes],
     reportedAt: row.reported_at ?? undefined,
     recordOrigin: row.record_origin === "migrated_historical" ? "migrated_historical" : "operational",
     scheduledStartAt: row.scheduled_start_at ?? undefined,
@@ -312,6 +364,7 @@ export type ParsedCreateWork = {
   status: MaintenanceStatus;
   holdReason?: string;
   requiresWorkInstruction: boolean;
+  commercialRoute: WorkCommercialRoute;
   operationalEventId?: string;
   reportedAt: string;
   scheduledStartAt?: string;
@@ -332,6 +385,9 @@ export function parseCreateWorkInput(payload: unknown): ParsedCreateWork {
   const status = parseStatus(raw.status, "requested");
   const source = parseSource(raw.source, "manual");
   const workKind = parseWorkKind(raw.type ?? raw.workKind);
+  // Required for every new Work, on every creation path. Never defaulted.
+  const commercialRoute = parseCommercialRoute(raw.commercialRoute);
+  if (!commercialRoute) throw new FmWorkValidationError("Execution basis is required.");
   const reportedAt =
     optionalTrimmed(raw.reportedAt) ?? new Date().toISOString();
 
@@ -363,6 +419,7 @@ export function parseCreateWorkInput(payload: unknown): ParsedCreateWork {
     status,
     holdReason: optionalTrimmed(raw.holdReason),
     requiresWorkInstruction: Boolean(raw.requiresWorkOrder === true),
+    commercialRoute,
     operationalEventId: optionalTrimmed(
       raw.operationalEventId ?? raw.eventId
     ),
@@ -424,6 +481,12 @@ export function parseUpdateWorkInput(payload: unknown): ParsedUpdateWork {
   }
   if (raw.requiresWorkOrder !== undefined) {
     out.requiresWorkInstruction = Boolean(raw.requiresWorkOrder);
+  }
+  if (raw.commercialRoute !== undefined) {
+    // May be corrected, never cleared back to legacy-unclassified.
+    const commercialRoute = parseCommercialRoute(raw.commercialRoute);
+    if (!commercialRoute) throw new FmWorkValidationError("Execution basis is required.");
+    out.commercialRoute = commercialRoute;
   }
   // workOrderIds may arrive from WO back-link orchestration — treat as
   // requires_work_instruction signal only; never persist child ID arrays.

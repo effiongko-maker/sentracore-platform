@@ -16,6 +16,8 @@ import {
   facilityDisplayName,
 } from "@/lib/platform/scopedFacility";
 import { labelize } from "@/modules/incidents/utils";
+import { ExecutionBasisField } from "@/modules/maintenance/components/ExecutionBasisField";
+import type { WorkCommercialRoute } from "@/modules/maintenance/types";
 import { logIssue, type LogIssueResult } from "../actions/logIssue";
 
 const URGENCY = ["low", "medium", "high", "critical"] as const;
@@ -39,6 +41,8 @@ export function LogIssueModal({ open, onClose, onCreated }: Props) {
   const [locationDetail, setLocationDetail] = useState("");
   const [urgency, setUrgency] =
     useState<(typeof URGENCY)[number]>("medium");
+  const [commercialRoute, setCommercialRoute] = useState<WorkCommercialRoute | "">("");
+  const [commercialRouteError, setCommercialRouteError] = useState<string>();
   const [saving, setSaving] = useState(false);
 
   const resolveScoped = useScopedFacilityResolver();
@@ -48,6 +52,8 @@ export function LogIssueModal({ open, onClose, onCreated }: Props) {
     setDescription("");
     setLocationDetail("");
     setUrgency("medium");
+    setCommercialRoute("");
+    setCommercialRouteError(undefined);
     setFacilityId(resolveScoped(facilities));
   }, [open, facilities, resolveScoped]);
 
@@ -55,10 +61,15 @@ export function LogIssueModal({ open, onClose, onCreated }: Props) {
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (!commercialRoute) {
+      setCommercialRouteError("Execution basis is required");
+      return;
+    }
     setSaving(true);
     try {
       const result = await logIssue({
         title,
+        commercialRoute,
         description: description || undefined,
         facilityId,
         locationDetail: locationDetail || undefined,
@@ -138,6 +149,15 @@ export function LogIssueModal({ open, onClose, onCreated }: Props) {
           />
         </FormField>
 
+        <ExecutionBasisField
+          id="log-issue-execution-basis"
+          value={commercialRoute}
+          onChange={(value) => {
+            setCommercialRoute(value);
+            setCommercialRouteError(undefined);
+          }}
+          error={commercialRouteError}
+        />
         <FormField label="Location detail" htmlFor="log-issue-location">
           <input
             id="log-issue-location"

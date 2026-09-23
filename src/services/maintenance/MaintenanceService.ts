@@ -9,6 +9,7 @@ import type {
   MaintenanceSource,
   MaintenanceStatus,
   MaintenanceType,
+  WorkCommercialRoute,
   UpdateMaintenanceInput,
 } from "@/modules/maintenance/types";
 import { applyWorkOrderRule } from "@/modules/maintenance/utils";
@@ -72,6 +73,11 @@ function mapStatus(raw: string): MaintenanceStatus {
  * Compatibility mapper for /api/maintenance responses (Supabase fm_work).
  * workOrderIds are never authoritative on Work after Phase 2B.
  */
+function readCommercialRoute(raw: RemoteMaintenance): WorkCommercialRoute | undefined {
+  const value = optionalMappedString(raw, "commercialRoute");
+  return value === "work_order" || value === "job_order" ? value : undefined;
+}
+
 export function mapRemoteMaintenance(raw: RemoteMaintenance): Maintenance {
   // Work type is source evidence: when the record states none it stays UNSET (rendered "Not recorded"). No default.
   const typeRaw = optionalMappedString(raw, "type", "Type", "Maintenance Type");
@@ -144,6 +150,11 @@ export function mapRemoteMaintenance(raw: RemoteMaintenance): Maintenance {
     status,
     holdReason: optionalMappedString(raw, "holdReason", "Hold Reason"),
     requiresWorkOrder,
+    // Execution basis: stored value only; absent = legacy-unclassified (never defaulted or inferred).
+    commercialRoute: readCommercialRoute(raw),
+    clientApprovalId: optionalMappedString(raw, "clientApprovalId"),
+    clientApprovalStatus: optionalMappedString(raw, "clientApprovalStatus"),
+    jobOrderIds: Array.isArray(raw.jobOrderIds) ? raw.jobOrderIds.map((id) => String(id)) : [],
     reportedAt,
     scheduledStartAt: optionalMappedString(raw, "scheduledStartAt"),
     scheduledEndAt: optionalMappedString(raw, "scheduledEndAt"),

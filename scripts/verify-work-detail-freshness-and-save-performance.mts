@@ -113,6 +113,7 @@ async function main() {
     description: "requiresWo list/detail probe",
     facilityId: "FAC-0001",
     type: "corrective",
+    commercialRoute: "work_order",
     source: "manual",
     priority: "medium",
     status: "in_progress",

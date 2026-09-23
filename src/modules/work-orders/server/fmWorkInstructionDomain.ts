@@ -124,6 +124,8 @@ export type FmWorkInstructionRow = {
   completion_notes: string | null;
   work_performed: string | null;
   requires_approval: boolean;
+  /** The client's own reference for an issued Job Order, as supplied (never generated). */
+  client_reference: string | null;
   operational_event_id: string | null;
   created_by_profile_id: string | null;
   updated_by_profile_id: string | null;
@@ -132,7 +134,7 @@ export type FmWorkInstructionRow = {
 };
 
 export const FM_WORK_INSTRUCTION_SELECT =
-  "id, organisation_id, code, order_type, work_id, facility_id, title, description, instruction_text, work_category, maintenance_type, source, category_id, asset_id, parent_instruction_id, reported_by_profile_id, assigned_to_profile_id, status, priority, hold_reason, requested_at, record_origin, scheduled_start_at, scheduled_end_at, due_at, sla_due_at, started_at, completed_at, estimated_hours, actual_hours, estimated_cost, actual_cost, downtime_minutes, completion_notes, work_performed, requires_approval, operational_event_id, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
+  "id, organisation_id, code, order_type, work_id, facility_id, title, description, instruction_text, work_category, maintenance_type, source, category_id, asset_id, parent_instruction_id, reported_by_profile_id, assigned_to_profile_id, status, priority, hold_reason, requested_at, record_origin, scheduled_start_at, scheduled_end_at, due_at, sla_due_at, started_at, completed_at, estimated_hours, actual_hours, estimated_cost, actual_cost, downtime_minutes, completion_notes, work_performed, requires_approval, client_reference, operational_event_id, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
 
 /** Relationships derived at read time — never stored as arrays or duplicated. */
 export type FmWorkInstructionRelations = {
@@ -140,8 +142,10 @@ export type FmWorkInstructionRelations = {
   /** Incident code derived THROUGH the Work (fm_work.incident_id). */
   incidentCode?: string;
   parentCode?: string;
-  /** Code of this instruction's Approval (fm_approvals.work_instruction_id) — derived. */
+  /** Code of this instruction's Approval (fm_approvals.work_instruction_id, else its Work's client Approval) — derived. */
   approvalCode?: string;
+  /** The Work's execution basis (fm_work.commercial_route) — derived; undefined for legacy-unclassified Work. */
+  workCommercialRoute?: WorkOrderOrderType;
 };
 
 function optionalTrimmed(value: unknown): string | undefined {
@@ -276,6 +280,7 @@ export type InstructionFields = {
   completionNotes?: string | null;
   workPerformed?: string | null;
   requiresApproval?: boolean;
+  clientReference?: string | null;
   operationalEventId?: string | null;
   /** Only a consistency assertion — facility is inherited from the Work. */
   assertFacilityRef?: string;
@@ -284,7 +289,8 @@ export type InstructionFields = {
 };
 
 export type ParsedCreateInstruction = InstructionFields & {
-  orderType: WorkOrderOrderType;
+  /** Undefined when not supplied: classified Work derives it from its route; legacy Work requires it (repository). */
+  orderType?: WorkOrderOrderType;
   workRef: string;
   title: string;
   workCategory: WorkOrderType;
@@ -344,6 +350,7 @@ function parseFields(raw: Record<string, unknown>): InstructionFields {
   if (raw.completionNotes !== undefined) out.completionNotes = nullableText(raw.completionNotes);
   if (raw.workPerformed !== undefined) out.workPerformed = nullableText(raw.workPerformed);
   if (raw.requiresApproval !== undefined) out.requiresApproval = raw.requiresApproval === true;
+  if (raw.clientReference !== undefined) out.clientReference = optionalTrimmed(raw.clientReference) ?? null;
   // approvalId is DERIVED from the Approval's work_instruction_id FK — never written here.
   if (raw.operationalEventId !== undefined) {
     const id = optionalTrimmed(raw.operationalEventId);
@@ -372,7 +379,8 @@ export function parseCreateInstructionInput(payload: unknown): ParsedCreateInstr
   const status = fields.status ?? "open";
   return {
     ...fields,
-    orderType: parseOrderType(raw.orderType),
+    // Explicit selection when supplied; classified Work derives it from fm_work.commercial_route (repository).
+    orderType: optionalTrimmed(raw.orderType) ? parseOrderType(raw.orderType) : undefined,
     workRef: fields.workRef,
     title: requireTrimmed(raw.title, "Work Instruction title"),
     workCategory: fields.workCategory ?? "corrective",
@@ -474,6 +482,8 @@ export function mapFmWorkInstructionRowToWorkOrder(
     slaDueAt: row.sla_due_at ?? undefined,
     requiresApproval: row.requires_approval,
     approvalId: relations.approvalCode,
+    clientReference: row.client_reference ?? undefined,
+    workCommercialRoute: relations.workCommercialRoute,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     createdByUserId: row.created_by_profile_id ?? undefined,

@@ -31,6 +31,7 @@ interface ApprovalsTableProps {
   onFollowUp: (approval: Approval) => void;
   onDecision: (approval: Approval) => void;
   onDeactivate: (approval: Approval) => void;
+  onRevise?: (approval: Approval) => void;
   canManage?: boolean;
 }
 
@@ -53,6 +54,7 @@ export function ApprovalsTable({
   onFollowUp,
   onDecision,
   onDeactivate,
+  onRevise,
   canManage = true,
 }: ApprovalsTableProps) {
   const columns = useMemo<Column<Approval>[]>(
@@ -73,7 +75,7 @@ export function ApprovalsTable({
         key: "workOrderId",
         header: "Work Order",
         render: (row) => (
-          <span className="text-muted">{row.workOrderId || "—"}</span>
+          <span className="text-muted">{row.workOrderId || (row.workId ? `Work ${row.workId}` : "—")}</span>
         ),
       },
       {
@@ -157,12 +159,13 @@ export function ApprovalsTable({
             onFollowUp={onFollowUp}
             onDecision={onDecision}
             onDeactivate={onDeactivate}
+            onRevise={onRevise}
             canManage={canManage}
           />
         ),
       },
     ],
-    [onView, onEdit, onPackage, onSubmit, onFollowUp, onDecision, onDeactivate, canManage]
+    [onView, onEdit, onPackage, onSubmit, onFollowUp, onDecision, onDeactivate, onRevise, canManage]
   );
 
   return (

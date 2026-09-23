@@ -36,6 +36,8 @@ export function WorkOrderClientApprovalSection({
   const [viewOpen, setViewOpen] = useState(false);
   const [packageOpen, setPackageOpen] = useState(false);
   const orderType = resolveWorkInstructionKind(workOrder);
+  // Classified Work: the client's approval belongs to the Work and precedes the Job Order; it is never raised here.
+  const classifiedRoute = workOrder.workCommercialRoute;
 
   useEffect(() => {
     let cancelled = false;
@@ -70,6 +72,15 @@ export function WorkOrderClientApprovalSection({
           <h3 className="text-sm font-semibold text-foreground">
             Client Approval
           </h3>
+          {classifiedRoute === "job_order" ? (
+            <p className="mt-1 text-xs text-muted">
+              The client&apos;s decision on this Work, requested from the Work before the Job Order was issued.
+            </p>
+          ) : classifiedRoute === "work_order" ? (
+            <p className="mt-1 text-xs text-muted">
+              Work Orders do not require prior client approval.
+            </p>
+          ) : (
           <p className="mt-1 text-xs text-muted">
             Optional commercial authorisation (Client/NCC APR). Independent of
             Order Type ({WORK_INSTRUCTION_KIND_LABELS[orderType]}) and of
@@ -78,8 +89,9 @@ export function WorkOrderClientApprovalSection({
               ? "Job Orders also follow the formal written approval / Procurement path after appropriate organisational approval."
               : "This record can proceed without an Approval Request when not required."}
           </p>
+          )}
         </div>
-        {!approval && !loading && workOrder.recordOrigin !== "migrated_historical" ? (
+        {!approval && !loading && !classifiedRoute && workOrder.recordOrigin !== "migrated_historical" ? (
           <Button size="sm" onClick={() => setWizardOpen(true)}>
             Generate Approval Request
           </Button>
@@ -186,13 +198,15 @@ export function WorkOrderClientApprovalSection({
               >
                 Preview package
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setWizardOpen(true)}
-              >
-                Revise / regenerate
-              </Button>
+              {!classifiedRoute ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setWizardOpen(true)}
+                >
+                  Revise / regenerate
+                </Button>
+              ) : null}
             </div>
           </div>
         ) : (

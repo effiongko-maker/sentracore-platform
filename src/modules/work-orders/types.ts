@@ -97,6 +97,10 @@ export interface WorkOrder {
   requiresApproval?: boolean;
   /** Linked client approval request (APR-…). */
   approvalId?: string;
+  /** The client's own reference for an issued Job Order, as supplied. */
+  clientReference?: string;
+  /** The Work's execution basis (derived). Undefined for legacy-unclassified Work. */
+  workCommercialRoute?: WorkOrderOrderType;
 
   createdAt: string;
   updatedAt: string;
@@ -108,8 +112,8 @@ export interface CreateWorkOrderInput {
   title: string;
   description?: string;
   type: WorkOrderType;
-  /** Required on create/update from the UI. */
-  orderType: WorkOrderOrderType;
+  /** Explicit selection for legacy-unclassified Work; derived from the Work's execution basis when classified. */
+  orderType?: WorkOrderOrderType;
   maintenanceType?: WorkOrderMaintenanceType;
   source: WorkOrderSource;
   categoryId?: string;
@@ -142,6 +146,7 @@ export interface CreateWorkOrderInput {
   slaDueAt?: string;
   requiresApproval?: boolean;
   approvalId?: string;
+  clientReference?: string;
   createdByUserId?: string;
   updatedByUserId?: string;
 }

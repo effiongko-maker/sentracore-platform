@@ -41,7 +41,7 @@ const workRow = (over: Record<string, unknown>) => ({
   hold_reason: null, requires_work_instruction: false, operational_event_id: null, reported_at: "2026-09-01T00:00:00Z", record_origin: "operational",
   due_at: null, scheduled_start_at: null, scheduled_end_at: null, started_at: null, completed_at: null, completion_notes: null, category_id: null,
   department: null, created_by_profile_id: null, updated_by_profile_id: null, created_at: "2026-09-21T00:00:00Z", updated_at: "2026-09-21T00:00:00Z",
-  incident_code: null, source_request_code: null, work_instruction_codes: [], ...over,
+  incident_code: null, source_request_code: null, work_instruction_codes: [], job_order_codes: [], client_approval_code: null, client_approval_status: null, ...over,
 }) as never;
 
 // Work
@@ -55,7 +55,7 @@ const workRow = (over: Record<string, unknown>) => ({
   assert(summary.critical === 0 && summary.inProgress === 0 && summary.awaitingAction === 0 && summary.overdue === 0, "unknown-status Work never counts as critical / in-progress / awaiting / overdue");
   assert(filterWorkRows([historical, normal], { status: "active" } as never).every((r) => r.status !== "unknown"), "the 'active' filter excludes unknown-status Work");
   assert(!WORK_STATUSES.includes("unknown" as never), "'unknown' is not a status the product can write");
-  const valid = { title: "x", facilityId: "f", priority: "high", source: "manual" };
+  const valid = { title: "x", facilityId: "f", priority: "high", source: "manual", commercialRoute: "work_order" };
   parseCreateWorkInput(valid); // the base payload is valid, so the rejections below are caused by 'unknown' alone
   let reason = "";
   try { parseCreateWorkInput({ ...valid, status: "unknown" }); } catch (e) { reason = (e as Error).message; }

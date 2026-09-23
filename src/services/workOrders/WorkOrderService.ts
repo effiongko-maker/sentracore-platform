@@ -231,6 +231,11 @@ function mapRemoteWorkOrder(raw: RemoteWorkOrder): WorkOrder {
       "Requires Approval"
     ),
     approvalId: optionalMappedString(raw, "approvalId", "Approval ID"),
+    clientReference: optionalMappedString(raw, "clientReference"),
+    workCommercialRoute: (() => {
+      const value = optionalMappedString(raw, "workCommercialRoute");
+      return value === "work_order" || value === "job_order" ? value : undefined;
+    })(),
     recordOrigin: readRecordOrigin(raw),
     createdAt: String(
       pickField(raw, "createdAt", "Created At") ?? new Date().toISOString()

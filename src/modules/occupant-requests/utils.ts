@@ -47,7 +47,8 @@ function appendStructuredNotes(
 export function toCreateMaintenanceInput(
   form: MaintenanceRequestFormValues,
   actor: OccupantActor
-): CreateMaintenanceInput {
+): Omit<CreateMaintenanceInput, "commercialRoute"> {
+  // Occupants never choose the Execution basis; staff set it when Work is created from the Request.
   const attachment = toAttachmentRef(form.attachment);
   const now = new Date().toISOString();
   const requester =

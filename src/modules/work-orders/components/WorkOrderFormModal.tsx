@@ -245,6 +245,12 @@ export function WorkOrderFormModal({
     updateField("orderType", value);
   }
 
+  // Classified Work fixes the Order Type (its execution basis); only legacy-unclassified Work asks for it.
+  const selectedWork = maintenanceRows.find((row) => row.id === form.maintenanceId);
+  const routeOrderType: WorkInstructionKind | undefined =
+    selectedWork?.commercialRoute ??
+    (mode === "edit" && workOrder?.maintenanceId === form.maintenanceId ? workOrder?.workCommercialRoute : undefined);
+
   function validate() {
     const next: Partial<Record<keyof WorkOrderFormValues, string>> = {};
     if (!form.title.trim()) next.title = "Title is required";
@@ -254,7 +260,7 @@ export function WorkOrderFormModal({
     }
     if (!form.facilityId.trim()) next.facilityId = "Facility comes from the selected Work";
 
-    const orderTypeCheck = validateOrderTypeSelection(form.orderType);
+    const orderTypeCheck = validateOrderTypeSelection(routeOrderType ?? form.orderType);
     if (!orderTypeCheck.ok) {
       next.orderType = orderTypeCheck.message;
     }
@@ -319,7 +325,7 @@ export function WorkOrderFormModal({
     event.preventDefault();
     if (!validate()) return;
 
-    const orderTypeCheck = validateOrderTypeSelection(form.orderType);
+    const orderTypeCheck = validateOrderTypeSelection(routeOrderType ?? form.orderType);
     if (!orderTypeCheck.ok) return;
 
     setSaving(true);
@@ -659,6 +665,7 @@ export function WorkOrderFormModal({
               updateField("maintenanceId", value);
               const work = maintenanceRows.find((row) => row.id === value);
               if (work?.facilityId) updateField("facilityId", work.facilityId);
+              if (work?.commercialRoute) updateField("orderType", work.commercialRoute);
             }}
             options={maintenanceOptions}
             searchPlaceholder="Search by reference, title, or facility…"
@@ -716,18 +723,22 @@ export function WorkOrderFormModal({
           error={errors.orderType}
           className="sm:col-span-2"
           hint={
-            form.orderType === "work_order" || form.orderType === "job_order"
-              ? WORK_INSTRUCTION_KIND_SUMMARIES[form.orderType]
-              : "Select Work Order or Job Order. Independent of estimated cost."
+            routeOrderType
+              ? "Set by the Work's execution basis."
+              : form.orderType === "work_order" || form.orderType === "job_order"
+                ? WORK_INSTRUCTION_KIND_SUMMARIES[form.orderType]
+                : "Select Work Order or Job Order. Independent of estimated cost."
           }
         >
           <select
             id="wo-order-type"
             className={selectClassName}
+            disabled={Boolean(routeOrderType)}
             value={
-              form.orderType === "work_order" || form.orderType === "job_order"
+              routeOrderType ??
+              (form.orderType === "work_order" || form.orderType === "job_order"
                 ? form.orderType
-                : ""
+                : "")
             }
             onChange={(event) =>
               updateOrderType(

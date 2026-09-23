@@ -45,7 +45,8 @@ function stubAdmin(tables: Record<string, Array<Record<string, unknown>>>) {
 const workRow = (origin: string, extra: Record<string, unknown> = {}) => ({
   id: UUID(1), organisation_id: "org", code: "WRK-2026-000001", facility_id: UUID(9), title: "T", description: null, work_kind: null,
   source: "manual", priority: origin === "migrated_historical" ? "unknown" : "medium", status: origin === "migrated_historical" ? "unknown" : "requested",
-  requires_work_instruction: false, reported_at: null, record_origin: origin, created_at: "2026-09-21T00:00:00Z", updated_at: "2026-09-21T00:00:00Z", ...extra,
+  requires_work_instruction: false, reported_at: null, record_origin: origin, created_at: "2026-09-21T00:00:00Z", updated_at: "2026-09-21T00:00:00Z",
+  job_order_codes: [], client_approval_code: null, client_approval_status: null, ...extra,
 });
 const wiRow = (origin: string) => ({
   id: UUID(2), organisation_id: "org", code: "WO-2026-000001", order_type: "job_order", work_id: UUID(1), facility_id: UUID(9), title: "T",

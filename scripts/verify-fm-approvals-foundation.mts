@@ -63,6 +63,7 @@ function sampleRow(overrides: Partial<FmApprovalRow> = {}): FmApprovalRow {
     organisation_id: "22222222-2222-4222-8222-222222222222",
     code: "APR-2026-000001",
     work_instruction_id: "55555555-5555-4555-8555-555555555555",
+    work_id: null,
     title: "Approval for pump",
     approval_type: "standard_maintenance",
     status: "draft",

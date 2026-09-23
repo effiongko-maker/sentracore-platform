@@ -13,7 +13,8 @@ import {
   MAINTENANCE_PRIORITIES,
   MAINTENANCE_TYPES,
 } from "@/modules/maintenance/constants";
-import type { CreateMaintenanceInput } from "@/modules/maintenance/types";
+import type { CreateMaintenanceInput, WorkCommercialRoute } from "@/modules/maintenance/types";
+import { ExecutionBasisField } from "@/modules/maintenance/components/ExecutionBasisField";
 import { labelize } from "@/modules/maintenance/utils";
 import { createMaintenanceFromRequest } from "../actions/treatRequest";
 import { mapRequestToMaintenanceSeed } from "../treatment/mapRequestToTreatment";
@@ -38,6 +39,9 @@ export function CreateMaintenanceFromRequestModal({
   const seed = useMemo(() => mapRequestToMaintenanceSeed(request), [request]);
   const [form, setForm] = useState<Partial<CreateMaintenanceInput>>(seed);
   const [saving, setSaving] = useState(false);
+  // Execution basis is chosen here by staff — never taken from the Request or defaulted.
+  const [commercialRoute, setCommercialRoute] = useState<WorkCommercialRoute | "">("");
+  const [commercialRouteError, setCommercialRouteError] = useState<string>();
   const idempotencyKey = useMemo(
     () =>
       open
@@ -49,13 +53,20 @@ export function CreateMaintenanceFromRequestModal({
   useEffect(() => {
     if (!open) return;
     setForm(mapRequestToMaintenanceSeed(request));
+    setCommercialRoute("");
+    setCommercialRouteError(undefined);
   }, [open, request]);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (!commercialRoute) {
+      setCommercialRouteError("Execution basis is required");
+      return;
+    }
     setSaving(true);
     try {
       const payload: CreateMaintenanceInput = {
+        commercialRoute,
         title: String(form.title ?? "").trim(),
         description: String(form.description ?? "").trim() || String(form.title ?? ""),
         type: (form.type as CreateMaintenanceInput["type"]) ?? "corrective",
@@ -128,6 +139,15 @@ export function CreateMaintenanceFromRequestModal({
             required
           />
         </FormField>
+        <ExecutionBasisField
+          id="mnt-from-req-execution-basis"
+          value={commercialRoute}
+          onChange={(value) => {
+            setCommercialRoute(value);
+            setCommercialRouteError(undefined);
+          }}
+          error={commercialRouteError}
+        />
         <FormField label="Description" htmlFor="mnt-from-req-desc">
           <textarea
             id="mnt-from-req-desc"

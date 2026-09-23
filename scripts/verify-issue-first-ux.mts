@@ -29,6 +29,7 @@ function main() {
   const defaultInput: LogIssueInput = {
     title: "Leaking toilet",
     facilityId: "FAC-0001",
+    commercialRoute: "work_order",
   };
   assert(
     defaultInput.classification === undefined,

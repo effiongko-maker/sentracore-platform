@@ -74,6 +74,8 @@ export type FmApprovalRow = {
   code: string;
   /** NULL only for provenance-backed source-register Approvals (DB-enforced). */
   work_instruction_id: string | null;
+  /** The Work the client decision is for (Job Order route: the Approval precedes the Job Order). */
+  work_id: string | null;
   title: string;
   /** NULL only for provenance-backed source-register Approvals (DB-enforced). */
   approval_type: string | null;
@@ -114,7 +116,7 @@ export type FmApprovalRow = {
 };
 
 export const FM_APPROVAL_SELECT =
-  "id, organisation_id, code, work_instruction_id, title, approval_type, status, description, reason, cover_letter, template_id, client_name, client_address, approval_amount, approved_amount, currency, requested_by_profile_id, decided_by_profile_id, generated_at, submitted_at, decision_at, decision_notes, decision_outcome, decision_reference, expires_at, submission_method, submitted_to, submission_reference, acknowledgement_file_name, acknowledgement_file_mime, acknowledgement_file_size, decision_document_file_name, decision_document_file_mime, decision_document_file_size, last_follow_up_at, source_note, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
+  "id, organisation_id, code, work_instruction_id, work_id, title, approval_type, status, description, reason, cover_letter, template_id, client_name, client_address, approval_amount, approved_amount, currency, requested_by_profile_id, decided_by_profile_id, generated_at, submitted_at, decision_at, decision_notes, decision_outcome, decision_reference, expires_at, submission_method, submitted_to, submission_reference, acknowledgement_file_name, acknowledgement_file_mime, acknowledgement_file_size, decision_document_file_name, decision_document_file_mime, decision_document_file_size, last_follow_up_at, source_note, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
 
 export type FmApprovalActivityRow = {
   id: string;
@@ -129,6 +131,8 @@ export type FmApprovalActivityRow = {
 /** Context derived at read time through Work Instruction -> Work. Never stored here. */
 export type FmApprovalRelations = {
   workInstructionCode?: string;
+  /** Code of the Work the Approval belongs to (fm_approvals.work_id). */
+  workCode?: string;
   facilityId?: string;
   assetRef?: string;
   /** Governed migration provenance (fm_migration_provenance) when the Approval came from a source register. */
@@ -255,6 +259,8 @@ export const DECISION_KEYS = [
 
 export type ApprovalFields = {
   workInstructionRef?: string;
+  /** Work UUID or code — a Work-level client Approval (Job Order route, before any Job Order exists). */
+  workRef?: string;
   title?: string;
   approvalType?: ApprovalType;
   status?: ApprovalStatus;
@@ -290,18 +296,67 @@ export type ApprovalFields = {
 };
 
 export type ParsedCreateApproval = ApprovalFields & {
-  workInstructionRef: string;
+  /** Exactly one of workInstructionRef / workRef. */
+  workInstructionRef?: string;
   title: string;
   approvalType: ApprovalType;
   status: ApprovalStatus;
 };
 export type ParsedUpdateApproval = ApprovalFields & { id: string };
 
-export type ParseOptions = { allowDecision: boolean };
+/**
+ * A recorded client decision is left only through an explicit path: a rejected Work-level Approval may be reopened to
+ * draft for revision (approval.revise_rejected — one Approval process per Work) or cancelled; an approved decision is
+ * final. Returns a refusal message, or null when the status change is allowed.
+ */
+export function approvalStatusChangeBlock(input: {
+  from: string;
+  to: string;
+  reopenRejected: boolean;
+  isWorkLevel: boolean;
+}): string | null {
+  if (input.reopenRejected) {
+    if (input.from !== "rejected" || input.to !== "draft") {
+      return "Only a rejected approval can be reopened, and it returns to draft.";
+    }
+    if (!input.isWorkLevel) {
+      return "Only a Work-level client approval (Job Order route) is revised and resubmitted.";
+    }
+    return null;
+  }
+  if (input.to === input.from) return null;
+  if (input.from === "approved") return "An approved client decision is final.";
+  if (input.from === "rejected" && input.to !== "cancelled") {
+    return "A rejected approval is reopened only through Revise & resubmit.";
+  }
+  return null;
+}
+
+export type ParseOptions = {
+  allowDecision: boolean;
+  /**
+   * Revision reopen only (approval.revise_rejected): decision keys may be CLEARED (null) — never given a value — so the
+   * protected approval.record_decision remains the only writer of a client decision.
+   */
+  clearDecision?: boolean;
+};
+
+const DECISION_FIELD_BY_KEY: Record<(typeof DECISION_KEYS)[number], keyof ApprovalFields> = {
+  decisionAt: "decisionAt",
+  decisionOutcome: "decisionOutcome",
+  decisionNotes: "decisionNotes",
+  decisionReference: "decisionReference",
+  approvedAmount: "approvedAmount",
+  approvedByUserId: "decidedByProfileId",
+  decisionDocumentFileName: "decisionDocumentFileName",
+  decisionDocumentFileMime: "decisionDocumentFileMime",
+  decisionDocumentFileSize: "decisionDocumentFileSize",
+};
 
 function parseFields(raw: Record<string, unknown>, options: ParseOptions): ApprovalFields {
   if (!options.allowDecision) {
     for (const key of DECISION_KEYS) {
+      if (options.clearDecision && raw[key] === null) continue;
       if (raw[key] !== undefined) {
         throw new FmApprovalValidationError(
           "Approval decisions must be recorded via the approval.record_decision server action."
@@ -313,6 +368,10 @@ function parseFields(raw: Record<string, unknown>, options: ParseOptions): Appro
   if (raw.workOrderId !== undefined) {
     const ref = optionalTrimmed(raw.workOrderId);
     if (ref) out.workInstructionRef = ref;
+  }
+  if (raw.workId !== undefined) {
+    const ref = optionalTrimmed(raw.workId);
+    if (ref) out.workRef = ref;
   }
   if (raw.title !== undefined) out.title = requireTrimmed(raw.title, "Title");
   if (raw.type !== undefined) out.approvalType = parseApprovalType(raw.type);
@@ -350,7 +409,13 @@ function parseFields(raw: Record<string, unknown>, options: ParseOptions): Appro
     if (raw.decisionDocumentFileName !== undefined) out.decisionDocumentFileName = nullableText(raw.decisionDocumentFileName);
     if (raw.decisionDocumentFileMime !== undefined) out.decisionDocumentFileMime = nullableText(raw.decisionDocumentFileMime);
     if (raw.decisionDocumentFileSize !== undefined) out.decisionDocumentFileSize = nullableSize(raw.decisionDocumentFileSize);
+  } else if (options.clearDecision) {
+    // Only nulls get here (checked above): the recorded decision leaves the row for a revision.
+    for (const key of DECISION_KEYS) {
+      if (raw[key] === null) (out as Record<string, unknown>)[DECISION_FIELD_BY_KEY[key]] = null;
+    }
   }
+
   return out;
 }
 
@@ -358,12 +423,14 @@ function parseFields(raw: Record<string, unknown>, options: ParseOptions): Appro
 export function parseCreateApprovalInput(payload: unknown, options: ParseOptions): ParsedCreateApproval {
   const raw = asRecord(payload);
   const fields = parseFields(raw, options);
-  if (!fields.workInstructionRef) {
+  if (!fields.workInstructionRef && !fields.workRef) {
     throw new FmApprovalValidationError("Work order id is required for an approval request.");
+  }
+  if (fields.workInstructionRef && fields.workRef) {
+    throw new FmApprovalValidationError("An approval request is for either the Work or one Work Instruction, not both.");
   }
   return {
     ...fields,
-    workInstructionRef: fields.workInstructionRef,
     title: requireTrimmed(raw.title, "Approval title"),
     approvalType: fields.approvalType ?? "standard_maintenance",
     status: fields.status ?? "draft",
@@ -456,6 +523,7 @@ export function mapFmApprovalRowToApproval(
     title: row.title,
     type: (row.approval_type as ApprovalType | null) ?? undefined,
     workOrderId: relations.workInstructionCode ?? "",
+    workId: relations.workCode,
     facilityId: relations.facilityId ?? "",
     assetId: relations.assetRef,
     status: row.status as ApprovalStatus,

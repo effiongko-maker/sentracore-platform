@@ -14,6 +14,8 @@ import {
   useWorkOrderTitle,
 } from "@/hooks/useEntityLabel";
 import { OrderTypePicker } from "@/modules/work-orders/components/OrderTypePicker";
+import { ExecutionBasisField } from "@/modules/maintenance/components/ExecutionBasisField";
+import type { WorkCommercialRoute } from "@/modules/maintenance/types";
 import type { WorkInstructionKind } from "@/modules/work-orders/instructionKind";
 import { triageIncident } from "../actions/triageIncident";
 import type { TriageResponse } from "@/lib/operational/orchestration";
@@ -120,8 +122,13 @@ export function ViewIncidentModal({
     useState<TriageResponse>("create_maintenance");
   const [applying, setApplying] = useState(false);
   const [orderType, setOrderType] = useState<WorkInstructionKind | "">("");
-  const needsOrderType =
-    nextStep === "create_work_order" || nextStep === "create_both";
+  // create_both: the new Work's execution basis IS the Order Type (never asked twice). create_work_order: the Incident's
+  // existing Work supplies it when classified; the picker only matters for legacy-unclassified Work.
+  const needsOrderType = nextStep === "create_work_order";
+  // Creating Work requires an explicit Execution basis (never defaulted).
+  const [commercialRoute, setCommercialRoute] = useState<WorkCommercialRoute | "">("");
+  const needsExecutionBasis =
+    nextStep === "create_maintenance" || nextStep === "create_both";
   const [contextRefreshKey, setContextRefreshKey] = useState(0);
   const submittingRef = useRef(false);
 
@@ -133,6 +140,7 @@ export function ViewIncidentModal({
     }
     setDisplayIncident(incident);
     setNextStep("create_maintenance");
+    setCommercialRoute("");
   }, [open, incident]);
 
   const facilityName = useFacilityName(displayIncident?.facilityId);
@@ -162,6 +170,7 @@ export function ViewIncidentModal({
         incidentId: displayIncident.id,
         response: nextStep,
         ...(needsOrderType && orderType ? { orderType } : {}),
+        ...(needsExecutionBasis && commercialRoute ? { commercialRoute } : {}),
       });
 
       if (!result.success) {
@@ -368,13 +377,36 @@ export function ViewIncidentModal({
               </label>
             ))}
           </div>
+          {needsExecutionBasis ? (
+            <ExecutionBasisField
+              id="incident-execution-basis"
+              value={commercialRoute}
+              onChange={setCommercialRoute}
+              disabled={applying}
+            />
+          ) : null}
           {needsOrderType ? (
-            <OrderTypePicker value={orderType} onChange={setOrderType} disabled={applying} />
+            <div className="space-y-1">
+              <OrderTypePicker value={orderType} onChange={setOrderType} disabled={applying} />
+              <p className="text-xs text-muted">
+                Only needed when the Work has no execution basis; otherwise it follows the Work.
+              </p>
+            </div>
+          ) : null}
+          {nextStep === "create_both" && commercialRoute === "job_order" ? (
+            <p className="text-xs text-muted">
+              A Job Order is issued only after the client approves: create the maintenance request first, then request
+              client approval from the Work.
+            </p>
           ) : null}
           <Button
             type="button"
             onClick={handleApplyNextStep}
-            disabled={applying || (needsOrderType && !orderType)}
+            disabled={
+              applying ||
+              (needsExecutionBasis && !commercialRoute) ||
+              (nextStep === "create_both" && commercialRoute === "job_order")
+            }
             loading={applying}
           >
             {applying ? "Applying..." : "Apply next step"}

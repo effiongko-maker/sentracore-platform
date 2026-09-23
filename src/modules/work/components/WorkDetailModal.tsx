@@ -105,8 +105,10 @@ export function WorkDetailModal({
   // absent facts read "Not recorded" (never a dash that could pass for a value, never a substitute).
   const historical = isHistoricalWork(work);
   const none = historical ? "Not recorded" : "—";
+  // Classified Work: its execution basis (not the legacy requires-work-order flag) says a Work Instruction follows.
+  const route = work.commercialRoute;
   const needsWorkOrderLink =
-    !historical && Boolean(work.requiresWorkOrder) && !work.workOrderId;
+    !historical && (route ? true : Boolean(work.requiresWorkOrder)) && !work.workOrderId;
   const linkedWorkOrderIds = collectLinkedWorkOrderIds(work);
   const canTreat = !historical && work.status !== "cancelled";
 
@@ -114,7 +116,7 @@ export function WorkDetailModal({
     if (!work) return;
     setCreatingWorkOrder(true);
     try {
-      const result = await createWorkOrderFromMaintenance(work.id, newOrderType);
+      const result = await createWorkOrderFromMaintenance(work.id, route ? "" : newOrderType);
       if (!result.success) {
         throw new Error(result.error.message);
       }
@@ -286,17 +288,21 @@ export function WorkDetailModal({
                   <div className="space-y-2">
                     <p className="text-sm text-muted">No work order linked yet</p>
                     <div className="flex flex-wrap gap-2">
-                      {canCreateWorkOrder ? (
+                      {canCreateWorkOrder && route === "job_order" ? (
+                        <p className="text-xs text-muted">Job Order Work: request client approval from Treat work — the Job Order is recorded there after approval.</p>
+                      ) : canCreateWorkOrder ? (
                         <>
-                          <OrderTypePicker value={newOrderType} onChange={setNewOrderType} disabled={creatingWorkOrder} />
+                          {!route ? (
+                            <OrderTypePicker value={newOrderType} onChange={setNewOrderType} disabled={creatingWorkOrder} />
+                          ) : null}
                           <Button
                             type="button"
                             size="sm"
                             loading={creatingWorkOrder}
-                            disabled={!newOrderType}
+                            disabled={!route && !newOrderType}
                             onClick={() => void handleCreateWorkOrder()}
                           >
-                            Create Work Instruction
+                            {route === "work_order" ? "Create Work Order" : "Create Work Instruction"}
                           </Button>
                         </>
                       ) : null}

@@ -160,7 +160,21 @@ export function ViewApprovalModal({
 
       <div className="mt-5 grid gap-5 sm:grid-cols-2">
         <Detail label="Approval ID" value={approval.id} />
-        <Detail label="Work Order" value={approval.workOrderId} />
+        {approval.workId ? (
+          <>
+            <Detail label="Work" value={approval.workId} />
+            <Detail
+              label="Job Order"
+              value={
+                approval.status === "approved"
+                  ? "Recorded from the Work once the client has issued it"
+                  : "Issued only after the client approves"
+              }
+            />
+          </>
+        ) : (
+          <Detail label="Work Order" value={approval.workOrderId} />
+        )}
         <Detail
           label="Facility"
           value={facilityName || approval.facilityId || "—"}

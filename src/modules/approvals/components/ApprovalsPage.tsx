@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
 import { cancelApprovalRequest } from "../actions/approvalLifecycleActions";
+import { reviseRejectedApproval } from "../actions/reviseRejectedApproval";
 import { useApprovals } from "../hooks/useApprovals";
 import type { Approval, ApprovalModalState } from "../types";
 import { ApprovalsTable } from "./ApprovalsTable";
@@ -51,6 +52,34 @@ export function ApprovalsPage() {
 
   const [modal, setModal] = useState<ApprovalModalState>({ type: "closed" });
   const [deactivating, setDeactivating] = useState(false);
+  const [revising, setRevising] = useState(false);
+
+  async function handleRevise() {
+    if (modal.type !== "revise") return;
+    setRevising(true);
+    try {
+      const result = await reviseRejectedApproval(modal.approval.id);
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
+      toast({
+        type: "success",
+        title: "Approval reopened for revision",
+        description: `${modal.approval.id} is back in draft — revise it, then submit it to the client again.`,
+      });
+      setModal({ type: "closed" });
+      await reload();
+    } catch (err) {
+      toast({
+        type: "error",
+        title: "Unable to reopen approval",
+        description:
+          err instanceof Error ? err.message : "Please try again in a moment.",
+      });
+    } finally {
+      setRevising(false);
+    }
+  }
 
   function handleLifecycleSaved(_approval: Approval) {
     void reload();
@@ -134,6 +163,7 @@ export function ApprovalsPage() {
             onDeactivate={(approval) =>
               setModal({ type: "deactivate", approval })
             }
+            onRevise={(approval) => setModal({ type: "revise", approval })}
           />
         )}
       </StreamSurface>
@@ -214,6 +244,20 @@ export function ApprovalsPage() {
         confirmLabel="Cancel approval"
         danger
         loading={deactivating}
+      />
+
+      <ConfirmDialog
+        open={modal.type === "revise"}
+        onClose={() => setModal({ type: "closed" })}
+        onConfirm={() => void handleRevise()}
+        title="Revise and resubmit to the client?"
+        description={
+          modal.type === "revise"
+            ? `${modal.approval.id} returns to draft so it can be revised and submitted again. The client's rejection stays in its history. The Job Order and execution stay blocked until the client approves.`
+            : undefined
+        }
+        confirmLabel="Reopen for revision"
+        loading={revising}
       />
     </ModeFrame>
   );

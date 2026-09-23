@@ -34,6 +34,7 @@ async function main() {
     description: "requiresWorkOrder round-trip verify",
     facilityId: "FAC-0001",
     type: "corrective",
+    commercialRoute: "work_order",
     source: "manual",
     priority: "medium",
     status: "in_progress",

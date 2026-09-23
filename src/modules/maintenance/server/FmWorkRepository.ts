@@ -1,4 +1,5 @@
 import "server-only";
+import { jobOrderExecutionBlock } from "@/modules/maintenance/commercialRoute";
 import { FmAssetRepository } from "@/modules/assets/server/FmAssetRepository";
 import { uuidsOnly } from "@/modules/assets/server/fmAssetDomain";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -11,6 +12,7 @@ import {
   FM_WORK_SELECT,
   FmWorkNotFoundError,
   FmWorkReadOnlyError,
+  assertCommercialRouteChangeAllowed,
   FmWorkUnavailableError,
   FmWorkValidationError,
   UUID_RE,
@@ -79,6 +81,9 @@ function asRow(value: unknown): FmWorkRow {
     incident_id: rec.incident_id != null ? String(rec.incident_id) : null,
     incident_code: null,
     work_instruction_codes: [],
+    job_order_codes: [],
+    client_approval_code: null,
+    client_approval_status: null,
     assigned_to_profile_id:
       rec.assigned_to_profile_id != null
         ? String(rec.assigned_to_profile_id)
@@ -89,6 +94,7 @@ function asRow(value: unknown): FmWorkRow {
         : null,
     hold_reason: rec.hold_reason != null ? String(rec.hold_reason) : null,
     requires_work_instruction: Boolean(rec.requires_work_instruction),
+    commercial_route: rec.commercial_route != null ? String(rec.commercial_route) : null,
     operational_event_id:
       rec.operational_event_id != null
         ? String(rec.operational_event_id)
@@ -234,19 +240,38 @@ export class FmWorkRepository {
     ];
     if (rows.length === 0) return rows;
 
-    // Work Instructions that belong to these Works (derived — never stored on Work).
-    const instructions = await this.admin
-      .from("fm_work_instructions")
-      .select("code, work_id")
-      .eq("organisation_id", this.organisationId)
-      .in("work_id", rows.map((row) => row.id))
-      .order("code", { ascending: true });
+    // Work Instructions and the Work-level client Approval that belong to these Works (derived — never stored on Work).
+    const workIds = rows.map((row) => row.id);
+    const [instructions, approvals] = await Promise.all([
+      this.admin
+        .from("fm_work_instructions")
+        .select("code, work_id, order_type")
+        .eq("organisation_id", this.organisationId)
+        .in("work_id", workIds)
+        .order("code", { ascending: true }),
+      this.admin
+        .from("fm_approvals")
+        .select("code, status, work_id")
+        .eq("organisation_id", this.organisationId)
+        .in("work_id", workIds),
+    ]);
     if (instructions.error) throwDb(instructions.error, "Unable to load Work Instructions.");
+    if (approvals.error) throwDb(approvals.error, "Unable to load Work approvals.");
     const instructionCodes = new Map<string, string[]>();
+    const jobOrderCodes = new Map<string, string[]>();
     for (const entry of instructions.data ?? []) {
-      const rec = entry as { code: string; work_id: string };
+      const rec = entry as { code: string; work_id: string; order_type: string };
       instructionCodes.set(rec.work_id, [...(instructionCodes.get(rec.work_id) ?? []), String(rec.code)]);
+      if (rec.order_type === "job_order") {
+        jobOrderCodes.set(rec.work_id, [...(jobOrderCodes.get(rec.work_id) ?? []), String(rec.code)]);
+      }
     }
+    const approvalByWork = new Map(
+      (approvals.data ?? []).map((entry) => {
+        const rec = entry as { code: string; status: string; work_id: string };
+        return [rec.work_id, rec] as const;
+      })
+    );
 
     const lookup = async (table: "fm_requests" | "fm_incidents", ids: string[]) => {
       const codes = new Map<string, string>();
@@ -275,6 +300,9 @@ export class FmWorkRepository {
         ? (incidentCodes.get(row.incident_id) ?? null)
         : null,
       work_instruction_codes: instructionCodes.get(row.id) ?? [],
+      job_order_codes: jobOrderCodes.get(row.id) ?? [],
+      client_approval_code: approvalByWork.get(row.id)?.code ?? null,
+      client_approval_status: approvalByWork.get(row.id)?.status ?? null,
     }));
   }
 
@@ -403,6 +431,14 @@ export class FmWorkRepository {
     if (!this.scope.canOperateIn(facilityId)) {
       throw new FmWorkValidationError("You are not authorised to create Work in this facility.");
     }
+    // New Job Order Work has no Approval or Job Order yet, so it cannot be created as already executing.
+    const executionBlock = jobOrderExecutionBlock({
+      route: input.commercialRoute,
+      status: input.status,
+      approvalStatus: null,
+      hasJobOrder: false,
+    });
+    if (executionBlock) throw new FmWorkValidationError(executionBlock);
     if (input.assignedToProfileId) {
       await this.assertAssigneeAtFacility(
         input.assignedToProfileId,
@@ -437,7 +473,10 @@ export class FmWorkRepository {
       assigned_to_profile_id: input.assignedToProfileId ?? null,
       reported_by_profile_id: input.reportedByProfileId ?? null,
       hold_reason: input.holdReason ?? null,
-      requires_work_instruction: input.requiresWorkInstruction,
+      // Legacy compatibility only: classified Work never writes requires_work_instruction (column default applies);
+      // its execution basis and actual Work Instructions answer the question.
+      ...(input.commercialRoute ? {} : { requires_work_instruction: input.requiresWorkInstruction }),
+      commercial_route: input.commercialRoute,
       operational_event_id: input.operationalEventId ?? null,
       reported_at: input.reportedAt,
       due_at: input.dueAt ?? null,
@@ -475,6 +514,7 @@ export class FmWorkRepository {
     // Imported historical Work is evidence: refuse BEFORE any relation resolution or write. This covers edit, treat,
     // progress, complete, cancel (deactivate delegates here), assign, date/status/priority and relationship changes.
     if (existing.record_origin === "migrated_historical") throw new FmWorkReadOnlyError();
+    assertCommercialRouteChangeAllowed(existing, input.commercialRoute);
 
     const facilityId = input.facilityId
       ? await this.resolveFacilityId(input.facilityId)
@@ -493,6 +533,16 @@ export class FmWorkRepository {
     }
 
     const nextStatus = input.status ?? existing.status;
+    // Job Order Work: no start / completion before the client's Approval is granted and the Job Order is recorded.
+    if (input.status !== undefined || input.commercialRoute !== undefined) {
+      const executionBlock = jobOrderExecutionBlock({
+        route: input.commercialRoute ?? existing.commercial_route,
+        status: nextStatus,
+        approvalStatus: existing.client_approval_status,
+        hasJobOrder: existing.job_order_codes.length > 0,
+      });
+      if (executionBlock) throw new FmWorkValidationError(executionBlock);
+    }
     let completedAt =
       input.completedAt !== undefined
         ? input.completedAt
@@ -542,9 +592,11 @@ export class FmWorkRepository {
     if (input.holdReason !== undefined) {
       patch.hold_reason = input.holdReason ?? null;
     }
-    if (input.requiresWorkInstruction !== undefined) {
+    // Legacy compatibility only: never written for classified Work.
+    if (input.requiresWorkInstruction !== undefined && !(input.commercialRoute ?? existing.commercial_route)) {
       patch.requires_work_instruction = input.requiresWorkInstruction;
     }
+    if (input.commercialRoute !== undefined) patch.commercial_route = input.commercialRoute;
     if (input.operationalEventId !== undefined) {
       patch.operational_event_id = input.operationalEventId ?? null;
     }

@@ -18,6 +18,10 @@ export const ApprovalServerAccess = {
     return (await getFmApprovalServerService()).findByWorkInstruction(ref);
   },
 
+  async getApprovalForWork(ref: string): Promise<Approval | null> {
+    return (await getFmApprovalServerService()).findByWork(ref);
+  },
+
   async createApproval(input: unknown, options?: ApprovalWriteOptions): Promise<Approval> {
     const created = await (await getFmApprovalServerService()).create(input, options);
     onApprovalMutation();

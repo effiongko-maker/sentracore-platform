@@ -2,7 +2,13 @@ import type {
   CreateMaintenanceInput,
   Maintenance,
   MaintenanceSort,
+  WorkCommercialRoute,
 } from "./types";
+
+/** Work form state: Execution basis starts unselected ("") — it is never defaulted. */
+export type MaintenanceFormValues = Omit<CreateMaintenanceInput, "commercialRoute"> & {
+  commercialRoute: WorkCommercialRoute | "";
+};
 
 const STRUCTURED_NOTE_LABELS = [
   "Location",
@@ -201,8 +207,9 @@ export function sortMaintenance(
 
 export function toCreateFormValues(
   maintenance?: Maintenance | null
-): CreateMaintenanceInput {
+): MaintenanceFormValues {
   return {
+    commercialRoute: maintenance?.commercialRoute ?? "",
     title: maintenance ? displayMaintenanceTitle(maintenance) : "",
     description: maintenance?.description ?? "",
     type: maintenance?.type ?? "corrective",
@@ -245,7 +252,8 @@ export function toCreateFormValues(
   };
 }
 
-const FORM_DIRTY_KEYS: (keyof CreateMaintenanceInput)[] = [
+const FORM_DIRTY_KEYS: (keyof MaintenanceFormValues)[] = [
+  "commercialRoute",
   "title",
   "description",
   "type",
@@ -282,7 +290,7 @@ function normalizeFormCompareValue(value: unknown): string {
 /** True when Treat form differs from the loaded Maintenance entity. */
 export function isMaintenanceFormDirty(
   maintenance: Maintenance,
-  form: CreateMaintenanceInput
+  form: MaintenanceFormValues
 ): boolean {
   const baseline = toCreateFormValues(maintenance);
   for (const key of FORM_DIRTY_KEYS) {

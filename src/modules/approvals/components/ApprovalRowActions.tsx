@@ -9,6 +9,7 @@ import {
   Pencil,
   Phone,
   Send,
+  RotateCcw,
 } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -56,6 +57,8 @@ interface ApprovalRowActionsProps {
   onFollowUp: (approval: Approval) => void;
   onDecision: (approval: Approval) => void;
   onDeactivate: (approval: Approval) => void;
+  /** Rejected Work-level client approval → revise & resubmit the same Approval. */
+  onRevise?: (approval: Approval) => void;
   /** When false, hide lifecycle mutations (view + print package remain). */
   canManage?: boolean;
 }
@@ -69,6 +72,7 @@ export function ApprovalRowActions({
   onFollowUp,
   onDecision,
   onDeactivate,
+  onRevise,
   canManage = true,
 }: ApprovalRowActionsProps) {
   const [open, setOpen] = useState(false);
@@ -213,6 +217,20 @@ export function ApprovalRowActions({
               >
                 <CheckCircle2 className="h-3.5 w-3.5 text-muted" />
                 Record decision
+              </button>
+            ) : null}
+            {canManage && onRevise && actions.canReviseAfterRejection && approval.workId ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-slate-50"
+                onClick={() => {
+                  setOpen(false);
+                  onRevise(approval);
+                }}
+              >
+                <RotateCcw className="h-3.5 w-3.5 text-muted" />
+                Revise &amp; resubmit
               </button>
             ) : null}
             {canManage && actions.canEdit ? (

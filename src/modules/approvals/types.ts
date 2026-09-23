@@ -77,8 +77,10 @@ export interface Approval {
   title: string;
   /** Absent only for source-register Approvals whose source establishes no type (never a placeholder). */
   type?: ApprovalType;
-  /** Work Instruction code; empty when the Approval has no Work Order (source-register Approvals). */
+  /** Work Instruction code; empty when the Approval has no Work Order (source-register and Work-level Approvals). */
   workOrderId: string;
+  /** Work code of a Work-level client Approval (Job Order route: requested before the Job Order exists). */
+  workId?: string;
   facilityId: string;
   assetId?: string;
   status: ApprovalStatus;
@@ -187,7 +189,8 @@ export type ApprovalModalState =
   | { type: "submit"; approval: Approval }
   | { type: "follow_up"; approval: Approval }
   | { type: "decision"; approval: Approval }
-  | { type: "deactivate"; approval: Approval };
+  | { type: "deactivate"; approval: Approval }
+  | { type: "revise"; approval: Approval };
 
 export interface ApprovalTemplateDefinition {
   id: ApprovalType;
