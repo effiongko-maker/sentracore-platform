@@ -75,7 +75,9 @@ export interface Approval {
   /** Authoritative Supabase identity (fm_approvals.id). */
   approvalUuid?: string;
   title: string;
-  type: ApprovalType;
+  /** Absent only for source-register Approvals whose source establishes no type (never a placeholder). */
+  type?: ApprovalType;
+  /** Work Instruction code; empty when the Approval has no Work Order (source-register Approvals). */
   workOrderId: string;
   facilityId: string;
   assetId?: string;
@@ -108,6 +110,10 @@ export interface Approval {
   decisionDocumentFileMime?: string;
   decisionDocumentFileSize?: number;
   lastFollowUpAt?: string;
+  /** Verbatim note from the source register — read-only evidence, never a status. */
+  sourceNote?: string;
+  /** Governed migration provenance when the Approval was brought in from a source register. */
+  sourceRecord?: { workbook: string; sheet: string; row: number };
   lastActivityAt?: string;
   lastActivitySummary?: string;
   /** JSON string of ApprovalActivityEntry[] persisted on the sheet */

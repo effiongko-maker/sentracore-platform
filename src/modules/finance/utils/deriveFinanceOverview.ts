@@ -567,9 +567,9 @@ function buildPosition(options: {
         : null,
       detail: !options.approvalsAvailable
         ? "Temporarily unavailable"
-        : `${awaitingDecision.length} Work Order client authorisation${
+        : `${awaitingDecision.length} request${
             awaitingDecision.length === 1 ? "" : "s"
-          }`,
+          } awaiting client decision`,
       emphasis: awaitingDecision.length > 0 ? "primary" : "muted",
       available: options.approvalsAvailable,
     },

@@ -72,9 +72,11 @@ export type FmApprovalRow = {
   id: string;
   organisation_id: string;
   code: string;
-  work_instruction_id: string;
+  /** NULL only for provenance-backed source-register Approvals (DB-enforced). */
+  work_instruction_id: string | null;
   title: string;
-  approval_type: string;
+  /** NULL only for provenance-backed source-register Approvals (DB-enforced). */
+  approval_type: string | null;
   status: string;
   description: string | null;
   reason: string | null;
@@ -104,6 +106,7 @@ export type FmApprovalRow = {
   decision_document_file_mime: string | null;
   decision_document_file_size: number | null;
   last_follow_up_at: string | null;
+  source_note: string | null;
   created_by_profile_id: string | null;
   updated_by_profile_id: string | null;
   created_at: string;
@@ -111,7 +114,7 @@ export type FmApprovalRow = {
 };
 
 export const FM_APPROVAL_SELECT =
-  "id, organisation_id, code, work_instruction_id, title, approval_type, status, description, reason, cover_letter, template_id, client_name, client_address, approval_amount, approved_amount, currency, requested_by_profile_id, decided_by_profile_id, generated_at, submitted_at, decision_at, decision_notes, decision_outcome, decision_reference, expires_at, submission_method, submitted_to, submission_reference, acknowledgement_file_name, acknowledgement_file_mime, acknowledgement_file_size, decision_document_file_name, decision_document_file_mime, decision_document_file_size, last_follow_up_at, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
+  "id, organisation_id, code, work_instruction_id, title, approval_type, status, description, reason, cover_letter, template_id, client_name, client_address, approval_amount, approved_amount, currency, requested_by_profile_id, decided_by_profile_id, generated_at, submitted_at, decision_at, decision_notes, decision_outcome, decision_reference, expires_at, submission_method, submitted_to, submission_reference, acknowledgement_file_name, acknowledgement_file_mime, acknowledgement_file_size, decision_document_file_name, decision_document_file_mime, decision_document_file_size, last_follow_up_at, source_note, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
 
 export type FmApprovalActivityRow = {
   id: string;
@@ -128,6 +131,8 @@ export type FmApprovalRelations = {
   workInstructionCode?: string;
   facilityId?: string;
   assetRef?: string;
+  /** Governed migration provenance (fm_migration_provenance) when the Approval came from a source register. */
+  sourceRecord?: { workbook: string; sheet: string; row: number };
   activities: FmApprovalActivityRow[];
 };
 
@@ -449,7 +454,7 @@ export function mapFmApprovalRowToApproval(
     id: row.code,
     approvalUuid: row.id,
     title: row.title,
-    type: row.approval_type as ApprovalType,
+    type: (row.approval_type as ApprovalType | null) ?? undefined,
     workOrderId: relations.workInstructionCode ?? "",
     facilityId: relations.facilityId ?? "",
     assetId: relations.assetRef,
@@ -482,6 +487,8 @@ export function mapFmApprovalRowToApproval(
     decisionDocumentFileMime: row.decision_document_file_mime ?? undefined,
     decisionDocumentFileSize: row.decision_document_file_size != null ? Number(row.decision_document_file_size) : undefined,
     lastFollowUpAt: row.last_follow_up_at ?? undefined,
+    sourceNote: row.source_note ?? undefined,
+    sourceRecord: relations.sourceRecord,
     lastActivityAt: last?.occurred_at ?? row.updated_at,
     lastActivitySummary: last?.summary ?? "Approval request created",
     activityLog: entries.length ? JSON.stringify(entries) : undefined,

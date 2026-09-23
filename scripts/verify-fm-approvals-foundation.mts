@@ -94,6 +94,7 @@ function sampleRow(overrides: Partial<FmApprovalRow> = {}): FmApprovalRow {
     decision_document_file_mime: null,
     decision_document_file_size: null,
     last_follow_up_at: null,
+    source_note: null,
     created_by_profile_id: null,
     updated_by_profile_id: null,
     created_at: "2026-09-19T00:00:00.000Z",

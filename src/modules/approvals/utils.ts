@@ -26,7 +26,9 @@ export function labelizeApprovalStatus(status: string): string {
   );
 }
 
-export function labelizeApprovalType(type: string): string {
+export function labelizeApprovalType(type: string | undefined): string {
+  // A source-register Approval whose source establishes no type — shown truthfully, never defaulted.
+  if (!type) return "Not established";
   return (
     APPROVAL_TYPE_LABEL[type as keyof typeof APPROVAL_TYPE_LABEL] ??
     type
@@ -39,6 +41,25 @@ export function labelizeApprovalType(type: string): string {
 export function optionalString(value?: string | null): string | undefined {
   const text = String(value ?? "").trim();
   return text || undefined;
+}
+
+/**
+ * Requested amount for display. A source-register Approval whose source records no amount is UNKNOWN (never
+ * ₦0) and is flagged for review/classification; a native Approval without an amount keeps the existing "—".
+ */
+export function approvalAmountLabel(approval: Approval): string {
+  if (approval.approvalAmount != null) {
+    return `${approval.currency ? `${approval.currency} ` : ""}${approval.approvalAmount.toLocaleString()}`;
+  }
+  return approval.sourceRecord ? "Not recorded · needs review" : "—";
+}
+
+/** Whole days an Approval has been with the client, from its submission date; undefined unless awaiting a decision. */
+export function approvalPendingDays(approval: Approval, now = Date.now()): number | undefined {
+  if (approval.status !== "awaiting_decision" && approval.status !== "returned") return undefined;
+  const submitted = Date.parse(approval.submittedAt ?? "");
+  if (!Number.isFinite(submitted) || submitted > now) return undefined;
+  return Math.floor((now - submitted) / 86_400_000);
 }
 
 export function displayApprovalTitle(approval: Approval): string {

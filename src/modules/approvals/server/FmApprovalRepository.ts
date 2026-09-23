@@ -74,9 +74,9 @@ function asRow(value: unknown): FmApprovalRow {
     id: String(rec.id),
     organisation_id: String(rec.organisation_id),
     code: String(rec.code ?? ""),
-    work_instruction_id: String(rec.work_instruction_id),
+    work_instruction_id: txt(rec, "work_instruction_id"),
     title: String(rec.title ?? ""),
-    approval_type: String(rec.approval_type ?? "standard_maintenance"),
+    approval_type: txt(rec, "approval_type"),
     status: String(rec.status ?? "draft"),
     description: txt(rec, "description"),
     reason: txt(rec, "reason"),
@@ -106,6 +106,7 @@ function asRow(value: unknown): FmApprovalRow {
     decision_document_file_mime: txt(rec, "decision_document_file_mime"),
     decision_document_file_size: num(rec.decision_document_file_size),
     last_follow_up_at: txt(rec, "last_follow_up_at"),
+    source_note: txt(rec, "source_note"),
     created_by_profile_id: txt(rec, "created_by_profile_id"),
     updated_by_profile_id: txt(rec, "updated_by_profile_id"),
     created_at: String(rec.created_at ?? ""),
@@ -284,25 +285,42 @@ export class FmApprovalRepository {
     return { rows: (data ?? []).map(asRow), total: count ?? 0 };
   }
 
-  /** Work Instruction context (code, facility, asset) + activities, in two batched queries. */
+  /** Work Instruction context (code, facility, asset), activities and source provenance, in batched queries. */
   async relationsFor(rows: FmApprovalRow[]): Promise<Map<string, FmApprovalRelations>> {
     const out = new Map<string, FmApprovalRelations>();
     if (rows.length === 0) return out;
-    const [instructions, activities] = await Promise.all([
-      this.admin
-        .from("fm_work_instructions")
-        .select("id, code, facility_id, asset_id")
-        .eq("organisation_id", this.organisationId)
-        .in("id", [...new Set(rows.map((r) => r.work_instruction_id))]),
+    // Source-register Approvals carry no Work Instruction: they simply have no Work Order / facility context.
+    const instructionIds = [...new Set(rows.flatMap((r) => (r.work_instruction_id ? [r.work_instruction_id] : [])))];
+    const [instructions, activities, provenance] = await Promise.all([
+      instructionIds.length
+        ? this.admin
+            .from("fm_work_instructions")
+            .select("id, code, facility_id, asset_id")
+            .eq("organisation_id", this.organisationId)
+            .in("id", instructionIds)
+        : Promise.resolve({ data: [], error: null }),
       this.admin
         .from("fm_approval_activities")
         .select("id, approval_id, action, occurred_at, summary, actor_profile_id, data")
         .eq("organisation_id", this.organisationId)
         .in("approval_id", rows.map((r) => r.id))
         .order("occurred_at", { ascending: true }),
+      this.admin
+        .from("fm_migration_provenance")
+        .select("target_id, workbook, source_sheet, source_row")
+        .eq("organisation_id", this.organisationId)
+        .eq("target_table", "fm_approvals")
+        .in("target_id", rows.map((r) => r.id)),
     ]);
     if (instructions.error) throwDb(instructions.error, "Unable to load Work Instruction context.");
     if (activities.error) throwDb(activities.error, "Unable to load approval activity.");
+    if (provenance.error) throwDb(provenance.error, "Unable to load approval provenance.");
+    const sourceByApproval = new Map(
+      (provenance.data ?? []).map((p) => {
+        const rec = p as { target_id: string; workbook: string; source_sheet: string; source_row: number };
+        return [rec.target_id, { workbook: rec.workbook, sheet: rec.source_sheet, row: Number(rec.source_row) }] as const;
+      })
+    );
 
     const byInstruction = new Map(
       (instructions.data ?? []).map((i) => {
@@ -311,11 +329,12 @@ export class FmApprovalRepository {
       })
     );
     for (const row of rows) {
-      const wi = byInstruction.get(row.work_instruction_id);
+      const wi = row.work_instruction_id ? byInstruction.get(row.work_instruction_id) : undefined;
       out.set(row.id, {
         workInstructionCode: wi?.code,
         facilityId: wi?.facility_id,
         assetRef: wi?.asset_id ?? undefined,
+        sourceRecord: sourceByApproval.get(row.id),
         activities: [],
       });
     }

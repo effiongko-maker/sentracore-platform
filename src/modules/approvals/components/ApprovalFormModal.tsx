@@ -33,7 +33,8 @@ interface ApprovalFormModalProps {
 
 type FormState = {
   title: string;
-  type: ApprovalType;
+  /** "" = no type established by the source (source-register Approvals) — never defaulted on save. */
+  type: ApprovalType | "";
   status: ApprovalStatus;
   reason: string;
   coverLetter: string;
@@ -74,7 +75,7 @@ export function ApprovalFormModal({
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<FormState>({
     title: approval.title,
-    type: approval.type ?? "standard_maintenance",
+    type: approval.type ?? "",
     status: approval.status,
     reason: approval.reason ?? "",
     coverLetter: approval.coverLetter ?? "",
@@ -95,7 +96,7 @@ export function ApprovalFormModal({
     if (!open) return;
     setForm({
       title: approval.title,
-      type: approval.type ?? "standard_maintenance",
+      type: approval.type ?? "",
       status: approval.status,
       reason: approval.reason ?? "",
       coverLetter: approval.coverLetter ?? "",
@@ -162,7 +163,7 @@ export function ApprovalFormModal({
 
       const result = await updateApprovalRecord(approval.id, {
         title: form.title.trim(),
-        type: form.type,
+        type: form.type || undefined,
         status: nextStatus,
         reason: optionalString(form.reason),
         coverLetter: optionalString(form.coverLetter),
@@ -256,6 +257,9 @@ export function ApprovalFormModal({
               updateField("type", event.target.value as ApprovalType)
             }
           >
+            {!approval.type ? (
+              <option value="">{labelizeApprovalType(undefined)}</option>
+            ) : null}
             {APPROVAL_TYPES.map((value) => (
               <option key={value} value={value}>
                 {labelizeApprovalType(value)}

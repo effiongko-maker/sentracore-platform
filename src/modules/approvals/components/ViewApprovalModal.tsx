@@ -9,6 +9,8 @@ import { useAssetName, useFacilityName } from "@/hooks/useEntityLabel";
 import { APPROVAL_STATUS_VARIANT } from "../constants";
 import { getApprovalLifecycleActions, parseApprovalActivityLog } from "../lifecycle";
 import {
+  approvalAmountLabel,
+  approvalPendingDays,
   displayApprovalTitle,
   labelizeApprovalStatus,
   labelizeApprovalType,
@@ -66,6 +68,7 @@ export function ViewApprovalModal({
     approval.submittedAt
   );
   const activities = parseApprovalActivityLog(approval.activityLog);
+  const pendingDays = approvalPendingDays(approval);
 
   return (
     <Modal
@@ -164,14 +167,7 @@ export function ViewApprovalModal({
         />
         <Detail label="Asset" value={approval.assetId ? assetName || approval.assetId : "—"} />
         <Detail label="Client" value={approval.clientName || "—"} />
-        <Detail
-          label="Amount"
-          value={
-            approval.approvalAmount != null
-              ? `${approval.currency ? `${approval.currency} ` : ""}${approval.approvalAmount.toLocaleString()}`
-              : "—"
-          }
-        />
+        <Detail label="Amount" value={approvalAmountLabel(approval)} />
         <Detail
           label="Approved amount"
           value={
@@ -190,9 +186,25 @@ export function ViewApprovalModal({
         <Detail
           label="Submitted"
           value={
-            approval.submittedAt ? formatDate(approval.submittedAt) : "—"
+            approval.submittedAt
+              ? `${formatDate(approval.submittedAt)}${
+                  pendingDays != null
+                    ? ` · pending ${pendingDays} day${pendingDays === 1 ? "" : "s"}`
+                    : ""
+                }`
+              : "—"
           }
         />
+        {approval.sourceRecord ? (
+          <>
+            {/* Verbatim source evidence — read-only, never a status. */}
+            <Detail label="Source note" value={approval.sourceNote || "—"} />
+            <Detail
+              label="Source"
+              value={`${approval.sourceRecord.workbook} · ${approval.sourceRecord.sheet} · row ${approval.sourceRecord.row}`}
+            />
+          </>
+        ) : null}
         <Detail
           label="Submission method"
           value={

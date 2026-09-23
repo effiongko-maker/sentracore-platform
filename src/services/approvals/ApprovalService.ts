@@ -113,8 +113,10 @@ function mapDecisionOutcome(
   return undefined;
 }
 
-function mapType(raw: unknown): ApprovalType {
-  const value = String(raw ?? "standard_maintenance")
+function mapType(raw: unknown): ApprovalType | undefined {
+  // No type established (source-register Approvals) stays absent — never defaulted.
+  if (raw == null || String(raw).trim() === "") return undefined;
+  const value = String(raw)
     .toLowerCase()
     .replace(/\s+/g, "_");
   const aliases: Record<string, ApprovalType> = {
@@ -126,6 +128,14 @@ function mapType(raw: unknown): ApprovalType {
     emergency_works: "emergency",
   };
   return aliases[value] ?? "standard_maintenance";
+}
+
+function mapSourceRecord(raw: unknown): Approval["sourceRecord"] {
+  if (!raw || typeof raw !== "object") return undefined;
+  const rec = raw as Record<string, unknown>;
+  const row = Number(rec.row);
+  if (!rec.workbook || !rec.sheet || !Number.isFinite(row)) return undefined;
+  return { workbook: String(rec.workbook), sheet: String(rec.sheet), row };
 }
 
 function mapRemoteApproval(raw: RemoteApproval): Approval {
@@ -222,6 +232,8 @@ function mapRemoteApproval(raw: RemoteApproval): Approval {
       "lastFollowUpAt",
       "Last Follow-up At"
     ),
+    sourceNote: optionalMappedString(raw, "sourceNote"),
+    sourceRecord: mapSourceRecord(raw.sourceRecord),
     lastActivityAt: optionalMappedString(
       raw,
       "lastActivityAt",

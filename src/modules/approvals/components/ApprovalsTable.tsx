@@ -8,6 +8,8 @@ import { formatDate } from "@/lib/utils";
 import { useFacilityName } from "@/hooks/useEntityLabel";
 import { APPROVAL_STATUS_VARIANT } from "../constants";
 import {
+  approvalAmountLabel,
+  approvalPendingDays,
   displayApprovalTitle,
   labelizeApprovalStatus,
   labelizeApprovalType,
@@ -94,11 +96,7 @@ export function ApprovalsTable({
         key: "approvalAmount",
         header: "Estimated Cost",
         render: (row) => (
-          <span className="text-muted">
-            {row.approvalAmount != null
-              ? `${row.currency ? `${row.currency} ` : ""}${row.approvalAmount.toLocaleString()}`
-              : "—"}
-          </span>
+          <span className="text-muted">{approvalAmountLabel(row)}</span>
         ),
       },
       {
@@ -120,11 +118,21 @@ export function ApprovalsTable({
       {
         key: "submittedAt",
         header: "Submitted",
-        render: (row) => (
-          <span className="text-muted">
-            {row.submittedAt ? formatDate(row.submittedAt) : "—"}
-          </span>
-        ),
+        render: (row) => {
+          const pendingDays = approvalPendingDays(row);
+          return (
+            <div className="space-y-1">
+              <span className="text-muted">
+                {row.submittedAt ? formatDate(row.submittedAt) : "—"}
+              </span>
+              {pendingDays != null ? (
+                <p className="text-[11px] text-muted">
+                  Pending {pendingDays} day{pendingDays === 1 ? "" : "s"}
+                </p>
+              ) : null}
+            </div>
+          );
+        },
       },
       {
         key: "decisionAt",
