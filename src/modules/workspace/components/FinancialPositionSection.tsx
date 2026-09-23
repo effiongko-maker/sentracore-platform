@@ -11,7 +11,6 @@ import { useFinancialPosition } from "@/modules/finance/hooks/useFinancialPositi
 export function FinancialPositionSection() {
   const { snapshot, loading, error, reload } = useFinancialPosition();
 
-  const isSample = Boolean(snapshot?.isSample);
   const spent = snapshot?.spentLabel ?? null;
   const reimbursement = snapshot?.expectedLabel ?? null;
   const outstanding = snapshot?.outstandingLabel ?? null;
@@ -41,9 +40,7 @@ export function FinancialPositionSection() {
                     !snapshot?.expectedAvailable ||
                     !snapshot?.outstandingAvailable
                   ? "Some figures are temporarily unavailable. Open Costs & Claims for the full record."
-                  : isSample
-                    ? "In-view sample from the current Costs & Claims pool"
-                    : "Costs and reimbursement claims recorded in SentraCore™ (earlier history is not loaded)"}
+                  : "Costs and reimbursement claims recorded in SentraCore™ (earlier history is not loaded)"}
           </p>
         </div>
         <div className="sc-fm-finance-header-actions">
@@ -67,12 +64,6 @@ export function FinancialPositionSection() {
         <div className="sc-fm-finance-metric" role="listitem">
           <p className="sc-fm-finance-label">
             Spent
-            {!loading &&
-            !snapshot?.spentComplete &&
-            isSample &&
-            snapshot?.costsTruncated
-              ? " (sample)"
-              : ""}
           </p>
           <MetricValue
             loading={loading}
@@ -83,12 +74,6 @@ export function FinancialPositionSection() {
         <div className="sc-fm-finance-metric" role="listitem">
           <p className="sc-fm-finance-label">
             Reimbursement
-            {!loading &&
-            isSample &&
-            (snapshot?.submissionsTruncated ||
-              snapshot?.authorizationsTruncated)
-              ? " (in view)"
-              : ""}
           </p>
           <MetricValue
             loading={loading}
@@ -99,13 +84,6 @@ export function FinancialPositionSection() {
         <div className="sc-fm-finance-metric" role="listitem">
           <p className="sc-fm-finance-label">
             Outstanding reimbursement
-            {!loading &&
-            isSample &&
-            (snapshot?.submissionsTruncated ||
-              snapshot?.paymentsTruncated ||
-              snapshot?.authorizationsTruncated)
-              ? " (in view)"
-              : ""}
           </p>
           <MetricValue
             loading={loading}

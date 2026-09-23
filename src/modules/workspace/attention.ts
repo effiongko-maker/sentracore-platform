@@ -284,13 +284,15 @@ function fromOverdueApprovalFollowUps(
     const days = Math.max(1, Math.floor(age / (24 * 60 * 60 * 1000)));
     matters.push({
       id: `apr-fu-overdue-${row.id}`,
-      severity: days >= 7 ? "critical" : "high",
+      // A client approval awaiting decision needs attention, but it is never critical: age alone must not
+      // escalate it into the critical-attention tier (reserved for genuinely critical work / incidents).
+      severity: "high",
       title: row.title?.trim() || row.id,
       location: facilityLabel(row.facilityId, facilityNameById),
-      entityLabel: "Approval",
+      entityLabel: "Client approval",
       reason: row.lastFollowUpAt
-        ? `No follow-up for ${days} day${days === 1 ? "" : "s"} while awaiting client decision.`
-        : `Submitted ${days} day${days === 1 ? "" : "s"} ago — record a follow-up or decision.`,
+        ? `Client approval awaiting decision — no follow-up for ${days} day${days === 1 ? "" : "s"}.`
+        : `Client approval awaiting decision — submitted ${days} day${days === 1 ? "" : "s"} ago; record a follow-up or decision.`,
       actionLabel: "Record follow-up →",
       href: "/approvals",
       entityId: row.id,
@@ -341,7 +343,7 @@ function fromApprovals(
         row.status === "submitted" ||
         row.status === "awaiting_response"
       ) {
-        reason = "Awaiting client decision — track and follow up.";
+        reason = "Client approval awaiting decision — track and follow up.";
         actionLabel = "Track approval →";
       } else if (row.status === "rejected") {
         reason = "Approval rejected — revise scope or re-submit.";
@@ -356,7 +358,7 @@ function fromApprovals(
         severity: rejected ? "critical" : "high",
         title: row.title?.trim() || row.id,
         location: facilityLabel(row.facilityId, facilityNameById),
-        entityLabel: "Approval",
+        entityLabel: "Client approval",
         reason,
         actionLabel,
         href: "/approvals",

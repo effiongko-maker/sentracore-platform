@@ -290,9 +290,10 @@ function main() {
     !/loading \? "—"/.test(section),
     "loading must not render em dash values"
   );
+  // Spent is the authoritative complete-register total; no "sample" / "in view" qualifier remains on Home.
   assert(
-    section.includes("In-view sample") || section.includes("(sample)"),
-    "sample honesty copy present"
+    !/sample|in view|in-view/i.test(section),
+    "no sample / in-view copy on Home Financial Position"
   );
 
   const hook = read("src/modules/finance/hooks/useFinancialPosition.ts");

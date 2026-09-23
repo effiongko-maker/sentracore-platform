@@ -88,7 +88,7 @@ export function ApprovalsPage() {
     <ModeFrame mode="act">
       <OperateHeader
         title="Approvals"
-        description="Formal client authorisation requests linked to work orders. Work Orders may exist without an Approval."
+        description="Formal client authorisation requests requiring submission, follow-up and decision tracking."
         signalValue={loading ? "—" : total}
         signalLabel="In view"
       />
