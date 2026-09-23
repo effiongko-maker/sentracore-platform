@@ -60,6 +60,8 @@ export function ApprovalPackageModal({
   if (!approval) return null;
 
   const current = approval;
+  // Work-level Job Order approval: it belongs to the Work; there is no Work Order / Job Order to show yet.
+  const workLevel = Boolean(current.workId) && !current.workOrderId;
 
   async function handlePdf() {
     const element = packageRef.current;
@@ -87,7 +89,7 @@ export function ApprovalPackageModal({
       open={open}
       onClose={onClose}
       title="Approval package"
-      description={`${current.id} · Cover letter + Work Order form`}
+      description={workLevel ? `${current.id} · Cover letter · Work ${current.workId}` : `${current.id} · Cover letter + Work Order form`}
       size="xl"
       footer={
         <>
@@ -129,8 +131,9 @@ export function ApprovalPackageModal({
               {labelizeApprovalStatus(current.status)}
             </p>
             <p>
-              <span className="text-muted">Work Order:</span>{" "}
-              {current.workOrderId}
+              {/* Job Order route: the approval is for the Work — no Job Order exists until the client approves. */}
+              <span className="text-muted">{workLevel ? "Work:" : "Work Order:"}</span>{" "}
+              {workLevel ? current.workId : current.workOrderId}
             </p>
             <p>
               <span className="text-muted">Facility:</span>{" "}
@@ -150,6 +153,7 @@ export function ApprovalPackageModal({
           </div>
         </section>
 
+        {workLevel ? null : (
         <section className="break-before-page rounded-xl border border-border bg-card p-6 print:rounded-none print:border-0 print:p-0">
           <p className="text-xs font-medium uppercase tracking-wider text-muted">
             Work Order form
@@ -229,6 +233,7 @@ export function ApprovalPackageModal({
             </p>
           )}
         </section>
+        )}
       </div>
     </Modal>
   );

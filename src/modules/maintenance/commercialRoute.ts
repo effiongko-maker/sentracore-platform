@@ -148,3 +148,55 @@ export function workReopenBlock(input: {
   }
   return null;
 }
+
+/**
+ * One operator-facing "next step" for classified Work, derived only from state that already exists (the Work's route
+ * and status, its Work-level Approval status, its Job Orders / Work Order and that Work Order's Client Payment). Not a
+ * lifecycle of its own. Returns null for legacy-unclassified or historical Work.
+ */
+export function workNextStep(input: {
+  route: string | null | undefined;
+  status: string;
+  recordOrigin?: string;
+  approvalCode?: string | null;
+  approvalStatus?: string | null;
+  jobOrderCode?: string | null;
+  workOrderCode?: string | null;
+  clientPaymentCode?: string | null;
+}): string | null {
+  const route = asRoute(input.route);
+  if (!route || input.recordOrigin === "migrated_historical") return null;
+  if (input.status === "cancelled") return "Cancelled — no further action.";
+  const apr = input.approvalCode ?? "the approval";
+
+  if (route === "job_order") {
+    if (!input.approvalStatus) return "Request client approval before any work starts.";
+    switch (input.approvalStatus) {
+      case "draft":
+        return `Complete the approval package for ${apr} (client, amount, cover letter) and submit it to the client.`;
+      case "awaiting_decision":
+      case "returned":
+        return `Awaiting the client's decision on ${apr} — follow up in Approvals.`;
+      case "rejected":
+        return `The client rejected ${apr} — revise & resubmit it in Approvals.`;
+      case GRANTED_APPROVAL_STATUS:
+        break;
+      default:
+        return `Client approval ${apr} is ${input.approvalStatus.replace(/_/g, " ")} — no Job Order can be recorded.`;
+    }
+    if (!input.jobOrderCode) return `${apr} approved — record the Job Order issued by the client.`;
+    if (input.status === "completed") return `Completed under Job Order ${input.jobOrderCode}.`;
+    if (input.status === "in_progress") return `In progress under Job Order ${input.jobOrderCode} — complete the work.`;
+    return `Job Order ${input.jobOrderCode} recorded — start the work.`;
+  }
+
+  // Work Order route: execute first; the Work Order and its Client Payment follow completion.
+  if (input.status !== "completed") {
+    return input.status === "in_progress"
+      ? "Complete the work, then submit the Work Order."
+      : "Carry out the work — no prior client approval is needed.";
+  }
+  if (!input.workOrderCode) return "Work completed — submit the Work Order.";
+  if (!input.clientPaymentCode) return `Request client payment for Work Order ${input.workOrderCode}.`;
+  return `Client payment ${input.clientPaymentCode} requested for ${input.workOrderCode} — record receipts in Client Payments.`;
+}

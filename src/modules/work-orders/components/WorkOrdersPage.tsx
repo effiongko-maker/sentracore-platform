@@ -74,12 +74,8 @@ export function WorkOrdersPage() {
           label: "New Work Order",
           initialOrderType: "work_order" as const,
         }
-      : orderTypeScope === "job_order"
-        ? {
-            label: "New Job Order",
-            initialOrderType: "job_order" as const,
-          }
-        : null;
+      : // Job Orders are recorded from approved Job Order-route Work ("Record issued Job Order"), never created here.
+        null;
 
   useEffect(() => {
     if (!openId) return;

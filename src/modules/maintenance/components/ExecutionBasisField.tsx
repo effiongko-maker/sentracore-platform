@@ -46,7 +46,7 @@ export function ExecutionBasisField({
         </option>
         {WORK_COMMERCIAL_ROUTE_OPTIONS.map((option) => (
           <option key={option.value} value={option.value}>
-            {`${option.label} — ${option.description}`}
+            {option.label}
           </option>
         ))}
       </select>

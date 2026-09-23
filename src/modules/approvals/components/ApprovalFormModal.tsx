@@ -268,14 +268,21 @@ export function ApprovalFormModal({
           </select>
         </FormField>
 
-        <FormField label="Work Order" htmlFor="apr-work-order">
-          <input
-            id="apr-work-order"
-            className={inputClassName}
-            value={approval.workOrderId}
-            disabled
-          />
-        </FormField>
+        {approval.workId && !approval.workOrderId ? (
+          // Job Order route: the approval is for the Work — no Job Order exists until the client approves.
+          <FormField label="Work" htmlFor="apr-work">
+            <input id="apr-work" className={inputClassName} value={approval.workId} disabled />
+          </FormField>
+        ) : (
+          <FormField label="Work Order" htmlFor="apr-work-order">
+            <input
+              id="apr-work-order"
+              className={inputClassName}
+              value={approval.workOrderId}
+              disabled
+            />
+          </FormField>
+        )}
 
         <FormField label="Client name" htmlFor="apr-client">
           <input

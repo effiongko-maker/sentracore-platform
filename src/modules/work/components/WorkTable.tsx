@@ -19,6 +19,7 @@ import {
   labelize,
 } from "@/modules/maintenance/utils";
 import type { Maintenance } from "@/modules/maintenance/types";
+import { WORK_COMMERCIAL_ROUTE_LABELS } from "@/modules/maintenance/constants";
 import type { WorkOrder } from "@/modules/work-orders/types";
 import { WORK_PRIORITY_VARIANT, WORK_STATUS_VARIANT, WORK_SCOPES, type WorkScope } from "../constants";
 import { collectLinkedWorkOrderIds } from "../utils/linkedWorkOrderIds";
@@ -152,6 +153,9 @@ export function WorkTable({
             </Link>
             {row.sourceRequestId ? (
               <p className="mt-0.5">Request {row.sourceRequestId}</p>
+            ) : null}
+            {row.commercialRoute ? (
+              <p className="mt-0.5">{WORK_COMMERCIAL_ROUTE_LABELS[row.commercialRoute]} basis</p>
             ) : null}
           </div>
         ),

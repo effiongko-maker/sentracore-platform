@@ -26,6 +26,8 @@ import {
   parseMaintenanceDescriptionNotes,
 } from "@/modules/maintenance/utils";
 import type { Maintenance } from "@/modules/maintenance/types";
+import { WORK_COMMERCIAL_ROUTE_OPTIONS } from "@/modules/maintenance/constants";
+import { workNextStep } from "@/modules/maintenance/commercialRoute";
 import type { WorkOrder } from "@/modules/work-orders/types";
 import { WORK_PRIORITY_VARIANT, WORK_STATUS_VARIANT } from "../constants";
 import { collectLinkedWorkOrderIds } from "../utils/linkedWorkOrderIds";
@@ -107,6 +109,21 @@ export function WorkDetailModal({
   const none = historical ? "Not recorded" : "—";
   // Classified Work: its execution basis (not the legacy requires-work-order flag) says a Work Instruction follows.
   const route = work.commercialRoute;
+  const executionBasis = WORK_COMMERCIAL_ROUTE_OPTIONS.find((option) => option.value === route);
+  const executionBasisLabel = executionBasis?.label;
+  // One derived next step (commercialRoute.ts) — from the Work, its Approval, Job Order / Work Order and Client Payment.
+  // While the linked Work Order is loading its Client Payment is unknown — show nothing rather than a wrong step.
+  const awaitingWorkOrder = route === "work_order" && Boolean(work.workOrderId) && linkedWorkOrdersLoading;
+  const nextStep = awaitingWorkOrder ? null : workNextStep({
+    route,
+    status: work.status,
+    recordOrigin: work.recordOrigin,
+    approvalCode: work.clientApprovalId,
+    approvalStatus: work.clientApprovalStatus,
+    jobOrderCode: work.jobOrderIds?.[0],
+    workOrderCode: route === "work_order" ? work.workOrderId : undefined,
+    clientPaymentCode: work.workOrderId ? linkedWorkOrdersById[work.workOrderId]?.clientPaymentId : undefined,
+  });
   const needsWorkOrderLink =
     !historical && (route ? true : Boolean(work.requiresWorkOrder)) && !work.workOrderId;
   const linkedWorkOrderIds = collectLinkedWorkOrderIds(work);
@@ -256,6 +273,11 @@ export function WorkDetailModal({
             label="Status"
             value={WORK_STATUS_LABELS[work.status] ?? labelize(work.status)}
           />
+          <Detail
+            label="Execution basis"
+            value={executionBasisLabel ?? (historical ? "Not recorded" : "Not set")}
+          />
+          {nextStep ? <Detail label="Next step" value={nextStep} /> : null}
           <Detail
             label="Scheduled"
             value={

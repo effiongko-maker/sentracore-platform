@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
 import { useQueryRecordId } from "@/hooks/useQueryRecordId";
 import { ViewWorkOrderModal } from "@/modules/work-orders/components/ViewWorkOrderModal";
+import { WorkOrderFormModal } from "@/modules/work-orders/components/WorkOrderFormModal";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
 import type { WorkOrder } from "@/modules/work-orders/types";
 import { MaintenanceFormModal } from "@/modules/maintenance/components/MaintenanceFormModal";
@@ -83,6 +84,9 @@ export function WorkPage() {
   const [cancelling, setCancelling] = useState(false);
   const [viewWorkOrderId, setViewWorkOrderId] = useState<string | null>(null);
   const [viewWorkOrder, setViewWorkOrder] = useState<WorkOrder | null>(null);
+  // Operational WO/JO opened from Work: the same Edit affordance as the Work Orders register (ops.edit; historical stays
+  // read-only). Editing exposes the existing Work Order → Client Payment section.
+  const [editWorkOrder, setEditWorkOrder] = useState<WorkOrder | null>(null);
 
   useEffect(() => {
     if (!viewWorkOrderId) {
@@ -315,6 +319,26 @@ export function WorkPage() {
         onClose={() => {
           setViewWorkOrderId(null);
           setViewWorkOrder(null);
+        }}
+        onEdit={
+          canMutateOps && viewWorkOrder?.recordOrigin !== "migrated_historical"
+            ? (workOrder) => {
+                setViewWorkOrderId(null);
+                setViewWorkOrder(null);
+                setEditWorkOrder(workOrder);
+              }
+            : undefined
+        }
+      />
+
+      <WorkOrderFormModal
+        open={Boolean(editWorkOrder)}
+        mode="edit"
+        workOrder={editWorkOrder}
+        onClose={() => setEditWorkOrder(null)}
+        onSaved={() => {
+          if (editWorkOrder) invalidateLinkedWorkOrderCache(editWorkOrder.id);
+          setEditWorkOrder(null);
         }}
       />
 

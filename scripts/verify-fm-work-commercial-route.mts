@@ -131,8 +131,9 @@ async function main() {
   check(field.includes('label="Execution basis"') && field.includes('<option value="" disabled>'), "field label + unselected start");
   const constants = read("src/modules/maintenance/constants.ts");
   check(
-    constants.includes('label: "Work Order",\n    description: "No prior client approval required"') &&
-      constants.includes('label: "Job Order",\n    description: "Client approval required before execution"'),
+    constants.includes('{ value: "work_order", label: "Work Order" }') &&
+      constants.includes('{ value: "job_order", label: "Job Order" }') &&
+      !/No prior client approval required|Client approval required before execution/.test(constants),
     "operator-facing option wording"
   );
   check(read("src/modules/maintenance/utils.ts").includes('commercialRoute: maintenance?.commercialRoute ?? "",'), "form starts unselected (no default)");

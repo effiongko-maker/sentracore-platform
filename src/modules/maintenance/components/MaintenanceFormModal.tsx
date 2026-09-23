@@ -3,6 +3,7 @@
 import { AuthorisedFacilitySelect } from "@/components/operational/AuthorisedFacilitySelect";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { Modal } from "@/components/modals/Modal";
 import { Button } from "@/components/ui/Button";
 import {
@@ -52,10 +53,9 @@ import {
   type MaintenanceFormValues,
 } from "../utils";
 import { ExecutionBasisField } from "./ExecutionBasisField";
-import { jobOrderExecutionBlock } from "../commercialRoute";
+import { EXECUTION_STATUSES, jobOrderExecutionBlock, workNextStep } from "../commercialRoute";
+import { WorkApprovalHandoff } from "@/modules/approvals/components/WorkApprovalHandoff";
 import { requestWorkApproval } from "@/modules/approvals/actions/requestWorkApproval";
-import { labelizeApprovalStatus } from "@/modules/approvals/utils";
-import type { ApprovalStatus } from "@/modules/approvals/types";
 import type {
   CreateMaintenanceInput,
   Maintenance,
@@ -88,6 +88,9 @@ export function MaintenanceFormModal({
   onSaved,
 }: MaintenanceFormModalProps) {
   const { toast } = useToast();
+  // Same capability the Approvals page uses; the server enforces it too (approval.request_for_work).
+  const { can } = useOperatingAccess();
+  const canManageApprovals = can("approvals.manage");
   const [form, setForm] = useState<MaintenanceFormValues>(toCreateFormValues());
   const [errors, setErrors] = useState<
     Partial<Record<keyof MaintenanceFormValues, string>>
@@ -604,7 +607,7 @@ export function MaintenanceFormModal({
       toast({
         type: "success",
         title: result.data.created ? "Client approval requested" : "Client approval already requested",
-        description: `${result.data.approval.id} — prepare and submit it to the client from Approvals.`,
+        description: `Open ${result.data.approval.id} to complete the package (client, amount, cover letter) and submit it to the client.`,
       });
     } catch (err) {
       toast({
@@ -698,7 +701,13 @@ export function MaintenanceFormModal({
           id="mnt-execution-basis"
           className="sm:col-span-2"
           value={form.commercialRoute}
-          onChange={(value) => updateField("commercialRoute", value)}
+          onChange={(value) => {
+            updateField("commercialRoute", value);
+            // New Job Order Work cannot start executing: drop an executing status chosen before the basis.
+            if (value === "job_order" && !isEdit && EXECUTION_STATUSES.includes(form.status)) {
+              updateField("status", "requested");
+            }
+          }}
           error={errors.commercialRoute}
           disabled={isTerminalLifecycle}
           lockedReason={executionBasisLockedReason}
@@ -816,7 +825,11 @@ export function MaintenanceFormModal({
                 <option
                   key={value}
                   value={value}
-                  disabled={Boolean(executionBlockedReason) && value === "in_progress"}
+                  disabled={
+                    // Job Order Work: no executing status before approval + Job Order (always so for new Work).
+                    (Boolean(executionBlockedReason) || (!isEdit && route === "job_order")) &&
+                    EXECUTION_STATUSES.includes(value)
+                  }
                 >
                   {labelize(value)}
                 </option>
@@ -1005,30 +1018,53 @@ export function MaintenanceFormModal({
                         Request the client&apos;s approval. The Job Order is recorded after the client approves, and
                         work starts once it is issued.
                       </p>
-                      <Button
-                        type="button"
-                        size="sm"
-                        loading={requestingApproval}
-                        disabled={!isEdit || requestingApproval || busy || isTerminalLifecycle}
-                        onClick={() => void handleRequestClientApproval()}
-                      >
-                        Request client approval
-                      </Button>
+                      {canManageApprovals ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          loading={requestingApproval}
+                          disabled={!isEdit || requestingApproval || busy || isTerminalLifecycle}
+                          onClick={() => void handleRequestClientApproval()}
+                        >
+                          Request client approval
+                        </Button>
+                      ) : (
+                        <p className="text-xs text-muted">Requires approval management access.</p>
+                      )}
                     </>
-                  ) : workApproval.status === "rejected" ? (
-                    <p className="text-xs text-muted">
-                      {workApproval.id} — rejected by the client. Revise &amp; resubmit it in Approvals; the Job Order
-                      can be recorded once the client approves.
-                    </p>
                   ) : workApproval.status !== "approved" ? (
-                    <p className="text-xs text-muted">
-                      {workApproval.id} — {labelizeApprovalStatus(workApproval.status as ApprovalStatus)}. Submit and
-                      follow it up in Approvals; the Job Order can be recorded once the client approves.
-                    </p>
+                    <div className="space-y-1 text-xs">
+                      <p>
+                        <WorkApprovalHandoff
+                          approvalId={workApproval.id}
+                          status={workApproval.status}
+                          onChanged={(approval) => setWorkApproval({ id: approval.id, status: approval.status })}
+                        />
+                      </p>
+                      <p className="text-muted">
+                        {workNextStep({
+                          route: "job_order",
+                          status: form.status,
+                          approvalCode: workApproval.id,
+                          approvalStatus: workApproval.status,
+                        })}{" "}
+                        {!canManageApprovals
+                          ? "Requires approval management access. "
+                          : workApproval.status === "rejected"
+                            ? ""
+                            : `Open ${workApproval.id} to do this here. `}
+                        The Job Order can be recorded once the client approves.
+                      </p>
+                    </div>
                   ) : (
                     <>
                       <p className="text-xs text-muted">
-                        {workApproval.id} — approved by the client. Record the Job Order the client issued.
+                        <WorkApprovalHandoff
+                          approvalId={workApproval.id}
+                          status={workApproval.status}
+                          onChanged={(approval) => setWorkApproval({ id: approval.id, status: approval.status })}
+                        />{" "}
+                        — record the Job Order the client issued.
                       </p>
                       <div className="flex flex-col gap-2 sm:flex-row">
                         <input

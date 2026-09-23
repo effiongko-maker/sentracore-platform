@@ -94,18 +94,9 @@ export const DEFAULT_MAINTENANCE_SORT: MaintenanceSort = "newest";
 export const WORK_COMMERCIAL_ROUTE_OPTIONS: Array<{
   value: WorkCommercialRoute;
   label: string;
-  description: string;
 }> = [
-  {
-    value: "work_order",
-    label: "Work Order",
-    description: "No prior client approval required",
-  },
-  {
-    value: "job_order",
-    label: "Job Order",
-    description: "Client approval required before execution",
-  },
+  { value: "work_order", label: "Work Order" },
+  { value: "job_order", label: "Job Order" },
 ];
 
 export const WORK_COMMERCIAL_ROUTE_LABELS: Record<WorkCommercialRoute, string> = {
