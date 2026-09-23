@@ -175,6 +175,7 @@ function main() {
     const sub: FmCostSubmissionRow = {
       id: U(6), organisation_id: U(9), code: "SUB-2026-000001", status: "draft", currency: "NGN", claim_amount: 0, markup_amount: null,
       markup_rate_percent: null, no_markup: null, facility_id: null, department_id: null, period_label: null, submission_kind: null,
+      description: null, client_location: null, source_note: null,
       package_reference: null, package_type: null, package_date: null, package_notes: null, approval_id: U(7), submitted_at: null,
       submitted_by_profile_id: null, queried_at: null, query_notes: null, notes: null, created_by_profile_id: U(5),
       updated_by_profile_id: U(5), created_at: "2026-09-19T10:00:00Z", updated_at: "2026-09-19T10:00:00Z",

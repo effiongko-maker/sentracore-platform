@@ -147,7 +147,13 @@ export class FmCostServerService {
 
   async createSubmission(payload: unknown) {
     const input = parseCreateSubmissionInput(payload);
-    assertSubmissionShape({ status: input.status, costCount: input.costRefs.length });
+    assertSubmissionShape({
+      status: input.status,
+      costCount: input.costRefs.length,
+      kind: input.submissionKind,
+      claimAmount: input.claimAmount,
+      description: input.description,
+    });
     const row = await this.repo().createSubmission(input, this.ctx.profileId);
     return (await this.hydrateSubmissions([row]))[0];
   }
@@ -174,7 +180,13 @@ export class FmCostServerService {
       );
     }
     const costCount = input.costRefs ? input.costRefs.length : await repo.submissionCostCount(existing.id);
-    assertSubmissionShape({ status: to, costCount });
+    assertSubmissionShape({
+      status: to,
+      costCount,
+      kind: existing.submission_kind,
+      claimAmount: input.claimAmount !== undefined ? input.claimAmount : existing.claim_amount,
+      description: input.description !== undefined ? input.description : existing.description,
+    });
     const row = await repo.updateSubmission(input, existing, this.ctx.profileId);
     return (await this.hydrateSubmissions([row]))[0];
   }

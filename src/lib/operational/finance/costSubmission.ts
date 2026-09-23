@@ -262,12 +262,23 @@ export function validateCostSubmission(
     costRecordId: submission.costRecordId,
   });
 
-  const requiresCosts =
-    submission.status === "submitted" || submission.status === "queried";
-  if (requiresCosts && costRecordIds.length === 0) {
+  // Reimbursement claims (unchanged) need >= 1 cost once live; payment requests / contract instalments never
+  // carry costs but must state the requested amount and what was requested.
+  const isClaim = (submission.submissionKind ?? "reimbursement_claim") === "reimbursement_claim";
+  const live = submission.status === "submitted" || submission.status === "queried";
+  if (isClaim && live && costRecordIds.length === 0) {
     errors.push(
       "at least one CostRecord reference is required when status is submitted or queried"
     );
+  }
+  if (!isClaim && costRecordIds.length > 0) {
+    errors.push("cost records can only be linked to reimbursement claims");
+  }
+  if (!isClaim && live && !(typeof submission.claimAmount === "number" && submission.claimAmount > 0)) {
+    errors.push("a requested amount is required when a client payment is submitted");
+  }
+  if (!isClaim && live && !isNonEmptyString(submission.description)) {
+    errors.push("a description is required when a client payment is submitted");
   }
 
   for (const costId of costRecordIds) {

@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { FileText, Plus, RefreshCw, Send, Users } from "lucide-react";
+import { ChevronDown, FileText, Plus, RefreshCw, Send, Users } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
 const SPEND_VISUAL_SRC = "/finance/finance-hero.jpg";
@@ -52,14 +52,18 @@ export function FinanceHeader({
                 <Plus className="h-4 w-4" />
                 Record cost
               </Button>
-              <Link
-                href="/finance/submissions/new"
-                className="fin-v13-btn-secondary"
-                aria-disabled={loading || undefined}
-              >
-                <Plus className="h-4 w-4" />
-                Create reimbursement claim
-              </Link>
+              <details className="fin-v13-menu">
+                <summary className="fin-v13-btn-secondary" aria-disabled={loading || undefined}>
+                  <Plus className="h-4 w-4" />
+                  New client payment
+                  <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+                </summary>
+                <div className="fin-v13-menu-list" role="menu">
+                  <Link role="menuitem" href="/finance/client-payments/new?kind=payment_request">Payment request</Link>
+                  <Link role="menuitem" href="/finance/client-payments/new?kind=contract_instalment">Contract instalment</Link>
+                  <Link role="menuitem" href="/finance/submissions/new">Reimbursement claim</Link>
+                </div>
+              </details>
             </>
           ) : null}
           <Button
@@ -83,7 +87,7 @@ export function FinanceSummaryRow({
   operatingYear,
   operatingYearRecordCount,
   costRecordsTotal,
-  reimbursementsInPreparation,
+  clientPaymentsOutstanding,
   clientAuthorisationsTotal,
   loading,
 }: {
@@ -93,7 +97,8 @@ export function FinanceSummaryRow({
   /** Records in the operating-year total; null when it could not be loaded. */
   operatingYearRecordCount: number | null;
   costRecordsTotal: number | string;
-  reimbursementsInPreparation: string;
+  /** "count · amount" of client payments awaiting receipt (receipt-derived). */
+  clientPaymentsOutstanding: string;
   clientAuthorisationsTotal: number | string;
   loading: boolean;
 }) {
@@ -154,9 +159,9 @@ export function FinanceSummaryRow({
             <Send className="h-4 w-4" strokeWidth={1.75} />
           </span>
           <div className="min-w-0">
-            <p className="fin-v13-metric-label">Reimbursement claims</p>
+            <p className="fin-v13-metric-label">Client payments outstanding</p>
             <p className="fin-v13-support-value">
-              {loading ? "—" : reimbursementsInPreparation}
+              {loading ? "—" : clientPaymentsOutstanding}
             </p>
           </div>
         </div>

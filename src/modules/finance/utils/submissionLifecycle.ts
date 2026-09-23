@@ -1,4 +1,4 @@
-import type { CostSubmissionLifecycleStatus } from "@/lib/operational/finance/types";
+import type { ClientPaymentKind, CostSubmissionLifecycleStatus } from "@/lib/operational/finance/types";
 import {
   assertCostSubmissionTransition,
   canQueryCostSubmission,
@@ -65,28 +65,36 @@ export function canQuerySubmission(
   return canQueryCostSubmission({ status });
 }
 
-/** Reimbursement authorization — only submitted claims; not WO Approvals. */
+const isClaim = (kind?: ClientPaymentKind) => (kind ?? "reimbursement_claim") === "reimbursement_claim";
+
+/** Reimbursement authorization — only submitted reimbursement claims; not WO Approvals or other client payments. */
 export function canAuthorizeSubmission(
   status: CostSubmissionLifecycleStatus,
-  isAuthorized: boolean
+  isAuthorized: boolean,
+  kind?: ClientPaymentKind
 ): boolean {
-  return status === "submitted" && !isAuthorized;
+  return isClaim(kind) && status === "submitted" && !isAuthorized;
 }
 
 export function canReviseAuthorization(
   status: CostSubmissionLifecycleStatus,
-  isAuthorized: boolean
+  isAuthorized: boolean,
+  kind?: ClientPaymentKind
 ): boolean {
-  return status === "submitted" && isAuthorized;
+  return isClaim(kind) && status === "submitted" && isAuthorized;
 }
 
-/** Payment receipts require an existing reimbursement authorization. */
+/**
+ * Receipts: a reimbursement claim requires an existing reimbursement authorization (unchanged). Payment requests /
+ * contract instalments need no authorization — any submitted or queried request can record a receipt.
+ */
 export function canRecordPaymentForSubmission(
   status: CostSubmissionLifecycleStatus,
-  isAuthorized: boolean
+  isAuthorized: boolean,
+  kind?: ClientPaymentKind
 ): boolean {
   return (
-    (status === "submitted" || status === "queried") && isAuthorized
+    (status === "submitted" || status === "queried") && (isAuthorized || !isClaim(kind))
   );
 }
 
@@ -97,7 +105,8 @@ export function canRecordPaymentForSubmission(
  */
 export function canCorrectPaymentForSubmission(
   status: CostSubmissionLifecycleStatus,
-  isAuthorized: boolean
+  isAuthorized: boolean,
+  kind?: ClientPaymentKind
 ): boolean {
-  return canRecordPaymentForSubmission(status, isAuthorized);
+  return canRecordPaymentForSubmission(status, isAuthorized, kind);
 }

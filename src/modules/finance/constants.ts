@@ -52,12 +52,12 @@ export const OPERATIONAL_COST_LENSES = [
   { id: "execution", label: "By work / job order" },
 ] as const;
 
-/** Optional suggestions — not an exhaustive or enforced taxonomy. */
-export const SUBMISSION_KIND_SUGGESTIONS = [
-  "Monthly contractual",
-  "Job / completion-based",
-  "Ad hoc reimbursement",
-] as const;
+/** FM Client Payment types (fm_cost_submissions.submission_kind — controlled, immutable). */
+export const CLIENT_PAYMENT_KIND_LABELS = {
+  payment_request: "Payment request",
+  contract_instalment: "Contract instalment",
+  reimbursement_claim: "Reimbursement claim",
+} as const;
 
 export const SUBMISSION_PACKAGE_TYPE_SUGGESTIONS = [
   "Cover sheet",

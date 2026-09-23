@@ -34,7 +34,6 @@ export async function POST() {
       .map((f) => {
         const month = monthlyPaymentPeriodLabel(f.description);
         return {
-          factId: f.id,
           month,
           slug: monthlyPaymentSlug(month),
           requestedAmount: f.submittedAmount ?? undefined,
@@ -54,43 +53,47 @@ export async function POST() {
       // Chronological ascending by the "YYYY-MM" slug (not the alphabetical month label); unparseable periods last.
       .sort((a, b) => (a.slug ?? "9999-99").localeCompare(b.slug ?? "9999-99"));
 
-    // Live client receivable (Platform Finance) that references the same historical fact, when one exists. Its open
-    // balance is derived from receipt allocations (off-ledger receivables settle on confirmed receipts). Ids stay
-    // server-side — only the derived state and outstanding amount are exposed.
+    // Client Payments (FM) are the live operational source for contract instalments. A live contract_instalment
+    // corresponds to a monthly entry when it is for the SAME contract (same FM-fee description rule as above) and
+    // states the SAME period label. Its receipt state is derived from FM receipts — never stored, never a second
+    // independent obligation. The historical entry itself is unchanged.
     const { createAdminClient } = await import("@/utils/supabase/admin");
     const admin = createAdminClient();
-    const factIds = monthly.map((m) => m.factId);
-    const { data: receivables, error: recvError } = factIds.length
-      ? await admin
-          .from("finance_receivables")
-          .select("id,historical_fact_id,original_amount,currency")
-          .eq("organisation_id", organisationId)
-          .in("historical_fact_id", factIds)
-      : { data: [], error: null };
-    if (recvError) throw recvError;
-    const settledById = new Map<string, number>();
-    const recvIds = (receivables ?? []).map((r) => String(r.id));
-    if (recvIds.length) {
-      const { data: allocations, error: allocError } = await admin
-        .from("finance_receipt_allocations")
-        .select("receivable_id,amount,finance_receipts!inner(status)")
-        .in("receivable_id", recvIds)
-        .in("finance_receipts.status", ["confirmed", "posted"]);
-      if (allocError) throw allocError;
-      for (const a of allocations ?? []) {
-        settledById.set(String(a.receivable_id), (settledById.get(String(a.receivable_id)) ?? 0) + Number(a.amount));
+    const { data: instalments, error: instError } = await admin
+      .from("fm_cost_submissions")
+      .select("id,code,status,claim_amount,currency,period_label,description")
+      .eq("organisation_id", organisationId)
+      .eq("submission_kind", "contract_instalment")
+      .in("status", ["submitted", "queried"]);
+    if (instError) throw instError;
+    const fmFee = (instalments ?? []).filter(
+      (s) => /Monthly Instalment Payment/i.test(String(s.description ?? "")) && /Facility Management and Maintenance Works/i.test(String(s.description ?? "")) && s.period_label
+    );
+    const receivedById = new Map<string, number>();
+    if (fmFee.length) {
+      const { data: receipts, error: rcptError } = await admin
+        .from("fm_reimbursement_payments")
+        .select("submission_id,received_amount")
+        .eq("organisation_id", organisationId)
+        .in("submission_id", fmFee.map((s) => String(s.id)));
+      if (rcptError) throw rcptError;
+      for (const r of receipts ?? []) {
+        receivedById.set(String(r.submission_id), (receivedById.get(String(r.submission_id)) ?? 0) + Number(r.received_amount));
       }
     }
-    const receivableByFact = new Map(
-      (receivables ?? []).map((r) => {
-        const original = Number(r.original_amount);
-        const settled = settledById.get(String(r.id)) ?? 0;
-        const outstandingAmount = Math.max(0, Math.round((original - settled) * 100) / 100);
-        const state = outstandingAmount === 0 ? "settled" : settled > 0 ? "partially_settled" : "open";
-        return [String(r.historical_fact_id), { state, outstandingAmount, currency: String(r.currency) }] as const;
-      })
-    );
-    const data = monthly.map(({ factId, ...row }) => ({ ...row, clientReceivable: receivableByFact.get(factId) }));
+    const byPeriod = new Map<string, typeof fmFee>();
+    for (const s of fmFee) byPeriod.set(String(s.period_label), [...(byPeriod.get(String(s.period_label)) ?? []), s]);
+    const clientPaymentFor = (month: string | undefined) => {
+      const matches = month ? byPeriod.get(month) ?? [] : [];
+      if (matches.length !== 1) return undefined; // none, or ambiguous — never guess which applies
+      const s = matches[0]!;
+      const requested = Number(s.claim_amount ?? 0);
+      const received = receivedById.get(String(s.id)) ?? 0;
+      const outstandingAmount = Math.max(0, Math.round((requested - received) * 100) / 100);
+      const state = received <= 0 ? "awaiting_receipt" : outstandingAmount > 0 ? "partially_received" : "received";
+      return { code: String(s.code), state, outstandingAmount, currency: String(s.currency) } as const;
+    };
+    const data = monthly.map((row) => ({ ...row, clientPayment: clientPaymentFor(row.month) }));
 
     return NextResponse.json({ success: true, data }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

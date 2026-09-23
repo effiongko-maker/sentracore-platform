@@ -3,12 +3,14 @@ import {
   inputClassName,
 } from "@/components/forms/FormField";
 import type { CostSubmissionPackage } from "@/lib/operational/finance/types";
+import type { ClientPaymentKind } from "@/lib/operational/finance/types";
 import {
-  SUBMISSION_KIND_SUGGESTIONS,
+  CLIENT_PAYMENT_KIND_LABELS,
   SUBMISSION_PACKAGE_TYPE_SUGGESTIONS,
 } from "../constants";
 
 export type SubmissionDetailsValues = {
+  /** Display label of the (fixed) client payment type — not an editable field. */
   submissionKind: string;
   periodLabel: string;
   packageReference: string;
@@ -20,7 +22,7 @@ export type SubmissionDetailsValues = {
 
 export function emptySubmissionDetails(): SubmissionDetailsValues {
   return {
-    submissionKind: "",
+    submissionKind: CLIENT_PAYMENT_KIND_LABELS.reimbursement_claim,
     periodLabel: "",
     packageReference: "",
     packageType: "",
@@ -31,13 +33,13 @@ export function emptySubmissionDetails(): SubmissionDetailsValues {
 }
 
 export function detailsFromPackage(
-  submissionKind?: string,
+  submissionKind?: ClientPaymentKind,
   periodLabel?: string,
   submissionPackage?: CostSubmissionPackage,
   notes?: string
 ): SubmissionDetailsValues {
   return {
-    submissionKind: submissionKind ?? "",
+    submissionKind: CLIENT_PAYMENT_KIND_LABELS[submissionKind ?? "reimbursement_claim"],
     periodLabel: periodLabel ?? "",
     packageReference: submissionPackage?.reference ?? "",
     packageType: submissionPackage?.packageType ?? "",
@@ -72,28 +74,10 @@ export function SubmissionDetailsForm({
   return (
     <div className="fin-submission-step">
       <p className="fin-section-lede">
-        Add claim period, type, and any supporting document details.
+        Add claim period and any supporting document details.
       </p>
 
       <div className="fin-submission-form-grid mt-4">
-        <FormField label="Claim type" htmlFor="submissionKind">
-          <input
-            id="submissionKind"
-            list="submission-kind-suggestions"
-            className={inputClassName}
-            value={values.submissionKind}
-            onChange={(event) =>
-              onChange({ submissionKind: event.target.value })
-            }
-            placeholder="e.g. Monthly contractual"
-          />
-          <datalist id="submission-kind-suggestions">
-            {SUBMISSION_KIND_SUGGESTIONS.map((kind) => (
-              <option key={kind} value={kind} />
-            ))}
-          </datalist>
-        </FormField>
-
         <FormField label="Claim period" htmlFor="periodLabel">
           <input
             id="periodLabel"

@@ -984,6 +984,46 @@
   background: color-mix(in srgb, var(--os-accent-soft, #f0f5ff) 70%, #fff);
 }
 
+/* "New client payment" menu (details/summary — no JS state). */
+.fin-v13-menu {
+  position: relative;
+}
+
+.fin-v13-menu > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.fin-v13-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.fin-v13-menu-list {
+  position: absolute;
+  right: 0;
+  z-index: 30;
+  margin-top: 0.3rem;
+  min-width: 12rem;
+  padding: 0.3rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--os-border) 70%, transparent);
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 0.12);
+}
+
+.fin-v13-menu-list a {
+  display: block;
+  padding: 0.45rem 0.6rem;
+  border-radius: 7px;
+  font-size: 0.8125rem;
+  color: var(--fin-ink);
+  text-decoration: none;
+}
+
+.fin-v13-menu-list a:hover {
+  background: color-mix(in srgb, var(--os-accent-soft, #f0f5ff) 70%, #fff);
+}
+
 .fin-v13-overview {
   display: flex;
   flex-direction: column;

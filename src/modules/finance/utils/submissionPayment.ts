@@ -246,3 +246,19 @@ export function buildFinancePaymentOverviewState(options: {
           : "Payment(s) recorded",
   };
 }
+
+/** Client payment receipt state — DERIVED from receipts, never stored. */
+export type ClientPaymentReceiptState = "awaiting_receipt" | "partially_received" | "received";
+
+export const CLIENT_PAYMENT_RECEIPT_LABELS: Record<ClientPaymentReceiptState, string> = {
+  awaiting_receipt: "Awaiting receipt",
+  partially_received: "Partially received",
+  received: "Received",
+};
+
+export function clientPaymentReceiptState(
+  summary: Pick<SubmissionPaymentSummary, "amountPaid" | "outstandingAmount">
+): ClientPaymentReceiptState {
+  if (summary.amountPaid <= 0) return "awaiting_receipt";
+  return summary.outstandingAmount > 0 ? "partially_received" : "received";
+}

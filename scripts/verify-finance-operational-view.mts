@@ -192,16 +192,19 @@ function staticChecks() {
   const header = read("src/modules/finance/components/FinanceHeader.tsx");
   assert(header.includes("Record cost"), "record cost action");
   assert(
-    header.includes("Create reimbursement claim"),
-    "create claim primary action"
+    header.includes("New client payment") &&
+      header.includes("Payment request") &&
+      header.includes("Contract instalment") &&
+      header.includes('href="/finance/submissions/new">Reimbursement claim'),
+    "new client payment action exposes all three types (reimbursement claim path preserved)"
   );
   assert(header.includes("Costs &amp; Claims</h1>"), "Costs & Claims title");
   assert(!/APR|this period|reporting period/i.test(header), "header not APR-period framed");
   assert(!header.includes("client authorisation records"), "header not APR-centric period");
   assert(
     !header.includes("/finance/submissions/new") ||
-      header.includes("Create reimbursement claim"),
-    "create claim remains in header"
+      header.includes('href="/finance/submissions/new">Reimbursement claim'),
+    "reimbursement claim remains reachable from the header"
   );
   assert(
     !header.includes('href="/approvals"'),

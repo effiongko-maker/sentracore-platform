@@ -15,9 +15,10 @@ export type MonthlyContractPayment = {
   submissionDate?: string;
   paymentDatetime?: string;
   commercialReference?: string;
-  /** Live Platform Finance client receivable for the same obligation, when one exists (derived state only). */
-  clientReceivable?: {
-    state: "open" | "partially_settled" | "settled";
+  /** Live FM Client Payment (contract instalment) for this month, when one exists — receipt state is derived. */
+  clientPayment?: {
+    code: string;
+    state: "awaiting_receipt" | "partially_received" | "received";
     outstandingAmount: number;
     currency: string;
   };

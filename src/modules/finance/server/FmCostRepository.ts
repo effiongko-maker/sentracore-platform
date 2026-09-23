@@ -92,6 +92,7 @@ function submissionRow(rec: Record<string, unknown>): FmCostSubmissionRow {
     claim_amount: num(rec.claim_amount), markup_amount: num(rec.markup_amount), markup_rate_percent: num(rec.markup_rate_percent),
     no_markup: rec.no_markup == null ? null : Boolean(rec.no_markup), facility_id: txt(rec, "facility_id"), department_id: txt(rec, "department_id"),
     period_label: txt(rec, "period_label"), submission_kind: txt(rec, "submission_kind"), package_reference: txt(rec, "package_reference"),
+    description: txt(rec, "description"), client_location: txt(rec, "client_location"), source_note: txt(rec, "source_note"),
     package_type: txt(rec, "package_type"), package_date: txt(rec, "package_date"), package_notes: txt(rec, "package_notes"),
     approval_id: txt(rec, "approval_id"), submitted_at: txt(rec, "submitted_at"), submitted_by_profile_id: txt(rec, "submitted_by_profile_id"),
     queried_at: txt(rec, "queried_at"), query_notes: txt(rec, "query_notes"), notes: txt(rec, "notes"),
@@ -470,6 +471,7 @@ export class FmCostRepository {
   async listSubmissions(params: SubmissionListParams): Promise<{ rows: FmCostSubmissionRow[]; total: number }> {
     let query = this.admin.from("fm_cost_submissions").select(FM_COST_SUBMISSION_SELECT, { count: "exact" }).eq("organisation_id", this.organisationId);
     if (params.status) query = query.eq("status", params.status);
+    if (params.kind) query = query.eq("submission_kind", params.kind);
     if (params.facilityId) {
       const id = await this.resolveFacilityId(params.facilityId).catch((e) => (e instanceof FmCostValidationError ? null : Promise.reject(e)));
       if (!id) return { rows: [], total: 0 };
@@ -483,7 +485,7 @@ export class FmCostRepository {
     const search = params.search ? sanitizeSearchTerm(params.search) : "";
     if (search) {
       const like = `%${search}%`;
-      query = query.or([`code.ilike.${like}`, `period_label.ilike.${like}`, `submission_kind.ilike.${like}`, `package_reference.ilike.${like}`, `notes.ilike.${like}`].join(","));
+      query = query.or([`code.ilike.${like}`, `period_label.ilike.${like}`, `submission_kind.ilike.${like}`, `description.ilike.${like}`, `package_reference.ilike.${like}`, `notes.ilike.${like}`].join(","));
     }
     const from = (params.page - 1) * params.pageSize;
     const { data, error, count } = await query
@@ -558,6 +560,8 @@ export class FmCostRepository {
     set("no_markup", f.noMarkup);
     set("period_label", f.periodLabel);
     set("submission_kind", f.submissionKind);
+    set("description", f.description);
+    set("client_location", f.clientLocation);
     set("package_reference", f.packageReference);
     set("package_type", f.packageType);
     set("package_date", f.packageDate);

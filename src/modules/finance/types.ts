@@ -1,5 +1,6 @@
 import type { Approval } from "@/modules/approvals/types";
 import type {
+  ClientPaymentKind,
   CostRecord,
   CostSubmission,
   CostSubmissionLifecycleStatus,
@@ -110,6 +111,12 @@ export type FinanceRecentCostRow = {
 
 export type FinanceSubmissionPreviewRow = {
   submissionId: string;
+  /** Client payment type (reimbursement claims keep their own workflow). */
+  kind: ClientPaymentKind;
+  description?: string;
+  clientReference?: string;
+  /** Derived from receipts: "Awaiting receipt" | "Partially received" | "Received" (submitted/queried only). */
+  receiptLabel?: string;
   status: CostSubmissionLifecycleStatus;
   periodLabel?: string;
   currency: string;
@@ -129,6 +136,12 @@ export type FinanceSubmissionSnapshot = {
   submittedCount: number | null;
   queriedCount: number | null;
   cancelledCount: number | null;
+  /**
+   * Client payments outstanding (submitted/queried with an outstanding amount), derived from receipts.
+   * null when the loaded pools are truncated — never a partial figure presented as complete.
+   */
+  outstandingCount: number | null;
+  outstandingAmount: number | null;
   preview: FinanceSubmissionPreviewRow[];
 };
 

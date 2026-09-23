@@ -49,7 +49,7 @@ export function SubmissionReviewPanel({
         <h3 className="fin-section-title">Claim details</h3>
         <dl className="fin-submission-review-dl">
           <div>
-            <dt>Claim type</dt>
+            <dt>Type</dt>
             <dd>{details.submissionKind.trim() || "—"}</dd>
           </div>
           <div>

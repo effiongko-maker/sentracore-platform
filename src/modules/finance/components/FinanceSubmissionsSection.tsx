@@ -1,14 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { FINANCE_UI_LIST_LIMIT } from "../constants";
+import { CLIENT_PAYMENT_KIND_LABELS, FINANCE_UI_LIST_LIMIT } from "../constants";
 import type { FinanceSubmissionSnapshot } from "../types";
 import { formatFinancialAmount } from "../utils/formatFinancialAmount";
 import { SUBMISSION_LIFECYCLE_LABELS } from "../utils/submissionLifecycle";
 
 function statusTone(
-  status: string
+  status: string,
+  receiptLabel?: string
 ): "neutral" | "info" | "warn" | "ok" {
+  if (receiptLabel === "Received") return "ok";
+  if (receiptLabel === "Partially received") return "warn";
   if (status === "queried") return "warn";
   if (status === "submitted") return "info";
   if (status === "draft") return "neutral";
@@ -32,8 +35,10 @@ export function FinanceSubmissionsSection({
     <section className="fin-v13-panel">
       <div className="fin-v13-section-head">
         <div>
-          <h2 className="fin-v13-section-title">Reimbursement claims</h2>
-          <p className="fin-v13-section-lede">Latest claims in view.</p>
+          <h2 className="fin-v13-section-title">Client payments</h2>
+          <p className="fin-v13-section-lede">
+            Amounts requested from the client · <Link href="/finance/submissions?kind=reimbursement_claim" className="fin-v13-text-action">Reimbursement claims</Link>
+          </p>
         </div>
         <Link href="/finance/submissions" className="fin-v13-text-action">
           View all →
@@ -42,19 +47,20 @@ export function FinanceSubmissionsSection({
 
       {error || snapshot?.available === false ? (
         <p className="fin-v13-empty">
-          {error ?? "Reimbursement claims are temporarily unavailable."}
+          {error ?? "Client payments are temporarily unavailable."}
         </p>
       ) : loading ? (
         <div className="fin-v13-skel-block" />
       ) : total === 0 ? (
-        <p className="fin-v13-empty">No reimbursement claims recorded in SentraCore™ yet.</p>
+        <p className="fin-v13-empty">No client payments recorded in SentraCore™ yet.</p>
       ) : (
         <table className="fin-v13-table fin-v13-table--compact">
           <thead>
             <tr>
-              <th>Claim</th>
+              <th>Request</th>
               <th>Status</th>
-              <th className="fin-v13-num">Amount</th>
+              <th className="fin-v13-num">Requested</th>
+              <th className="fin-v13-num">Received</th>
               <th className="fin-v13-num">Outstanding</th>
               <th className="fin-v13-action-col" />
             </tr>
@@ -67,19 +73,29 @@ export function FinanceSubmissionsSection({
                     href={`/finance/submissions/${submission.submissionId}`}
                     className="fin-v13-item-link"
                   >
-                    {submission.submissionId}
+                    {submission.clientReference ?? submission.submissionId}
                   </Link>
+                  <p className="fin-v13-muted text-xs">
+                    {CLIENT_PAYMENT_KIND_LABELS[submission.kind]}
+                    {submission.description ? ` · ${submission.description.length > 60 ? `${submission.description.slice(0, 60)}…` : submission.description}` : ""}
+                  </p>
                 </td>
                 <td>
                   <span
-                    className={`fin-v13-pill fin-v13-pill--${statusTone(submission.status)}`}
+                    className={`fin-v13-pill fin-v13-pill--${statusTone(submission.status, submission.receiptLabel)}`}
                   >
-                    {SUBMISSION_LIFECYCLE_LABELS[submission.status]}
+                    {submission.receiptLabel ?? SUBMISSION_LIFECYCLE_LABELS[submission.status]}
                   </span>
                 </td>
                 <td className="fin-v13-num">
                   {formatFinancialAmount(
                     submission.claimAmount,
+                    submission.currency
+                  )}
+                </td>
+                <td className="fin-v13-num">
+                  {formatFinancialAmount(
+                    submission.amountPaid,
                     submission.currency
                   )}
                 </td>

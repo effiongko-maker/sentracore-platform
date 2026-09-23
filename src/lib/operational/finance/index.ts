@@ -4,6 +4,7 @@
  */
 
 export type {
+  ClientPaymentKind,
   ContractPaymentRecord,
   ContractPaymentStatus,
   CostCategory,

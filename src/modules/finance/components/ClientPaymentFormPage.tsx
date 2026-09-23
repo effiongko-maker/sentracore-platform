@@ -1,0 +1,139 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ModeFrame, OperateHeader, StreamSurface } from "@/components/platform";
+import { FormField, inputClassName } from "@/components/forms/FormField";
+import { Button } from "@/components/ui/Button";
+import { useToast } from "@/components/ui/Toast";
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
+import { DEFAULT_COST_SUBMISSION_CURRENCY } from "@/lib/operational/finance/costSubmission";
+import { CostSubmissionService } from "@/services/finance/CostSubmissionService";
+import { UserService } from "@/services/users/UserService";
+import { CLIENT_PAYMENT_KIND_LABELS } from "../constants";
+
+type Kind = "payment_request" | "contract_instalment";
+
+/**
+ * New Payment request / Contract instalment — a Client Payment billed to the client. No cost records and no
+ * reimbursement authorization (those belong to Reimbursement claims, which keep their own workflow). The request is
+ * recorded as submitted; receipts are then recorded against it (partial receipts supported).
+ */
+export function ClientPaymentFormPage({ initialKind }: { initialKind?: string }) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const { can } = useOperatingAccess();
+  const canCreate = can("finance.create");
+  const [kind, setKind] = useState<Kind>(initialKind === "contract_instalment" ? "contract_instalment" : "payment_request");
+  const [description, setDescription] = useState("");
+  const [reference, setReference] = useState("");
+  const [submittedOn, setSubmittedOn] = useState("");
+  const [amount, setAmount] = useState("");
+  const [periodLabel, setPeriodLabel] = useState("");
+  const [clientLocation, setClientLocation] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    UserService.getCurrentUser()
+      .then((user) => { if (!cancelled) setUserId(user.id); })
+      .catch(() => { if (!cancelled) setUserId(null); });
+    return () => { cancelled = true; };
+  }, []);
+
+  async function submit() {
+    const requested = Number(amount.replace(/,/g, ""));
+    if (!description.trim()) return setError("Describe what was requested from the client.");
+    if (!Number.isFinite(requested) || requested <= 0) return setError("Enter the requested amount.");
+    if (!submittedOn) return setError("Enter the date the request was submitted to the client.");
+    if (kind === "contract_instalment" && !periodLabel.trim()) return setError("Enter the instalment period.");
+    if (!userId) return setError("Your user session could not be verified. Sign in again.");
+    setSaving(true);
+    setError(null);
+    try {
+      const record = await CostSubmissionService.createCostSubmission({
+        submissionKind: kind,
+        status: "submitted",
+        currency: DEFAULT_COST_SUBMISSION_CURRENCY,
+        costRecordIds: [],
+        claimAmount: Math.round(requested * 100) / 100,
+        description: description.trim(),
+        periodLabel: kind === "contract_instalment" ? periodLabel.trim() : undefined,
+        clientLocation: clientLocation.trim() || undefined,
+        submissionPackage: reference.trim() ? { reference: reference.trim() } : undefined,
+        // Local date → WAT midnight (date-only input; no time is invented beyond the day).
+        submittedAt: `${submittedOn}T00:00:00+01:00`,
+        submittedBy: userId,
+        createdBy: userId,
+      });
+      toast({ type: "success", title: `${CLIENT_PAYMENT_KIND_LABELS[kind]} recorded` });
+      router.push(`/finance/submissions/${encodeURIComponent(record.submissionId)}`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to record the client payment.");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ModeFrame mode="act">
+      <div className="fin-page">
+        <div className="mb-4">
+          <Link href="/finance" className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+            <ArrowLeft className="h-4 w-4" /> Back to Costs & Claims
+          </Link>
+        </div>
+        <OperateHeader
+          title={`New ${CLIENT_PAYMENT_KIND_LABELS[kind].toLowerCase()}`}
+          description="An amount FM has requested from the client. Receipts are recorded against it as the client pays."
+        />
+        <StreamSurface className="mt-4">
+          {!canCreate ? (
+            <p className="fin-section-lede">You do not have permission to record client payments.</p>
+          ) : (
+            <div className="fin-submission-form-grid">
+              <FormField label="Type" htmlFor="cp-kind" required>
+                <select id="cp-kind" className={inputClassName} value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
+                  <option value="payment_request">{CLIENT_PAYMENT_KIND_LABELS.payment_request}</option>
+                  <option value="contract_instalment">{CLIENT_PAYMENT_KIND_LABELS.contract_instalment}</option>
+                </select>
+              </FormField>
+              <FormField label="Client reference (invoice / request no.)" htmlFor="cp-ref">
+                <input id="cp-ref" className={inputClassName} value={reference} onChange={(e) => setReference(e.target.value)} />
+              </FormField>
+              <FormField label="What was requested" htmlFor="cp-desc" required>
+                <textarea id="cp-desc" className={inputClassName} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+              </FormField>
+              <FormField label="Submitted to client on" htmlFor="cp-date" required>
+                <input id="cp-date" type="date" className={inputClassName} value={submittedOn} onChange={(e) => setSubmittedOn(e.target.value)} />
+              </FormField>
+              <FormField label="Requested amount (NGN)" htmlFor="cp-amount" required>
+                <input id="cp-amount" inputMode="decimal" className={inputClassName} value={amount} onChange={(e) => setAmount(e.target.value)} />
+              </FormField>
+              {kind === "contract_instalment" ? (
+                <FormField label="Instalment period" htmlFor="cp-period" required>
+                  <input id="cp-period" className={inputClassName} placeholder="e.g. September 2026" value={periodLabel} onChange={(e) => setPeriodLabel(e.target.value)} />
+                </FormField>
+              ) : null}
+              <FormField label="Client location (current processing point)" htmlFor="cp-loc">
+                <input id="cp-loc" className={inputClassName} value={clientLocation} onChange={(e) => setClientLocation(e.target.value)} />
+              </FormField>
+              {error ? <div className="fin-submission-error" role="alert">{error}</div> : null}
+              <div className="flex gap-2">
+                <Button type="button" onClick={() => void submit()} disabled={saving}>
+                  {saving ? "Recording…" : "Record client payment"}
+                </Button>
+                <Link href="/finance/submissions/new" className="fin-v13-text-action self-center">
+                  Recovering recorded costs? Create a reimbursement claim →
+                </Link>
+              </div>
+            </div>
+          )}
+        </StreamSurface>
+      </div>
+    </ModeFrame>
+  );
+}

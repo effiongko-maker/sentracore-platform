@@ -193,9 +193,12 @@ function main() {
     /Add any documents or references that support this claim/i.test(detailsForm),
     "supporting documents guidance must be present"
   );
+  // The client payment type is a controlled, immutable field: the claim workflow always creates a
+  // reimbursement claim (no free-text "Claim type" input).
   assert(
-    detailsForm.includes('label="Claim type"'),
-    "claim type label"
+    !detailsForm.includes('label="Claim type"') &&
+      readSrc("src/modules/finance/components/SubmissionWorkflowPage.tsx").includes('submissionKind: "reimbursement_claim"'),
+    "claim workflow fixes the type to reimbursement_claim"
   );
   assert(
     detailsForm.includes('label="Claim period"'),

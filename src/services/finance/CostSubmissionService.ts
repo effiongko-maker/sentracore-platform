@@ -10,6 +10,7 @@ import {
   type RemoteCostSubmission,
 } from "@/lib/operational/finance/costSubmissionRow";
 import type {
+  ClientPaymentKind,
   CostSubmission,
   CostSubmissionLifecycleStatus,
   CostSubmissionPackage,
@@ -36,6 +37,7 @@ export type CostSubmissionListParams = {
   facilityId?: string | "all";
   status?: CostSubmissionLifecycleStatus | "all";
   approvalId?: string;
+  kind?: ClientPaymentKind | "all";
 };
 
 export type CreateCostSubmissionInput = {
@@ -47,7 +49,9 @@ export type CreateCostSubmissionInput = {
   facilityId?: string;
   departmentId?: string;
   periodLabel?: string;
-  submissionKind?: string;
+  submissionKind?: ClientPaymentKind;
+  description?: string;
+  clientLocation?: string;
   submissionPackage?: CostSubmissionPackage;
   refs?: FinancialOperationalRefs;
   executionKind?: CostSubmission["executionKind"];
@@ -163,6 +167,7 @@ export const CostSubmissionService = {
           facilityId: params.facilityId,
           status: params.status,
           approvalId: params.approvalId,
+          kind: params.kind,
         },
         { signal: options?.signal }
       );
@@ -201,6 +206,8 @@ export const CostSubmissionService = {
       departmentId: input.departmentId,
       periodLabel: input.periodLabel,
       submissionKind: input.submissionKind,
+      description: input.description,
+      clientLocation: input.clientLocation,
       submissionPackage: input.submissionPackage,
       refs: input.refs,
       executionKind: input.executionKind,

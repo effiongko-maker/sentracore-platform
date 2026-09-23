@@ -20,6 +20,8 @@ export const COST_CATEGORY_VALUES: CostCategory[] = [
 ];
 export const REIMBURSABILITY_VALUES: CostReimbursability[] = ["unknown", "reimbursable", "non_reimbursable"];
 export const SUBMISSION_STATUS_VALUES: CostSubmissionLifecycleStatus[] = ["draft", "submitted", "queried", "cancelled"];
+export const CLIENT_PAYMENT_KIND_VALUES = ["reimbursement_claim", "payment_request", "contract_instalment"] as const;
+export type ClientPaymentKindValue = (typeof CLIENT_PAYMENT_KIND_VALUES)[number];
 export const DEFAULT_CURRENCY = "NGN";
 
 /** Statuses of a claim that lock its Cost Records against unprotected edits. */
@@ -340,13 +342,14 @@ export type FmCostSubmissionRow = {
   id: string; organisation_id: string; code: string; status: string; currency: string;
   claim_amount: number | null; markup_amount: number | null; markup_rate_percent: number | null; no_markup: boolean | null;
   facility_id: string | null; department_id: string | null; period_label: string | null; submission_kind: string | null;
+  description: string | null; client_location: string | null; source_note: string | null;
   package_reference: string | null; package_type: string | null; package_date: string | null; package_notes: string | null;
   approval_id: string | null; submitted_at: string | null; submitted_by_profile_id: string | null;
   queried_at: string | null; query_notes: string | null; notes: string | null;
   created_by_profile_id: string | null; updated_by_profile_id: string | null; created_at: string; updated_at: string;
 };
 export const FM_COST_SUBMISSION_SELECT =
-  "id, organisation_id, code, status, currency, claim_amount, markup_amount, markup_rate_percent, no_markup, facility_id, department_id, period_label, submission_kind, package_reference, package_type, package_date, package_notes, approval_id, submitted_at, submitted_by_profile_id, queried_at, query_notes, notes, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
+  "id, organisation_id, code, status, currency, claim_amount, markup_amount, markup_rate_percent, no_markup, facility_id, department_id, period_label, submission_kind, description, client_location, source_note, package_reference, package_type, package_date, package_notes, approval_id, submitted_at, submitted_by_profile_id, queried_at, query_notes, notes, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
 
 export type SubmissionFields = {
   costRefs?: string[];
@@ -359,7 +362,9 @@ export type SubmissionFields = {
   facilityRef?: string | null;
   departmentId?: string | null;
   periodLabel?: string | null;
-  submissionKind?: string | null;
+  submissionKind?: ClientPaymentKindValue;
+  description?: string | null;
+  clientLocation?: string | null;
   packageReference?: string | null;
   packageType?: string | null;
   packageDate?: string | null;
@@ -370,7 +375,7 @@ export type SubmissionFields = {
   queryNotes?: string | null;
   notes?: string | null;
 };
-export type ParsedCreateSubmission = SubmissionFields & { status: CostSubmissionLifecycleStatus; currency: string; costRefs: string[] };
+export type ParsedCreateSubmission = SubmissionFields & { status: CostSubmissionLifecycleStatus; currency: string; costRefs: string[]; submissionKind: ClientPaymentKindValue };
 export type ParsedUpdateSubmission = SubmissionFields & { id: string };
 
 function parseSubmissionFields(raw: Record<string, unknown>): SubmissionFields {
@@ -391,7 +396,11 @@ function parseSubmissionFields(raw: Record<string, unknown>): SubmissionFields {
   if (raw.facilityId !== undefined) out.facilityRef = refOrUndefined(raw.facilityId) ?? null;
   if (raw.departmentId !== undefined) out.departmentId = refOrUndefined(raw.departmentId) ?? null;
   if (raw.periodLabel !== undefined) out.periodLabel = nullableText(raw.periodLabel);
-  if (raw.submissionKind !== undefined) out.submissionKind = nullableText(raw.submissionKind);
+  if (raw.submissionKind !== undefined && raw.submissionKind !== null && raw.submissionKind !== "") {
+    out.submissionKind = parseEnum(raw.submissionKind, [...CLIENT_PAYMENT_KIND_VALUES], "client payment type");
+  }
+  if (raw.description !== undefined) out.description = nullableText(raw.description);
+  if (raw.clientLocation !== undefined) out.clientLocation = nullableText(raw.clientLocation);
   const pkg = raw.submissionPackage && typeof raw.submissionPackage === "object" ? (raw.submissionPackage as Record<string, unknown>) : undefined;
   if (pkg) {
     if (pkg.reference !== undefined) out.packageReference = nullableText(pkg.reference);
@@ -412,30 +421,60 @@ function parseSubmissionFields(raw: Record<string, unknown>): SubmissionFields {
 
 export function parseCreateSubmissionInput(payload: unknown): ParsedCreateSubmission {
   const f = parseSubmissionFields(asRecord(payload));
-  return { ...f, status: f.status ?? "draft", currency: f.currency ?? DEFAULT_CURRENCY, costRefs: f.costRefs ?? [] };
+  return {
+    ...f,
+    status: f.status ?? "draft",
+    currency: f.currency ?? DEFAULT_CURRENCY,
+    costRefs: f.costRefs ?? [],
+    submissionKind: f.submissionKind ?? "reimbursement_claim",
+  };
 }
 export function parseUpdateSubmissionInput(payload: unknown): ParsedUpdateSubmission {
   const raw = asRecord(payload);
-  return { ...parseSubmissionFields(raw), id: requireTrimmed(raw.submissionId ?? raw.id, "Submission id") };
+  const fields = parseSubmissionFields(raw);
+  // The client payment type is fixed at creation (DB-enforced too); an update never carries it.
+  delete fields.submissionKind;
+  return { ...fields, id: requireTrimmed(raw.submissionId ?? raw.id, "Submission id") };
 }
 export function parseSubmissionIdPayload(payload: unknown): string {
   const raw = asRecord(payload);
   return requireTrimmed(raw.submissionId ?? raw.id, "Submission id");
 }
 
-/** A claim in `submitted`/`queried` must reference at least one Cost Record and carry its dates. */
+/**
+ * Reimbursement claims (unchanged): a claim in `submitted`/`queried` must reference at least one Cost Record.
+ * Payment requests / contract instalments: never carry cost records; once submitted they must state the requested
+ * amount and what was requested.
+ */
 export function assertSubmissionShape(input: {
   status: CostSubmissionLifecycleStatus;
   costCount: number;
+  kind?: ClientPaymentKindValue | string | null;
+  claimAmount?: number | null;
+  description?: string | null;
   submittedAt?: string | null;
   queriedAt?: string | null;
 }): void {
-  if ((input.status === "submitted" || input.status === "queried") && input.costCount < 1) {
-    throw new FmCostValidationError("At least one Cost Record is required when a claim is submitted or queried.");
+  const kind = input.kind ?? "reimbursement_claim";
+  const live = input.status === "submitted" || input.status === "queried";
+  if (kind === "reimbursement_claim") {
+    if (live && input.costCount < 1) {
+      throw new FmCostValidationError("At least one Cost Record is required when a claim is submitted or queried.");
+    }
+    return;
+  }
+  if (input.costCount > 0) {
+    throw new FmCostValidationError("Cost records can only be linked to reimbursement claims.");
+  }
+  if (live && !(input.claimAmount != null && input.claimAmount > 0)) {
+    throw new FmCostValidationError("A requested amount is required when a client payment is submitted.");
+  }
+  if (live && !input.description?.trim()) {
+    throw new FmCostValidationError("A description of what was requested is required when a client payment is submitted.");
   }
 }
 
-export type SubmissionListParams = { page: number; pageSize: number; search?: string; facilityId?: string; status?: CostSubmissionLifecycleStatus; approvalId?: string };
+export type SubmissionListParams = { page: number; pageSize: number; search?: string; facilityId?: string; status?: CostSubmissionLifecycleStatus; approvalId?: string; kind?: ClientPaymentKindValue };
 export function parseSubmissionListParams(payload: unknown): SubmissionListParams {
   const raw = asRecord(payload);
   const status = optionalTrimmed(raw.status);
@@ -445,6 +484,10 @@ export function parseSubmissionListParams(payload: unknown): SubmissionListParam
     facilityId: !facilityId || facilityId === "all" ? undefined : facilityId,
     status: !status || status === "all" ? undefined : parseEnum(status, SUBMISSION_STATUS_VALUES, "submission status"),
     approvalId: optionalTrimmed(raw.approvalId),
+    kind: (() => {
+      const kind = optionalTrimmed(raw.kind);
+      return !kind || kind === "all" ? undefined : parseEnum(kind, [...CLIENT_PAYMENT_KIND_VALUES], "client payment type");
+    })(),
   };
 }
 
@@ -470,7 +513,10 @@ export function mapFmCostSubmissionRow(row: FmCostSubmissionRow, relations: Subm
     facilityId: row.facility_id ?? undefined,
     departmentId: row.department_id ?? undefined,
     periodLabel: row.period_label ?? undefined,
-    submissionKind: row.submission_kind ?? undefined,
+    submissionKind: (row.submission_kind as ClientPaymentKindValue | null) ?? "reimbursement_claim",
+    description: row.description ?? undefined,
+    clientLocation: row.client_location ?? undefined,
+    sourceNote: row.source_note ?? undefined,
     submissionPackage: hasPackage
       ? {
           reference: row.package_reference ?? undefined,

@@ -19,7 +19,7 @@ export {
   FINANCE_UI_LIST_LIMIT,
   OPERATIONAL_COST_LENSES,
   SUBMISSIONS_LIST_PAGE_SIZE,
-  SUBMISSION_KIND_SUGGESTIONS,
+  CLIENT_PAYMENT_KIND_LABELS,
 } from "./constants";
 export type {
   FinanceDataAvailability,

@@ -107,6 +107,11 @@ export function SubmissionWorkflowPage({
           setFormError("This claim could not be found.");
           return;
         }
+        if ((record.submissionKind ?? "reimbursement_claim") !== "reimbursement_claim") {
+          setExisting(record);
+          setFormError("This client payment is not a reimbursement claim and is managed from its own page.");
+          return;
+        }
         if (record.status !== "draft" && record.status !== "queried") {
           setExisting(record);
           setFormError(
@@ -238,7 +243,8 @@ export function SubmissionWorkflowPage({
         markup: buildMarkupRepresentation(synced),
         facilityId,
         periodLabel: details.periodLabel.trim() || undefined,
-        submissionKind: details.submissionKind.trim() || undefined,
+        // This workflow only ever creates reimbursement claims (the type is fixed at creation).
+        submissionKind: "reimbursement_claim" as const,
         submissionPackage: detailsToPackage(details),
         notes: details.notes.trim() || undefined,
         ...(status === "submitted"

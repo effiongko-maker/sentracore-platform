@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { ArrowLeft, FileStack, Plus } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ModeFrame, OperateHeader, StreamSurface } from "@/components/platform";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { DataTable, type Column } from "@/components/tables/DataTable";
-import type { CostSubmission } from "@/lib/operational/finance/types";
-import { SUBMISSIONS_LIST_PAGE_SIZE } from "../constants";
+import type { ClientPaymentKind, CostSubmission } from "@/lib/operational/finance/types";
+import { CLIENT_PAYMENT_KIND_LABELS, SUBMISSIONS_LIST_PAGE_SIZE } from "../constants";
 import { useCostSubmissionsList } from "../hooks/useCostSubmissionsList";
 import { formatFinancialAmount } from "../utils/formatFinancialAmount";
 import {
@@ -26,21 +27,34 @@ function formatTimestamp(iso?: string): string {
   });
 }
 
+const KIND_TABS: Array<{ id: ClientPaymentKind | "all"; label: string }> = [
+  { id: "all", label: "All" },
+  { id: "payment_request", label: "Payment requests" },
+  { id: "contract_instalment", label: "Contract instalments" },
+  { id: "reimbursement_claim", label: "Reimbursement claims" },
+];
+
+/** FM Client Payments register. `?kind=reimbursement_claim` is the direct Reimbursement claims view. */
 export function SubmissionsPage() {
   const [page, setPage] = useState(1);
+  const searchParams = useSearchParams();
+  const rawKind = searchParams.get("kind");
+  const kind = KIND_TABS.some((tab) => tab.id === rawKind) ? (rawKind as ClientPaymentKind | "all") : "all";
+  const claimsOnly = kind === "reimbursement_claim";
   const { can } = useOperatingAccess();
   const canCreateClaim = can("finance.create");
   const { submissions, total, totalPages, loading, error, reload } =
     useCostSubmissionsList({
       page,
       pageSize: SUBMISSIONS_LIST_PAGE_SIZE,
+      kind,
     });
 
   const columns = useMemo<Column<CostSubmission>[]>(
     () => [
         {
         key: "submissionId",
-        header: "Claim",
+        header: "Reference",
         render: (row) => (
           <Link
             href={`/finance/submissions/${row.submissionId}`}
@@ -60,17 +74,20 @@ export function SubmissionsPage() {
         ),
       },
       {
-        key: "periodLabel",
-        header: "Claim period",
+        key: "submissionKind",
+        header: "Type",
         render: (row) => (
-          <span className="text-muted">{row.periodLabel ?? "—"}</span>
+          <span className="text-muted">{CLIENT_PAYMENT_KIND_LABELS[row.submissionKind ?? "reimbursement_claim"]}</span>
         ),
       },
       {
-        key: "submissionKind",
-        header: "Claim type",
+        key: "description",
+        header: "Request",
         render: (row) => (
-          <span className="text-muted">{row.submissionKind ?? "—"}</span>
+          <span className="text-muted">
+            {row.description ?? row.periodLabel ?? "—"}
+            {row.submissionPackage?.reference ? ` · ${row.submissionPackage.reference}` : ""}
+          </span>
         ),
       },
       {
@@ -82,7 +99,7 @@ export function SubmissionsPage() {
       },
       {
         key: "claimAmount",
-        header: "Claim",
+        header: "Requested",
         render: (row) => (
           <span className="font-medium">
             {formatFinancialAmount(row.claimAmount, row.currency)}
@@ -114,12 +131,16 @@ export function SubmissionsPage() {
 
         <div className="flex flex-wrap items-start justify-between gap-3">
           <OperateHeader
-            title="Reimbursement claims"
-            description="Prepare and track reimbursement claims from operational costs."
+            title={claimsOnly ? "Reimbursement claims" : "Client payments"}
+            description={
+              claimsOnly
+                ? "Prepare and track reimbursement claims from operational costs."
+                : "Amounts FM has requested from the client — payment requests, contract instalments and reimbursement claims."
+            }
             signalValue={loading ? "—" : total}
-            signalLabel="Claims"
+            signalLabel={claimsOnly ? "Claims" : "Requests"}
           />
-          {canCreateClaim ? (
+          {canCreateClaim && claimsOnly ? (
             <Link
               href="/finance/submissions/new"
               className="inline-flex h-8 items-center gap-2 rounded-[12px] bg-accent px-3 text-xs font-medium text-white shadow-sc hover:bg-[#1e40af]"
@@ -129,6 +150,21 @@ export function SubmissionsPage() {
             </Link>
           ) : null}
         </div>
+
+        <nav className="mt-4 flex flex-wrap gap-2" aria-label="Client payment type">
+          {KIND_TABS.map((tab) => (
+            <Link
+              key={tab.id}
+              href={tab.id === "all" ? "/finance/submissions" : `/finance/submissions?kind=${tab.id}`}
+              onClick={() => setPage(1)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                kind === tab.id ? "border-accent bg-accent text-white" : "border-border text-muted hover:text-foreground"
+              }`}
+            >
+              {tab.label}
+            </Link>
+          ))}
+        </nav>
 
         <StreamSurface className="mt-4">
           {error ? (
@@ -150,8 +186,12 @@ export function SubmissionsPage() {
               total={total}
               onPageChange={setPage}
               emptyIcon={FileStack}
-              emptyTitle="No reimbursement claims recorded in SentraCore™ yet"
-              emptyDescription="Create a claim to group reimbursable costs for reimbursement."
+              emptyTitle={claimsOnly ? "No reimbursement claims recorded in SentraCore™ yet" : "No client payments recorded yet"}
+              emptyDescription={
+                claimsOnly
+                  ? "Create a claim to group reimbursable costs for reimbursement."
+                  : "Payment requests, contract instalments and reimbursement claims appear here."
+              }
             />
           )}
         </StreamSurface>

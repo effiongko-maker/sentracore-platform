@@ -286,8 +286,17 @@ export type CostSubmission = {
   departmentId?: string;
   /** Human-readable period/cycle label — not a hard-coded cadence rule. */
   periodLabel?: string;
-  /** Extensible submission classification — no fixed enum until policy is established. */
-  submissionKind?: string;
+  /**
+   * Client payment type (controlled, immutable). Absent only on legacy rows — treat as reimbursement_claim.
+   * reimbursement_claim keeps every cost/authorization control; payment_request / contract_instalment need neither.
+   */
+  submissionKind?: ClientPaymentKind;
+  /** What was requested from the client (payment requests / contract instalments). */
+  description?: string;
+  /** Client's current processing point (operational). */
+  clientLocation?: string;
+  /** Verbatim note from the source register — read-only evidence. */
+  sourceNote?: string;
 
   /** Submission support package — distinct from per-cost evidence. */
   submissionPackage?: CostSubmissionPackage;
@@ -317,6 +326,9 @@ export type CostSubmission = {
   /** @deprecated Use costRecordIds. Phase ≤12 single-cost reference. */
   costRecordId?: string;
 };
+
+/** FM Client Payment types. A reimbursement claim is one workflow within the broader Client Payments concept. */
+export type ClientPaymentKind = "reimbursement_claim" | "payment_request" | "contract_instalment";
 
 export type ContractPaymentStatus =
   | "expected"

@@ -31,7 +31,7 @@ import { CostSubmissionService } from "@/services/finance/CostSubmissionService"
 import { ReimbursementAuthorizationService } from "@/services/finance/ReimbursementAuthorizationService";
 import { ReimbursementPaymentService } from "@/services/finance/ReimbursementPaymentService";
 import { UserService } from "@/services/users/UserService";
-import { FINANCE_UI_LIST_LIMIT } from "../constants";
+import { CLIENT_PAYMENT_KIND_LABELS, FINANCE_UI_LIST_LIMIT } from "../constants";
 import { useSubmissionCostPool } from "../hooks/useSubmissionCostPool";
 import { formatFinancialAmount } from "../utils/formatFinancialAmount";
 import {
@@ -54,6 +54,8 @@ import {
 } from "../utils/submissionLifecycle";
 import {
   CLAIM_WORKFLOW_STATUS_LABELS,
+  CLIENT_PAYMENT_RECEIPT_LABELS,
+  clientPaymentReceiptState,
   deriveClaimWorkflowStatus,
   PAYMENT_OUTCOME_LABELS,
   summarizeSubmissionPayments,
@@ -265,6 +267,20 @@ export function SubmissionDetailPage({
         : null,
     [submission, paymentSummary]
   );
+
+  // Client payment type: reimbursement claims keep the full claim workflow; payment requests / contract
+  // instalments show a receipt state derived from receipts (never stored).
+  const kind = submission?.submissionKind ?? "reimbursement_claim";
+  const isClaim = kind === "reimbursement_claim";
+  const receiptState = paymentSummary ? clientPaymentReceiptState(paymentSummary) : null;
+  const clientPaymentStatusLabel =
+    !submission
+      ? ""
+      : submission.status === "submitted" || submission.status === "queried"
+        ? CLIENT_PAYMENT_RECEIPT_LABELS[receiptState ?? "awaiting_receipt"]
+        : submission.status === "cancelled"
+          ? "Withdrawn"
+          : SUBMISSION_LIFECYCLE_LABELS[submission.status];
 
   const authorization = useMemo(
     () =>
@@ -638,14 +654,18 @@ export function SubmissionDetailPage({
             <OperateHeader
               title={submission.submissionId}
               description={
-                workflowStatus
-                  ? CLAIM_WORKFLOW_STATUS_LABELS[workflowStatus]
-                  : submissionLifecycleDescription(submission.status)
+                !isClaim
+                  ? `${CLIENT_PAYMENT_KIND_LABELS[kind]} · ${clientPaymentStatusLabel}`
+                  : workflowStatus
+                    ? CLAIM_WORKFLOW_STATUS_LABELS[workflowStatus]
+                    : submissionLifecycleDescription(submission.status)
               }
               signalValue={
-                workflowStatus
-                  ? CLAIM_WORKFLOW_STATUS_LABELS[workflowStatus]
-                  : SUBMISSION_LIFECYCLE_LABELS[submission.status]
+                !isClaim
+                  ? clientPaymentStatusLabel
+                  : workflowStatus
+                    ? CLAIM_WORKFLOW_STATUS_LABELS[workflowStatus]
+                    : SUBMISSION_LIFECYCLE_LABELS[submission.status]
               }
               signalLabel="Status"
             />
@@ -653,7 +673,11 @@ export function SubmissionDetailPage({
             <div className="fin-claim-next mt-3" role="status">
               <p className="fin-claim-next-label">What happens next</p>
               <p className="fin-claim-next-text">
-                {claimNextStep(workflowStatus)}
+                {isClaim
+                  ? claimNextStep(workflowStatus)
+                  : receiptState === "received"
+                    ? "The requested amount has been received in full."
+                    : "Record each receipt from the client as it arrives — partial receipts are supported."}
               </p>
             </div>
 
@@ -688,6 +712,7 @@ export function SubmissionDetailPage({
             ) : null}
 
             <StreamSurface className="mt-4">
+{isClaim ? (
               <div className="fin-submission-review-block">
                 <p className="fin-form-kicker">Claim</p>
                 <dl className="fin-submission-review-dl">
@@ -764,6 +789,41 @@ export function SubmissionDetailPage({
                   ) : null}
                 </dl>
               </div>
+              ) : (
+              <div className="fin-submission-review-block">
+                <p className="fin-form-kicker">Client payment</p>
+                <dl className="fin-submission-review-dl">
+                  <div><dt>Type</dt><dd>{CLIENT_PAYMENT_KIND_LABELS[kind]}</dd></div>
+                  <div><dt>Status</dt><dd>{clientPaymentStatusLabel}</dd></div>
+                  <div><dt>Request</dt><dd>{submission.description ?? "—"}</dd></div>
+                  <div><dt>Client reference</dt><dd>{submission.submissionPackage?.reference ?? "—"}</dd></div>
+                  {submission.periodLabel ? (
+                    <div><dt>Period</dt><dd>{submission.periodLabel}</dd></div>
+                  ) : null}
+                  <div>
+                    <dt>Submitted</dt>
+                    <dd>{submission.submittedAt ? formatTimestamp(submission.submittedAt) : "—"}</dd>
+                  </div>
+                  <div><dt>Client location</dt><dd>{submission.clientLocation ?? "Not recorded"}</dd></div>
+                  <div>
+                    <dt>Requested</dt>
+                    <dd className="tabular-nums font-semibold">{formatFinancialAmount(claimAmount, currency)}</dd>
+                  </div>
+                  <div>
+                    <dt>Received</dt>
+                    <dd className="tabular-nums">{formatFinancialAmount(paymentSummary.amountPaid, currency)}</dd>
+                  </div>
+                  <div>
+                    <dt>Outstanding</dt>
+                    <dd className="tabular-nums">{formatFinancialAmount(paymentSummary.outstandingAmount, currency)}</dd>
+                  </div>
+                  {submission.sourceNote ? (
+                    // Verbatim source evidence — read-only, never a status.
+                    <div><dt>Source note</dt><dd>{submission.sourceNote}</dd></div>
+                  ) : null}
+                </dl>
+              </div>
+              )}
 
               <div
                 className="fin-detail-actions"
@@ -776,7 +836,7 @@ export function SubmissionDetailPage({
                   Actions
                 </h3>
                 <div className="fin-detail-actions-row">
-                {editable && canCreateFinance ? (
+                {editable && canCreateFinance && isClaim ? (
                   <Link
                     href={`/finance/submissions/${submissionId}/edit`}
                     className="fin-detail-action fin-detail-action--primary"
@@ -813,10 +873,7 @@ export function SubmissionDetailPage({
                   </Button>
                 ) : null}
                 {canAuthorizeFinance &&
-                canAuthorizeSubmission(
-                  submission.status,
-                  paymentSummary.isAuthorized
-                ) ? (
+                canAuthorizeSubmission(submission.status, paymentSummary.isAuthorized, submission.submissionKind) ? (
                   <Button
                     type="button"
                     size="sm"
@@ -831,10 +888,7 @@ export function SubmissionDetailPage({
                   </Button>
                 ) : null}
                 {canAuthorizeFinance &&
-                canReviseAuthorization(
-                  submission.status,
-                  paymentSummary.isAuthorized
-                ) && !paymentSummary.fullyPaid ? (
+                canReviseAuthorization(submission.status, paymentSummary.isAuthorized, submission.submissionKind) && !paymentSummary.fullyPaid ? (
                   <Button
                     type="button"
                     size="sm"
@@ -850,10 +904,7 @@ export function SubmissionDetailPage({
                   </Button>
                 ) : null}
                 {canPayFinance &&
-                canRecordPaymentForSubmission(
-                  submission.status,
-                  paymentSummary.isAuthorized
-                ) && !paymentSummary.fullyPaid ? (
+                canRecordPaymentForSubmission(submission.status, paymentSummary.isAuthorized, submission.submissionKind) && !paymentSummary.fullyPaid ? (
                   <Button
                     type="button"
                     size="sm"
@@ -862,7 +913,7 @@ export function SubmissionDetailPage({
                     disabled={acting}
                     onClick={() => openCreatePaymentForm()}
                   >
-                    Record payment reference
+                    {isClaim ? "Record payment reference" : "Record receipt"}
                   </Button>
                 ) : null}
                 </div>
@@ -980,17 +1031,18 @@ export function SubmissionDetailPage({
                   className="mt-4 grid gap-3 sm:grid-cols-2 max-w-2xl"
                 >
                   <p className="sm:col-span-2 fin-form-hint">
-                    This is FM&apos;s operational reference that the client
-                    reimbursed this claim. It is not an accounting transaction.
+                    {isClaim
+                      ? "This is FM’s operational reference that the client reimbursed this claim. It is not an accounting transaction."
+                      : "This is FM’s operational record of money received from the client for this request. It is not an accounting transaction."}
                   </p>
                   <div className="sm:col-span-2 fin-payment-context">
                     <div>
-                      <p className="fin-metric-kicker">Claim</p>
+                      <p className="fin-metric-kicker">{isClaim ? "Claim" : "Requested"}</p>
                       <p className="fin-metric-value fin-metric-value--sm">
                         {formatFinancialAmount(claimAmount, currency)}
                       </p>
                     </div>
-                    <div>
+                    <div hidden={!isClaim}>
                       <p className="fin-metric-kicker">Authorised</p>
                       <p className="fin-metric-value fin-metric-value--sm">
                         {paymentSummary.authorizedAmount != null
@@ -1023,7 +1075,9 @@ export function SubmissionDetailPage({
                   <p className="sm:col-span-2 fin-form-hint">
                     {editingPaymentId
                       ? "Update this receipt. The payment ID stays the same."
-                      : "Record what was received against this claim."}
+                      : isClaim
+                        ? "Record what was received against this claim."
+                        : "Record what was received against this request."}
                   </p>
                   <FormField
                     label="Amount received"
@@ -1148,10 +1202,7 @@ export function SubmissionDetailPage({
                       <th>Date</th>
                       <th>Reference</th>
                       <th className="fin-v13-num">Amount</th>
-                      {canCorrectPaymentForSubmission(
-                        submission.status,
-                        paymentSummary.isAuthorized
-                      ) ? (
+                      {canCorrectPaymentForSubmission(submission.status, paymentSummary.isAuthorized, submission.submissionKind) ? (
                         <th className="fin-v13-action-col" />
                       ) : null}
                     </tr>
@@ -1174,10 +1225,7 @@ export function SubmissionDetailPage({
                             payment.currency
                           )}
                         </td>
-                        {canCorrectPaymentForSubmission(
-                          submission.status,
-                          paymentSummary.isAuthorized
-                        ) ? (
+                        {canCorrectPaymentForSubmission(submission.status, paymentSummary.isAuthorized, submission.submissionKind) ? (
                           <td className="fin-v13-action-col">
                             <Button
                               type="button"
@@ -1206,6 +1254,7 @@ export function SubmissionDetailPage({
               </StreamSurface>
             ) : null}
 
+            {isClaim ? (
             <StreamSurface className="mt-4">
               <p className="fin-section-lede mb-4">
                 {getSubmissionCostCount(submission)} cost reference
@@ -1234,6 +1283,7 @@ export function SubmissionDetailPage({
                 currency={currency}
               />
             </StreamSurface>
+            ) : null}
           </>
         )}
       </div>

@@ -32,6 +32,8 @@ import type {
 import { formatFinancialAmount, sumAmounts } from "./formatFinancialAmount";
 import {
   buildFinancePaymentOverviewState,
+  CLIENT_PAYMENT_RECEIPT_LABELS,
+  clientPaymentReceiptState,
   PAYMENT_OUTCOME_LABELS,
   summarizeSubmissionPayments,
 } from "./submissionPayment";
@@ -141,10 +143,23 @@ function buildSubmissionSnapshot(
   submissions: CostSubmission[],
   total: number,
   payments: ReimbursementPayment[],
-  authorizations: ReimbursementAuthorization[]
+  authorizations: ReimbursementAuthorization[],
+  paymentsTruncated = false
 ): FinanceSubmissionSnapshot {
   const truncated = total > submissions.length;
   const counts = countByLifecycle(submissions);
+  // Client payments outstanding across the loaded pool (receipt-derived). Unsafe when either pool is truncated.
+  let outstandingCount = 0;
+  let outstandingAmount = 0;
+  for (const submission of submissions) {
+    if (submission.status !== "submitted" && submission.status !== "queried") continue;
+    const summary = summarizeSubmissionPayments(submission, payments, authorizations);
+    if (summary.outstandingAmount > 0) {
+      outstandingCount += 1;
+      outstandingAmount += summary.outstandingAmount;
+    }
+  }
+  const outstandingSafe = !truncated && !paymentsTruncated;
   const preview: FinanceSubmissionPreviewRow[] = submissions
     .slice(0, FINANCE_SUBMISSIONS_PREVIEW_SIZE)
     .map((submission) => {
@@ -153,8 +168,13 @@ function buildSubmissionSnapshot(
         payments,
         authorizations
       );
+      const live = submission.status === "submitted" || submission.status === "queried";
       return {
         submissionId: submission.submissionId,
+        kind: submission.submissionKind ?? "reimbursement_claim",
+        description: submission.description,
+        clientReference: submission.submissionPackage?.reference,
+        receiptLabel: live ? CLIENT_PAYMENT_RECEIPT_LABELS[clientPaymentReceiptState(payment)] : undefined,
         status: submission.status,
         periodLabel: submission.periodLabel,
         currency: submission.currency,
@@ -174,6 +194,8 @@ function buildSubmissionSnapshot(
     submittedCount: truncated ? null : counts.submitted,
     queriedCount: truncated ? null : counts.queried,
     cancelledCount: truncated ? null : counts.cancelled,
+    outstandingCount: outstandingSafe ? outstandingCount : null,
+    outstandingAmount: outstandingSafe ? Math.round(outstandingAmount * 100) / 100 : null,
     preview,
   };
 }
@@ -650,7 +672,8 @@ export function deriveFinanceOverview(
         submissions,
         totalSubmissions,
         payments,
-        authorizations
+        authorizations,
+        paymentsTruncated
       )
     : {
         available: false,
@@ -660,6 +683,8 @@ export function deriveFinanceOverview(
         submittedCount: null,
         queriedCount: null,
         cancelledCount: null,
+        outstandingCount: null,
+        outstandingAmount: null,
         preview: [],
       };
   const paymentSnapshot = buildFinancePaymentOverviewState({

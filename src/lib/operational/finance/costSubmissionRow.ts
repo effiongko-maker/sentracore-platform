@@ -5,6 +5,7 @@
 
 import { formatIdList, parseIdList } from "@/lib/operational/idLists";
 import type {
+  ClientPaymentKind,
   CostSubmission,
   CostSubmissionLifecycleStatus,
   CostSubmissionPackage,
@@ -12,6 +13,11 @@ import type {
   MarkupRepresentation,
 } from "./types";
 import { getSubmissionCostRecordIds } from "./costSubmission";
+
+/** Controlled client payment type; anything else (legacy free text / absent) is a reimbursement claim. */
+function toClientPaymentKind(value: string | undefined): ClientPaymentKind {
+  return value === "payment_request" || value === "contract_instalment" ? value : "reimbursement_claim";
+}
 
 /** Human-readable sheet headers for COST_SUBMISSIONS (34 columns). */
 export const COST_SUBMISSION_SHEET_HEADERS = [
@@ -234,7 +240,10 @@ export function mapRemoteCostSubmission(
     facilityId: optionalString(raw, "facilityId", "Facility ID"),
     departmentId: optionalString(raw, "departmentId", "Department ID"),
     periodLabel: optionalString(raw, "periodLabel", "Period Label"),
-    submissionKind: optionalString(raw, "submissionKind", "Submission Kind"),
+    submissionKind: toClientPaymentKind(optionalString(raw, "submissionKind", "Submission Kind")),
+    description: optionalString(raw, "description"),
+    clientLocation: optionalString(raw, "clientLocation"),
+    sourceNote: optionalString(raw, "sourceNote"),
     submissionPackage: mapSubmissionPackage(raw),
     refs: mapRefs(raw),
     executionKind: optionalString(
@@ -344,7 +353,7 @@ export function rowToCostSubmission(
     facilityId: row["Facility ID"],
     departmentId: row["Department ID"],
     periodLabel: row["Period Label"],
-    submissionKind: row["Submission Kind"],
+    submissionKind: toClientPaymentKind(row["Submission Kind"] == null ? undefined : String(row["Submission Kind"])),
     submissionPackage: {
       reference: row["Package Reference"],
       packageType: row["Package Type"],

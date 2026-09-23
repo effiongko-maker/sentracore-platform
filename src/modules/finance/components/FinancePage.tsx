@@ -52,14 +52,17 @@ export function FinancePage() {
   const spendLabel = yearSpend
     ? formatFinancialAmount(yearSpend.totalAmount, yearSpend.currency)
     : "Unavailable";
-  const draftCount = overview?.submissions.draftCount;
-  const reimbursementsInPreparation = !submissionsAvailable
+  const outstandingCount = overview?.submissions.outstandingCount;
+  const outstandingAmount = overview?.submissions.outstandingAmount;
+  const clientPaymentsOutstanding = !submissionsAvailable
     ? "Unavailable"
-    : draftCount != null
-      ? String(draftCount)
-      : submissionTotal && submissionTotal > 0
-        ? `${submissionTotal} total`
-        : "0";
+    : outstandingCount == null || outstandingAmount == null
+      ? submissionTotal && submissionTotal > 0
+        ? `${submissionTotal} requests · see Client payments`
+        : "Unavailable"
+      : outstandingCount === 0
+        ? "None"
+        : `${outstandingCount} · ${formatFinancialAmount(outstandingAmount, "NGN")}`;
 
   return (
     <ModeFrame mode="understand">
@@ -79,8 +82,8 @@ export function FinancePage() {
           costRecordsTotal={
             loading ? "—" : costTotal == null ? "Unavailable" : costTotal
           }
-          reimbursementsInPreparation={
-            loading ? "—" : reimbursementsInPreparation
+          clientPaymentsOutstanding={
+            loading ? "—" : clientPaymentsOutstanding
           }
           clientAuthorisationsTotal={
             loading
@@ -119,7 +122,7 @@ export function FinancePage() {
               loading={loading}
               error={
                 overview && overview.submissions.available === false
-                  ? "Reimbursement claims are temporarily unavailable."
+                  ? "Client payments are temporarily unavailable."
                   : null
               }
             />
