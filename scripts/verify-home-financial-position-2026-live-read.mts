@@ -69,7 +69,7 @@ async function main() {
   assert(!/CostRecordService\.getTotals\(/.test(hook), "Home never uses the all-year register total");
   assert(hook.includes("operatingYear: HOME_FINANCIAL_POSITION_YEAR"), "snapshot is derived year-scoped");
   const section = readFileSync("src/modules/workspace/components/FinancialPositionSection.tsx", "utf8");
-  for (const label of ["Financial Position · {HOME_FINANCIAL_POSITION_YEAR}", "Spent ({HOME_FINANCIAL_POSITION_YEAR})", "Reimbursement ({HOME_FINANCIAL_POSITION_YEAR})", "Outstanding reimbursement ({HOME_FINANCIAL_POSITION_YEAR})"]) {
+  for (const label of ["Financial Position · {HOME_FINANCIAL_POSITION_YEAR}", "Spent ({HOME_FINANCIAL_POSITION_YEAR})", "Client payments requested ({HOME_FINANCIAL_POSITION_YEAR})", "Client payments outstanding ({HOME_FINANCIAL_POSITION_YEAR})"]) {
     assert(section.includes(label), `label present: ${label}`);
   }
   results.push("PASS Home wiring + labels: 2026 period explicit on the section and every metric");

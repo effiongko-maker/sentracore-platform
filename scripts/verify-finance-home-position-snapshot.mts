@@ -276,12 +276,12 @@ function main() {
   assert(section.includes("Open Costs & Claims"), "Open Costs & Claims label (FM cost domain, not Platform Finance)");
   assert(section.includes("Spent"), "Spent metric");
   assert(
-    section.includes("            Reimbursement"),
-    "Reimbursement metric"
+    section.includes("Client payments requested"),
+    "Client payments requested metric"
   );
   assert(!section.includes("Expected reimbursement"), "not Expected reimbursement");
   assert(!section.includes("Expected Back"), "not Expected Back");
-  assert(section.includes("Outstanding reimbursement"), "Outstanding metric");
+  assert(section.includes("Client payments outstanding"), "Client payments outstanding metric");
   assert(section.includes("sc-fm-finance-skel"), "loading skeleton");
   assert(section.includes("Unavailable"), "error fallback copy");
   assert(section.includes("Try again"), "error retry");

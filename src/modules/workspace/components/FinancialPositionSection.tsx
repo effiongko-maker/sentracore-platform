@@ -43,7 +43,7 @@ export function FinancialPositionSection() {
                     !snapshot?.expectedAvailable ||
                     !snapshot?.outstandingAvailable
                   ? "Some figures are temporarily unavailable. Open Costs & Claims for the full record."
-                  : `${HOME_FINANCIAL_POSITION_YEAR} operating year — costs from the ${HOME_FINANCIAL_POSITION_YEAR} Job/Work Order registers and reimbursement claims`}
+                  : `${HOME_FINANCIAL_POSITION_YEAR} operating year — recorded costs and client payment requests`}
           </p>
         </div>
         <div className="sc-fm-finance-header-actions">
@@ -76,7 +76,7 @@ export function FinancialPositionSection() {
         </div>
         <div className="sc-fm-finance-metric" role="listitem">
           <p className="sc-fm-finance-label">
-            Reimbursement ({HOME_FINANCIAL_POSITION_YEAR})
+            Client payments requested ({HOME_FINANCIAL_POSITION_YEAR})
           </p>
           <MetricValue
             loading={loading}
@@ -86,7 +86,7 @@ export function FinancialPositionSection() {
         </div>
         <div className="sc-fm-finance-metric" role="listitem">
           <p className="sc-fm-finance-label">
-            Outstanding reimbursement ({HOME_FINANCIAL_POSITION_YEAR})
+            Client payments outstanding ({HOME_FINANCIAL_POSITION_YEAR})
           </p>
           <MetricValue
             loading={loading}

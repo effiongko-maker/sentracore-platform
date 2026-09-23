@@ -54,7 +54,8 @@ export function FinanceSubmissionsSection({
       ) : total === 0 ? (
         <p className="fin-v13-empty">No client payments recorded in SentraCore™ yet.</p>
       ) : (
-        <table className="fin-v13-table fin-v13-table--compact">
+        <div className="fin-v13-table-scroll">
+        <table className="fin-v13-table fin-v13-table--compact fin-v13-table--client-payments">
           <thead>
             <tr>
               <th>Request</th>
@@ -75,9 +76,9 @@ export function FinanceSubmissionsSection({
                   >
                     {submission.clientReference ?? submission.submissionId}
                   </Link>
+                  {/* Overview snapshot: reference + type only (full request text lives on the register/detail pages). */}
                   <p className="fin-v13-muted text-xs">
                     {CLIENT_PAYMENT_KIND_LABELS[submission.kind]}
-                    {submission.description ? ` · ${submission.description.length > 60 ? `${submission.description.slice(0, 60)}…` : submission.description}` : ""}
                   </p>
                 </td>
                 <td>
@@ -117,6 +118,7 @@ export function FinanceSubmissionsSection({
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </section>
   );

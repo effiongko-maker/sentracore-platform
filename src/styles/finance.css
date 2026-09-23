@@ -1581,6 +1581,26 @@
 }
 
 /* Dense register panel (Monthly contract payments): tighter card + row padding; font sizes unchanged. */
+/* Client payments overview snapshot: one compact line per row; amounts and badges never wrap. */
+.fin-v13-table-scroll {
+  overflow-x: auto;
+}
+
+.fin-v13-table--client-payments {
+  table-layout: auto;
+}
+
+.fin-v13-table--client-payments .fin-v13-num,
+.fin-v13-table--client-payments .fin-v13-pill,
+.fin-v13-table--client-payments .fin-v13-action-col {
+  white-space: nowrap;
+}
+
+.fin-v13-table--client-payments td p {
+  margin: 0;
+  white-space: nowrap;
+}
+
 .fin-v13-panel--dense {
   padding-top: 0.85rem;
   padding-bottom: 0.8rem;
