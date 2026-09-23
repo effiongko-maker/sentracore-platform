@@ -1540,6 +1540,21 @@
   font-size: 0.875rem;
 }
 
+/* Dense register panel (Monthly contract payments): tighter card + row padding; font sizes unchanged. */
+.fin-v13-panel--dense {
+  padding-top: 0.85rem;
+  padding-bottom: 0.8rem;
+}
+
+.fin-v13-panel--dense .fin-v13-section-head {
+  margin-bottom: 0.6rem;
+}
+
+.fin-v13-panel--dense .fin-v13-table td {
+  padding-top: 0.3rem;
+  padding-bottom: 0.3rem;
+}
+
 .fin-v13-lenses {
   display: flex;
   flex-wrap: wrap;

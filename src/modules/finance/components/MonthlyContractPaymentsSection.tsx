@@ -42,7 +42,7 @@ export function MonthlyContractPaymentsSection() {
   }, []);
 
   return (
-    <section className="fin-v13-panel">
+    <section className="fin-v13-panel fin-v13-panel--dense">
       <div className="fin-v13-section-head">
         <div>
           <h2 className="fin-v13-section-title">Monthly contract payments</h2>
