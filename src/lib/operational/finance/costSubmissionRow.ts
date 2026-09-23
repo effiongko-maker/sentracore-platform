@@ -253,6 +253,7 @@ export function mapRemoteCostSubmission(
     ) as CostSubmission["executionKind"],
     executionId: optionalString(raw, "executionId", "Execution ID"),
     approvalId: optionalString(raw, "approvalId", "Approval ID"),
+    workOrderId: optionalString(raw, "workOrderId"),
     createdAt: String(
       pickField(raw, "createdAt", "Created At") ?? new Date().toISOString()
     ),

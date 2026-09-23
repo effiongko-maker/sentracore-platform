@@ -232,6 +232,7 @@ function mapRemoteWorkOrder(raw: RemoteWorkOrder): WorkOrder {
     ),
     approvalId: optionalMappedString(raw, "approvalId", "Approval ID"),
     clientReference: optionalMappedString(raw, "clientReference"),
+    clientPaymentId: optionalMappedString(raw, "clientPaymentId"),
     workCommercialRoute: (() => {
       const value = optionalMappedString(raw, "workCommercialRoute");
       return value === "work_order" || value === "job_order" ? value : undefined;

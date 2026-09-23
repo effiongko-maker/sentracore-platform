@@ -96,3 +96,55 @@ export function instructionApprovalBlock(route: string | null | undefined): stri
   if (classified === "work_order") return "Work Order Work does not require prior client approval.";
   return null;
 }
+
+/**
+ * Work Order route: the Work Order is the post-execution submission for completed Work — it never authorises
+ * execution, so it is refused until the Work is completed.
+ */
+export function workOrderSubmissionBlock(input: {
+  route: string | null | undefined;
+  orderType: WorkInstructionKind;
+  workStatus: string;
+}): string | null {
+  if (asRoute(input.route) !== "work_order" || input.orderType !== "work_order") return null;
+  if (input.workStatus !== "completed") {
+    return "Submit the Work Order once the Work is completed: it records completed work for client payment.";
+  }
+  return null;
+}
+
+/**
+ * A Client Payment links to a Work Order only as a payment request, for an operational Work Order on Work Order-route
+ * Work (legacy and historical records keep their previous behaviour: no link).
+ */
+export function workOrderClientPaymentBlock(input: {
+  kind: string;
+  orderType: string;
+  route: string | null | undefined;
+  recordOrigin: string;
+}): string | null {
+  if (input.kind !== "payment_request") return "Only a payment request can be raised for a Work Order.";
+  if (input.orderType !== "work_order") return "A client payment request is raised for a Work Order, not a Job Order.";
+  if (input.recordOrigin === "migrated_historical") return "Imported historical Work Orders are read-only source records.";
+  if (asRoute(input.route) !== "work_order") {
+    return "Client payment requests are linked to Work Orders on Work Order-route Work.";
+  }
+  return null;
+}
+
+/**
+ * Work Order route: once a Work Order has been submitted for completed Work, the Work may not leave "completed" through
+ * an ordinary transition (no reopen / reversal workflow exists).
+ */
+export function workReopenBlock(input: {
+  route: string | null | undefined;
+  fromStatus: string;
+  toStatus: string;
+  hasWorkOrder: boolean;
+}): string | null {
+  if (asRoute(input.route) !== "work_order" || !input.hasWorkOrder) return null;
+  if (input.fromStatus === "completed" && input.toStatus !== "completed") {
+    return "This Work has a submitted Work Order: it cannot be moved out of completed.";
+  }
+  return null;
+}

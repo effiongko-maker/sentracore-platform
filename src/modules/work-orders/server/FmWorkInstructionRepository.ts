@@ -9,7 +9,11 @@ import { FmAssetRepository } from "@/modules/assets/server/FmAssetRepository";
 import { uuidsOnly } from "@/modules/assets/server/fmAssetDomain";
 import { createAdminClient } from "@/utils/supabase/admin";
 import type { WorkOrderListParams, WorkOrderOrderType } from "@/modules/work-orders/types";
-import { jobOrderIssueBlock, resolveInstructionOrderType } from "@/modules/maintenance/commercialRoute";
+import {
+  jobOrderIssueBlock,
+  resolveInstructionOrderType,
+  workOrderSubmissionBlock,
+} from "@/modules/maintenance/commercialRoute";
 import {
   ACTIVE_INSTRUCTION_STATUSES,
   ASSIGNED_INSTRUCTION_STATUSES,
@@ -121,6 +125,7 @@ type WorkRef = {
   incident_id: string | null;
   record_origin: string;
   commercial_route: string | null;
+  status: string;
 };
 
 function toColumns(f: InstructionFields): Record<string, unknown> {
@@ -182,7 +187,7 @@ export class FmWorkInstructionRepository {
     const target = workRef.trim();
     const query = this.admin
       .from("fm_work")
-      .select("id, code, facility_id, incident_id, record_origin, commercial_route")
+      .select("id, code, facility_id, incident_id, record_origin, commercial_route, status")
       .eq("organisation_id", this.organisationId);
     const { data, error } = UUID_RE.test(target)
       ? await query.eq("id", target).maybeSingle()
@@ -199,6 +204,7 @@ export class FmWorkInstructionRepository {
       incident_id: rec.incident_id != null ? String(rec.incident_id) : null,
       record_origin: rec.record_origin != null ? String(rec.record_origin) : "operational",
       commercial_route: rec.commercial_route != null ? String(rec.commercial_route) : null,
+      status: String(rec.status ?? ""),
     };
   }
 
@@ -227,6 +233,13 @@ export class FmWorkInstructionRepository {
       approvalStatus: work.commercial_route === "job_order" ? await this.workApprovalStatus(work.id) : null,
     });
     if (issueBlock) throw new FmWorkInstructionValidationError(issueBlock);
+    // Work Order route: the Work Order is submitted for completed Work only (it never authorises execution).
+    const submissionBlock = workOrderSubmissionBlock({
+      route: work.commercial_route,
+      orderType: resolved.orderType,
+      workStatus: work.status,
+    });
+    if (submissionBlock) throw new FmWorkInstructionValidationError(submissionBlock);
     return resolved.orderType;
   }
 
@@ -384,7 +397,7 @@ export class FmWorkInstructionRepository {
     const workIds = [...new Set(rows.map((r) => r.work_id))];
     const parentIds = [...new Set(rows.map((r) => r.parent_instruction_id).filter((v): v is string => !!v))];
 
-    const [work, parents, approvals] = await Promise.all([
+    const [work, parents, approvals, clientPayments] = await Promise.all([
       this.admin
         .from("fm_work")
         .select("id, code, incident_id, commercial_route")
@@ -404,7 +417,21 @@ export class FmWorkInstructionRepository {
         .select("code, work_instruction_id, work_id")
         .eq("organisation_id", this.organisationId)
         .or(`work_instruction_id.in.(${rows.map((r) => r.id).join(",")}),work_id.in.(${workIds.join(",")})`),
+      // The Work Order's active Client Payment (fm_cost_submissions.work_instruction_id) — its receipt state stays there.
+      this.admin
+        .from("fm_cost_submissions")
+        .select("code, work_instruction_id")
+        .eq("organisation_id", this.organisationId)
+        .neq("status", "cancelled")
+        .in("work_instruction_id", rows.map((r) => r.id)),
     ]);
+    if (clientPayments.error) throwDb(clientPayments.error, "Unable to load Client Payment context.");
+    const clientPaymentByInstruction = new Map(
+      (clientPayments.data ?? []).map((p) => [
+        String((p as { work_instruction_id: string }).work_instruction_id),
+        String((p as { code: string }).code),
+      ])
+    );
     if (work.error) throwDb(work.error, "Unable to load Work context.");
     if (approvals.error) throwDb(approvals.error, "Unable to load Approval context.");
     if (parents.error) throwDb(parents.error, "Unable to load parent instructions.");
@@ -450,6 +477,7 @@ export class FmWorkInstructionRepository {
           approvalCodeByInstruction.get(row.id) ??
           (row.order_type === "job_order" ? approvalCodeByWork.get(row.work_id) : undefined),
         workCommercialRoute: w?.route,
+        clientPaymentCode: clientPaymentByInstruction.get(row.id),
       });
     }
     return out;

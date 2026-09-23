@@ -1,4 +1,5 @@
 import "server-only";
+import { workOrderClientPaymentBlock } from "@/modules/maintenance/commercialRoute";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
   applyFacilityScope,
@@ -101,6 +102,7 @@ function submissionRow(rec: Record<string, unknown>): FmCostSubmissionRow {
     description: txt(rec, "description"), client_location: txt(rec, "client_location"), source_note: txt(rec, "source_note"),
     package_type: txt(rec, "package_type"), package_date: txt(rec, "package_date"), package_notes: txt(rec, "package_notes"),
     approval_id: txt(rec, "approval_id"), submitted_at: txt(rec, "submitted_at"), submitted_by_profile_id: txt(rec, "submitted_by_profile_id"),
+    work_instruction_id: txt(rec, "work_instruction_id"),
     queried_at: txt(rec, "queried_at"), query_notes: txt(rec, "query_notes"), notes: txt(rec, "notes"),
     created_by_profile_id: txt(rec, "created_by_profile_id"), updated_by_profile_id: txt(rec, "updated_by_profile_id"),
     created_at: str(rec, "created_at"), updated_at: str(rec, "updated_at"),
@@ -215,6 +217,38 @@ export class FmCostRepository {
     if (error) throwDb(error, "Unable to resolve approval.");
     if (!data) throw new FmCostValidationError(`Approval ${target} not found in this organisation.`);
     return String((data as { id: string }).id);
+  }
+
+  /**
+   * Work Order route: resolve the Work Order a payment request bills. It must be an operational Work Order on Work
+   * Order-route Work with no active Client Payment yet (the DB index / guard enforce the same).
+   */
+  private async resolveWorkOrderForPayment(ref: string, kind: string): Promise<string> {
+    const target = ref.trim();
+    const query = this.admin
+      .from("fm_work_instructions")
+      .select("id, code, order_type, record_origin, work_id")
+      .eq("organisation_id", this.organisationId);
+    const { data, error } = UUID_RE.test(target) ? await query.eq("id", target).maybeSingle() : await query.eq("code", target.toUpperCase()).maybeSingle();
+    if (error) throwDb(error, "Unable to resolve Work Order.");
+    if (!data) throw new FmCostValidationError(`Work Order ${target} not found in this organisation.`);
+    const wi = data as { id: string; code: string; order_type: string; record_origin: string | null; work_id: string };
+    const work = await this.admin.from("fm_work").select("commercial_route").eq("organisation_id", this.organisationId).eq("id", wi.work_id).maybeSingle();
+    if (work.error) throwDb(work.error, "Unable to resolve Work.");
+    const block = workOrderClientPaymentBlock({
+      kind,
+      orderType: wi.order_type,
+      route: (work.data as { commercial_route?: string | null } | null)?.commercial_route ?? null,
+      recordOrigin: wi.record_origin ?? "operational",
+    });
+    if (block) throw new FmCostValidationError(block);
+    const existing = await this.admin
+      .from("fm_cost_submissions").select("code").eq("organisation_id", this.organisationId)
+      .eq("work_instruction_id", wi.id).neq("status", "cancelled").limit(1);
+    if (existing.error) throwDb(existing.error, "Unable to check existing client payments.");
+    const found = (existing.data ?? [])[0] as { code?: string } | undefined;
+    if (found?.code) throw new FmCostValidationError(`Work Order ${wi.code} already has client payment ${found.code}.`);
+    return wi.id;
   }
 
   private async latestCode(table: string, prefix: string): Promise<string | null> {
@@ -555,12 +589,18 @@ export class FmCostRepository {
     const out = new Map<string, SubmissionRelations>();
     if (rows.length === 0) return out;
     const approvalIds = [...new Set(rows.map((r) => r.approval_id).filter((v): v is string => !!v))];
-    const [items, approvals] = await Promise.all([
+    const workOrderIds = [...new Set(rows.map((r) => r.work_instruction_id).filter((v): v is string => !!v))];
+    const [items, approvals, workOrders] = await Promise.all([
       this.admin.from("fm_cost_submission_items").select("submission_id, cost_record_id").eq("organisation_id", this.organisationId).in("submission_id", rows.map((r) => r.id)).order("created_at", { ascending: true }),
       approvalIds.length
         ? this.admin.from("fm_approvals").select("id, code").eq("organisation_id", this.organisationId).in("id", approvalIds)
         : Promise.resolve({ data: [], error: null }),
+      workOrderIds.length
+        ? this.admin.from("fm_work_instructions").select("id, code").eq("organisation_id", this.organisationId).in("id", workOrderIds)
+        : Promise.resolve({ data: [], error: null }),
     ]);
+    if (workOrders.error) throwDb(workOrders.error, "Unable to load client payment Work Orders.");
+    const workOrderCode = new Map((workOrders.data ?? []).map((w) => [String((w as { id: string }).id), String((w as { code: string }).code)]));
     if (items.error) throwDb(items.error, "Unable to load claim costs.");
     if (approvals.error) throwDb(approvals.error, "Unable to load claim approvals.");
     const costIds = [...new Set((items.data ?? []).map((i) => String((i as { cost_record_id: string }).cost_record_id)))];
@@ -570,7 +610,13 @@ export class FmCostRepository {
     if (costs.error) throwDb(costs.error, "Unable to load claim costs.");
     const costCode = new Map((costs.data ?? []).map((c) => [String((c as { id: string }).id), String((c as { code: string }).code)]));
     const approvalCode = new Map((approvals.data ?? []).map((a) => [String((a as { id: string }).id), String((a as { code: string }).code)]));
-    for (const row of rows) out.set(row.id, { costCodes: [], approvalCode: row.approval_id ? approvalCode.get(row.approval_id) : undefined });
+    for (const row of rows) {
+      out.set(row.id, {
+        costCodes: [],
+        approvalCode: row.approval_id ? approvalCode.get(row.approval_id) : undefined,
+        workOrderCode: row.work_instruction_id ? workOrderCode.get(row.work_instruction_id) : undefined,
+      });
+    }
     for (const item of items.data ?? []) {
       const rec = item as { submission_id: string; cost_record_id: string };
       const code = costCode.get(rec.cost_record_id);
@@ -639,6 +685,7 @@ export class FmCostRepository {
     }
     if (input.departmentId !== undefined) columns.department_id = input.departmentId ? await this.resolveDepartmentId(input.departmentId) : null;
     if (input.approvalRef !== undefined) columns.approval_id = input.approvalRef ? await this.resolveApprovalId(input.approvalRef) : null;
+    if (input.workOrderRef) columns.work_instruction_id = await this.resolveWorkOrderForPayment(input.workOrderRef, input.submissionKind);
     const now = new Date().toISOString();
     if (input.status === "submitted" || input.status === "queried") {
       columns.submitted_at = columns.submitted_at ?? now;
@@ -653,6 +700,16 @@ export class FmCostRepository {
   }
 
   async updateSubmission(input: ParsedUpdateSubmission, existing: FmCostSubmissionRow, actorProfileId: string): Promise<FmCostSubmissionRow> {
+    if (input.workOrderRef !== undefined) {
+      // Fixed at creation: echoing the current link is a no-op; any change is refused (the DB guard agrees).
+      const target = input.workOrderRef.trim();
+      const query = this.admin.from("fm_work_instructions").select("id").eq("organisation_id", this.organisationId);
+      const { data, error } = UUID_RE.test(target) ? await query.eq("id", target).maybeSingle() : await query.eq("code", target.toUpperCase()).maybeSingle();
+      if (error) throwDb(error, "Unable to resolve Work Order.");
+      if (!data || String((data as { id: string }).id) !== existing.work_instruction_id) {
+        throw new FmCostValidationError("A client payment's Work Order is set when it is created and cannot be changed.");
+      }
+    }
     const patch = this.submissionColumns(input);
     if (input.facilityRef !== undefined) patch.facility_id = input.facilityRef ? await this.resolveFacilityId(input.facilityRef) : null;
     if (patch.facility_id && patch.facility_id !== existing.facility_id && !this.scope.canOperateIn(String(patch.facility_id))) {

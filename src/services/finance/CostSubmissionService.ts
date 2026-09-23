@@ -57,6 +57,8 @@ export type CreateCostSubmissionInput = {
   executionKind?: CostSubmission["executionKind"];
   executionId?: string;
   approvalId?: string;
+  /** Work Order a payment request bills (set on create only). */
+  workOrderId?: string;
   createdBy: string;
   createdAt?: string;
   submittedAt?: string;
@@ -213,6 +215,7 @@ export const CostSubmissionService = {
       executionKind: input.executionKind,
       executionId: input.executionId,
       approvalId: input.approvalId,
+      workOrderId: input.workOrderId,
       createdAt: input.createdAt ?? new Date().toISOString(),
       createdBy: input.createdBy,
       submittedAt: input.submittedAt,

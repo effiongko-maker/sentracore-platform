@@ -235,10 +235,15 @@ export function ViewMaintenanceModal({
                         type="button"
                         size="sm"
                         loading={creatingWorkOrder}
-                        disabled={!route && !newOrderType}
+                        disabled={(!route && !newOrderType) || (route === "work_order" && maintenance.status !== "completed")}
+                        title={
+                          route === "work_order" && maintenance.status !== "completed"
+                            ? "The Work Order is submitted after the work is completed."
+                            : undefined
+                        }
                         onClick={() => void handleCreateWorkOrder()}
                       >
-                        {route === "work_order" ? "Create Work Order" : "Create Work Instruction"}
+                        {route === "work_order" ? "Submit Work Order" : "Create Work Instruction"}
                       </Button>
                     </>
                   )}

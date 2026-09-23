@@ -797,6 +797,9 @@ export function SubmissionDetailPage({
                   <div><dt>Status</dt><dd>{clientPaymentStatusLabel}</dd></div>
                   <div><dt>Request</dt><dd>{submission.description ?? "—"}</dd></div>
                   <div><dt>Client reference</dt><dd>{submission.submissionPackage?.reference ?? "—"}</dd></div>
+                  {submission.workOrderId ? (
+                    <div><dt>Work Order</dt><dd>{submission.workOrderId}</dd></div>
+                  ) : null}
                   {submission.periodLabel ? (
                     <div><dt>Period</dt><dd>{submission.periodLabel}</dd></div>
                   ) : null}

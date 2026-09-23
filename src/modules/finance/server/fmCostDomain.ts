@@ -345,11 +345,13 @@ export type FmCostSubmissionRow = {
   description: string | null; client_location: string | null; source_note: string | null;
   package_reference: string | null; package_type: string | null; package_date: string | null; package_notes: string | null;
   approval_id: string | null; submitted_at: string | null; submitted_by_profile_id: string | null;
+  /** The Work Order a payment request bills (Work Order route). */
+  work_instruction_id: string | null;
   queried_at: string | null; query_notes: string | null; notes: string | null;
   created_by_profile_id: string | null; updated_by_profile_id: string | null; created_at: string; updated_at: string;
 };
 export const FM_COST_SUBMISSION_SELECT =
-  "id, organisation_id, code, status, currency, claim_amount, markup_amount, markup_rate_percent, no_markup, facility_id, department_id, period_label, submission_kind, description, client_location, source_note, package_reference, package_type, package_date, package_notes, approval_id, submitted_at, submitted_by_profile_id, queried_at, query_notes, notes, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
+  "id, organisation_id, code, status, currency, claim_amount, markup_amount, markup_rate_percent, no_markup, facility_id, department_id, period_label, submission_kind, description, client_location, source_note, package_reference, package_type, package_date, package_notes, approval_id, work_instruction_id, submitted_at, submitted_by_profile_id, queried_at, query_notes, notes, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
 
 export type SubmissionFields = {
   costRefs?: string[];
@@ -370,6 +372,8 @@ export type SubmissionFields = {
   packageDate?: string | null;
   packageNotes?: string | null;
   approvalRef?: string | null;
+  /** Work Order (UUID or code) a payment request bills — create only; fixed once set. */
+  workOrderRef?: string;
   submittedAt?: string | null;
   queriedAt?: string | null;
   queryNotes?: string | null;
@@ -410,6 +414,7 @@ function parseSubmissionFields(raw: Record<string, unknown>): SubmissionFields {
   }
   // Approval is a UUID relationship to the FM Approval (code accepted only as input, resolved in-tenant).
   if (raw.approvalId !== undefined) out.approvalRef = refOrUndefined(raw.approvalId) ?? null;
+  if (raw.workOrderId !== undefined) out.workOrderRef = refOrUndefined(raw.workOrderId);
   if (raw.submittedAt !== undefined) out.submittedAt = nullableIso(raw.submittedAt, "Submitted at");
   if (raw.queriedAt !== undefined) out.queriedAt = nullableIso(raw.queriedAt, "Queried at");
   if (raw.queryNotes !== undefined) out.queryNotes = nullableText(raw.queryNotes);
@@ -491,7 +496,7 @@ export function parseSubmissionListParams(payload: unknown): SubmissionListParam
   };
 }
 
-export type SubmissionRelations = { costCodes: string[]; approvalCode?: string };
+export type SubmissionRelations = { costCodes: string[]; approvalCode?: string; workOrderCode?: string };
 
 export function mapFmCostSubmissionRow(row: FmCostSubmissionRow, relations: SubmissionRelations = { costCodes: [] }): CostSubmission & { submissionUuid: string } {
   const hasMarkup = row.markup_amount != null || row.markup_rate_percent != null || row.no_markup != null;
@@ -526,6 +531,7 @@ export function mapFmCostSubmissionRow(row: FmCostSubmissionRow, relations: Subm
         }
       : undefined,
     approvalId: relations.approvalCode,
+    workOrderId: relations.workOrderCode,
     createdAt: row.created_at,
     createdBy: row.created_by_profile_id ?? "",
     submittedAt: row.submitted_at ?? undefined,

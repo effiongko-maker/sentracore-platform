@@ -1,6 +1,7 @@
 "use client";
 
 import { AuthorisedFacilitySelect } from "@/components/operational/AuthorisedFacilitySelect";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/modals/Modal";
 import { Button } from "@/components/ui/Button";
@@ -494,7 +495,10 @@ export function MaintenanceFormModal({
       });
       return;
     }
-    if (isTerminalLifecycle) {
+    // Work Order route: the Work Order is submitted AFTER completion (the server enforces it); only cancelled Work is
+    // closed to it. Other routes keep the previous rule.
+    const workOrderRoute = form.commercialRoute === "work_order";
+    if (workOrderRoute ? isCancelled : isTerminalLifecycle) {
       toast({
         type: "info",
         title: "Maintenance is closed",
@@ -941,6 +945,7 @@ export function MaintenanceFormModal({
           {!requiresWo ? (
             <p className="text-sm text-muted">Not applicable</p>
           ) : linkedWorkOrderId ? (
+            <div className="space-y-2">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="min-w-0 flex-1 rounded-md border border-border bg-card px-3 py-2 text-sm">
                 <span className="font-medium text-foreground">
@@ -962,6 +967,30 @@ export function MaintenanceFormModal({
               >
                 Change link
               </Button>
+            </div>
+            {route === "work_order" && isEdit ? (
+              // Work Order route: the submitted Work Order is billed through one Client Payment (payment request);
+              // its receipt state lives there, never on the Work Order.
+              linkedWorkOrder?.clientPaymentId ? (
+                <p className="text-xs text-muted">
+                  Client payment{" "}
+                  <Link
+                    href={`/finance/submissions/${encodeURIComponent(linkedWorkOrder.clientPaymentId)}`}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    {linkedWorkOrder.clientPaymentId}
+                  </Link>{" "}
+                  — receipts are recorded there.
+                </p>
+              ) : (
+                <Link
+                  href={`/finance/client-payments/new?workOrder=${encodeURIComponent(linkedWorkOrderId)}`}
+                  className="inline-block text-sm font-medium text-primary hover:underline"
+                >
+                  Request client payment for {linkedWorkOrderId} →
+                </Link>
+              )
+            ) : null}
             </div>
           ) : (
             <div className="space-y-3 rounded-md border border-border/80 bg-muted/20 p-3">
@@ -1043,11 +1072,11 @@ export function MaintenanceFormModal({
                     (!route && !newOrderType) ||
                     creatingWorkOrder ||
                     busy ||
-                    isTerminalLifecycle
+                    (route === "work_order" ? !isCompleted : isTerminalLifecycle)
                   }
                   onClick={() => void handleCreateWorkOrder()}
                 >
-                  {route === "work_order" ? "Create Work Order" : "Create new work order"}
+                  {route === "work_order" ? "Submit Work Order" : "Create new work order"}
                 </Button>
                 <Button
                   type="button"
@@ -1062,6 +1091,11 @@ export function MaintenanceFormModal({
               </div>
               </>
               )}
+              {route === "work_order" && isEdit && !isCompleted ? (
+                <p className="text-xs text-muted">
+                  The Work Order is submitted after the work is completed. Complete this Work first.
+                </p>
+              ) : null}
               {!isEdit ? (
                 <p className="text-xs text-muted">
                   Save this maintenance record first to create a work order from

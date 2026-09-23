@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -78,7 +79,31 @@ export function WorkOrderClientApprovalSection({
             </p>
           ) : classifiedRoute === "work_order" ? (
             <p className="mt-1 text-xs text-muted">
-              Work Orders do not require prior client approval.
+              Work Orders do not require prior client approval. Payment is requested through a Client Payment
+              {workOrder.clientPaymentId ? (
+                <>
+                  :{" "}
+                  <Link
+                    href={`/finance/submissions/${encodeURIComponent(workOrder.clientPaymentId)}`}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    {workOrder.clientPaymentId}
+                  </Link>
+                </>
+              ) : workOrder.recordOrigin !== "migrated_historical" ? (
+                <>
+                  {" "}
+                  —{" "}
+                  <Link
+                    href={`/finance/client-payments/new?workOrder=${encodeURIComponent(workOrder.id)}`}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    request client payment →
+                  </Link>
+                </>
+              ) : (
+                "."
+              )}
             </p>
           ) : (
           <p className="mt-1 text-xs text-muted">

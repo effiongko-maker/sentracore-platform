@@ -20,13 +20,19 @@ type Kind = "payment_request" | "contract_instalment";
  * New Payment request / Contract instalment — a Client Payment billed to the client. No cost records and no
  * reimbursement authorization (those belong to Reimbursement claims, which keep their own workflow). The request is
  * recorded as submitted; receipts are then recorded against it (partial receipts supported).
+ *
+ * Work Order route: opened with a Work Order, it records the payment request billed for that Work Order. Every
+ * commercial fact (what was requested, amount, date, reference) is still entered here — never taken from the Work.
  */
-export function ClientPaymentFormPage({ initialKind }: { initialKind?: string }) {
+export function ClientPaymentFormPage({ initialKind, workOrderId }: { initialKind?: string; workOrderId?: string }) {
   const router = useRouter();
   const { toast } = useToast();
   const { can } = useOperatingAccess();
   const canCreate = can("finance.create");
-  const [kind, setKind] = useState<Kind>(initialKind === "contract_instalment" ? "contract_instalment" : "payment_request");
+  const forWorkOrder = workOrderId?.trim() || undefined;
+  const [kind, setKind] = useState<Kind>(
+    !forWorkOrder && initialKind === "contract_instalment" ? "contract_instalment" : "payment_request"
+  );
   const [description, setDescription] = useState("");
   const [reference, setReference] = useState("");
   const [submittedOn, setSubmittedOn] = useState("");
@@ -69,6 +75,7 @@ export function ClientPaymentFormPage({ initialKind }: { initialKind?: string })
         submittedAt: `${submittedOn}T00:00:00+01:00`,
         submittedBy: userId,
         createdBy: userId,
+        workOrderId: forWorkOrder,
       });
       toast({ type: "success", title: `${CLIENT_PAYMENT_KIND_LABELS[kind]} recorded` });
       router.push(`/finance/submissions/${encodeURIComponent(record.submissionId)}`);
@@ -95,12 +102,18 @@ export function ClientPaymentFormPage({ initialKind }: { initialKind?: string })
             <p className="fin-section-lede">You do not have permission to record client payments.</p>
           ) : (
             <div className="fin-submission-form-grid">
+              {forWorkOrder ? (
+                <FormField label="For Work Order" htmlFor="cp-wo">
+                  <input id="cp-wo" className={inputClassName} value={forWorkOrder} readOnly disabled />
+                </FormField>
+              ) : (
               <FormField label="Type" htmlFor="cp-kind" required>
                 <select id="cp-kind" className={inputClassName} value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
                   <option value="payment_request">{CLIENT_PAYMENT_KIND_LABELS.payment_request}</option>
                   <option value="contract_instalment">{CLIENT_PAYMENT_KIND_LABELS.contract_instalment}</option>
                 </select>
               </FormField>
+              )}
               <FormField label="Client reference (invoice / request no.)" htmlFor="cp-ref">
                 <input id="cp-ref" className={inputClassName} value={reference} onChange={(e) => setReference(e.target.value)} />
               </FormField>

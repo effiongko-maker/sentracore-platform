@@ -146,6 +146,8 @@ export type FmWorkInstructionRelations = {
   approvalCode?: string;
   /** The Work's execution basis (fm_work.commercial_route) — derived; undefined for legacy-unclassified Work. */
   workCommercialRoute?: WorkOrderOrderType;
+  /** Code of this Work Order's active Client Payment (fm_cost_submissions.work_instruction_id) — derived. */
+  clientPaymentCode?: string;
 };
 
 function optionalTrimmed(value: unknown): string | undefined {
@@ -484,6 +486,7 @@ export function mapFmWorkInstructionRowToWorkOrder(
     approvalId: relations.approvalCode,
     clientReference: row.client_reference ?? undefined,
     workCommercialRoute: relations.workCommercialRoute,
+    clientPaymentId: relations.clientPaymentCode,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     createdByUserId: row.created_by_profile_id ?? undefined,

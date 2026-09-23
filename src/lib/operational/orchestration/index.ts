@@ -386,6 +386,9 @@ export async function orchestrateCreateWorkOrderFromMaintenance(options: {
         priority: maintenance.priority || "medium",
         orderType: options.orderType,
         clientReference: options.clientReference,
+        // The Work Order's OWN lifecycle starts "open" (issued / submitted, not closed) on every route — it never copies
+        // the Work's completion. Its record date is requestedAt (now): when it is actually submitted / recorded. On the
+        // Work Order route the repository refuses it until the Work is completed.
         status: "open",
         requestedAt: options.context.now,
         createdByUserId: options.context.userId,

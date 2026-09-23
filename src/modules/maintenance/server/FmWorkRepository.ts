@@ -1,5 +1,5 @@
 import "server-only";
-import { jobOrderExecutionBlock } from "@/modules/maintenance/commercialRoute";
+import { jobOrderExecutionBlock, workReopenBlock } from "@/modules/maintenance/commercialRoute";
 import { FmAssetRepository } from "@/modules/assets/server/FmAssetRepository";
 import { uuidsOnly } from "@/modules/assets/server/fmAssetDomain";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -543,6 +543,14 @@ export class FmWorkRepository {
       });
       if (executionBlock) throw new FmWorkValidationError(executionBlock);
     }
+    // Work Order route: a submitted Work Order pins its Work at completed (the route cannot change once one exists).
+    const reopenBlock = workReopenBlock({
+      route: existing.commercial_route,
+      fromStatus: existing.status,
+      toStatus: nextStatus,
+      hasWorkOrder: existing.work_instruction_codes.length > 0,
+    });
+    if (reopenBlock) throw new FmWorkValidationError(reopenBlock);
     let completedAt =
       input.completedAt !== undefined
         ? input.completedAt

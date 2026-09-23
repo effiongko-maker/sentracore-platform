@@ -308,6 +308,8 @@ export type CostSubmission = {
 
   /** Relationship to Approval domain — not duplicated approval state. */
   approvalId?: string;
+  /** Work Order this payment request bills (Work Order route) — relationship only; receipts stay on the Client Payment. */
+  workOrderId?: string;
 
   /** Audit — who prepared and when. */
   createdAt: string;

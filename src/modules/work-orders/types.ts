@@ -101,6 +101,8 @@ export interface WorkOrder {
   clientReference?: string;
   /** The Work's execution basis (derived). Undefined for legacy-unclassified Work. */
   workCommercialRoute?: WorkOrderOrderType;
+  /** The active Client Payment (payment request) raised for this Work Order — derived; receipts live there. */
+  clientPaymentId?: string;
 
   createdAt: string;
   updatedAt: string;

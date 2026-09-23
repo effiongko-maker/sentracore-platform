@@ -7,10 +7,10 @@ export const metadata: Metadata = {
 };
 
 type PageProps = {
-  searchParams: Promise<{ kind?: string }>;
+  searchParams: Promise<{ kind?: string; workOrder?: string }>;
 };
 
 export default async function NewClientPaymentRoute({ searchParams }: PageProps) {
   const params = await searchParams;
-  return <ClientPaymentFormPage initialKind={params.kind} />;
+  return <ClientPaymentFormPage initialKind={params.kind} workOrderId={params.workOrder} />;
 }
