@@ -15,6 +15,12 @@ export type MonthlyContractPayment = {
   submissionDate?: string;
   paymentDatetime?: string;
   commercialReference?: string;
+  /** Live Platform Finance client receivable for the same obligation, when one exists (derived state only). */
+  clientReceivable?: {
+    state: "open" | "partially_settled" | "settled";
+    outstandingAmount: number;
+    currency: string;
+  };
 };
 
 export const MonthlyPaymentsService = {

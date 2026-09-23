@@ -34,6 +34,7 @@ export async function POST() {
       .map((f) => {
         const month = monthlyPaymentPeriodLabel(f.description);
         return {
+          factId: f.id,
           month,
           slug: monthlyPaymentSlug(month),
           requestedAmount: f.submittedAmount ?? undefined,
@@ -53,7 +54,45 @@ export async function POST() {
       // Chronological ascending by the "YYYY-MM" slug (not the alphabetical month label); unparseable periods last.
       .sort((a, b) => (a.slug ?? "9999-99").localeCompare(b.slug ?? "9999-99"));
 
-    return NextResponse.json({ success: true, data: monthly }, { headers: { "Cache-Control": "no-store" } });
+    // Live client receivable (Platform Finance) that references the same historical fact, when one exists. Its open
+    // balance is derived from receipt allocations (off-ledger receivables settle on confirmed receipts). Ids stay
+    // server-side — only the derived state and outstanding amount are exposed.
+    const { createAdminClient } = await import("@/utils/supabase/admin");
+    const admin = createAdminClient();
+    const factIds = monthly.map((m) => m.factId);
+    const { data: receivables, error: recvError } = factIds.length
+      ? await admin
+          .from("finance_receivables")
+          .select("id,historical_fact_id,original_amount,currency")
+          .eq("organisation_id", organisationId)
+          .in("historical_fact_id", factIds)
+      : { data: [], error: null };
+    if (recvError) throw recvError;
+    const settledById = new Map<string, number>();
+    const recvIds = (receivables ?? []).map((r) => String(r.id));
+    if (recvIds.length) {
+      const { data: allocations, error: allocError } = await admin
+        .from("finance_receipt_allocations")
+        .select("receivable_id,amount,finance_receipts!inner(status)")
+        .in("receivable_id", recvIds)
+        .in("finance_receipts.status", ["confirmed", "posted"]);
+      if (allocError) throw allocError;
+      for (const a of allocations ?? []) {
+        settledById.set(String(a.receivable_id), (settledById.get(String(a.receivable_id)) ?? 0) + Number(a.amount));
+      }
+    }
+    const receivableByFact = new Map(
+      (receivables ?? []).map((r) => {
+        const original = Number(r.original_amount);
+        const settled = settledById.get(String(r.id)) ?? 0;
+        const outstandingAmount = Math.max(0, Math.round((original - settled) * 100) / 100);
+        const state = outstandingAmount === 0 ? "settled" : settled > 0 ? "partially_settled" : "open";
+        return [String(r.historical_fact_id), { state, outstandingAmount, currency: String(r.currency) }] as const;
+      })
+    );
+    const data = monthly.map(({ factId, ...row }) => ({ ...row, clientReceivable: receivableByFact.get(factId) }));
+
+    return NextResponse.json({ success: true, data }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("[finance/monthly-payments]", error);
     return NextResponse.json({ success: false, message: "Unable to load monthly contract payments.", data: [] }, { status: 500 });

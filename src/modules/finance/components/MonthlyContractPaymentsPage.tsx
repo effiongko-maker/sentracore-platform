@@ -88,9 +88,19 @@ export function MonthlyContractPaymentsPage() {
         key: "status",
         header: "Status",
         render: (row) => (
-          <span className={`fin-v13-pill fin-v13-pill--${row.status?.tone ?? "neutral"}`}>
-            {row.status?.label ?? "Not recorded"}
-          </span>
+          <div>
+            <span className={`fin-v13-pill fin-v13-pill--${row.status?.tone ?? "neutral"}`}>
+              {row.status?.label ?? "Not recorded"}
+            </span>
+            {row.clientReceivable ? (
+              // Live Platform Finance receivable for this instalment — its settlement state, not the source status.
+              <p className="text-xs text-muted">
+                {row.clientReceivable.state === "settled"
+                  ? "Receivable settled"
+                  : `Receivable ${row.clientReceivable.state === "open" ? "open" : "partially settled"} · ${formatMonthlyPaymentAmount(row.clientReceivable.outstandingAmount, row.clientReceivable.currency)} outstanding`}
+              </p>
+            ) : null}
+          </div>
         ),
       },
       {

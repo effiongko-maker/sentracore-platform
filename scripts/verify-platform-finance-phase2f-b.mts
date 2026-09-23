@@ -31,7 +31,10 @@ assert.match(dbVerify, /rollback;/);
 assert.match(types, /receivable_view: "platform_finance\.receivable\.view"/);
 assert.match(server, /listAccessibleCompanyIds/);
 assert.match(server, /platform_finance\.receivable\.view/);
-assert.match(server, /outstandingAmount = Math\.max\(0, originalAmount - posted\)/);
+// Invoice (GL-recognised) receivables settle on POSTED receipts; off-ledger non-invoice receivables on confirmed ones.
+assert.match(server, /const settled = offLedger \? committed : posted;/);
+assert.match(server, /offLedger = originType !== "invoice"/);
+assert.match(server, /outstandingAmount = Math\.max\(0, originalAmount - settled\)/);
 assert.match(server, /availableToAllocate = Math\.max\(0, originalAmount - committed\)/);
 assert.doesNotMatch(server + route, /is_platform_super_admin/i);
 assert.match(route, /PLATFORM_FINANCE_CAPABILITIES\.receivable_view/);

@@ -1235,21 +1235,26 @@ export class PlatformFinanceServerService {
     if (receivableGrant && companyIdsForRequests.length) {
       const { data: receivableRows, error: receivableError } = await admin
         .from("finance_receivables")
-        .select("id,due_date,original_amount")
+        .select("id,due_date,original_amount,origin_type")
         .eq("organisation_id", this.organisationId)
         .in("company_id", companyIdsForRequests);
       if (receivableError) throw new ActionError("INTERNAL_ERROR", receivableError.message);
       const ids = (receivableRows ?? []).map((row) => String(row.id));
+      // Settled amount per receivable: posted receipts for GL-recognised (invoice) receivables; confirmed or posted
+      // receipts for off-ledger (non-invoice) receivables, which are never posted.
+      const offLedger = new Set((receivableRows ?? []).filter((row) => row.origin_type !== "invoice").map((row) => String(row.id)));
       const posted = new Map<string, number>();
       if (ids.length) {
         const { data: allocations, error: allocationError } = await admin
           .from("finance_receipt_allocations")
           .select("receivable_id,amount,finance_receipts!inner(status)")
           .in("receivable_id", ids)
-          .eq("finance_receipts.status", "posted");
+          .in("finance_receipts.status", ["confirmed", "posted"]);
         if (allocationError) throw new ActionError("INTERNAL_ERROR", allocationError.message);
         for (const allocation of allocations ?? []) {
           const id = String(allocation.receivable_id);
+          const status = (allocation.finance_receipts as unknown as { status: string }).status;
+          if (status !== "posted" && !offLedger.has(id)) continue;
           posted.set(id, (posted.get(id) ?? 0) + Number(allocation.amount));
         }
       }
@@ -1258,7 +1263,8 @@ export class PlatformFinanceServerService {
         dueDate: row.due_date,
         amount: Math.max(0, Number(row.original_amount) - (posted.get(String(row.id)) ?? 0)),
       })).filter((row) => row.amount > 0);
-      const overdueRows = outstandingRows.filter((row) => row.dueDate < today);
+      // No stated due date (live client billing) is never overdue — never inferred.
+      const overdueRows = outstandingRows.filter((row) => row.dueDate != null && row.dueDate < today);
       receivables = {
         open: sumBucket(outstandingRows.map((row) => row.amount)),
         overdue: sumBucket(overdueRows.map((row) => row.amount)),
