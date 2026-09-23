@@ -2525,6 +2525,20 @@
     0 0 24px rgba(22, 101, 52, 0.28);
 }
 
+/* No active critical condition (0 or unavailable): neutral tile — no red / emergency treatment. */
+.sc-fm-hero .sc-fm-hero-critical-tile.is-inactive {
+  background: rgba(15, 23, 42, 0.35);
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.18);
+}
+
+.sc-fm-hero .sc-fm-hero-critical-tile.is-inactive .sc-fm-hero-critical-label {
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.sc-fm-hero .sc-fm-hero-critical-tile.is-inactive .sc-fm-hero-critical-meta {
+  color: rgba(148, 163, 184, 0.75);
+}
+
 .sc-fm-hero-critical-value {
   margin: 0;
   font-size: 2rem;

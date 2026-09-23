@@ -381,7 +381,11 @@ function CommandHero({
         <div className="sc-fm-hero-metrics" aria-label="Operational status">
           <Link
             href="/work"
-            className="sc-fm-hero-critical-tile sc-fm-hero-critical-link"
+            className={cn(
+              "sc-fm-hero-critical-tile sc-fm-hero-critical-link",
+              // Critical styling signals an active critical condition only — not the metric's name.
+              !(criticalWork != null && criticalWork > 0) && "is-inactive"
+            )}
           >
             <p className="sc-fm-hero-critical-value">{padCount(criticalWork)}</p>
             <p className="sc-fm-hero-critical-label">Critical work</p>
