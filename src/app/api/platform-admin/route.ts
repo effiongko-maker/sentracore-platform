@@ -46,6 +46,8 @@ type RequestBody = {
   before?: string;
   limit?: number;
   facilityId?: string;
+  /** Create Account: several facilities (each becomes an ordinary assignment with operationalRole). */
+  facilityIds?: string[];
   operationalRole?: string;
   assignmentId?: string;
   capabilityPackage?: string | null;
@@ -137,6 +139,9 @@ export async function POST(request: Request) {
           homeModule: body.homeModule,
           landingWorkspace: body.landingWorkspace,
           facilityAssignment: body.facilityId ? { facilityId: body.facilityId, operationalRole: body.operationalRole } : null,
+          facilityAssignments: Array.isArray(body.facilityIds)
+            ? body.facilityIds.map((facilityId) => ({ facilityId: String(facilityId), operationalRole: body.operationalRole }))
+            : null,
           capabilityPackage: body.capabilityPackage,
           capabilities: body.capabilities,
         });

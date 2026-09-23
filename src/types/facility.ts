@@ -12,7 +12,6 @@ export type {
 } from "@/modules/facilities/types";
 
 export {
-  FACILITY_LOCATIONS,
   FACILITY_STATUSES,
   FACILITY_TYPES,
 } from "@/modules/facilities/constants";

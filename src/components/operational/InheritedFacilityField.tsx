@@ -1,17 +1,16 @@
 "use client";
 
 import { useEffect } from "react";
-import { FormField, inputClassName } from "@/components/forms/FormField";
+import { FormField } from "@/components/forms/FormField";
+import { AuthorisedFacilitySelect } from "@/components/operational/AuthorisedFacilitySelect";
 import { useFacilityOptions } from "@/hooks/useFacilityOptions";
 import { useScopedFacilityResolver } from "@/hooks/useScopedFacilityResolver";
 import { facilityDisplayName } from "@/lib/platform/scopedFacility";
 
 /**
- * Facility for create/edit forms is INHERITED from the signed-in user's active
- * facility assignment — never chosen per record. Read-only. On create the
- * resolved facility is pushed into the form; on edit the record's own facility
- * is shown untouched. A failed facility load is an explicit error, not an
- * empty choice.
+ * Facility field for create/edit forms — a normal dropdown of the user's AUTHORISED facilities (facility is an
+ * attribute of the record, not a workspace context). On create it preselects the only authorised facility when there
+ * is exactly one; on edit it shows the record's own facility. A failed facility load is an explicit error.
  */
 export function InheritedFacilityField({
   open,
@@ -30,8 +29,7 @@ export function InheritedFacilityField({
   onResolve: (facilityId: string) => void;
 }) {
   const { facilities, loading, error: loadError } = useFacilityOptions(open);
-  // Create when the form opened without a facility (edit forms arrive with the record's own facility).
-  const resolveScoped = useScopedFacilityResolver({ open, creating: !value.trim() });
+  const resolveScoped = useScopedFacilityResolver();
 
   useEffect(() => {
     if (!open || value.trim()) return;
@@ -39,27 +37,19 @@ export function InheritedFacilityField({
     if (resolved) onResolve(resolved);
   }, [open, value, facilities, resolveScoped, onResolve]);
 
-  const shown = value.trim()
-    ? facilityDisplayName(facilities, value)
-    : loading
-      ? "Loading facility…"
-      : loadError
-        ? "Facility unavailable"
-        : "No facility context";
-
   return (
     <FormField
       label={label}
       htmlFor={id}
       required
-      error={error ?? (loadError && !value.trim() ? "Couldn't load your facility. Close and reopen to retry." : undefined)}
+      error={error ?? (loadError && !value.trim() ? "Couldn't load facilities. Close and reopen to retry." : undefined)}
     >
-      <input
+      <AuthorisedFacilitySelect
         id={id}
-        className={inputClassName}
-        value={shown}
-        readOnly
-        aria-readonly="true"
+        value={value}
+        currentName={facilityDisplayName(facilities, value)}
+        disabled={loading}
+        onChange={onResolve}
       />
     </FormField>
   );

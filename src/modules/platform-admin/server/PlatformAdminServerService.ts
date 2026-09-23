@@ -1,3 +1,4 @@
+import { normaliseRequestedAssignments } from "./facilityAssignmentRequest";
 import { ActionError } from "@/lib/actions/errors";
 import { createAdminClient } from "@/utils/supabase/admin";
 import type { ProfileStatus } from "@/lib/auth/types";
@@ -174,6 +175,8 @@ export class PlatformAdminServerService {
       homeModule?: unknown;
       landingWorkspace?: unknown;
       facilityAssignment?: { facilityId: string; operationalRole: unknown } | null;
+      /** One or more facilities (e.g. both NCC Annex and CSIRT) — each becomes an ordinary assignment row. */
+      facilityAssignments?: Array<{ facilityId: string; operationalRole: unknown }> | null;
       capabilityPackage?: unknown;
       capabilities?: unknown[];
     }
@@ -206,18 +209,15 @@ export class PlatformAdminServerService {
     if (capabilityPackage !== null && capabilityPackage !== "facility_manager") {
       throw new ActionError("VALIDATION_ERROR", "Unknown capability package.");
     }
-    let assignment: { facilityId: string; operationalRole: string } | null = null;
+    const assignments = normaliseRequestedAssignments(input);
     // Facility context belongs to Facility Management (and to platform-scope accounts, which may work across
     // modules). A home whose domain has no facility context — ECC Operations, Platform Finance — never carries a
     // facility assignment or an FM operating role.
-    if (input.facilityAssignment && accessScope === "module" && !workspaceEntry(homeModule as string)?.facilityContext) {
+    if (assignments.length && accessScope === "module" && !workspaceEntry(homeModule as string)?.facilityContext) {
       throw new ActionError("VALIDATION_ERROR", `${workspaceLabel(homeModule as string)} has no facility context: a facility assignment and FM operating role do not apply.`);
     }
-    if (input.facilityAssignment) {
-      const role = parseOperationalRole(input.facilityAssignment.operationalRole);
-      assignment = { facilityId: input.facilityAssignment.facilityId, operationalRole: role };
-    }
-    if (capabilityPackage === "facility_manager" && assignment?.operationalRole !== "facility_manager") {
+    const assignment = assignments[0] ?? null;
+    if (capabilityPackage === "facility_manager" && !assignments.some((a) => a.operationalRole === "facility_manager")) {
       throw new ActionError("VALIDATION_ERROR", "The Facility Manager package requires an active facility_manager facility assignment.");
     }
     const explicit = [...new Set(input.capabilities ?? [])];
@@ -287,17 +287,18 @@ export class PlatformAdminServerService {
       fail("access_scope", error);
     }
     try {
-      if (assignment) {
-        // For an ACTIVE facility_manager this also applies the canonical Facility Manager package (audited grants).
+      // One ordinary, audited fm_facility_assignments row per facility ("Both" = two rows; no synthetic facility).
+      // For an ACTIVE facility_manager this also applies the canonical Facility Manager package (audited grants).
+      for (const a of assignments) {
         await this.setFacilityAssignment(ctx, {
           organisationId: organisation.id,
           profileId,
-          facilityId: assignment.facilityId,
-          operationalRole: assignment.operationalRole,
+          facilityId: a.facilityId,
+          operationalRole: a.operationalRole,
           status: "active",
         });
-        completed.push("facility_assignment");
       }
+      if (assignments.length) completed.push("facility_assignment");
     } catch (error) {
       fail("facility_assignment", error);
     }
@@ -347,6 +348,7 @@ export class PlatformAdminServerService {
       homeModule: accessScope === "module" ? (homeModule as string) : null,
       landingWorkspace: landingRaw,
       assignment,
+      assignments,
       capabilityPackage: capabilityPackage as "facility_manager" | null,
       grantedCapabilities: held,
       authEmailSent: false,

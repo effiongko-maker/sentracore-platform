@@ -44,10 +44,7 @@ export function FacilitiesTable({
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-xs font-semibold text-white">
               {getFacilityInitials(facility.name)}
             </div>
-            <div>
-              <span className="font-medium text-foreground">{facility.name}</span>
-              <p className="text-xs text-muted">{facility.id}</p>
-            </div>
+            <span className="font-medium text-foreground">{facility.name}</span>
           </div>
         ),
       },

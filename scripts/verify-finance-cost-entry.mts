@@ -57,7 +57,8 @@ function main() {
   assert(modal.includes("What was this for?"), "description label");
   assert(modal.includes("How much?"), "amount label");
   assert(!modal.includes('label="Where?"'), "facility selector removed from UX");
-  assert(!modal.includes("cost-facility"), "no facility dropdown field");
+  // Facility is a normal record attribute: a dropdown of the user's AUTHORISED facilities (no free choice of any facility).
+  assert(modal.includes("<AuthorisedFacilitySelect") && modal.includes('id="cost-facility"'), "facility dropdown of authorised facilities");
   assert(!modal.includes("FAC-0001"), "no legacy facility code as identity");
   assert(modal.includes("useScopedFacilityResolver"), "facility scope comes from the canonical assignment resolver");
   assert(modal.includes("scopedFacilityId"), "auto facility from the resolved scope");

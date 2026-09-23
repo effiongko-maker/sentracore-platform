@@ -16,7 +16,7 @@ export function toCreateFormValues(facility?: Facility | null) {
   return {
     name: facility?.name ?? "",
     code: facility?.code ?? "",
-    location: facility?.location ?? "Lagos, Nigeria",
+    location: facility?.location ?? "",
     type: facility?.type ?? ("office" as const),
     manager: facility?.manager ?? "",
     status: facility?.status ?? ("pending" as const),

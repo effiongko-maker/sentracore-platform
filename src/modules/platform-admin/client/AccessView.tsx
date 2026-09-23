@@ -9,7 +9,8 @@ import { v1OperatingRoleLabel } from "@/lib/access/roles";
 import { cn } from "@/lib/utils";
 import { CAPABILITY_DOMAINS, type CapabilityDomain } from "../capabilityCatalog";
 import { PLATFORM_ADMINISTRABLE_CAPABILITIES } from "../types";
-import type { AdminModuleRecord, AdminPersonDetail, AdminPersonSummary, OrganisationAdminRecord, PlatformCapabilityBatchResult } from "../types";
+import type { AdminFacilityAssignment, AdminModuleRecord, AdminPersonDetail, AdminPersonSummary, OrganisationAdminRecord, PlatformCapabilityBatchResult } from "../types";
+import { AssignmentDialog } from "./PersonView";
 import { AdminApiError, adminCall } from "./adminApi";
 import { FinanceAccess } from "./FinanceAccess";
 import { ContextStrip, DataBoundary, Note, OrgGate, PageHead, displayName, moduleStatusMark, useAdminData } from "./ui";
@@ -104,6 +105,31 @@ function PersonAccess({ organisationId, profileId, onChanged }: { organisationId
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const held = useMemo(() => new Set(person.data?.capabilities ?? []), [person.data?.capabilities]);
+
+  // Operating context (facility assignments) — the existing audited assignment workflow; never touches grants.
+  const [assigning, setAssigning] = useState<{ assignment?: AdminFacilityAssignment } | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
+  async function removeAssignment(a: AdminFacilityAssignment) {
+    if (!window.confirm(`Remove ${a.facilityName} from this person's operating context? Their capability grants are not changed.`)) return;
+    setRemoving(a.assignmentId);
+    try {
+      await adminCall("setFacilityAssignment", {
+        organisationId,
+        profileId,
+        facilityId: a.facilityId,
+        assignmentId: a.assignmentId,
+        operationalRole: a.operationalRole,
+        status: "inactive",
+      });
+      toast({ type: "success", title: `${a.facilityName} removed`, description: "Recorded in administrative history. Capability grants unchanged." });
+      person.reload();
+      onChanged();
+    } catch (err) {
+      toast({ type: "error", title: "The assignment could not be removed", description: err instanceof AdminApiError ? err.message : undefined });
+    } finally {
+      setRemoving(null);
+    }
+  }
 
   function startEdit() {
     setPending(new Map());
@@ -310,20 +336,67 @@ function PersonAccess({ organisationId, profileId, onChanged }: { organisationId
             </Panel>
 
             <div className="ac-cols" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(20rem, 1fr))" }}>
-              <Panel title="Operating context" icon={Building2} aside="Descriptive — grants nothing" flush>
-                {p.facilityAssignments.length === 0 ? (
-                  <p className="ac-secondary" style={{ padding: "12px 16px", margin: 0 }}>No facility assignments.</p>
-                ) : (
-                  p.facilityAssignments.map((a) => (
-                    <div key={a.assignmentId} className="ac-cap" style={{ padding: "10px 16px" }}>
-                      <span className="ac-cap-label">{a.facilityName}</span>
-                      <Pill tone={a.status === "active" ? "ok" : "neutral"}>{a.status === "active" ? "Active" : "Inactive"}</Pill>
-                      <span className="ac-cap-detail">{v1OperatingRoleLabel(a.operationalRole as never)} — operating role</span>
-                    </div>
-                  ))
-                )}
+              <Panel
+                title="Operating context"
+                icon={Building2}
+                aside={
+                  p.status === "active" ? (
+                    <button type="button" className="ac-btn ac-btn-secondary ac-btn-sm" onClick={() => setAssigning({})}>
+                      Add facility
+                    </button>
+                  ) : (
+                    "Descriptive — grants nothing"
+                  )
+                }
+                flush
+              >
+                {(() => {
+                  const active = p.facilityAssignments.filter((a) => a.status === "active");
+                  const inactive = p.facilityAssignments.filter((a) => a.status !== "active");
+                  return (
+                    <>
+                      <p className="ac-secondary" style={{ padding: "12px 16px 4px", margin: 0 }}>
+                        {active.length === 0
+                          ? "No active facility assignment."
+                          : `Operates at ${active.length === 1 ? "1 facility" : `${active.length} facilities`}: ${active.map((a) => a.facilityName).join(", ")}.`}
+                      </p>
+                      {active.map((a) => (
+                        <div key={a.assignmentId} className="ac-cap" style={{ padding: "10px 16px" }}>
+                          <span className="ac-cap-label">{a.facilityName}</span>
+                          <Pill tone="ok">Active</Pill>
+                          <span className="ac-cap-detail">{v1OperatingRoleLabel(a.operationalRole as never)} — operating role</span>
+                          {p.status === "active" ? (
+                            <button
+                              type="button"
+                              className="ac-btn ac-btn-quiet ac-btn-sm"
+                              disabled={removing === a.assignmentId}
+                              onClick={() => void removeAssignment(a)}
+                            >
+                              {removing === a.assignmentId ? "Removing…" : "Remove"}
+                            </button>
+                          ) : null}
+                        </div>
+                      ))}
+                      {inactive.length ? (
+                        <p className="ac-secondary" style={{ padding: "6px 16px 10px", margin: 0 }}>
+                          Previously assigned (inactive): {inactive.map((a) => a.facilityName).join(", ")}
+                        </p>
+                      ) : null}
+                    </>
+                  );
+                })()}
                 <div className="ac-panel-foot">“Facility Manager” and other operating roles describe where and how someone works. They do not give — or remove — any capability.</div>
               </Panel>
+              <AssignmentDialog
+                state={assigning}
+                person={p}
+                organisationId={organisationId}
+                onClose={() => setAssigning(null)}
+                onDone={() => {
+                  person.reload();
+                  onChanged();
+                }}
+              />
 
               <Panel title="Platform Finance access" icon={Landmark} aside="Read-only here">
                 <FinanceAccess access={p.financeAccess} />

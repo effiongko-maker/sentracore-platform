@@ -137,6 +137,8 @@ export type CreateAccountResult = {
   homeModule: string | null;
   landingWorkspace: string | null;
   assignment: { facilityId: string; operationalRole: string } | null;
+  /** Every facility assignment created (one per facility). */
+  assignments: Array<{ facilityId: string; operationalRole: string }>;
   capabilityPackage: "facility_manager" | null;
   grantedCapabilities: string[];
   /** Always false: account creation sends no Auth email of any kind. */

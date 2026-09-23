@@ -477,6 +477,9 @@ export class FmIncidentRepository {
     if (existing.record_origin === "migrated_historical") throw new FmIncidentReadOnlyError();
 
     const resolved = await this.resolveRelations(input);
+    if (resolved.facilityId && resolved.facilityId !== existing.facility_id && !this.scope.canOperateIn(resolved.facilityId)) {
+      throw new FmIncidentValidationError("You are not authorised to move incidents to this facility.");
+    }
     if (resolved.parentIncidentId === existing.id) {
       throw new FmIncidentValidationError("An incident cannot be its own parent.");
     }

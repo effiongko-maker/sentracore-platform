@@ -1,5 +1,6 @@
 "use client";
 
+import { AuthorisedFacilitySelect } from "@/components/operational/AuthorisedFacilitySelect";
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/modals/Modal";
 import { Button } from "@/components/ui/Button";
@@ -40,7 +41,7 @@ export function LogIssueModal({ open, onClose, onCreated }: Props) {
     useState<(typeof URGENCY)[number]>("medium");
   const [saving, setSaving] = useState(false);
 
-  const resolveScoped = useScopedFacilityResolver({ open, creating: true });
+  const resolveScoped = useScopedFacilityResolver();
   useEffect(() => {
     if (!open) return;
     setTitle("");
@@ -129,12 +130,11 @@ export function LogIssueModal({ open, onClose, onCreated }: Props) {
         </FormField>
 
         <FormField label="Facility" htmlFor="log-issue-facility">
-          <input
+          <AuthorisedFacilitySelect
             id="log-issue-facility"
-            className={inputClassName}
-            value={facilityName}
-            readOnly
-            aria-readonly="true"
+            value={facilityId}
+            currentName={facilityName}
+            onChange={setFacilityId}
           />
         </FormField>
 

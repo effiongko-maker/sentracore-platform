@@ -671,7 +671,7 @@ function OffboardDialog({ open, person, onClose, onDone }: { open: boolean; pers
   );
 }
 
-function AssignmentDialog({
+export function AssignmentDialog({
   state,
   person,
   organisationId,
@@ -761,7 +761,10 @@ function AssignmentDialog({
           ) : (
             <select id="ac-asg-facility" className="ac-select" value={facilityId} onChange={(e) => setFacilityId(e.target.value)} disabled={facilities.loading} required>
               <option value="">{facilities.loading ? "Loading facilities…" : "Select a facility"}</option>
-              {(facilities.data ?? []).map((f) => (
+              {(facilities.data ?? [])
+                // Only facilities this person is not already actively assigned to (one active assignment per facility).
+                .filter((f) => f.status === "active" && !person.facilityAssignments.some((a) => a.status === "active" && a.facilityId === f.id))
+                .map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.name}
                 </option>

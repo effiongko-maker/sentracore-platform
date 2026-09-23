@@ -7,7 +7,6 @@ import {
   type PlatformSessionChrome,
 } from "@/hooks/usePlatformSession";
 import { OperatingAccessProvider } from "@/hooks/useOperatingAccess";
-import { CreationFacilityPromptProvider } from "@/hooks/useCreationFacilityPrompt";
 import type { OperatingAccess } from "@/lib/access";
 import { ToastProvider } from "@/components/ui/Toast";
 import { OrganisationalCompass } from "./OrganisationalCompass";
@@ -57,9 +56,7 @@ export function ProductShell({
       <OperatingAccessProvider initialAccess={initialOperatingAccess}>
         <PlatformShellProvider>
           <ToastProvider>
-            <CreationFacilityPromptProvider>
-              <ProductShellBody>{children}</ProductShellBody>
-            </CreationFacilityPromptProvider>
+            <ProductShellBody>{children}</ProductShellBody>
           </ToastProvider>
         </PlatformShellProvider>
       </OperatingAccessProvider>

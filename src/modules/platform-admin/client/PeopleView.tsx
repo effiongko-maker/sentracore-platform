@@ -25,6 +25,10 @@ const STATUS_FILTERS: Array<{ value: "all" | ProfileStatus; label: string }> = [
   { value: "inactive", label: "Inactive" },
 ];
 
+
+/** Create Account facility choice meaning "every active facility" (each becomes its own assignment). */
+const ALL_FACILITIES_CHOICE = "__all_facilities__";
+
 export function PeopleView() {
   return (
     <div className="ac-page">
@@ -153,10 +157,9 @@ function PeopleBody({ organisation }: { organisation: OrganisationAdminRecord })
                               <span className="ac-secondary">No active assignment</span>
                             ) : (
                               <>
-                                {active[0].facilityName}
+                                {active.map((a) => a.facilityName).join(", ")}
                                 <div className="ac-secondary">
-                                  {v1OperatingRoleLabel(active[0].operationalRole as never)}
-                                  {active.length > 1 ? ` · +${active.length - 1} more` : ""}
+                                  {[...new Set(active.map((a) => v1OperatingRoleLabel(a.operationalRole as never)))].join(", ")}
                                 </div>
                               </>
                             )}
@@ -235,7 +238,10 @@ function CreateAccountDialog({
   // Facility context (assignment, FM operating role, FM package) applies to Facility Management and to platform-scope
   // accounts only; ECC Operations and Platform Finance homes have none.
   const facilityContext = scope === "platform" || Boolean(homeEntry?.facilityContext);
-  const packageAvailable = facilityContext && role === "facility_manager" && Boolean(facilityId);
+  const activeFacilities = (facilities.data ?? []).filter((f) => f.status === "active");
+  const facilityIds =
+    facilityId === ALL_FACILITIES_CHOICE ? activeFacilities.map((f) => f.id) : facilityId ? [facilityId] : [];
+  const packageAvailable = facilityContext && role === "facility_manager" && facilityIds.length > 0;
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -250,7 +256,8 @@ function CreateAccountDialog({
         accessScope: scope,
         homeModule: scope === "module" ? homeModule : null,
         landingWorkspace: scope === "platform" && landing ? landing : null,
-        ...(facilityContext && facilityId && role ? { facilityId, operationalRole: role } : {}),
+        // "Both/All facilities" = one ordinary assignment per facility (no synthetic facility, no stored "both").
+        ...(facilityContext && facilityIds.length && role ? { facilityIds, operationalRole: role } : {}),
         capabilityPackage: pkg && packageAvailable ? "facility_manager" : null,
       });
       setResult(data);
@@ -296,7 +303,13 @@ function CreateAccountDialog({
             <dt>Access scope</dt>
             <dd>{result.accessScope === "module" ? `Module-bound (${workspaceLabel(result.homeModule)})` : "Platform"}</dd>
             <dt>Facility assignment</dt>
-            <dd>{result.assignment ? `${v1OperatingRoleLabel(result.assignment.operationalRole as never)} (active)` : "None"}</dd>
+            <dd>
+              {result.assignments.length
+                ? result.assignments
+                    .map((a) => `${(facilities.data ?? []).find((f) => f.id === a.facilityId)?.name ?? a.facilityId} — ${v1OperatingRoleLabel(a.operationalRole as never)}`)
+                    .join("; ")
+                : "None"}
+            </dd>
             <dt>Capabilities granted</dt>
             <dd>{result.grantedCapabilities.length ? result.grantedCapabilities.join(", ") : "None — grant them in Access"}</dd>
             <dt>Authentication email</dt>
@@ -360,12 +373,22 @@ function CreateAccountDialog({
             <label htmlFor="ac-create-facility">Facility (optional)</label>
             <select id="ac-create-facility" className="ac-select" value={facilityId} onChange={(e) => setFacilityId(e.target.value)} disabled={facilities.loading}>
               <option value="">{facilities.loading ? "Loading facilities…" : "No facility assignment"}</option>
-              {(facilities.data ?? []).map((f) => (
+              {activeFacilities.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.name}
                 </option>
               ))}
+              {activeFacilities.length > 1 ? (
+                <option value={ALL_FACILITIES_CHOICE}>
+                  {activeFacilities.length === 2 ? "Both facilities" : `All ${activeFacilities.length} facilities`}
+                </option>
+              ) : null}
             </select>
+            {facilityId === ALL_FACILITIES_CHOICE ? (
+              <span className="ac-hint">
+                Creates one assignment per facility ({activeFacilities.map((f) => f.name).join(" and ")}), each with the operating role below.
+              </span>
+            ) : null}
           </div>
           ) : null}
           {facilityContext && facilityId ? (

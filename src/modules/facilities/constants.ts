@@ -1,5 +1,6 @@
 import type { FacilityStatus, FacilityType } from "./types";
 
+/** The facility-type vocabulary the database enforces (fm_facilities_type_check). Filters show only types in use. */
 export const FACILITY_TYPES: FacilityType[] = [
   "headquarters",
   "campus",
@@ -15,15 +16,6 @@ export const FACILITY_STATUSES: FacilityStatus[] = [
   "inactive",
   "suspended",
 ];
-
-export const FACILITY_LOCATIONS = [
-  "Lagos, Nigeria",
-  "London, United Kingdom",
-  "Accra, Ghana",
-  "Nairobi, Kenya",
-  "Abuja, Nigeria",
-  "Johannesburg, South Africa",
-] as const;
 
 export const FACILITY_STATUS_VARIANT: Record<
   FacilityStatus,

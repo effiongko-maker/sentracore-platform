@@ -10,7 +10,6 @@ import {
 } from "@/components/forms/FormField";
 import { useToast } from "@/components/ui/Toast";
 import {
-  FACILITY_LOCATIONS,
   FACILITY_STATUSES,
   FACILITY_TYPES,
 } from "../constants";
@@ -158,7 +157,7 @@ export function FacilityFormModal({
           <input
             id="facility-name"
             className={inputClassName}
-            placeholder="e.g. Lagos HQ"
+            placeholder="e.g. NCC Annex"
             value={form.name}
             onChange={(event) => updateField("name", event.target.value)}
           />
@@ -186,18 +185,14 @@ export function FacilityFormModal({
           required
           error={errors.location}
         >
-          <select
+          {/* Free text — the facility's real location (stored as location_text); no preset/demo city list. */}
+          <input
             id="facility-location"
-            className={selectClassName}
+            className={inputClassName}
             value={form.location}
+            placeholder="e.g. Mbora District, Abuja"
             onChange={(event) => updateField("location", event.target.value)}
-          >
-            {FACILITY_LOCATIONS.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
+          />
         </FormField>
 
         <FormField label="Facility type" htmlFor="facility-type" required>

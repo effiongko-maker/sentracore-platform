@@ -1,5 +1,6 @@
 "use client";
 
+import { AuthorisedFacilitySelect } from "@/components/operational/AuthorisedFacilitySelect";
 import { useEffect, useMemo, useState } from "react";
 import { MasterDataSelect } from "@/components/forms/MasterDataSelect";
 import { SearchableSelect } from "@/components/forms/SearchableSelect";
@@ -154,8 +155,8 @@ export function CostRecordFormModal({
   >([]);
   const [workOrderLoading, setWorkOrderLoading] = useState(false);
 
-  /** The user's active facility assignment (UUID) — or the record's own facility. */
-  const resolveScoped = useScopedFacilityResolver({ open, creating: !initialValues?.facilityId?.trim() });
+  /** Initial facility: the supplied record/link facility, or the only authorised facility (else the user chooses). */
+  const resolveScoped = useScopedFacilityResolver();
   const scopedFacilityId = useMemo(() => {
     if (initialValues?.facilityId?.trim()) return initialValues.facilityId.trim();
     return resolveScoped(facilities);
@@ -172,10 +173,9 @@ export function CostRecordFormModal({
 
   useEffect(() => {
     if (!open || !scopedFacilityId) return;
+    // Fill only an empty field — never overwrite the user's own choice.
     setForm((current) =>
-      current.facilityId === scopedFacilityId
-        ? current
-        : { ...current, facilityId: scopedFacilityId }
+      current.facilityId.trim() ? current : { ...current, facilityId: scopedFacilityId }
     );
   }, [open, scopedFacilityId]);
 
@@ -305,13 +305,9 @@ export function CostRecordFormModal({
 
   function validate(): boolean {
     const next: FormErrors = {};
-    const facilityId = form.facilityId.trim() || scopedFacilityId;
+    const facilityId = form.facilityId.trim();
     if (!facilityId) {
-      next.description =
-        next.description ??
-        (facilitiesLoading
-          ? "Facility context is still loading. Try again in a moment."
-          : "Facility context is unavailable right now.");
+      next.facilityId = facilitiesLoading ? "Facilities are still loading. Try again in a moment." : "Facility is required";
     }
     if (!form.location.trim()) next.location = "Location is required";
     if (!form.description.trim()) {
@@ -356,7 +352,7 @@ export function CostRecordFormModal({
     if (!validate()) return;
 
     const actualAmount = parseOptionalAmount(form.actualAmount);
-    const facilityId = form.facilityId.trim() || scopedFacilityId;
+    const facilityId = form.facilityId.trim();
     if (actualAmount == null || !recordedBy || !facilityId) return;
 
     const payload: CreateCostRecordInput = {
@@ -468,6 +464,19 @@ export function CostRecordFormModal({
           className="grid gap-5 sm:grid-cols-2"
           onSubmit={(event) => void handleSubmit(event)}
         >
+          <FormField label="Facility" htmlFor="cost-facility" required error={errors.facilityId}>
+            <AuthorisedFacilitySelect
+              id="cost-facility"
+              value={form.facilityId}
+              disabled={saving}
+              onChange={(facilityId) => {
+                updateField("facilityId", facilityId);
+                // A linked Work / Work Order belongs to one facility: changing facility clears the link.
+                updateField("workId", "");
+                updateField("workOrderId", "");
+              }}
+            />
+          </FormField>
           <FormField
             label="What was this for?"
             htmlFor="cost-description"

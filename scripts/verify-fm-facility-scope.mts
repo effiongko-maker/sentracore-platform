@@ -9,7 +9,8 @@
  *    All facilities; a Client Payment WITH a facility obeys facility scope (no cross-facility leak);
  *  - Approvals keep their derived facility (via Work Order): ones with no facility-bearing parent are All-only;
  *  - multi-facility Work (fm_work_facilities) is visible from each of its facilities;
- *  - creation: single facility inherits; All facilities requires a target; out-of-scope creation is refused;
+ *  - creation: Facility is a normal dropdown of AUTHORISED facilities (one ⇒ preselected; several ⇒ user chooses);
+ *    no "choose a facility" interception; out-of-scope creation is refused server-side;
  *  - Facilities is in the FM sidebar (Organise, ahead of Assets) and both active facilities are listed.
  * Writes nothing.
  *
@@ -61,16 +62,36 @@ async function main() {
   check(S.scopeAllowsFacilities(narrowed.scope, [A.id, B.id]), "multi-facility record visible from any of its facilities");
   const defaults = resolveOperatingAccessFromGrants({ email: "x", name: "x", capabilities: [] });
   check(defaults.facilityScopeMode === "assigned" && !defaults.fmFacilityScope.unrestricted, "access defaults fail closed");
-  // Creation inheritance (the resolver's pure core): one facility inherits; All facilities needs a target.
-  check(resolveScopedFacilityId([A, B], null, A.id) === A.id, "single-facility context: new record inherits it");
-  check(resolveScopedFacilityId([A, B], null, "") === "", "All facilities: no silent default — a target must be chosen");
+  // Initial facility (the resolver's pure core): exactly one authorised facility ⇒ preselected; several ⇒ none (the
+  // user picks from the dropdown); editing keeps the record's own facility.
+  check(resolveScopedFacilityId([A, B], null, A.id) === A.id, "one authorised facility: preselected");
+  check(resolveScopedFacilityId([A, B], null, "") === "", "several authorised facilities: no silent default — the user chooses");
   check(resolveScopedFacilityId([A, B], B.id, A.id) === B.id, "editing keeps the record's own facility");
   const onlyA = S.repoScopeFromAccess({ fmFacilityScope: single.scope, facilityScopeMode: "assigned", authorisedFacilities: [A] });
   check(onlyA.canOperateIn(A.id) && !onlyA.canOperateIn(B.id), "creation refused outside authorised facilities");
   check(S.scopeAllowsFmWide(single.scope, null) && S.scopeAllowsFmWide(narrowed.scope, null), "FM-wide: no facility ⇒ visible in any single-facility view");
   check(S.scopeAllowsFmWide(single.scope, A.id) && !S.scopeAllowsFmWide(single.scope, B.id), "FM-wide: a facility-bearing record still obeys facility scope");
   check(S.fmWideScopeClause(single.scope) === `facility_id.in.(${A.id}),facility_id.is.null`, "FM-wide clause admits own facility + no facility only");
-  results.push("PASS pure: workspace resolution, membership, fail-closed defaults, FM-wide rule, creation inheritance/target rule");
+  results.push("PASS pure: workspace resolution, membership, fail-closed defaults, FM-wide rule, initial-facility rule");
+
+  // Creation UX: no interception; the Facility field is a dropdown of authorised facilities.
+  const exists = (path: string) => existsSync(path);
+  check(!exists("src/hooks/useCreationFacilityPrompt.tsx"), "the 'Choose a facility' prompt is removed");
+  const select = readFileSync("src/components/operational/AuthorisedFacilitySelect.tsx", "utf8");
+  check(select.includes("access?.authorisedFacilities"), "dropdown options = authorised facilities");
+  for (const form of [
+    "src/modules/requests/components/RequestFormModal.tsx",
+    "src/modules/maintenance/components/MaintenanceFormModal.tsx",
+    "src/modules/incidents/components/IncidentFormModal.tsx",
+    "src/modules/issues/components/LogIssueModal.tsx",
+    "src/modules/finance/components/CostRecordFormModal.tsx",
+    "src/components/operational/InheritedFacilityField.tsx",
+  ]) {
+    check(readFileSync(form, "utf8").includes("<AuthorisedFacilitySelect"), `${form}: Facility is a dropdown`);
+  }
+  const resolver = readFileSync("src/hooks/useScopedFacilityResolver.ts", "utf8");
+  check(!/workspaceFacility|prompt/i.test(resolver.replace(/\/\*[\s\S]*?\*\//g, "")), "initial facility never depends on workspace context or a prompt");
+  results.push("PASS creation UX: prompt removed; authorised-facility dropdown in Request, Work, Incident, Log issue, Cost and inherited-field forms");
 
   // ---- Live (read-only) through the real repositories ------------------------------------------------------------
   const { createAdminClient } = await import("../src/utils/supabase/admin");

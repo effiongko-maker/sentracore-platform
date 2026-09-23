@@ -3,11 +3,9 @@
 import { SlidersHorizontal } from "lucide-react";
 import { SearchBox } from "@/components/ui/SearchBox";
 import { toolbarSelectClassName } from "@/components/forms/FormField";
-import {
-  FACILITY_LOCATIONS,
-  FACILITY_STATUSES,
-  FACILITY_TYPES,
-} from "../constants";
+import { useMemo } from "react";
+import { useFacilityOptions } from "@/hooks/useFacilityOptions";
+import { FACILITY_STATUSES } from "../constants";
 import { labelize } from "../utils";
 import type { FacilityStatus, FacilityType } from "../types";
 
@@ -33,6 +31,16 @@ export function FacilitiesToolbar({
   status,
   onStatusChange,
 }: FacilitiesToolbarProps) {
+  // Type / Location filters offer only values present on live facilities — never preset/demo lists.
+  const { facilities } = useFacilityOptions(true);
+  const liveTypes = useMemo(
+    () => [...new Set(facilities.map((f) => f.type).filter(Boolean))].sort() as FacilityType[],
+    [facilities]
+  );
+  const liveLocations = useMemo(
+    () => [...new Set(facilities.map((f) => f.location.trim()).filter(Boolean))].sort(),
+    [facilities]
+  );
   return (
     <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
       <SearchBox
@@ -57,7 +65,7 @@ export function FacilitiesToolbar({
           aria-label="Filter by type"
         >
           <option value="all">All types</option>
-          {FACILITY_TYPES.map((value) => (
+          {liveTypes.map((value) => (
             <option key={value} value={value}>
               {labelize(value)}
             </option>
@@ -73,7 +81,7 @@ export function FacilitiesToolbar({
           aria-label="Filter by location"
         >
           <option value="all">All locations</option>
-          {FACILITY_LOCATIONS.map((value) => (
+          {liveLocations.map((value) => (
             <option key={value} value={value}>
               {value}
             </option>

@@ -1,5 +1,6 @@
 "use client";
 
+import { AuthorisedFacilitySelect } from "@/components/operational/AuthorisedFacilitySelect";
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/modals/Modal";
 import { Button } from "@/components/ui/Button";
@@ -96,7 +97,7 @@ export function RequestFormModal({
     };
   }, [open]);
 
-  const resolveScoped = useScopedFacilityResolver({ open, creating: mode === "create" });
+  const resolveScoped = useScopedFacilityResolver();
   useEffect(() => {
     if (!open || facilities.length === 0) return;
     setForm((current) => {
@@ -216,12 +217,11 @@ export function RequestFormModal({
             htmlFor="req-facility"
             error={errors.facilityId}
           >
-            <input
+            <AuthorisedFacilitySelect
               id="req-facility"
-              className={inputClassName}
-              value={facilityDisplayName(facilities, form.facilityId)}
-              readOnly
-              aria-readonly="true"
+              value={form.facilityId}
+              currentName={facilityDisplayName(facilities, form.facilityId)}
+              onChange={(facilityId) => updateField("facilityId", facilityId)}
             />
           </FormField>
 

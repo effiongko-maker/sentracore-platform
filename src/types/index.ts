@@ -32,7 +32,6 @@ export type {
 } from "./facility";
 
 export {
-  FACILITY_LOCATIONS,
   FACILITY_STATUSES,
   FACILITY_TYPES,
 } from "./facility";

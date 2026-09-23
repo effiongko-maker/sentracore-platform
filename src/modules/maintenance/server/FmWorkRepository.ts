@@ -479,6 +479,9 @@ export class FmWorkRepository {
     const facilityId = input.facilityId
       ? await this.resolveFacilityId(input.facilityId)
       : existing.facility_id;
+    if (facilityId !== existing.facility_id && !this.scope.canOperateIn(facilityId)) {
+      throw new FmWorkValidationError("You are not authorised to move Work to this facility.");
+    }
 
     const assignee =
       input.assignedToProfileId !== undefined

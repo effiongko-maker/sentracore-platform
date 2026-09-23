@@ -153,7 +153,7 @@ export function WorkOrderFormModal({
     setErrors({});
   }, [open, mode, workOrder, initialOrderType]);
 
-  const resolveScoped = useScopedFacilityResolver({ open, creating: mode === "create" });
+  const resolveScoped = useScopedFacilityResolver();
   useEffect(() => {
     if (!open || facilities.length === 0) return;
     setForm((current) => {

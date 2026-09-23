@@ -14,7 +14,6 @@ export type {
   UpdateFacilityInput,
 } from "./types";
 export {
-  FACILITY_LOCATIONS,
   FACILITY_STATUSES,
   FACILITY_TYPES,
 } from "./constants";

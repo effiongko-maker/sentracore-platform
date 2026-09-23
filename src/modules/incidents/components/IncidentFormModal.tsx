@@ -1,5 +1,6 @@
 "use client";
 
+import { AuthorisedFacilitySelect } from "@/components/operational/AuthorisedFacilitySelect";
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/modals/Modal";
 import { Button } from "@/components/ui/Button";
@@ -96,7 +97,7 @@ export function IncidentFormModal({
     setErrors({});
   }, [open, incident]);
 
-  const resolveScoped = useScopedFacilityResolver({ open, creating: !incident });
+  const resolveScoped = useScopedFacilityResolver();
   useEffect(() => {
     if (!open || facilities.length === 0) return;
     setForm((current) => {
@@ -285,12 +286,14 @@ export function IncidentFormModal({
           htmlFor="inc-facility"
           error={errors.facilityId}
         >
-          <input
+          <AuthorisedFacilitySelect
             id="inc-facility"
-            className={inputClassName}
-            value={facilityDisplayName(facilities, form.facilityId)}
-            readOnly
-            aria-readonly="true"
+            value={form.facilityId}
+            currentName={facilityDisplayName(facilities, form.facilityId)}
+            onChange={(facilityId) => {
+              updateField("facilityId", facilityId);
+              updateField("assetId", ""); // assets belong to a facility
+            }}
           />
         </FormField>
 
