@@ -31,6 +31,7 @@ import {
   parseUpdateCostRecordInput,
   parseUpdatePaymentInput,
   parseUpdateSubmissionInput,
+  parseOperatingYear,
   type FmCostRecordRow,
   type FmCostSubmissionRow,
 } from "./fmCostDomain";
@@ -90,6 +91,11 @@ export class FmCostServerService {
   /** The authoritative total over the COMPLETE cost register (never a bounded page/pool). */
   async getCostTotals() {
     return this.repo().aggregateTotals();
+  }
+
+  /** Complete-register total restricted to one operating year (source-register / recorded_at evidence only). */
+  async getCostTotalsForYear(year: number) {
+    return this.repo().aggregateTotalsForYear(year);
   }
 
   async getCost(idOrCode: string) {
@@ -247,7 +253,10 @@ export class FmCostServerService {
     switch (resource) {
       case "cost-records":
         if (action === "getAll") return this.listCosts(payload);
-        if (action === "getTotals") return this.getCostTotals();
+        if (action === "getTotals") {
+          const operatingYear = parseOperatingYear(raw.operatingYear);
+          return operatingYear != null ? this.getCostTotalsForYear(operatingYear) : this.getCostTotals();
+        }
         if (action === "getById") return this.getCost(parseCostIdPayload(payload));
         if (action === "create") return this.createCost(payload);
         if (action === "update") return this.updateCost(payload, options);

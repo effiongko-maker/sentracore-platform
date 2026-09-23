@@ -202,6 +202,23 @@ export const CostRecordService = {
     return postCostRecords("getTotals", {}, { signal: options?.signal });
   },
 
+  /**
+   * Complete-register total for one operating year. Imported records are classified only by their source
+   * register (provenance); records that cannot be classified are excluded and counted in unclassifiedCount.
+   */
+  async getOperatingYearTotals(
+    operatingYear: number,
+    options?: { signal?: AbortSignal }
+  ): Promise<{
+    operatingYear: number;
+    totalCount: number;
+    totalAmount: number;
+    currency: string;
+    unclassifiedCount: number;
+  }> {
+    return postCostRecords("getTotals", { operatingYear }, { signal: options?.signal });
+  },
+
   async getCostRecord(costId: string): Promise<CostRecord | null> {
     try {
       const data = await postCostRecords<RemoteCostRecord>("getById", {

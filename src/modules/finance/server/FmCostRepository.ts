@@ -32,6 +32,8 @@ import {
   type SubmissionRelations,
   type SubmissionScopedListParams,
   type CostRecordRelations,
+  COST_SOURCE_REGISTER_WORKBOOK,
+  costRecordOperatingYear,
 } from "./fmCostDomain";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -336,6 +338,66 @@ export class FmCostRepository {
       if (batch.length < batchSize) break;
     }
     return { totalCount, totalAmount: Math.round(totalAmount * 100) / 100, currency, liveUnclassifiedCount, historicalUnrecordedReimbursabilityCount, reimbursableCount, nonReimbursableCount };
+  }
+
+  /**
+   * Complete-register total for ONE operating year. Imported records are classified only by their source
+   * register (governed provenance); native records by their own recorded_at. Records that cannot be classified
+   * are excluded from the year and counted separately — never guessed.
+   */
+  async aggregateTotalsForYear(year: number): Promise<{
+    operatingYear: number;
+    totalCount: number;
+    totalAmount: number;
+    currency: string;
+    unclassifiedCount: number;
+  }> {
+    const sheetByCost = new Map<string, string>();
+    const batchSize = 1000;
+    for (let offset = 0; ; offset += batchSize) {
+      const { data, error } = await this.admin
+        .from("fm_migration_provenance")
+        .select("target_id, source_sheet")
+        .eq("organisation_id", this.organisationId)
+        .eq("target_table", "fm_cost_records")
+        .eq("workbook", COST_SOURCE_REGISTER_WORKBOOK)
+        .order("id", { ascending: true })
+        .range(offset, offset + batchSize - 1);
+      if (error) throwDb(error, "Unable to load cost provenance.");
+      const batch = (data ?? []) as Array<{ target_id: string; source_sheet: string }>;
+      for (const row of batch) sheetByCost.set(String(row.target_id), String(row.source_sheet));
+      if (batch.length < batchSize) break;
+    }
+    let totalCount = 0, totalAmount = 0, unclassifiedCount = 0;
+    let currency = "NGN";
+    for (let offset = 0; ; offset += batchSize) {
+      const { data, error } = await this.admin
+        .from("fm_cost_records")
+        .select("id, actual_amount, currency, record_origin, recorded_at")
+        .eq("organisation_id", this.organisationId)
+        .order("id", { ascending: true })
+        .range(offset, offset + batchSize - 1);
+      if (error) throwDb(error, "Unable to load cost totals.");
+      const batch = (data ?? []) as Array<{ id: string; actual_amount: number; currency: string; record_origin: string; recorded_at: string | null }>;
+      for (const row of batch) {
+        const sheet = sheetByCost.get(String(row.id));
+        const rowYear = costRecordOperatingYear({
+          imported: sheet != null || row.record_origin === "migrated_historical",
+          sourceSheet: sheet,
+          recordedAt: row.recorded_at,
+        });
+        if (rowYear == null) {
+          unclassifiedCount += 1;
+          continue;
+        }
+        if (rowYear !== year) continue;
+        totalCount += 1;
+        totalAmount += Number(row.actual_amount) || 0;
+        currency = row.currency || currency;
+      }
+      if (batch.length < batchSize) break;
+    }
+    return { operatingYear: year, totalCount, totalAmount: Math.round(totalAmount * 100) / 100, currency, unclassifiedCount };
   }
 
   async createCost(input: ParsedCreateCostRecord, actorProfileId: string): Promise<FmCostRecordRow> {

@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { useFinancialPosition } from "@/modules/finance/hooks/useFinancialPosition";
+import {
+  HOME_FINANCIAL_POSITION_YEAR,
+  useFinancialPosition,
+} from "@/modules/finance/hooks/useFinancialPosition";
 
 /**
  * Compact executive Financial Position for Facility Management Home.
@@ -29,7 +32,7 @@ export function FinancialPositionSection() {
       <div className="sc-fm-finance-header">
         <div>
           <h2 id="sc-fm-finance-heading" className="sc-fm-panel-title">
-            Financial Position
+            Financial Position · {HOME_FINANCIAL_POSITION_YEAR}
           </h2>
           <p className="sc-fm-panel-lede">
             {loading
@@ -40,7 +43,7 @@ export function FinancialPositionSection() {
                     !snapshot?.expectedAvailable ||
                     !snapshot?.outstandingAvailable
                   ? "Some figures are temporarily unavailable. Open Costs & Claims for the full record."
-                  : "Costs and reimbursement claims recorded in SentraCore™ (earlier history is not loaded)"}
+                  : `${HOME_FINANCIAL_POSITION_YEAR} operating year — costs from the ${HOME_FINANCIAL_POSITION_YEAR} Job/Work Order registers and reimbursement claims`}
           </p>
         </div>
         <div className="sc-fm-finance-header-actions">
@@ -63,7 +66,7 @@ export function FinancialPositionSection() {
       <div className="sc-fm-finance-metrics" role="list">
         <div className="sc-fm-finance-metric" role="listitem">
           <p className="sc-fm-finance-label">
-            Spent
+            Spent ({HOME_FINANCIAL_POSITION_YEAR})
           </p>
           <MetricValue
             loading={loading}
@@ -73,7 +76,7 @@ export function FinancialPositionSection() {
         </div>
         <div className="sc-fm-finance-metric" role="listitem">
           <p className="sc-fm-finance-label">
-            Reimbursement
+            Reimbursement ({HOME_FINANCIAL_POSITION_YEAR})
           </p>
           <MetricValue
             loading={loading}
@@ -83,7 +86,7 @@ export function FinancialPositionSection() {
         </div>
         <div className="sc-fm-finance-metric" role="listitem">
           <p className="sc-fm-finance-label">
-            Outstanding reimbursement
+            Outstanding reimbursement ({HOME_FINANCIAL_POSITION_YEAR})
           </p>
           <MetricValue
             loading={loading}

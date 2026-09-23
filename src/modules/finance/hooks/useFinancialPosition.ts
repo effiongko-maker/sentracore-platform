@@ -49,11 +49,16 @@ async function settleSource<T>(
 }
 
 /**
- * The complete cost register total — same authoritative source Costs & Claims itself
- * prefers (never a bounded pool). Isolated the same way as every other source: a
- * failure here falls back to the bounded pool sum in deriveFinancialPositionSnapshot,
- * it never blocks the other Financial Position metrics, and it never invents a figure.
+ * The complete cost register total for HOME_FINANCIAL_POSITION_YEAR (never a bounded pool).
+ * Isolated the same way as every other source: a failure here leaves Spent unavailable
+ * (no all-year pool fallback), never blocks the other metrics, and never invents a figure.
  */
+/**
+ * Operating year Home Financial Position presents. Spent is that year's complete-register total, classified by
+ * source-register provenance for imported records (never by an inferred date).
+ */
+export const HOME_FINANCIAL_POSITION_YEAR = 2026;
+
 async function settleCostTotals(): Promise<{
   totalAmount: number;
   currency: string;
@@ -64,9 +69,10 @@ async function settleCostTotals(): Promise<{
   }, HOME_FINANCE_SOURCE_TIMEOUT_MS);
 
   try {
-    const result = await CostRecordService.getTotals({
-      signal: controller.signal,
-    });
+    const result = await CostRecordService.getOperatingYearTotals(
+      HOME_FINANCIAL_POSITION_YEAR,
+      { signal: controller.signal }
+    );
     return { totalAmount: result.totalAmount, currency: result.currency };
   } catch {
     return null;
@@ -146,6 +152,7 @@ export function useFinancialPosition() {
         payments,
         authorizations,
         costTotals,
+        operatingYear: HOME_FINANCIAL_POSITION_YEAR,
       });
 
       const anyAvailable =

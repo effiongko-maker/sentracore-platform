@@ -145,6 +145,41 @@ function nextCode(prefix: string, latest: string | null | undefined, now: Date):
   return `${prefix}-${year}-${String(max + 1).padStart(6, "0")}`;
 }
 export const generateNextCostCode = (latest: string | null | undefined, now = new Date()) => nextCode("COST", latest, now);
+
+/**
+ * Operating year of an IMPORTED cost record, established ONLY by the source register it was migrated from
+ * (fm_migration_provenance: MBORA workbook order-register sheets). Imported costs carry no transaction date, so
+ * no date is inferred: a register not listed here leaves the record unclassified (never guessed into a year).
+ */
+export const COST_SOURCE_REGISTER_YEAR: Readonly<Record<string, number>> = {
+  "2025 JOB ORDERS": 2025,
+  "2025 WORK ORDERS": 2025,
+  "2026 JOB ORDERS": 2026,
+  "2026 WORK ORDER": 2026,
+};
+export const COST_SOURCE_REGISTER_WORKBOOK = "MBORA";
+
+/**
+ * Operating year of one cost record. Imported (provenance-backed) → its source register's year; native → the
+ * year of its own recorded_at in WAT (Africa/Lagos, UTC+1 without DST). null = not classifiable.
+ */
+export function costRecordOperatingYear(input: {
+  sourceSheet?: string | null;
+  recordedAt?: string | null;
+  imported: boolean;
+}): number | null {
+  if (input.imported) return (input.sourceSheet && COST_SOURCE_REGISTER_YEAR[input.sourceSheet]) || null;
+  const ms = Date.parse(input.recordedAt ?? "");
+  if (!Number.isFinite(ms)) return null;
+  return new Date(ms + 60 * 60 * 1000).getUTCFullYear();
+}
+
+export function parseOperatingYear(value: unknown): number | undefined {
+  if (value == null || value === "") return undefined;
+  const year = Number(value);
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) throw new FmCostValidationError("Invalid operating year.");
+  return year;
+}
 export const generateNextSubmissionCode = (latest: string | null | undefined, now = new Date()) => nextCode("SUB", latest, now);
 export const generateNextAuthorizationCode = (latest: string | null | undefined, now = new Date()) => nextCode("AUTH", latest, now);
 export const generateNextPaymentCode = (latest: string | null | undefined, now = new Date()) => nextCode("PAY", latest, now);

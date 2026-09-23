@@ -19,6 +19,12 @@ export type FinancialPositionSourcePool<T> =
   | { available: true; data: T[]; total: number }
   | { available: false };
 
+/** Calendar year of an ISO timestamp in WAT (Africa/Lagos, UTC+1, no DST); null when not a valid date. */
+function watYear(iso?: string): number | null {
+  const ms = Date.parse(iso ?? "");
+  return Number.isFinite(ms) ? new Date(ms + 60 * 60 * 1000).getUTCFullYear() : null;
+}
+
 export type FinancialPositionSnapshotInput = {
   costs: FinancialPositionSourcePool<CostRecord>;
   submissions: FinancialPositionSourcePool<CostSubmission>;
@@ -31,6 +37,11 @@ export type FinancialPositionSnapshotInput = {
    * partial in-view total as if it were the whole register.
    */
   costTotals?: { totalAmount: number; currency: string } | null;
+  /**
+   * When set, `costTotals` is that operating year's complete-register total and Spent is ONLY that figure:
+   * if it failed to load, Spent is unavailable — never the bounded all-year pool (which would mix years).
+   */
+  operatingYear?: number;
   currency?: string;
 };
 
@@ -49,6 +60,8 @@ export type FinancialPositionSnapshot = {
   isSample: boolean;
   /** True when spentAmount is the authoritative complete-register total, not a bounded-pool sum. */
   spentComplete: boolean;
+  /** Operating year the snapshot presents (Spent scoped to it), when year-scoped. */
+  operatingYear: number | null;
   costsTruncated: boolean;
   submissionsTruncated: boolean;
   paymentsTruncated: boolean;
@@ -124,10 +137,11 @@ export function deriveFinancialPositionSnapshot(
   // fallback — e.g. the complete-total request itself failed — and is never presented
   // as the full register without the (sample) qualification below.
   const spentComplete = input.costTotals != null;
-  const spentAvailable = spentComplete || costsAvailable;
+  const poolFallbackAllowed = input.operatingYear == null;
+  const spentAvailable = spentComplete || (poolFallbackAllowed && costsAvailable);
   const spentAmount = spentComplete
     ? input.costTotals!.totalAmount
-    : costsAvailable
+    : poolFallbackAllowed && costsAvailable
       ? sumAmounts(costRecords.map((row) => ({ amount: row.actualAmount })))
       : null;
 
@@ -148,6 +162,13 @@ export function deriveFinancialPositionSnapshot(
     let openClaims = 0;
     for (const submission of submissions) {
       if (!isOpenReimbursementClaim(submission.status)) continue;
+      // Year-scoped snapshot: a claim belongs to the year of its own submission (WAT), never another year's.
+      if (
+        input.operatingYear != null &&
+        watYear(submission.submittedAt ?? submission.createdAt) !== input.operatingYear
+      ) {
+        continue;
+      }
       openClaims += 1;
       const summary = summarizeSubmissionPayments(
         submission,
@@ -187,6 +208,7 @@ export function deriveFinancialPositionSnapshot(
     ),
     isSample,
     spentComplete,
+    operatingYear: input.operatingYear ?? null,
     costsTruncated,
     submissionsTruncated,
     paymentsTruncated,
