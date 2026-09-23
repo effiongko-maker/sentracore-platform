@@ -8,6 +8,7 @@ import { ReimbursementAuthorizationService } from "@/services/finance/Reimbursem
 import { ReimbursementPaymentService } from "@/services/finance/ReimbursementPaymentService";
 import {
   FINANCE_COST_POOL_FETCH_SIZE,
+  FINANCE_OPERATING_YEAR,
   FINANCE_OVERVIEW_FETCH_SIZE,
 } from "../constants";
 import type { FinanceOverview } from "../types";
@@ -45,6 +46,7 @@ export function useFinanceOverview() {
       approvalResult,
       costResult,
       costTotalsResult,
+      yearTotalsResult,
       submissionResult,
       paymentResult,
       authorizationResult,
@@ -72,6 +74,19 @@ export function useFinanceOverview() {
         const timer = setTimeout(() => controller.abort(), SOURCE_TIMEOUT_MS);
         try {
           const data = await CostRecordService.getTotals({ signal: controller.signal });
+          return { available: true, data };
+        } catch {
+          return { available: false };
+        } finally {
+          clearTimeout(timer);
+        }
+      })(),
+      // Headline: the operating year's complete-register total (same year classification as Home).
+      (async (): Promise<{ available: true; data: Awaited<ReturnType<typeof CostRecordService.getOperatingYearTotals>> } | { available: false }> => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), SOURCE_TIMEOUT_MS);
+        try {
+          const data = await CostRecordService.getOperatingYearTotals(FINANCE_OPERATING_YEAR, { signal: controller.signal });
           return { available: true, data };
         } catch {
           return { available: false };
@@ -124,6 +139,14 @@ export function useFinanceOverview() {
         totalCostRecords: costResult.available ? costResult.total : 0,
         costRecordsAvailable: costResult.available,
         costTotals: costTotalsResult.available ? costTotalsResult.data : null,
+        operatingYearCostTotals: yearTotalsResult.available
+          ? {
+              year: yearTotalsResult.data.operatingYear,
+              totalCount: yearTotalsResult.data.totalCount,
+              totalAmount: yearTotalsResult.data.totalAmount,
+              currency: yearTotalsResult.data.currency,
+            }
+          : null,
         submissions: submissionResult.available ? submissionResult.data : [],
         totalSubmissions: submissionResult.available
           ? submissionResult.total

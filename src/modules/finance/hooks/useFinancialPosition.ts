@@ -8,6 +8,7 @@ import { ReimbursementPaymentService } from "@/services/finance/ReimbursementPay
 import { signalHomeFinanceSettled } from "@/modules/workspace/utils/homeWorkspaceReady";
 import {
   FINANCE_COST_POOL_FETCH_SIZE,
+  FINANCE_OPERATING_YEAR,
   FINANCE_OVERVIEW_FETCH_SIZE,
 } from "../constants";
 import {
@@ -57,7 +58,7 @@ async function settleSource<T>(
  * Operating year Home Financial Position presents. Spent is that year's complete-register total, classified by
  * source-register provenance for imported records (never by an inferred date).
  */
-export const HOME_FINANCIAL_POSITION_YEAR = 2026;
+export const HOME_FINANCIAL_POSITION_YEAR = FINANCE_OPERATING_YEAR;
 
 async function settleCostTotals(): Promise<{
   totalAmount: number;

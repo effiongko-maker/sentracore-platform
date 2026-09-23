@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Banknote } from "lucide-react";
 import { ModeFrame } from "@/components/platform";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { FINANCE_OPERATING_YEAR } from "../constants";
 import { formatFinancialAmount } from "../utils/formatFinancialAmount";
 import { useFinanceOverview } from "../hooks/useFinanceOverview";
 import { CostRecordFormModal } from "./CostRecordFormModal";
@@ -45,12 +46,12 @@ export function FinancePage() {
   const submissionTotal = submissionsAvailable
     ? (overview?.meta.submissionsTotal ?? 0)
     : null;
-  const summary = overview?.operationalCostSummary ?? null;
-  const spendLabel = !costAvailable
-    ? "Unavailable"
-    : summary && summary.totalCount > 0
-      ? formatFinancialAmount(summary.sampleAmount, summary.currency)
-      : "—";
+  // Headline = the operating year's complete-register spend only. If that total failed it is Unavailable —
+  // never the all-year register or the bounded preview pool (either would misstate the year).
+  const yearSpend = overview?.operatingYearSpend ?? null;
+  const spendLabel = yearSpend
+    ? formatFinancialAmount(yearSpend.totalAmount, yearSpend.currency)
+    : "Unavailable";
   const draftCount = overview?.submissions.draftCount;
   const reimbursementsInPreparation = !submissionsAvailable
     ? "Unavailable"
@@ -73,7 +74,8 @@ export function FinancePage() {
 
         <FinanceSummaryRow
           operationalSpendLabel={loading ? "—" : spendLabel}
-          spendIsSample={Boolean(summary) && !summary!.completeTotalAvailable}
+          operatingYear={FINANCE_OPERATING_YEAR}
+          operatingYearRecordCount={yearSpend?.totalCount ?? null}
           costRecordsTotal={
             loading ? "—" : costTotal == null ? "Unavailable" : costTotal
           }

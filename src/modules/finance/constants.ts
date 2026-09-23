@@ -25,6 +25,13 @@ export const FINANCE_COST_POOL_FETCH_SIZE = 100;
 /** Bounded overview pool for Approvals / CostSubmissions. */
 export const FINANCE_OVERVIEW_FETCH_SIZE = 100;
 
+/**
+ * Operating year presented by the Home Financial Position and the Costs & Claims headline. Its spend is the
+ * complete-register total for this year only (fmCostDomain.costRecordOperatingYear: source-register provenance
+ * for imported costs, recorded_at for native). The full all-year register stays in the cost views.
+ */
+export const FINANCE_OPERATING_YEAR = 2026;
+
 /** Concise recent submissions on the Finance overview section. */
 export const FINANCE_SUBMISSIONS_PREVIEW_SIZE = 5;
 

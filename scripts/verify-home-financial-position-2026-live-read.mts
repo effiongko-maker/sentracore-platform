@@ -62,7 +62,9 @@ async function main() {
 
   // ---- Source: Home is wired to the 2026 snapshot ----------------------------------------------------------------
   const hook = readFileSync("src/modules/finance/hooks/useFinancialPosition.ts", "utf8");
-  assert(/HOME_FINANCIAL_POSITION_YEAR = 2026;/.test(hook), "Home operating year is 2026");
+  const constants = readFileSync("src/modules/finance/constants.ts", "utf8");
+  assert(/export const FINANCE_OPERATING_YEAR = 2026;/.test(constants), "finance operating year is 2026");
+  assert(/HOME_FINANCIAL_POSITION_YEAR = FINANCE_OPERATING_YEAR;/.test(hook), "Home uses the shared operating year");
   assert(hook.includes("getOperatingYearTotals(\n      HOME_FINANCIAL_POSITION_YEAR"), "Home Spent uses the operating-year total");
   assert(!/CostRecordService\.getTotals\(/.test(hook), "Home never uses the all-year register total");
   assert(hook.includes("operatingYear: HOME_FINANCIAL_POSITION_YEAR"), "snapshot is derived year-scoped");
@@ -71,6 +73,21 @@ async function main() {
     assert(section.includes(label), `label present: ${label}`);
   }
   results.push("PASS Home wiring + labels: 2026 period explicit on the section and every metric");
+
+  // ---- Source: Costs & Claims headline uses the SAME operating-year total ----------------------------------------
+  const overviewHook = readFileSync("src/modules/finance/hooks/useFinanceOverview.ts", "utf8");
+  assert(overviewHook.includes("getOperatingYearTotals(FINANCE_OPERATING_YEAR"), "Costs & Claims fetches the operating-year total");
+  const financePage = readFileSync("src/modules/finance/components/FinancePage.tsx", "utf8");
+  assert(financePage.includes("overview?.operatingYearSpend") && !/summary\.sampleAmount/.test(financePage), "headline uses operatingYearSpend, never the all-year / preview amount");
+  const financeHeader = readFileSync("src/modules/finance/components/FinanceHeader.tsx", "utf8");
+  assert(financeHeader.includes("Operational spend · {operatingYear}"), "headline labelled with the operating year");
+  assert(!/complete cost register recorded/i.test(financeHeader), "headline copy no longer calls the figure the complete register");
+  assert(financeHeader.includes("Client Approvals") && !financeHeader.includes("Work Order approvals"), "summary card reads Client Approvals");
+  const { deriveFinanceOverview } = await import("../src/modules/finance/utils/deriveFinanceOverview");
+  const base = { approvals: [], totalApprovals: 0, costRecords: [], totalCostRecords: 0, submissions: [], totalSubmissions: 0 };
+  assert(deriveFinanceOverview({ ...base, operatingYearCostTotals: null }).operatingYearSpend === null, "failed year total ⇒ headline unavailable (null)");
+  assert(deriveFinanceOverview({ ...base, operatingYearCostTotals: { year: 2026, totalCount: 52, totalAmount: 426174848.25, currency: "NGN" } }).operatingYearSpend?.totalCount === 52, "year total passes through unchanged");
+  results.push("PASS Costs & Claims headline: same 2026 total as Home, labelled 2026, Client Approvals card");
 
   // ---- Live read-only: the reconciled 2026 population ------------------------------------------------------------
   const { createAdminClient } = await import("../src/utils/supabase/admin");

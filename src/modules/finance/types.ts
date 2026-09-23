@@ -173,6 +173,14 @@ export type FinanceOverviewMeta = {
   pendingIncomplete: boolean;
 };
 
+/** Operating-year spend for the Costs & Claims headline (complete register, that year only). */
+export type FinanceOperatingYearSpend = {
+  year: number;
+  totalCount: number;
+  totalAmount: number;
+  currency: string;
+};
+
 export type FinanceOverview = {
   availability: FinanceDataAvailability;
   meta: FinanceOverviewMeta;
@@ -181,6 +189,8 @@ export type FinanceOverview = {
   pendingActions: FinancePendingActionItem[];
   operationalCostLenses: FinanceOperationalCostLens[];
   operationalCostSummary: FinanceOperationalCostSummary | null;
+  /** null when the operating-year total could not be loaded (never the all-year or preview figure). */
+  operatingYearSpend: FinanceOperatingYearSpend | null;
   recentCosts: FinanceRecentCostRow[];
   submissions: FinanceSubmissionSnapshot;
   payments: FinancePaymentSnapshot;

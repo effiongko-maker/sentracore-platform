@@ -80,23 +80,28 @@ export function FinanceHeader({
 
 export function FinanceSummaryRow({
   operationalSpendLabel,
-  spendIsSample,
+  operatingYear,
+  operatingYearRecordCount,
   costRecordsTotal,
   reimbursementsInPreparation,
   clientAuthorisationsTotal,
   loading,
 }: {
   operationalSpendLabel: string;
-  spendIsSample: boolean;
+  /** Operating year the headline presents (spend is that year's complete-register total only). */
+  operatingYear: number;
+  /** Records in the operating-year total; null when it could not be loaded. */
+  operatingYearRecordCount: number | null;
   costRecordsTotal: number | string;
   reimbursementsInPreparation: string;
   clientAuthorisationsTotal: number | string;
   loading: boolean;
 }) {
-  // Zero is data, but it is only the SentraCore™ record: earlier (historical) execution costs are not loaded here.
-  const supportCopy = spendIsSample
-    ? "The complete total could not be loaded — this is a partial figure from a bounded preview, not the full register."
-    : "The complete cost register recorded in SentraCore™, including imported historical execution costs — NGN 0 means none recorded yet, not that none were incurred.";
+  // The headline is ONE operating year, never the complete register (which stays in the cost views).
+  const supportCopy =
+    operatingYearRecordCount == null
+      ? `The ${operatingYear} total could not be loaded. The full cost register (all years) remains available under View details.`
+      : `${operatingYear} operating year: ${operatingYearRecordCount} cost record${operatingYearRecordCount === 1 ? "" : "s"} from the ${operatingYear} Job/Work Order registers and costs recorded in ${operatingYear}. Earlier years remain in the full cost register — NGN 0 means none recorded, not that none were incurred.`;
 
   return (
     <div className="fin-v13-overview">
@@ -104,7 +109,7 @@ export function FinanceSummaryRow({
         <div className="fin-v13-hero-body">
           <div className="fin-v13-hero-metric">
             <p className="fin-v13-metric-label">
-              Operational spend{spendIsSample ? " (partial)" : ""}
+              Operational spend · {operatingYear}
             </p>
             <p className="fin-v13-hero-value">
               {loading ? "—" : operationalSpendLabel}
@@ -138,7 +143,7 @@ export function FinanceSummaryRow({
             <FileText className="h-4 w-4" strokeWidth={1.75} />
           </span>
           <div className="min-w-0">
-            <p className="fin-v13-metric-label">Costs recorded in SentraCore™</p>
+            <p className="fin-v13-metric-label">Costs recorded in SentraCore™ (all years)</p>
             <p className="fin-v13-support-value">
               {loading ? "—" : costRecordsTotal}
             </p>
@@ -160,7 +165,7 @@ export function FinanceSummaryRow({
             <Users className="h-4 w-4" strokeWidth={1.75} />
           </span>
           <div className="min-w-0">
-            <p className="fin-v13-metric-label">Work Order approvals</p>
+            <p className="fin-v13-metric-label">Client Approvals</p>
             <p className="fin-v13-support-value">
               {loading ? "—" : clientAuthorisationsTotal}
             </p>

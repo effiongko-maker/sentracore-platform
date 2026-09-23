@@ -19,6 +19,7 @@ import {
   OPERATIONAL_COST_LENSES,
 } from "../constants";
 import type {
+  FinanceOperatingYearSpend,
   FinanceOverview,
   FinancePaymentSnapshot,
   FinancePendingActionItem,
@@ -595,6 +596,8 @@ export type DeriveFinanceOverviewInput = {
   totalCostRecords: number;
   /** The authoritative COMPLETE-register total; null only when it could not be loaded. */
   costTotals?: CostTotals | null;
+  /** The complete-register total for FINANCE_OPERATING_YEAR only; null when it could not be loaded. */
+  operatingYearCostTotals?: FinanceOperatingYearSpend | null;
   submissions: CostSubmission[];
   totalSubmissions: number;
   payments?: ReimbursementPayment[];
@@ -766,6 +769,7 @@ export function deriveFinanceOverview(
             reimbursableCount,
           }
         : null,
+    operatingYearSpend: input.operatingYearCostTotals ?? null,
     recentCosts: costRecordsAvailable ? buildRecentCostRows(costRecords) : [],
     submissions: submissionSnapshot,
     payments: paymentSnapshot,
