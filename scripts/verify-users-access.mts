@@ -360,7 +360,8 @@ function main() {
 
   const form = readSrc("src/modules/users/components/UserFormModal.tsx");
   assert(form.includes("V1_OPERATING_ROLE_OPTIONS"), "V1 role select");
-  assert(form.includes("V1_DEPLOYED_FACILITY_NAME"), "NCC Annex default");
+  // Multi-facility: no named/assumed default facility (pre-select only when exactly one facility exists).
+  assert(!form.includes("V1_DEPLOYED_FACILITY_NAME") && !form.includes("NCC Annex"), "no hard-coded NCC Annex default");
   assert(
     !form.includes("system_administrator"),
     "People form must not offer Super Admin as facility role"

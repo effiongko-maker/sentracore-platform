@@ -1,5 +1,10 @@
 import "server-only";
 import { createAdminClient } from "@/utils/supabase/admin";
+import {
+  NO_FACILITY_MATCH,
+  UNRESTRICTED_REPO_SCOPE,
+  type FmRepoScope,
+} from "@/lib/access/facilityScope";
 import type { ApprovalListParams } from "@/modules/approvals/types";
 import {
   AWAITING_ACTION_STATUSES,
@@ -166,8 +171,56 @@ function assertWorkInstructionNotHistorical(wi: InstructionRef): void {
 export class FmApprovalRepository {
   constructor(
     private readonly organisationId: string,
-    private readonly admin: AdminClient = db()
+    private readonly admin: AdminClient = db(),
+    private readonly scope: FmRepoScope = UNRESTRICTED_REPO_SCOPE
   ) {}
+
+  /**
+   * Facility scope for Approvals. An Approval's facility is DERIVED through its Work Instruction (never stored); an
+   * Approval without one is facility-less (visible in "All facilities" only). Returns a PostgREST `or` clause, or
+   * null when unrestricted.
+   */
+  private async scopeClause(): Promise<string | null> {
+    const read = this.scope.read;
+    if (read.unrestricted) return null;
+    const parts: string[] = [];
+    if (read.facilityIds.length) {
+      const ids: string[] = [];
+      for (let offset = 0; ; offset += 1000) {
+        const { data, error } = await this.admin
+          .from("fm_work_instructions")
+          .select("id")
+          .eq("organisation_id", this.organisationId)
+          .in("facility_id", read.facilityIds)
+          .order("id", { ascending: true })
+          .range(offset, offset + 999);
+        if (error) throwDb(error, "Unable to resolve facility scope.");
+        const batch = (data ?? []).map((r) => String((r as { id: string }).id));
+        ids.push(...batch);
+        if (batch.length < 1000) break;
+      }
+      if (ids.length) parts.push(`work_instruction_id.in.(${ids.join(",")})`);
+    }
+    if (read.includeUnattributed) parts.push("work_instruction_id.is.null");
+    return parts.length ? parts.join(",") : `id.eq.${NO_FACILITY_MATCH}`;
+  }
+
+  /** Direct reads obey the facility scope: out of scope is "not found". */
+  private async scoped(row: FmApprovalRow | null): Promise<FmApprovalRow | null> {
+    if (!row) return null;
+    const read = this.scope.read;
+    if (read.unrestricted) return row;
+    if (!row.work_instruction_id) return read.includeUnattributed ? row : null;
+    const { data, error } = await this.admin
+      .from("fm_work_instructions")
+      .select("facility_id")
+      .eq("organisation_id", this.organisationId)
+      .eq("id", row.work_instruction_id)
+      .maybeSingle();
+    if (error) throwDb(error, "Unable to resolve facility scope.");
+    const facilityId = (data as { facility_id?: string } | null)?.facility_id;
+    return facilityId && read.facilityIds.includes(String(facilityId)) ? row : null;
+  }
 
   /** Resolve a Work Instruction by UUID or display code — inside this organisation only. */
   async resolveWorkInstruction(ref: string): Promise<InstructionRef> {
@@ -199,7 +252,7 @@ export class FmApprovalRepository {
       ? await query.eq("id", target).maybeSingle()
       : await query.eq("code", target.toUpperCase()).maybeSingle();
     if (error) throwDb(error, "Unable to load approval.");
-    return data ? asRow(data) : null;
+    return this.scoped(data ? asRow(data) : null);
   }
 
   async getByWorkInstruction(workInstructionId: string): Promise<FmApprovalRow | null> {
@@ -210,7 +263,7 @@ export class FmApprovalRepository {
       .eq("work_instruction_id", workInstructionId)
       .maybeSingle();
     if (error) throwDb(error, "Unable to load approval.");
-    return data ? asRow(data) : null;
+    return this.scoped(data ? asRow(data) : null);
   }
 
   private async instructionIds(filter: { facilityId?: string; codeLike?: string }): Promise<string[]> {
@@ -241,6 +294,8 @@ export class FmApprovalRepository {
       .from("fm_approvals")
       .select(FM_APPROVAL_SELECT, { count: "exact" })
       .eq("organisation_id", this.organisationId);
+    const scopeClause = await this.scopeClause();
+    if (scopeClause) query = query.or(scopeClause);
 
     if (params.status && params.status !== "all") query = query.eq("status", params.status);
     if (params.type && params.type !== "all") query = query.eq("approval_type", params.type);
@@ -359,6 +414,9 @@ export class FmApprovalRepository {
 
   async create(input: ParsedCreateApproval, actorProfileId: string): Promise<FmApprovalRow> {
     const wi = await this.resolveWorkInstruction(input.workInstructionRef);
+    if (!this.scope.canOperateIn(wi.facility_id)) {
+      throw new FmApprovalValidationError("You are not authorised to raise approvals in this facility.");
+    }
     // Imported historical Work Instructions are read-only evidence: no Approval is raised against them.
     assertWorkInstructionNotHistorical(wi);
     const columns = toColumns(input);
@@ -433,12 +491,15 @@ export class FmApprovalRepository {
   /** Complete-register statuses for the Operational Picture (one column only). */
   async operationalPictureStatuses(): Promise<Array<{ status: string }>> {
     const rows: Array<{ status: string }> = [];
+    const scopeClause = await this.scopeClause();
     for (let offset = 0; ; offset += 1000) {
-      const { data, error } = await this.admin
+      let scoped = this.admin
         .from("fm_approvals")
         .select("status")
         .eq("organisation_id", this.organisationId)
-        .in("status", [...AWAITING_ACTION_STATUSES])
+        .in("status", [...AWAITING_ACTION_STATUSES]);
+      if (scopeClause) scoped = scoped.or(scopeClause);
+      const { data, error } = await scoped
         .order("id", { ascending: true })
         .range(offset, offset + 999);
       if (error) throwDb(error, "Unable to load Approval totals.");

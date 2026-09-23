@@ -40,7 +40,7 @@ export function LogIssueModal({ open, onClose, onCreated }: Props) {
     useState<(typeof URGENCY)[number]>("medium");
   const [saving, setSaving] = useState(false);
 
-  const resolveScoped = useScopedFacilityResolver();
+  const resolveScoped = useScopedFacilityResolver({ open, creating: true });
   useEffect(() => {
     if (!open) return;
     setTitle("");

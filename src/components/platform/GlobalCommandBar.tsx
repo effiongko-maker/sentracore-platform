@@ -9,6 +9,7 @@ import {
 import {
   fmOperatingIdentityName,
   isCommandCentrePath,
+  isOperationsPath,
   isPlatformHomePath,
   isPlatformWorkspaceSurfacePath,
 } from "@/lib/platform/workspaces";
@@ -17,6 +18,7 @@ import type { CurrentUser } from "@/types";
 import { usePlatformShell } from "@/hooks/usePlatformShell";
 import { usePathname } from "next/navigation";
 import { GlobalNotificationBell } from "./GlobalNotificationBell";
+import { FacilityContextSwitcher } from "@/components/navigation/FacilityContextSwitcher";
 
 export function GlobalCommandBar() {
   const pathname = usePathname();
@@ -93,6 +95,8 @@ export function GlobalCommandBar() {
       )}
 
       <div className="os-command-actions">
+        {/* Facility Management: the single workspace facility-context control. */}
+        {isOperationsPath(pathname) ? <FacilityContextSwitcher /> : null}
         {showCommandSearch ? <GlobalNotificationBell /> : null}
         {operatingCompanyName ? (
           <span className="hidden text-xs text-[var(--os-ink-faint)] lg:inline">

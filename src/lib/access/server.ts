@@ -13,6 +13,11 @@ import {
   type OperatingAccess,
 } from "./resolveAccess";
 import {
+  FM_FACILITY_CONTEXT_COOKIE,
+  type AuthorisedFacility,
+  type FmFacilityScopeMode,
+} from "./facilityScope";
+import {
   FM_EXPLICIT_GRANT_CAPABILITIES,
   type AccessCapability,
 } from "./capabilities";
@@ -61,49 +66,87 @@ async function loadActiveAssignmentContext(
   facility: string;
   facilityId: string;
   status: OperatingAccess["status"];
+  /** Every ACTIVE facility the profile holds an active assignment at (most recently updated first). */
+  assigned: AuthorisedFacility[];
 }> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("fm_facility_assignments")
-    .select("operational_role, status, facility_id, updated_at")
+    .select("operational_role, status, facility_id, updated_at, fm_facilities ( id, name, code, status )")
     .eq("organisation_id", organisationId)
     .eq("profile_id", profileId)
     .eq("status", "active")
-    .order("updated_at", { ascending: false })
-    .limit(1);
+    .order("updated_at", { ascending: false });
   if (error) {
     throw error;
   }
-  const row = (data ?? [])[0] as
-    | { operational_role?: string; facility_id?: string }
-    | undefined;
+  type Row = {
+    operational_role?: string;
+    facility_id?: string;
+    fm_facilities?: { id?: string; name?: string; code?: string; status?: string } | null;
+  };
+  const rows = (data ?? []) as unknown as Row[];
+  const assigned: AuthorisedFacility[] = [];
+  for (const r of rows) {
+    const f = Array.isArray(r.fm_facilities) ? r.fm_facilities[0] : r.fm_facilities;
+    if (!f?.id || f.status !== "active" || assigned.some((a) => a.id === f.id)) continue;
+    assigned.push({ id: String(f.id), name: String(f.name ?? ""), code: f.code ? String(f.code) : undefined });
+  }
+  // The primary (most recently updated) assignment keeps its existing meaning: operating role + default facility.
+  const row = rows[0];
   if (!row) {
-    return { role: null, facility: "", facilityId: "", status: "unknown" };
+    return { role: null, facility: "", facilityId: "", status: "unknown", assigned };
   }
   const rawRole = String(row.operational_role ?? "");
   const role = isV1OperatingRole(rawRole)
     ? rawRole
     : parseV1OperatingRole(rawRole);
-  let facility = "";
-  const facilityId = String(row.facility_id ?? "");
-  if (facilityId) {
-    const { data: facilityRow, error: facilityError } = await admin
-      .from("fm_facilities")
-      .select("name")
-      .eq("organisation_id", organisationId)
-      .eq("id", facilityId)
-      .maybeSingle();
-    if (facilityError) throw facilityError;
-    facility = String(
-      (facilityRow as { name?: string } | null)?.name ?? ""
-    );
-  }
+  const primary = Array.isArray(row.fm_facilities) ? row.fm_facilities[0] : row.fm_facilities;
   return {
     role,
-    facility,
-    facilityId,
+    facility: String(primary?.name ?? ""),
+    facilityId: String(row.facility_id ?? ""),
     status: "active",
+    assigned,
   };
+}
+
+/**
+ * The explicit organisation-wide facility scope (profiles.fm_facility_scope). Fails closed to "assigned" when the
+ * value is absent or unreadable — never widened by an error.
+ */
+async function loadFacilityScopeMode(organisationId: string, profileId: string): Promise<FmFacilityScopeMode> {
+  const { data, error } = await createAdminClient()
+    .from("profiles")
+    .select("fm_facility_scope")
+    .eq("organisation_id", organisationId)
+    .eq("id", profileId)
+    .maybeSingle();
+  if (error) {
+    console.warn("[access] facility scope unavailable; using assigned facilities only", error.message);
+    return "assigned";
+  }
+  return (data as { fm_facility_scope?: string } | null)?.fm_facility_scope === "all" ? "all" : "assigned";
+}
+
+async function loadActiveFacilities(organisationId: string): Promise<AuthorisedFacility[]> {
+  const { data, error } = await createAdminClient()
+    .from("fm_facilities")
+    .select("id, name, code")
+    .eq("organisation_id", organisationId)
+    .eq("status", "active");
+  if (error) throw error;
+  return (data ?? []).map((f) => ({ id: String(f.id), name: String(f.name ?? ""), code: f.code ? String(f.code) : undefined }));
+}
+
+/** The user's requested workspace facility (untrusted; validated against access by the resolver). */
+async function readRequestedFacilityContext(): Promise<string | null> {
+  try {
+    const { cookies } = await import("next/headers");
+    return (await cookies()).get(FM_FACILITY_CONTEXT_COOKIE)?.value ?? null;
+  } catch {
+    return null; // outside a request (scripts / background work): default selection
+  }
 }
 
 /**
@@ -178,13 +221,18 @@ export async function resolveOperatingAccess(
   let facility = "";
   let facilityId = "";
   let assignmentStatus: OperatingAccess["status"] = "unknown";
+  let authorisedFacilities: AuthorisedFacility[] = [];
 
   // Grants and assignment context are independent (both keyed on org + profile).
   // Each keeps its own failure semantics: grants fail closed, assignment degrades.
-  const [grantsResult, contextResult] = await Promise.allSettled([
+  const [grantsResult, contextResult, scopeModeResult, requestedFacilityContext] = await Promise.allSettled([
     loadExplicitFmGrants(organisationId, profileId),
     loadActiveAssignmentContext(organisationId, profileId),
+    loadFacilityScopeMode(organisationId, profileId),
+    readRequestedFacilityContext(),
   ]);
+  let facilityScopeMode: FmFacilityScopeMode =
+    scopeModeResult.status === "fulfilled" ? scopeModeResult.value : "assigned";
 
   if (grantsResult.status === "fulfilled") {
     capabilities = grantsResult.value;
@@ -202,11 +250,21 @@ export async function resolveOperatingAccess(
     facility = context.facility;
     facilityId = context.facilityId;
     assignmentStatus = context.status;
+    authorisedFacilities = context.assigned;
   } else {
     console.warn(
       "[access] facility assignment context unavailable; continuing with grants only",
       contextResult.reason
     );
+  }
+
+  if (facilityScopeMode === "all") {
+    try {
+      authorisedFacilities = await loadActiveFacilities(organisationId);
+    } catch (error) {
+      console.warn("[access] active facilities unavailable; all-facilities scope degraded to assigned", error);
+      facilityScopeMode = "assigned"; // never unrestricted on a failed read
+    }
   }
 
   const base = resolveOperatingAccessFromGrants({
@@ -217,6 +275,10 @@ export async function resolveOperatingAccess(
     status: assignmentStatus,
     facility,
     facilityId,
+    facilityScopeMode,
+    authorisedFacilities,
+    requestedFacilityContext:
+      requestedFacilityContext.status === "fulfilled" ? requestedFacilityContext.value : null,
     inactive: isInactiveUserStatus(session.profile.status),
     unassigned: role == null,
     capabilities,

@@ -4,6 +4,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import type { ProfileStatus } from "@/lib/auth/types";
 import type {
   AccessScopeResult,
+  FmFacilityScopeResult,
   LandingWorkspaceResult,
   OrganisationAdminRecord,
   OrganisationModuleAdminStatus,
@@ -383,6 +384,29 @@ export class PlatformAdminRepository {
       organisationId: rec.organisationId ? String(rec.organisationId) : null,
       accessScope: rec.accessScope === "module" ? "module" : "platform",
       homeModule: isBoundModule(rec.homeModule) ? rec.homeModule : null,
+      changed: Boolean(rec.changed),
+    };
+  }
+
+  async setFmFacilityScope(input: {
+    actorProfileId: string;
+    targetProfileId: string;
+    fmFacilityScope: "assigned" | "all";
+  }): Promise<FmFacilityScopeResult> {
+    const { data, error } = await this.admin.rpc("platform_iam_set_fm_facility_scope", {
+      p_actor_profile_id: input.actorProfileId,
+      p_target_profile_id: input.targetProfileId,
+      p_fm_facility_scope: input.fmFacilityScope,
+    });
+    if (error) rpcError(error, "Unable to update facility scope.");
+    const rec = asRecord(data);
+    if (!rec) {
+      throw new ActionError("INTERNAL_ERROR", "Facility scope RPC returned no data.");
+    }
+    return {
+      profileId: String(rec.profileId),
+      organisationId: rec.organisationId ? String(rec.organisationId) : null,
+      fmFacilityScope: rec.fmFacilityScope === "all" ? "all" : "assigned",
       changed: Boolean(rec.changed),
     };
   }

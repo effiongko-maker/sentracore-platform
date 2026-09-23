@@ -1,4 +1,5 @@
 import "server-only";
+import { repoScopeFromAccess } from "@/lib/access/facilityScope";
 import { ActionError } from "@/lib/actions/errors";
 import type { OperatingAccess } from "@/lib/access/resolveAccess";
 import type { PlatformSession } from "@/lib/auth/types";
@@ -36,7 +37,7 @@ export class FmIncidentServerService {
   constructor(private readonly ctx: FmIncidentAccessContext) {}
 
   private repo() {
-    return new FmIncidentRepository(this.ctx.organisationId);
+    return new FmIncidentRepository(this.ctx.organisationId, undefined, repoScopeFromAccess(this.ctx.access));
   }
 
   private async hydrate(rows: FmIncidentRow[]): Promise<Incident[]> {

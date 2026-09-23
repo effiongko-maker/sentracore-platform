@@ -1,4 +1,5 @@
 import "server-only";
+import { repoScopeFromAccess } from "@/lib/access/facilityScope";
 import { ActionError } from "@/lib/actions/errors";
 import type { OperatingAccess } from "@/lib/access/resolveAccess";
 import type { PlatformSession } from "@/lib/auth/types";
@@ -55,7 +56,7 @@ export class FmRequestServerService {
   constructor(private readonly ctx: FmRequestAccessContext) {}
 
   private repo() {
-    return new FmRequestRepository(this.ctx.organisationId);
+    return new FmRequestRepository(this.ctx.organisationId, undefined, repoScopeFromAccess(this.ctx.access));
   }
 
   private requireActor(): string {

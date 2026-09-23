@@ -58,8 +58,9 @@ export class FmFacilitiesServerService {
 
   async list(params: FacilityListParams = {}): Promise<PaginatedResult<Facility>> {
     const parsed = parseFacilityListParams(params);
-    const rows = await this.repo().listRows();
-    const mapped = rows.map(mapFmFacilityRowToApi);
+    const repo = this.repo();
+    const [rows, assigned] = await Promise.all([repo.listRows(), repo.assignedPeopleCounts()]);
+    const mapped = rows.map((row) => ({ ...mapFmFacilityRowToApi(row), assignedPeople: assigned.get(row.id) ?? 0 }));
     const filtered = filterFacilityRows(mapped, parsed);
     return paginateRows(
       filtered,

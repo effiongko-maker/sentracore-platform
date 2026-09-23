@@ -19,6 +19,7 @@ export const PLATFORM_IAM_AUDIT_ACTIONS = [
   "capability.revoked",
   "user.offboarded",
   "access_scope.changed",
+  "fm_facility_scope.changed",
   "landing_workspace.changed",
   "facility_assignment.created",
   "facility_assignment.activated",
@@ -267,6 +268,15 @@ export type AdminPersonDetail = AdminPersonSummary & {
   homeModule: BoundModule | null;
   /** UX routing preference (platform scope only); never authority. */
   landingWorkspace: string | null;
+  /** FM facility scope (WHERE): assigned facilities only, or all active facilities. Grants no capability. */
+  fmFacilityScope: "assigned" | "all";
+};
+
+export type FmFacilityScopeResult = {
+  profileId: string;
+  organisationId: string | null;
+  fmFacilityScope: "assigned" | "all";
+  changed: boolean;
 };
 
 export type LandingWorkspaceResult = {

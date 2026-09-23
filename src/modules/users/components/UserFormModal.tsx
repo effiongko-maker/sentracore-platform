@@ -10,7 +10,6 @@ import {
 import { useToast } from "@/components/ui/Toast";
 import { useFacilityOptions } from "@/hooks/useFacilityOptions";
 import {
-  V1_DEPLOYED_FACILITY_NAME,
   V1_OPERATING_ROLE_OPTIONS,
   parseV1OperatingRole,
   v1OperatingRoleLabel,
@@ -113,9 +112,8 @@ export function UserFormModal({
         return current;
       }
       if (mode === "create") {
-        const preferred =
-          facilities.find((item) => item.name === V1_DEPLOYED_FACILITY_NAME) ??
-          facilities[0];
+        // Pre-select only when there is nothing to choose between — never a named/assumed default facility.
+        const preferred = facilities.length === 1 ? facilities[0] : undefined;
         if (preferred) {
           return {
             ...current,

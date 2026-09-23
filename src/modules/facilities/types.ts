@@ -17,6 +17,8 @@ export interface Facility {
   manager: string;
   status: FacilityStatus;
   description?: string;
+  /** People with an ACTIVE facility assignment here (read-only; assignments are managed in Admin Console). */
+  assignedPeople?: number;
   createdAt: string;
   updatedAt: string;
 }

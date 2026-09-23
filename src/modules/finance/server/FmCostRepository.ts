@@ -1,6 +1,12 @@
 import "server-only";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
+  applyFacilityScope,
+  facilityScopeClause,
+  UNRESTRICTED_REPO_SCOPE,
+  type FmRepoScope,
+} from "@/lib/access/facilityScope";
+import {
   FM_AUTHORIZATION_SELECT,
   FM_COST_RECORD_SELECT,
   FM_COST_SUBMISSION_SELECT,
@@ -122,11 +128,45 @@ function paymentRow(rec: Record<string, unknown>): FmPaymentRow {
 
 type Ref = { id: string; code: string; facility_id: string };
 
+/** Client Payments are FM-wide: a row with no facility is admitted in every authorised facility context. */
+const FM_WIDE_WHEN_NO_FACILITY = ["facility_id.is.null"];
+
+/** `or` clause for raw aggregate loops (a match-all clause when unrestricted, so the call site stays uniform). */
+function facilityScopeOr(scope: FmRepoScope): string {
+  return facilityScopeClause(scope.read) ?? "id.not.is.null";
+}
+
 export class FmCostRepository {
   constructor(
     private readonly organisationId: string,
-    private readonly admin: AdminClient = db()
+    private readonly admin: AdminClient = db(),
+    private readonly scope: FmRepoScope = UNRESTRICTED_REPO_SCOPE
   ) {}
+
+  /**
+   * Client payment (submission) UUIDs inside the facility scope — null when unrestricted. Client Payments are FM-WIDE:
+   * one with no facility is visible in every authorised facility context; one with a facility obeys facility scope.
+   * Authorizations and receipts carry no facility of their own: they are in scope exactly when their client payment is
+   * (derived, never copied).
+   */
+  private async submissionIdsInScope(): Promise<string[] | null> {
+    if (this.scope.read.unrestricted) return null;
+    const ids: string[] = [];
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await applyFacilityScope(
+        this.admin.from("fm_cost_submissions").select("id").eq("organisation_id", this.organisationId),
+        this.scope.read,
+        "facility_id",
+        FM_WIDE_WHEN_NO_FACILITY
+      )
+        .order("id", { ascending: true })
+        .range(offset, offset + 999);
+      if (error) throwDb(error, "Unable to resolve facility scope.");
+      const batch = (data ?? []).map((r) => String((r as { id: string }).id));
+      ids.push(...batch);
+      if (batch.length < 1000) return ids;
+    }
+  }
 
   // ------------------------------------------------------------- resolution
 
@@ -214,14 +254,18 @@ export class FmCostRepository {
   async getCost(idOrCode: string): Promise<FmCostRecordRow | null> {
     const target = idOrCode.trim();
     if (!target) return null;
-    const q = this.scoped("fm_cost_records", FM_COST_RECORD_SELECT);
+    // Direct reads obey the facility scope: out of scope is "not found".
+    const q = applyFacilityScope(this.scoped("fm_cost_records", FM_COST_RECORD_SELECT), this.scope.read);
     const { data, error } = await (UUID_RE.test(target) ? q.eq("id", target) : q.eq("code", target.toUpperCase())).maybeSingle();
     if (error) throwDb(error, "Unable to load cost record.");
     return data ? costRow(data as unknown as Record<string, unknown>) : null;
   }
 
   async listCosts(params: CostRecordListParams): Promise<{ rows: FmCostRecordRow[]; total: number }> {
-    let query = this.admin.from("fm_cost_records").select(FM_COST_RECORD_SELECT, { count: "exact" }).eq("organisation_id", this.organisationId);
+    let query = applyFacilityScope(
+      this.admin.from("fm_cost_records").select(FM_COST_RECORD_SELECT, { count: "exact" }).eq("organisation_id", this.organisationId),
+      this.scope.read
+    );
     if (params.category) query = query.eq("category", params.category);
     if (params.reimbursability) query = query.eq("reimbursability", params.reimbursability);
     if (params.facilityId) {
@@ -322,6 +366,7 @@ export class FmCostRepository {
         .from("fm_cost_records")
         .select("actual_amount, currency, reimbursability, record_origin")
         .eq("organisation_id", this.organisationId)
+        .or(facilityScopeOr(this.scope))
         .order("id", { ascending: true })
         .range(offset, offset + batchSize - 1);
       if (error) throwDb(error, "Unable to load cost totals.");
@@ -376,6 +421,7 @@ export class FmCostRepository {
         .from("fm_cost_records")
         .select("id, actual_amount, currency, record_origin, recorded_at")
         .eq("organisation_id", this.organisationId)
+        .or(facilityScopeOr(this.scope))
         .order("id", { ascending: true })
         .range(offset, offset + batchSize - 1);
       if (error) throwDb(error, "Unable to load cost totals.");
@@ -403,6 +449,9 @@ export class FmCostRepository {
 
   async createCost(input: ParsedCreateCostRecord, actorProfileId: string): Promise<FmCostRecordRow> {
     const facilityId = await this.resolveFacilityId(input.facilityRef);
+    if (!this.scope.canOperateIn(facilityId)) {
+      throw new FmCostValidationError("You are not authorised to record costs in this facility.");
+    }
     const ctx = await this.costContext({ facilityId, workRef: input.workRef, workInstructionRef: input.workInstructionRef });
     const departmentId = input.departmentId ? await this.resolveDepartmentId(input.departmentId) : null;
     return this.insertWithCode("fm_cost_records", FM_COST_RECORD_SELECT, "COST", (l) => generateNextCostCode(l), {
@@ -431,6 +480,9 @@ export class FmCostRepository {
     if (!existing) throw new FmCostNotFoundError(`Cost record ${input.id} not found.`);
     if (existing.record_origin === "migrated_historical") throw new FmCostReadOnlyError();
     const facilityId = input.facilityRef ? await this.resolveFacilityId(input.facilityRef) : existing.facility_id;
+    if (facilityId !== existing.facility_id && !this.scope.canOperateIn(facilityId)) {
+      throw new FmCostValidationError("You are not authorised to move costs to this facility.");
+    }
     const workRef = input.workRef !== undefined ? input.workRef : existing.work_id;
     const wiRef = input.workInstructionRef !== undefined ? input.workInstructionRef : existing.work_instruction_id;
     const ctx = await this.costContext({ facilityId, workRef, workInstructionRef: wiRef });
@@ -462,14 +514,19 @@ export class FmCostRepository {
   async getSubmission(idOrCode: string): Promise<FmCostSubmissionRow | null> {
     const target = idOrCode.trim();
     if (!target) return null;
-    const q = this.scoped("fm_cost_submissions", FM_COST_SUBMISSION_SELECT);
+    const q = applyFacilityScope(this.scoped("fm_cost_submissions", FM_COST_SUBMISSION_SELECT), this.scope.read, "facility_id", FM_WIDE_WHEN_NO_FACILITY);
     const { data, error } = await (UUID_RE.test(target) ? q.eq("id", target) : q.eq("code", target.toUpperCase())).maybeSingle();
     if (error) throwDb(error, "Unable to load cost submission.");
     return data ? submissionRow(data as unknown as Record<string, unknown>) : null;
   }
 
   async listSubmissions(params: SubmissionListParams): Promise<{ rows: FmCostSubmissionRow[]; total: number }> {
-    let query = this.admin.from("fm_cost_submissions").select(FM_COST_SUBMISSION_SELECT, { count: "exact" }).eq("organisation_id", this.organisationId);
+    let query = applyFacilityScope(
+      this.admin.from("fm_cost_submissions").select(FM_COST_SUBMISSION_SELECT, { count: "exact" }).eq("organisation_id", this.organisationId),
+      this.scope.read,
+      "facility_id",
+      FM_WIDE_WHEN_NO_FACILITY
+    );
     if (params.status) query = query.eq("status", params.status);
     if (params.kind) query = query.eq("submission_kind", params.kind);
     if (params.facilityId) {
@@ -577,6 +634,9 @@ export class FmCostRepository {
     const costIds = await this.resolveCostIds(input.costRefs);
     const columns = this.submissionColumns(input);
     if (input.facilityRef !== undefined) columns.facility_id = input.facilityRef ? await this.resolveFacilityId(input.facilityRef) : null;
+    if (columns.facility_id && !this.scope.canOperateIn(String(columns.facility_id))) {
+      throw new FmCostValidationError("You are not authorised to create client payments in this facility.");
+    }
     if (input.departmentId !== undefined) columns.department_id = input.departmentId ? await this.resolveDepartmentId(input.departmentId) : null;
     if (input.approvalRef !== undefined) columns.approval_id = input.approvalRef ? await this.resolveApprovalId(input.approvalRef) : null;
     const now = new Date().toISOString();
@@ -595,6 +655,9 @@ export class FmCostRepository {
   async updateSubmission(input: ParsedUpdateSubmission, existing: FmCostSubmissionRow, actorProfileId: string): Promise<FmCostSubmissionRow> {
     const patch = this.submissionColumns(input);
     if (input.facilityRef !== undefined) patch.facility_id = input.facilityRef ? await this.resolveFacilityId(input.facilityRef) : null;
+    if (patch.facility_id && patch.facility_id !== existing.facility_id && !this.scope.canOperateIn(String(patch.facility_id))) {
+      throw new FmCostValidationError("You are not authorised to move client payments to this facility.");
+    }
     if (input.departmentId !== undefined) patch.department_id = input.departmentId ? await this.resolveDepartmentId(input.departmentId) : null;
     if (input.approvalRef !== undefined) patch.approval_id = input.approvalRef ? await this.resolveApprovalId(input.approvalRef) : null;
     const now = new Date().toISOString();
@@ -643,6 +706,7 @@ export class FmCostRepository {
     if (error) throwDb(error, "Unable to load authorization.");
     if (!data) return null;
     const row = authorizationRow(data as unknown as Record<string, unknown>);
+    if (!(await this.getSubmission(row.submission_id))) return null; // out of facility scope
     return { row, submissionCode: (await this.submissionCodes([row.submission_id])).get(row.submission_id) ?? "" };
   }
 
@@ -657,6 +721,11 @@ export class FmCostRepository {
 
   async listAuthorizations(params: SubmissionScopedListParams): Promise<{ rows: Array<{ row: FmAuthorizationRow; submissionCode: string }>; total: number }> {
     let query = this.admin.from("fm_reimbursement_authorizations").select(FM_AUTHORIZATION_SELECT, { count: "exact" }).eq("organisation_id", this.organisationId);
+    const inScope = await this.submissionIdsInScope();
+    if (inScope) {
+      if (inScope.length === 0) return { rows: [], total: 0 };
+      query = query.in("submission_id", inScope);
+    }
     if (params.submissionId) {
       const id = await this.submissionIdForRef(params.submissionId);
       if (!id) return { rows: [], total: 0 };
@@ -729,11 +798,17 @@ export class FmCostRepository {
     if (error) throwDb(error, "Unable to load payment.");
     if (!data) return null;
     const row = paymentRow(data as unknown as Record<string, unknown>);
+    if (!(await this.getSubmission(row.submission_id))) return null; // out of facility scope
     return { row, submissionCode: (await this.submissionCodes([row.submission_id])).get(row.submission_id) ?? "" };
   }
 
   async listPayments(params: SubmissionScopedListParams): Promise<{ rows: Array<{ row: FmPaymentRow; submissionCode: string }>; total: number }> {
     let query = this.admin.from("fm_reimbursement_payments").select(FM_PAYMENT_SELECT, { count: "exact" }).eq("organisation_id", this.organisationId);
+    const inScope = await this.submissionIdsInScope();
+    if (inScope) {
+      if (inScope.length === 0) return { rows: [], total: 0 };
+      query = query.in("submission_id", inScope);
+    }
     if (params.submissionId) {
       const id = await this.submissionIdForRef(params.submissionId);
       if (!id) return { rows: [], total: 0 };

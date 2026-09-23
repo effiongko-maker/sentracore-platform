@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { gateApiCapability } from "@/lib/access/gateApi";
+import { scopeAllowsFmWide } from "@/lib/access/facilityScope";
 import { resolveFmCostOrganisation } from "@/modules/finance/server/FmCostServerService";
 import {
   deriveMonthlyPaymentStatus,
@@ -61,13 +62,15 @@ export async function POST() {
     const admin = createAdminClient();
     const { data: instalments, error: instError } = await admin
       .from("fm_cost_submissions")
-      .select("id,code,status,claim_amount,currency,period_label,description")
+      .select("id,code,status,claim_amount,currency,period_label,description,facility_id")
       .eq("organisation_id", organisationId)
       .eq("submission_kind", "contract_instalment")
       .in("status", ["submitted", "queried"]);
     if (instError) throw instError;
+    // Client Payments are FM-wide: one with no facility shows in every authorised facility context; one with a facility
+    // obeys facility scope.
     const fmFee = (instalments ?? []).filter(
-      (s) => /Monthly Instalment Payment/i.test(String(s.description ?? "")) && /Facility Management and Maintenance Works/i.test(String(s.description ?? "")) && s.period_label
+      (s) => scopeAllowsFmWide(gate.access.fmFacilityScope, s.facility_id as string | null) && /Monthly Instalment Payment/i.test(String(s.description ?? "")) && /Facility Management and Maintenance Works/i.test(String(s.description ?? "")) && s.period_label
     );
     const receivedById = new Map<string, number>();
     if (fmFee.length) {

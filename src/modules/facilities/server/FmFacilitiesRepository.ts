@@ -88,6 +88,22 @@ export class FmFacilitiesRepository {
     return (data ?? []).map(asRow);
   }
 
+  /** Distinct people with an ACTIVE assignment per facility UUID. */
+  async assignedPeopleCounts(): Promise<Map<string, number>> {
+    const { data, error } = await this.admin
+      .from("fm_facility_assignments")
+      .select("facility_id, profile_id")
+      .eq("organisation_id", this.organisationId)
+      .eq("status", "active");
+    if (error) throwDb(error, "Unable to load facility assignments.");
+    const people = new Map<string, Set<string>>();
+    for (const row of data ?? []) {
+      const rec = row as { facility_id: string; profile_id: string };
+      people.set(rec.facility_id, (people.get(rec.facility_id) ?? new Set()).add(rec.profile_id));
+    }
+    return new Map([...people].map(([id, set]) => [id, set.size]));
+  }
+
   async getByIdOrCode(idOrCode: string): Promise<FmFacilityRow | null> {
     const target = idOrCode.trim();
     if (!target) return null;

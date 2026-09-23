@@ -18,7 +18,7 @@ export const AUDIT_CATEGORY_LABELS: Record<AuditCategory, string> = {
 export function auditCategoryForAction(action: string): AuditCategory | null {
   if (action.startsWith("capability.")) return "access";
   if (action.startsWith("module.")) return "modules";
-  if (action === "access_scope.changed" || action === "landing_workspace.changed") return "access";
+  if (action === "access_scope.changed" || action === "landing_workspace.changed" || action === "fm_facility_scope.changed") return "access";
   if (action.startsWith("facility_assignment.")) return "operating_context";
   if (action.startsWith("user.") || action.startsWith("profile.")) return "people";
   return null;
@@ -26,7 +26,7 @@ export function auditCategoryForAction(action: string): AuditCategory | null {
 
 export const AUDIT_ACTIONS_BY_CATEGORY: Record<AuditCategory, string[]> = {
   people: ["user.account_created", "user.temporary_password_issued", "user.password_changed", "user.invited", "user.offboarded", "profile.attached_to_organisation", "profile.activated", "profile.suspended", "profile.deactivated"],
-  access: ["capability.granted", "capability.revoked", "access_scope.changed", "landing_workspace.changed"],
+  access: ["capability.granted", "capability.revoked", "access_scope.changed", "landing_workspace.changed", "fm_facility_scope.changed"],
   modules: ["module.enabled", "module.disabled"],
   operating_context: [
     "facility_assignment.created",
@@ -97,6 +97,11 @@ export function describeAuditEvent(
         scope === "module" ? `Module-bound · ${home === "ecc_operations" ? "ECC Operations" : home === "facility_management" ? "Facility Management" : "unknown module"}` : "Platform";
       detail.push(`Access scope: ${label(str(details, "previousAccessScope"), str(details, "previousHomeModule"))} → ${label(str(details, "accessScope"), str(details, "homeModule"))}`);
       return { headline: `Changed access scope for ${person}`, category, detail };
+    }
+    case "fm_facility_scope.changed": {
+      const label = (v: string) => (v === "all" ? "All facilities" : "Assigned facilities only");
+      detail.push(`Facility scope: ${label(str(details, "previousFmFacilityScope"))} → ${label(str(details, "fmFacilityScope"))}`);
+      return { headline: `Changed facility scope for ${person}`, category, detail };
     }
     case "landing_workspace.changed": {
       const label = (v: string) =>

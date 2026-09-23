@@ -12,6 +12,7 @@ type PlatformAdminAction =
   | "attachProfileToOrganisation"
   | "setProfileStatus"
   | "setAccessScope"
+  | "setFmFacilityScope"
   | "setLandingWorkspace"
   | "setOrganisationModule"
   | "grantPlatformCapability"
@@ -38,6 +39,7 @@ type RequestBody = {
   accessScope?: string;
   homeModule?: string | null;
   landingWorkspace?: string | null;
+  fmFacilityScope?: string;
   moduleSlug?: string;
   capability?: string;
   category?: string;
@@ -188,6 +190,19 @@ export async function POST(request: Request) {
           profileId: body.profileId,
           accessScope: body.accessScope,
           homeModule: body.homeModule ?? null,
+        });
+        return NextResponse.json({ success: true, data });
+      }
+      case "setFmFacilityScope": {
+        if (!body.profileId || !body.fmFacilityScope) {
+          return NextResponse.json(
+            { success: false, message: "profileId and fmFacilityScope are required." },
+            { status: 400 }
+          );
+        }
+        const data = await service.setFmFacilityScope(ctx, {
+          profileId: body.profileId,
+          fmFacilityScope: body.fmFacilityScope,
         });
         return NextResponse.json({ success: true, data });
       }

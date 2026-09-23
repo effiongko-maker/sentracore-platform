@@ -14,6 +14,14 @@ import {
   type V1OperatingRole,
 } from "./roles";
 
+import {
+  resolveWorkspaceFacility,
+  type AuthorisedFacility,
+  type FmFacilityScope,
+  type FmFacilityScopeMode,
+  type WorkspaceFacilityContext,
+} from "./facilityScope";
+
 export type OperatingAccessSource = "platform" | "assignment" | "unassigned";
 
 /**
@@ -60,6 +68,17 @@ export type OperatingAccess = {
    * The only source for the scoped facility — never a display name or code.
    */
   facilityId: string;
+  /**
+   * WHERE the user may operate: "assigned" (their active facility assignments) or "all" (explicit
+   * organisation-wide facility scope). Independent of capabilities (WHAT they may do).
+   */
+  facilityScopeMode: FmFacilityScopeMode;
+  /** Active facilities the user may operate in (all active facilities when facilityScopeMode = "all"). */
+  authorisedFacilities: AuthorisedFacility[];
+  /** Validated workspace facility context ("All facilities" or one authorised facility). */
+  workspaceFacility: WorkspaceFacilityContext;
+  /** Server-enforced FM read scope derived from the above. */
+  fmFacilityScope: FmFacilityScope;
   source: OperatingAccessSource;
   /**
    * True when no valid V1 operating assignment resolved.
@@ -92,6 +111,9 @@ export function resolveOperatingAccessFromGrants(input: {
   status?: UserStatus | "" | "unknown";
   facility?: string;
   facilityId?: string;
+  facilityScopeMode?: FmFacilityScopeMode;
+  authorisedFacilities?: AuthorisedFacility[];
+  requestedFacilityContext?: string | null;
   inactive?: boolean;
   unassigned?: boolean;
   capabilities: readonly AccessCapability[];
@@ -99,6 +121,14 @@ export function resolveOperatingAccessFromGrants(input: {
 }): OperatingAccess {
   const role = input.role ?? null;
   const unassigned = input.unassigned ?? role == null;
+  // Fail closed: no authorised facility ⇒ only facility-less FM records remain in scope.
+  const facilityScopeMode = input.facilityScopeMode ?? "assigned";
+  const authorisedFacilities = input.authorisedFacilities ?? [];
+  const workspace = resolveWorkspaceFacility({
+    authorised: authorisedFacilities,
+    mode: facilityScopeMode,
+    requested: input.requestedFacilityContext,
+  });
   return {
     email: input.email,
     name: input.name,
@@ -114,6 +144,10 @@ export function resolveOperatingAccessFromGrants(input: {
     status: input.status ?? "unknown",
     facility: input.facility ?? "",
     facilityId: input.facilityId ?? "",
+    facilityScopeMode,
+    authorisedFacilities,
+    workspaceFacility: workspace.context,
+    fmFacilityScope: workspace.scope,
     source: "platform",
     unassigned,
     inactive: Boolean(input.inactive),

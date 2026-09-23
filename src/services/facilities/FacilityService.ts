@@ -52,6 +52,7 @@ function mapRemoteFacility(raw: RemoteFacility): Facility {
       const value = pickField(raw, "description", "Description");
       return value != null ? String(value) : undefined;
     })(),
+    assignedPeople: typeof raw.assignedPeople === "number" ? raw.assignedPeople : undefined,
     createdAt: String(
       pickField(raw, "createdAt", "Created At") ?? new Date().toISOString()
     ),

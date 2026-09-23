@@ -10,7 +10,7 @@ import { V1_OPERATING_ROLES, v1OperatingRoleLabel } from "@/lib/access/roles";
 import type { ProfileStatus } from "@/lib/auth/types";
 import { CAPABILITY_DOMAINS, describeCapability } from "../capabilityCatalog";
 import { LANDING_WORKSPACES, LANDING_WORKSPACE_LABEL, type LandingWorkspace } from "@/lib/access/landingWorkspace";
-import type { IssueTemporaryPasswordResult, AccessScopeResult, LandingWorkspaceResult, AdminAuditPage, AdminFacilityAssignment, AdminPersonDetail, OffboardResult, OrganisationAdminRecord, ProfileStatusResult } from "../types";
+import type { IssueTemporaryPasswordResult, AccessScopeResult, FmFacilityScopeResult, LandingWorkspaceResult, AdminAuditPage, AdminFacilityAssignment, AdminPersonDetail, OffboardResult, OrganisationAdminRecord, ProfileStatusResult } from "../types";
 import { AdminApiError, adminCall } from "./adminApi";
 import { useAdminConsole } from "./AdminConsoleContext";
 import { AuditFeed } from "./AuditFeed";
@@ -69,6 +69,7 @@ function PersonBody({ organisation, profileId }: { organisation: OrganisationAdm
   const [reissuing, setReissuing] = useState(false);
   const [scoping, setScoping] = useState(false);
   const [landing, setLanding] = useState(false);
+  const [facilityScope, setFacilityScope] = useState(false);
   const [assigning, setAssigning] = useState<{ assignment?: AdminFacilityAssignment } | null>(null);
   const isSelf = profileId === actorProfileId;
   const refresh = () => {
@@ -207,6 +208,13 @@ function PersonBody({ organisation, profileId }: { organisation: OrganisationAdm
                     <Note>
                       Where and in what capacity this person works. An operating role such as “Facility Manager” describes context — <strong>it grants no access</strong>. Access comes only from explicit capability grants.
                     </Note>
+                    <p className="ac-secondary" style={{ margin: "10px 0 0" }}>
+                      Facility scope:{" "}
+                      <b>{p.fmFacilityScope === "all" ? "All facilities (organisation-wide)" : "Assigned facilities only"}</b>{" "}
+                      <button type="button" className="ac-btn ac-btn-quiet ac-btn-sm" onClick={() => setFacilityScope(true)}>
+                        Change
+                      </button>
+                    </p>
                   </div>
                   {p.facilityAssignments.length === 0 ? (
                     <div className="ac-state">No facility assignments.</div>
@@ -280,6 +288,7 @@ function PersonBody({ organisation, profileId }: { organisation: OrganisationAdm
             ) : null}
 
             <LandingDialog open={landing} person={p} onClose={() => setLanding(false)} onDone={refresh} />
+            <FacilityScopeDialog open={facilityScope} person={p} onClose={() => setFacilityScope(false)} onDone={refresh} />
             <ScopeDialog open={scoping} person={p} onClose={() => setScoping(false)} onDone={refresh} />
             <StatusDialog action={pending} person={p} organisationId={organisation.id} onClose={() => setPending(null)} onDone={refresh} />
             <IssuePasswordDialog open={reissuing} person={p} onClose={() => setReissuing(false)} onDone={refresh} />
@@ -438,6 +447,72 @@ function LandingDialog({ open, person, onClose, onDone }: { open: boolean; perso
             ))}
           </select>
           <span className="ac-hint">Only used when they can currently enter that workspace; otherwise they see Platform Home. It never grants access.</span>
+        </div>
+        {error ? <p className="ac-form-error" role="alert">{error}</p> : null}
+      </form>
+    </Modal>
+  );
+}
+
+function FacilityScopeDialog({ open, person, onClose, onDone }: { open: boolean; person: AdminPersonDetail; onClose: () => void; onDone: () => void }) {
+  const { toast } = useToast();
+  const [value, setValue] = useState<"assigned" | "all">("assigned");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [seed, setSeed] = useState<boolean>(false);
+  if (open !== seed) {
+    setSeed(open);
+    setError(null);
+    setValue(person.fmFacilityScope);
+  }
+
+  function close() {
+    if (busy) return;
+    onClose();
+  }
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await adminCall<FmFacilityScopeResult>("setFmFacilityScope", { profileId: person.profileId, fmFacilityScope: value });
+      toast({ type: "success", title: `Facility scope updated for ${displayName(person)}`, description: res.changed ? "Recorded in administrative history." : "No change was needed." });
+      onDone();
+      onClose();
+    } catch (err) {
+      setError(err instanceof AdminApiError ? err.message : "The facility scope could not be changed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={close}
+      title="Facility scope"
+      description={displayName(person)}
+      size="md"
+      footer={
+        <>
+          <button type="button" className="ac-btn ac-btn-secondary" onClick={close} disabled={busy}>
+            Cancel
+          </button>
+          <button type="submit" form="ac-facility-scope-form" className="ac-btn ac-btn-primary" disabled={busy}>
+            {busy ? "Saving…" : "Save"}
+          </button>
+        </>
+      }
+    >
+      <form id="ac-facility-scope-form" onSubmit={save}>
+        <div className="ac-field">
+          <label htmlFor="ac-facility-scope-select">Where they may operate in Facility Management</label>
+          <select id="ac-facility-scope-select" className="ac-select" value={value} onChange={(e) => setValue(e.target.value === "all" ? "all" : "assigned")}>
+            <option value="assigned">Assigned facilities only</option>
+            <option value="all">All facilities (organisation-wide)</option>
+          </select>
+          <span className="ac-hint">Facility scope decides WHERE; capability grants still decide WHAT they may do. It grants no capability.</span>
         </div>
         {error ? <p className="ac-form-error" role="alert">{error}</p> : null}
       </form>

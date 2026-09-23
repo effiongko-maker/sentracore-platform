@@ -1,4 +1,5 @@
 import "server-only";
+import { repoScopeFromAccess } from "@/lib/access/facilityScope";
 import { ActionError } from "@/lib/actions/errors";
 import type { OperatingAccess } from "@/lib/access/resolveAccess";
 import type { PlatformSession } from "@/lib/auth/types";
@@ -36,7 +37,7 @@ export class FmWorkInstructionServerService {
   constructor(private readonly ctx: FmWorkInstructionAccessContext) {}
 
   private repo() {
-    return new FmWorkInstructionRepository(this.ctx.organisationId);
+    return new FmWorkInstructionRepository(this.ctx.organisationId, undefined, repoScopeFromAccess(this.ctx.access));
   }
 
   private async hydrate(rows: FmWorkInstructionRow[]): Promise<WorkOrder[]> {

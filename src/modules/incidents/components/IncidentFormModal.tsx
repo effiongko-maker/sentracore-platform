@@ -96,7 +96,7 @@ export function IncidentFormModal({
     setErrors({});
   }, [open, incident]);
 
-  const resolveScoped = useScopedFacilityResolver();
+  const resolveScoped = useScopedFacilityResolver({ open, creating: !incident });
   useEffect(() => {
     if (!open || facilities.length === 0) return;
     setForm((current) => {

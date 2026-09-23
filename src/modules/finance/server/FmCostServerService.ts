@@ -1,4 +1,5 @@
 import "server-only";
+import { repoScopeFromAccess } from "@/lib/access/facilityScope";
 import { ActionError } from "@/lib/actions/errors";
 import type { OperatingAccess } from "@/lib/access/resolveAccess";
 import type { ProtectedActionId } from "@/lib/access/protectedActions";
@@ -72,7 +73,7 @@ export class FmCostServerService {
   constructor(private readonly ctx: FmCostAccessContext) {}
 
   private repo() {
-    return new FmCostRepository(this.ctx.organisationId);
+    return new FmCostRepository(this.ctx.organisationId, undefined, repoScopeFromAccess(this.ctx.access));
   }
 
   // ------------------------------------------------------------ Cost Records

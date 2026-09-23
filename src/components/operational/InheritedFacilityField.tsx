@@ -30,7 +30,8 @@ export function InheritedFacilityField({
   onResolve: (facilityId: string) => void;
 }) {
   const { facilities, loading, error: loadError } = useFacilityOptions(open);
-  const resolveScoped = useScopedFacilityResolver();
+  // Create when the form opened without a facility (edit forms arrive with the record's own facility).
+  const resolveScoped = useScopedFacilityResolver({ open, creating: !value.trim() });
 
   useEffect(() => {
     if (!open || value.trim()) return;

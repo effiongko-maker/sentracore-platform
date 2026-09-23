@@ -89,6 +89,15 @@ export function FacilitiesTable({
         ),
       },
       {
+        key: "assignedPeople",
+        header: "Assigned people",
+        render: (facility) => (
+          <span className="text-muted" title="Active facility assignments — managed in Admin Console">
+            {facility.assignedPeople ?? "—"}
+          </span>
+        ),
+      },
+      {
         key: "actions",
         header: "Actions",
         className: "w-20 text-right",

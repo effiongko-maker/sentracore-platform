@@ -155,7 +155,7 @@ export function CostRecordFormModal({
   const [workOrderLoading, setWorkOrderLoading] = useState(false);
 
   /** The user's active facility assignment (UUID) — or the record's own facility. */
-  const resolveScoped = useScopedFacilityResolver();
+  const resolveScoped = useScopedFacilityResolver({ open, creating: !initialValues?.facilityId?.trim() });
   const scopedFacilityId = useMemo(() => {
     if (initialValues?.facilityId?.trim()) return initialValues.facilityId.trim();
     return resolveScoped(facilities);

@@ -22,6 +22,7 @@ import {
   type PlatformCapabilityBatchResult,
   type PlatformIdentityAdminRecord,
   type AccessScopeResult,
+  type FmFacilityScopeResult,
   type LandingWorkspaceResult,
   type ProfileStatusResult,
 } from "../types";
@@ -494,6 +495,25 @@ export class PlatformAdminServerService {
       targetProfileId: input.profileId,
       accessScope,
       homeModule: accessScope === "module" ? (homeModule as string) : null,
+    });
+  }
+
+  /** FM facility scope (WHERE) — independent of capability grants (WHAT). */
+  async setFmFacilityScope(
+    ctx: PlatformAdminContext,
+    input: { profileId: string; fmFacilityScope: unknown }
+  ): Promise<FmFacilityScopeResult> {
+    if (input.fmFacilityScope !== "assigned" && input.fmFacilityScope !== "all") {
+      throw new ActionError("VALIDATION_ERROR", "Facility scope must be assigned or all.");
+    }
+    const current = await this.repo.getProfile(input.profileId);
+    if (!current) {
+      throw new ActionError("VALIDATION_ERROR", "Profile not found.");
+    }
+    return this.repo.setFmFacilityScope({
+      actorProfileId: ctx.actorProfileId,
+      targetProfileId: input.profileId,
+      fmFacilityScope: input.fmFacilityScope,
     });
   }
 

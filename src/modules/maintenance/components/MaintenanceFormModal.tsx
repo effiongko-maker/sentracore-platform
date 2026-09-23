@@ -124,7 +124,7 @@ export function MaintenanceFormModal({
     );
   }, [open, mode, maintenance]);
 
-  const resolveScoped = useScopedFacilityResolver();
+  const resolveScoped = useScopedFacilityResolver({ open, creating: mode === "create" });
   useEffect(() => {
     if (!open || facilities.length === 0) return;
     setForm((current) => {

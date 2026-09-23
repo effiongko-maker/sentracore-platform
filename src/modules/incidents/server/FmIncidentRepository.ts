@@ -1,4 +1,10 @@
 import "server-only";
+import {
+  applyFacilityScope,
+  scopeAllowsFacilities,
+  UNRESTRICTED_REPO_SCOPE,
+  type FmRepoScope,
+} from "@/lib/access/facilityScope";
 import { FmAssetRepository } from "@/modules/assets/server/FmAssetRepository";
 import { uuidsOnly } from "@/modules/assets/server/fmAssetDomain";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -169,7 +175,8 @@ function toColumns(
 export class FmIncidentRepository {
   constructor(
     private readonly organisationId: string,
-    private readonly admin: AdminClient = db()
+    private readonly admin: AdminClient = db(),
+    private readonly scope: FmRepoScope = UNRESTRICTED_REPO_SCOPE
   ) {}
 
   async resolveFacilityId(facilityIdOrCode: string): Promise<string> {
@@ -229,7 +236,10 @@ export class FmIncidentRepository {
       ? await query.eq("id", target).maybeSingle()
       : await query.eq("code", target.toUpperCase()).maybeSingle();
     if (error) throwDb(error, "Unable to load incident.");
-    return data ? asRow(data) : null;
+    if (!data) return null;
+    const row = asRow(data);
+    // Direct reads obey the facility scope: out of scope is "not found".
+    return scopeAllowsFacilities(this.scope.read, [row.facility_id]) ? row : null;
   }
 
   async listPage(
@@ -242,6 +252,7 @@ export class FmIncidentRepository {
       .from("fm_incidents")
       .select(FM_INCIDENT_SELECT, { count: "exact" })
       .eq("organisation_id", this.organisationId);
+    query = applyFacilityScope(query, this.scope.read);
 
     if (params.status && params.status !== "all") query = query.eq("status", params.status);
     if (params.severity && params.severity !== "all") {
@@ -422,6 +433,9 @@ export class FmIncidentRepository {
    */
   async create(input: ParsedCreateIncident, actorProfileId: string): Promise<FmIncidentRow> {
     const resolved = await this.resolveRelations(input);
+    if (!this.scope.canOperateIn(resolved.facilityId)) {
+      throw new FmIncidentValidationError("You are not authorised to create incidents in this facility.");
+    }
     const columns = toColumns(input, resolved);
 
     for (let attempt = 0; attempt < CODE_RETRY_LIMIT; attempt += 1) {

@@ -68,5 +68,3 @@ export {
   type ProtectedActionDefinition,
 } from "./protectedActions";
 
-/** Preferred facility display name for V1 single-facility deployment. */
-export const V1_DEPLOYED_FACILITY_NAME = "NCC Annex";

@@ -1,4 +1,5 @@
 import "server-only";
+import { repoScopeFromAccess } from "@/lib/access/facilityScope";
 import { hasModule } from "@/lib/actions/moduleAccess";
 import { ActionError } from "@/lib/actions/errors";
 import { assertActiveProfileForBusinessAccess } from "@/lib/auth/assertActiveProfile";
@@ -61,7 +62,7 @@ export class FmWorkServerService {
   constructor(private readonly ctx: FmWorkAccessContext) {}
 
   private repo() {
-    return new FmWorkRepository(this.ctx.organisationId);
+    return new FmWorkRepository(this.ctx.organisationId, undefined, repoScopeFromAccess(this.ctx.access));
   }
 
   async list(

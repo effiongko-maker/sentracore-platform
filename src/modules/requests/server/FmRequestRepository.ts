@@ -1,4 +1,10 @@
 import "server-only";
+import {
+  applyFacilityScope,
+  scopeAllowsFacilities,
+  UNRESTRICTED_REPO_SCOPE,
+  type FmRepoScope,
+} from "@/lib/access/facilityScope";
 import { createAdminClient } from "@/utils/supabase/admin";
 import type { RequestListParams } from "@/modules/requests/types";
 import {
@@ -85,8 +91,14 @@ function asRow(value: unknown): FmRequestRow {
 export class FmRequestRepository {
   constructor(
     private readonly organisationId: string,
-    private readonly admin: AdminClient = db()
+    private readonly admin: AdminClient = db(),
+    private readonly scope: FmRepoScope = UNRESTRICTED_REPO_SCOPE
   ) {}
+
+  /** Direct reads obey the facility scope: out of scope is "not found". */
+  private scoped(row: FmRequestRow | null): FmRequestRow | null {
+    return row && scopeAllowsFacilities(this.scope.read, [row.facility_id]) ? row : null;
+  }
 
   async resolveFacilityId(facilityIdOrCode: string): Promise<string> {
     const target = facilityIdOrCode.trim();
@@ -120,7 +132,7 @@ export class FmRequestRepository {
         .eq("id", target)
         .maybeSingle();
       if (error) throwDb(error, "Unable to load request.");
-      return data ? asRow(data) : null;
+      return this.scoped(data ? asRow(data) : null);
     }
 
     const { data, error } = await this.admin
@@ -130,7 +142,7 @@ export class FmRequestRepository {
       .eq("code", target.toUpperCase())
       .maybeSingle();
     if (error) throwDb(error, "Unable to load request.");
-    return data ? asRow(data) : null;
+    return this.scoped(data ? asRow(data) : null);
   }
 
   async listPage(
@@ -143,6 +155,7 @@ export class FmRequestRepository {
       .from("fm_requests")
       .select(FM_REQUEST_SELECT, { count: "exact" })
       .eq("organisation_id", this.organisationId);
+    query = applyFacilityScope(query, this.scope.read);
 
     if (params.status && params.status !== "all") {
       query = query.eq("status", params.status);
@@ -258,6 +271,9 @@ export class FmRequestRepository {
     actorProfileId: string | null
   ): Promise<FmRequestRow> {
     const facilityId = await this.resolveFacilityId(input.facilityId);
+    if (!this.scope.canOperateIn(facilityId)) {
+      throw new FmRequestValidationError("You are not authorised to create requests in this facility.");
+    }
 
     for (let attempt = 0; attempt < CODE_RETRY_LIMIT; attempt += 1) {
       const code = generateNextRequestCode(
@@ -312,6 +328,9 @@ export class FmRequestRepository {
     if (input.description !== undefined) patch.description = input.description;
     if (input.facilityId !== undefined) {
       patch.facility_id = await this.resolveFacilityId(input.facilityId);
+      if (!this.scope.canOperateIn(String(patch.facility_id))) {
+        throw new FmRequestValidationError("You are not authorised to move requests to this facility.");
+      }
     }
     if (input.locationDetail !== undefined) {
       patch.location_detail = input.locationDetail;

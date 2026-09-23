@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   Bell,
+  Building2,
   ClipboardList,
   Database,
   FileBarChart2,
@@ -103,6 +104,13 @@ export const OPERATING_LAYERS: OperatingLayer[] = [
     id: "organise",
     label: "Organisation",
     modules: [
+      fm({
+        label: "Facilities",
+        href: "/facilities",
+        icon: Building2,
+        title: "Facilities",
+        description: "Sites and locations",
+      }),
       fm({
         label: "Assets",
         href: "/assets",

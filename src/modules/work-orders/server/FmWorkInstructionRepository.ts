@@ -1,4 +1,10 @@
 import "server-only";
+import {
+  applyFacilityScope,
+  scopeAllowsFacilities,
+  UNRESTRICTED_REPO_SCOPE,
+  type FmRepoScope,
+} from "@/lib/access/facilityScope";
 import { FmAssetRepository } from "@/modules/assets/server/FmAssetRepository";
 import { uuidsOnly } from "@/modules/assets/server/fmAssetDomain";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -149,7 +155,8 @@ function toColumns(f: InstructionFields): Record<string, unknown> {
 export class FmWorkInstructionRepository {
   constructor(
     private readonly organisationId: string,
-    private readonly admin: AdminClient = db()
+    private readonly admin: AdminClient = db(),
+    private readonly scope: FmRepoScope = UNRESTRICTED_REPO_SCOPE
   ) {}
 
   /** Resolve an Asset reference (UUID, or a code accepted as INPUT only) to its tenant UUID. */
@@ -246,7 +253,10 @@ export class FmWorkInstructionRepository {
       ? await query.eq("id", target).maybeSingle()
       : await query.eq("code", target.toUpperCase()).maybeSingle();
     if (error) throwDb(error, "Unable to load work instruction.");
-    return data ? asRow(data) : null;
+    if (!data) return null;
+    const row = asRow(data);
+    // Direct reads obey the facility scope: out of scope is "not found".
+    return scopeAllowsFacilities(this.scope.read, [row.facility_id]) ? row : null;
   }
 
   async listPage(params: WorkOrderListParams): Promise<{ rows: FmWorkInstructionRow[]; total: number }> {
@@ -256,6 +266,7 @@ export class FmWorkInstructionRepository {
       .from("fm_work_instructions")
       .select(FM_WORK_INSTRUCTION_SELECT, { count: "exact" })
       .eq("organisation_id", this.organisationId);
+    query = applyFacilityScope(query, this.scope.read);
 
     if (params.status && params.status !== "all") query = query.eq("status", params.status);
     if (params.priority && params.priority !== "all") query = query.eq("priority", params.priority);
@@ -410,6 +421,9 @@ export class FmWorkInstructionRepository {
 
   async create(input: ParsedCreateInstruction, actorProfileId: string): Promise<FmWorkInstructionRow> {
     const work = await this.resolveWork(input.workRef);
+    if (!this.scope.canOperateIn(work.facility_id)) {
+      throw new FmWorkInstructionValidationError("You are not authorised to create Work Orders in this facility.");
+    }
     // A Work Instruction cannot be attached to imported historical Work (that would alter the historical relationship).
     if (work.record_origin === "migrated_historical") throw new FmWorkInstructionReadOnlyError();
     await this.assertInherited(work, input);
@@ -498,11 +512,14 @@ export class FmWorkInstructionRepository {
   async operationalPictureRows(): Promise<Array<{ status: string; due_at: string | null; sla_due_at: string | null }>> {
     const rows: Array<{ status: string; due_at: string | null; sla_due_at: string | null }> = [];
     for (let offset = 0; ; offset += 1000) {
-      const { data, error } = await this.admin
-        .from("fm_work_instructions")
-        .select("status, due_at, sla_due_at")
-        .eq("organisation_id", this.organisationId)
-        .in("status", [...ASSIGNED_INSTRUCTION_STATUSES])
+      const { data, error } = await applyFacilityScope(
+        this.admin
+          .from("fm_work_instructions")
+          .select("status, due_at, sla_due_at")
+          .eq("organisation_id", this.organisationId)
+          .in("status", [...ASSIGNED_INSTRUCTION_STATUSES]),
+        this.scope.read
+      )
         .order("id", { ascending: true })
         .range(offset, offset + 999);
       if (error) throwDb(error, "Unable to load Work Instruction totals.");
@@ -519,11 +536,14 @@ export class FmWorkInstructionRepository {
    * bare, unexplained zero. One lightweight COUNT query, no row data transferred.
    */
   async countUnrecordedStatus(): Promise<number> {
-    const { count, error } = await this.admin
-      .from("fm_work_instructions")
-      .select("id", { count: "exact", head: true })
-      .eq("organisation_id", this.organisationId)
-      .eq("status", "unknown");
+    const { count, error } = await applyFacilityScope(
+      this.admin
+        .from("fm_work_instructions")
+        .select("id", { count: "exact", head: true })
+        .eq("organisation_id", this.organisationId)
+        .eq("status", "unknown"),
+      this.scope.read
+    );
     if (error) throwDb(error, "Unable to load Work Instruction historical total.");
     return count ?? 0;
   }

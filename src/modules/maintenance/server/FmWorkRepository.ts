@@ -3,6 +3,11 @@ import { FmAssetRepository } from "@/modules/assets/server/FmAssetRepository";
 import { uuidsOnly } from "@/modules/assets/server/fmAssetDomain";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
+  scopeAllowsFacilities,
+  UNRESTRICTED_REPO_SCOPE,
+  type FmRepoScope,
+} from "@/lib/access/facilityScope";
+import {
   FM_WORK_SELECT,
   FmWorkNotFoundError,
   FmWorkReadOnlyError,
@@ -118,8 +123,35 @@ function asRow(value: unknown): FmWorkRow {
 export class FmWorkRepository {
   constructor(
     private readonly organisationId: string,
-    private readonly admin: AdminClient = db()
+    private readonly admin: AdminClient = db(),
+    private readonly scope: FmRepoScope = UNRESTRICTED_REPO_SCOPE
   ) {}
+
+  /**
+   * Additional facilities of multi-facility Work (fm_work_facilities), keyed by Work UUID. The primary
+   * fm_work.facility_id stays the record's own facility; a Work item is in scope when ANY of its facilities is.
+   */
+  private async extraFacilities(workIds?: string[]): Promise<Map<string, string[]>> {
+    const out = new Map<string, string[]>();
+    let query = this.admin.from("fm_work_facilities").select("work_id, facility_id").eq("organisation_id", this.organisationId);
+    if (workIds) {
+      if (workIds.length === 0) return out;
+      query = query.in("work_id", workIds);
+    }
+    const { data, error } = await query;
+    if (error) throwDb(error, "Unable to load Work facilities.");
+    for (const row of data ?? []) {
+      const rec = row as { work_id: string; facility_id: string };
+      out.set(rec.work_id, [...(out.get(rec.work_id) ?? []), rec.facility_id]);
+    }
+    return out;
+  }
+
+  private async withinScope(rows: FmWorkRow[]): Promise<FmWorkRow[]> {
+    if (this.scope.read.unrestricted || rows.length === 0) return rows;
+    const extra = await this.extraFacilities(rows.length > 200 ? undefined : rows.map((r) => r.id));
+    return rows.filter((r) => scopeAllowsFacilities(this.scope.read, [r.facility_id, ...(extra.get(r.id) ?? [])]));
+  }
 
   async listRows(): Promise<FmWorkRow[]> {
     const rows: FmWorkRow[] = [];
@@ -135,7 +167,7 @@ export class FmWorkRepository {
       if (error) throwDb(error, "Unable to load work.");
       const batch = (data ?? []).map(asRow);
       rows.push(...batch);
-      if (batch.length < batchSize) return this.withRequestCodes(rows);
+      if (batch.length < batchSize) return this.withRequestCodes(await this.withinScope(rows));
     }
   }
 
@@ -168,7 +200,11 @@ export class FmWorkRepository {
         .eq("id", target)
         .maybeSingle();
       if (error) throwDb(error, "Unable to load work.");
-      if (data) return (await this.withRequestCodes([asRow(data)]))[0]!;
+      if (data) {
+        // Direct reads obey the same facility scope as lists: out of scope is "not found".
+        const scoped = await this.withinScope([asRow(data)]);
+        return scoped.length ? (await this.withRequestCodes(scoped))[0]! : null;
+      }
     }
 
     const { data, error } = await this.admin
@@ -178,7 +214,9 @@ export class FmWorkRepository {
       .ilike("code", target)
       .maybeSingle();
     if (error) throwDb(error, "Unable to load work.");
-    return data ? (await this.withRequestCodes([asRow(data)]))[0]! : null;
+    if (!data) return null;
+    const scoped = await this.withinScope([asRow(data)]);
+    return scoped.length ? (await this.withRequestCodes(scoped))[0]! : null;
   }
 
 
@@ -362,6 +400,9 @@ export class FmWorkRepository {
     actorProfileId: string
   ): Promise<FmWorkRow> {
     const facilityId = await this.resolveFacilityId(input.facilityId);
+    if (!this.scope.canOperateIn(facilityId)) {
+      throw new FmWorkValidationError("You are not authorised to create Work in this facility.");
+    }
     if (input.assignedToProfileId) {
       await this.assertAssigneeAtFacility(
         input.assignedToProfileId,
