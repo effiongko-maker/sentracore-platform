@@ -124,9 +124,12 @@ function unrecordedMeta(
     : `${unrecordedTotal} historical records — none active`;
 }
 
+/**
+ * Supporting text for the Critical Work card — derived ONLY from Critical Work state. The cross-domain
+ * attention count belongs to the hero line and Requires attention, never to this card.
+ */
 function heroCriticalWorkMeta(
   criticalWork: number | null,
-  attentionTotal: number,
   attentionIncomplete: boolean
 ): string {
   if (criticalWork == null) {
@@ -136,14 +139,6 @@ function heroCriticalWorkMeta(
   }
   if (criticalWork > 0) {
     return "Require immediate intervention";
-  }
-  if (attentionIncomplete && attentionTotal === 0) {
-    return "Attention picture incomplete";
-  }
-  if (attentionTotal > 0) {
-    return attentionTotal === 1
-      ? "1 matter requires attention"
-      : `${attentionTotal} matters require attention`;
   }
   return "None requiring intervention";
 }
@@ -391,11 +386,7 @@ function CommandHero({
             <p className="sc-fm-hero-critical-value">{padCount(criticalWork)}</p>
             <p className="sc-fm-hero-critical-label">Critical work</p>
             <p className="sc-fm-hero-critical-meta">
-              {heroCriticalWorkMeta(
-                criticalWork,
-                attentionTotal,
-                attentionIncomplete
-              )}
+              {heroCriticalWorkMeta(criticalWork, attentionIncomplete)}
             </p>
           </Link>
 
