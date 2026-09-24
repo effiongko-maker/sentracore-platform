@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import {
   ArrowRight,
+  ArrowUpRight,
+  CircleDot,
   Building2,
   ChevronRight,
   FileText,
@@ -20,11 +22,12 @@ import { CommitmentsPanel } from "@/modules/command-centre/components/Commitment
 import { EXECUTIVE_OFFICE_LENSES } from "@/modules/command-centre/nav";
 import {
   attentionSignal,
-  commitmentsSignal,
   decisionsSignal,
-  lensSignal,
+  performanceSignal,
   type ExecutiveSignal,
 } from "@/modules/command-centre/executiveSignals";
+
+import { overviewAttention, overviewPulseLines } from "@/modules/command-centre/overviewPresentation";
 
 const PULSE_ICON = {
   finance: Landmark,
@@ -127,7 +130,7 @@ function PanelHead({
   );
 }
 
-function PulseCard({ card }: { card: CommandCentrePulseCard }) {
+function PulseCard({ card, decisions }: { card: CommandCentrePulseCard; decisions: CommandCentreSnapshot["decisions"] }) {
   const Icon = PULSE_ICON[card.domain];
   const isSoon = card.state === "unavailable" && card.domain === "projects_construction";
   const body = (
@@ -163,8 +166,8 @@ function PulseCard({ card }: { card: CommandCentrePulseCard }) {
         ) : null}
       </div>
       <div className="scc-pulse-body">
-        {card.lines.slice(0, 4).map((line) => (
-          <p key={line} className="scc-pulse-line">
+        {overviewPulseLines(card, decisions).map((line, index) => (
+          <p key={line} className={index === 0 ? "scc-pulse-line eo-pulse-headline" : "scc-pulse-line"}>
             {line}
           </p>
         ))}
@@ -181,19 +184,24 @@ function PulseCard({ card }: { card: CommandCentrePulseCard }) {
 
   if (card.href) {
     return (
-      <Link href={card.href} className={className}>
+      <Link href={card.href} className={className} data-state={card.state} data-partial={card.partial || card.state === "partial"}>
         {body}
       </Link>
     );
   }
-  return <div className={className}>{body}</div>;
+  return <div className={className} data-state={card.state} data-partial={card.partial || card.state === "partial"}>{body}</div>;
 }
 
-function AttentionBlock({
-  attention,
-}: {
-  attention: CommandCentreSnapshot["attention"];
-}) {
+function AttentionBlock({ snapshot }: { snapshot: CommandCentreSnapshot }) {
+  const { attention } = snapshot;
+  const { items, decisionsElsewhere, commitmentsElsewhere } = overviewAttention(snapshot);
+  const referrals = decisionsElsewhere || commitmentsElsewhere ? (
+    <p className="scc-panel-scope">
+      Also in your agenda: {decisionsElsewhere ? <a href="#scc-decisions">Finance decisions</a> : null}
+      {decisionsElsewhere && commitmentsElsewhere ? " · " : null}
+      {commitmentsElsewhere ? <a href="#commitments">Overdue commitments</a> : null}.
+    </p>
+  ) : null;
   const gaps = attention.coverage.filter(
     (c) => c.status !== "loaded" && c.status !== "not_enabled" && c.note
   );
@@ -211,9 +219,8 @@ function AttentionBlock({
   if (attention.items.length > 0) {
     return (
       <>
-        <p className="scc-attn-summary">{attention.summary}</p>
         <ul className="scc-attn-list">
-          {attention.items.map((item) => {
+          {items.map((item) => {
             const inner = (
               <>
                 <span
@@ -234,7 +241,7 @@ function AttentionBlock({
               </>
             );
             return (
-              <li key={item.id}>
+              <li key={item.id} data-tone={item.tone}>
                 {item.href ? (
                   <Link href={item.href} className="scc-attn-row">
                     {inner}
@@ -251,6 +258,7 @@ function AttentionBlock({
             and {attention.hiddenCount} more not shown
           </p>
         ) : null}
+        {referrals}
         {coverageNote}
       </>
     );
@@ -289,6 +297,7 @@ function DecisionsBlock({
               <span className="scc-decision-aside">
                 <span className="scc-decision-amount">{item.amountLabel}</span>
                 <span className="scc-decision-badge">{item.decisionLabel}</span>
+                <span className="eo-decision-action">Review <ArrowUpRight className="h-3.5 w-3.5" aria-hidden /></span>
               </span>
             </Link>
           </li>
@@ -356,9 +365,14 @@ function LastVisitBlock({
 
 function PictureSignal({ label, signal, href }: { label: string; signal: ExecutiveSignal; href: string }) {
   return (
-    <a href={href} className="eo-picture-item">
-      <span className="eo-picture-label">{label}</span>
+    <a href={href} className="eo-picture-item" data-tone={signal.tone}>
+      <span className="eo-picture-label">
+        <span className="eo-signal-dot" aria-hidden />
+        {label}
+        <ArrowUpRight className="eo-picture-arrow h-4 w-4" aria-hidden />
+      </span>
       <span className={cn("eo-picture-text", `eo-tone-${signal.tone}`)}>{signal.text}</span>
+      <span className="eo-picture-track" aria-hidden><span /></span>
     </a>
   );
 }
@@ -374,109 +388,127 @@ export function CommandCentrePage({
   const dateLabel = formatAsOfDate(snapshot.asOf, snapshot.timeZone);
   const { decisions, attention } = snapshot;
   const checkedLabel = formatCheckedTime(snapshot.checkedAt, snapshot.timeZone);
+  const headline = attentionSignal(attention);
 
   return (
-    <div className="scc scc--app">
-      <header className="os-module-header eo-header">
-        <div className="min-w-0">
-          <p className="eo-eyebrow">
-            {snapshot.greeting}
-            {dateLabel ? <span className="eo-eyebrow-date"> · {dateLabel}</span> : null}
-          </p>
-          <h1 className="os-module-title">Executive Office</h1>
-          <p className="os-module-desc">
-            Organisation-wide visibility across operations, finance, commitments and executive action.
-          </p>
-        </div>
-      </header>
-
-      {/* Executive picture: what needs awareness or action now — only signals the snapshot actually supports. */}
-      <section className="eo-picture" aria-label="Executive picture">
-        <PictureSignal label="Attention" signal={attentionSignal(attention)} href="#scc-attention" />
-        <PictureSignal label="Decisions" signal={decisionsSignal(decisions)} href="#scc-decisions" />
-        <PictureSignal label="Commitments" signal={commitmentsSignal(snapshot.commitments)} href="#commitments" />
-      </section>
-
-      {/* Executive lenses: views into the organisation; each lens links to its own route. */}
-      <nav className="eo-lenses" aria-label="Executive lenses">
-        {EXECUTIVE_OFFICE_LENSES.map((lens) => {
-          const Icon = lens.icon;
-          const signal = lensSignal(lens.id, snapshot);
-          return (
-            <Link key={lens.id} href={lens.href} className="eo-lens-link">
-              <span className="eo-lens-head">
-                <Icon className="h-4 w-4 shrink-0" strokeWidth={1.6} aria-hidden />
-                <span className="eo-lens-label">{lens.label}</span>
-                <ChevronRight className="eo-lens-go h-3.5 w-3.5" aria-hidden />
+    <div className="scc scc--app eo-overview">
+      <div className="eo-masthead">
+        <header className="eo-header">
+          <div className="eo-context-line">
+            <p className="eo-eyebrow">{snapshot.greeting}</p>
+            {dateLabel ? <p className="eo-date">{dateLabel}</p> : null}
+          </div>
+          <div className="eo-masthead-main">
+            <div className="eo-identity">
+              <p className="eo-kicker">Today</p>
+              <h1>Executive Office</h1>
+              <p className="eo-situation">A current view of what matters across the organisation.</p>
+            </div>
+            <a href="#eo-agenda-heading" className="eo-headline-state">
+              <CircleDot className="eo-state-icon h-5 w-5" strokeWidth={1.5} aria-hidden />
+              <span>
+                <span className="eo-state-label">Your agenda</span>
+                <span className="eo-state-text">Review matters requiring action</span>
               </span>
-              <span className={cn("eo-lens-signal", `eo-tone-${signal.tone}`)}>{signal.text}</span>
-            </Link>
-          );
-        })}
+              <ArrowUpRight className="h-4 w-4 shrink-0" aria-hidden />
+            </a>
+          </div>
+        </header>
+
+        <section className="eo-briefing" aria-labelledby="eo-picture-heading">
+          <div className="eo-briefing-head">
+            <h2 id="eo-picture-heading">At a glance</h2>
+            {checkedLabel ? (
+              <p>Snapshot checked <time dateTime={snapshot.checkedAt}>{checkedLabel}</time></p>
+            ) : null}
+          </div>
+          <div className="eo-picture">
+            <PictureSignal label="Needs attention" signal={headline} href="#eo-agenda-heading" />
+            <PictureSignal label="Operating coverage" signal={performanceSignal(snapshot.pulse)} href="#scc-pulse-heading" />
+            {(decisions.state === "healthy" || decisions.state === "partial") && decisions.items.length > 0 ? (
+              <PictureSignal label="Awaiting your action" signal={decisionsSignal(decisions)} href="#scc-decisions" />
+            ) : null}
+          </div>
+        </section>
+      </div>
+
+      <nav className="eo-perspectives" aria-label="Executive lenses">
+        <div className="eo-perspectives-heading">
+          <span className="eo-kicker">Executive lenses</span>
+          <span>Open a deeper Executive Office view.</span>
+        </div>
+        <div className="eo-lenses">
+          {EXECUTIVE_OFFICE_LENSES.map((lens, index) => {
+            const Icon = lens.icon;
+            return (
+              <Link key={lens.id} href={lens.href} className="eo-lens-link">
+                <span className="eo-lens-top">
+                  <span className="eo-lens-icon"><Icon className="h-4 w-4" strokeWidth={1.5} aria-hidden /></span>
+                  <span className="eo-lens-index" aria-hidden>0{index + 1}</span>
+                  <ArrowUpRight className="eo-lens-go h-3.5 w-3.5" aria-hidden />
+                </span>
+                <span className="eo-lens-label">{lens.label}</span>
+                <span className="eo-lens-signal">{lens.purpose}</span>
+              </Link>
+            );
+          })}
+        </div>
       </nav>
 
       <section className="scc-pulse" aria-labelledby="scc-pulse-heading">
-        <div className="scc-section-head">
+        <div className="eo-section-heading">
+          <span className="eo-section-index" aria-hidden>01</span>
           <div>
-            <h2 id="scc-pulse-heading" className="scc-section-title">
-              Organisational Pulse
-            </h2>
-            <p className="scc-section-lede">
-              Where the organisation stands, by domain.
-            </p>
+            <h2 id="scc-pulse-heading">Organisational Pulse</h2>
+            <p>The current position across operating environments.</p>
           </div>
-          {dateLabel || checkedLabel ? (
-            <p className="scc-pulse-meta">
-              <span>
-                {checkedLabel ? `Checked ${checkedLabel}` : ""}
-                {checkedLabel && dateLabel ? " · " : ""}
-                {dateLabel}
-              </span>
-            </p>
-          ) : null}
+          <span className="eo-section-rule" aria-hidden />
         </div>
-        <div className="scc-pulse-grid">
-          {snapshot.pulse.map((card) => (
-            <PulseCard key={card.domain} card={card} />
-          ))}
+        <div className="eo-pulse-surface">
+          <div className="eo-pulse-caption"><span>Operating environments</span><span>Current position</span></div>
+          <div className="scc-pulse-grid">
+            {snapshot.pulse.map((card) => <PulseCard key={card.domain} card={card} decisions={decisions} />)}
+          </div>
         </div>
       </section>
 
-      <section className="scc-board" aria-label="Command surfaces">
-        <div className="scc-col">
-          <article
-            className="scc-panel scc-panel--attention"
-            aria-labelledby="scc-attention"
-          >
-            <PanelHead id="scc-attention" title="Needs Your Attention" />
-            <AttentionBlock attention={attention} />
-          </article>
+      <section className="eo-agenda" aria-labelledby="eo-agenda-heading">
+        <div className="eo-section-heading">
+          <span className="eo-section-index" aria-hidden>02</span>
+          <div>
+            <h2 id="eo-agenda-heading">Your agenda</h2>
+            <p>Matters to weigh. Decisions to move forward.</p>
+          </div>
+          <span className="eo-section-rule" aria-hidden />
         </div>
-
-        <div className="scc-col">
-          <article
-            className="scc-panel scc-panel--decisions"
-            aria-labelledby="scc-decisions"
-          >
-            <PanelHead
-              id="scc-decisions"
-              title="Your Decisions"
-              actionHref={decisions.viewAllHref}
-              actionLabel="View all"
-            />
+        <div className="eo-agenda-grid">
+          <article className="scc-panel scc-panel--attention" aria-labelledby="scc-attention">
+            <div className="eo-panel-overline"><span className="eo-priority-mark" aria-hidden />Awareness & priority</div>
+            <PanelHead id="scc-attention" title="Needs Your Attention" />
+            <AttentionBlock snapshot={snapshot} />
+          </article>
+          <article className="scc-panel scc-panel--decisions" aria-labelledby="scc-decisions">
+            <div className="eo-panel-overline"><ArrowUpRight className="h-3.5 w-3.5" aria-hidden />Action required</div>
+            <PanelHead id="scc-decisions" title="Your Decisions" actionHref={decisions.viewAllHref} actionLabel="View all" />
             <DecisionsBlock decisions={decisions} />
           </article>
-
-          <CommitmentsPanel commitments={snapshot.commitments} />
         </div>
+      </section>
 
-        <div className="scc-col">
+      <section className="eo-follow-through" aria-labelledby="eo-follow-heading">
+        <div className="eo-section-heading">
+          <span className="eo-section-index" aria-hidden>03</span>
+          <div>
+            <h2 id="eo-follow-heading">{snapshot.commitments.state === "restricted" ? "Recent context" : "Direction & follow-through"}</h2>
+            <p>{snapshot.commitments.state === "restricted" ? "Recorded changes since your last visit." : "Executive commitments and recorded changes."}</p>
+          </div>
+          <span className="eo-section-rule" aria-hidden />
+        </div>
+        <div className="eo-follow-grid">
+          <CommitmentsPanel commitments={snapshot.commitments} />
           <article className="scc-panel scc-panel--feed" aria-labelledby="scc-last-visit">
-            <PanelHead
-              id="scc-last-visit"
-              title="Since Your Last Visit"
-              actionHref={null}
-            />
+            <div className="eo-panel-overline">Continuity</div>
+            <PanelHead id="scc-last-visit" title="Since Your Last Visit" />
             <LastVisitBlock lastVisit={snapshot.lastVisit} />
           </article>
         </div>

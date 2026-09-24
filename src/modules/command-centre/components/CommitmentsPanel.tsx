@@ -90,7 +90,7 @@ export function CommitmentsPanel({ commitments }: { commitments: CommandCentreSn
   }
 
   const row = (item: CommitmentView) => (
-    <li key={item.id} className="scc-commit-row">
+    <li key={item.id} className="scc-commit-row" data-status={item.status} data-overdue={item.overdue}>
       <div className="scc-commit-main">
         <span className="scc-commit-title">{item.title}</span>
         <span className={item.overdue ? "scc-commit-meta scc-commit-meta--overdue" : "scc-commit-meta"}>
@@ -129,6 +129,7 @@ export function CommitmentsPanel({ commitments }: { commitments: CommandCentreSn
 
   return (
     <article className="scc-panel scc-panel--commitments" id="commitments" aria-labelledby="scc-commitments">
+      <div className="eo-panel-overline">Follow-through</div>
       <div className="scc-panel-head">
         <h2 id="scc-commitments" className="scc-panel-title">
           Commitments
@@ -215,13 +216,13 @@ export function CommitmentsPanel({ commitments }: { commitments: CommandCentreSn
             <>
               {commitments.overdue.length > 0 ? (
                 <>
-                  <p className="scc-commit-group">Overdue</p>
+                  <p className="scc-commit-group" data-group="overdue">Overdue <span>{commitments.overdue.length}</span></p>
                   <ul className="scc-commit-list">{commitments.overdue.map(row)}</ul>
                 </>
               ) : null}
               {commitments.open.length > 0 ? (
                 <>
-                  <p className="scc-commit-group">Open</p>
+                  <p className="scc-commit-group" data-group="open">Open & upcoming <span>{commitments.open.length}</span></p>
                   <ul className="scc-commit-list">{commitments.open.map(row)}</ul>
                 </>
               ) : null}
@@ -229,7 +230,7 @@ export function CommitmentsPanel({ commitments }: { commitments: CommandCentreSn
           )}
           {commitments.completed.length > 0 ? (
             <>
-              <p className="scc-commit-group">Recently completed</p>
+              <p className="scc-commit-group" data-group="completed">Recently completed <span>{commitments.completed.length}</span></p>
               <ul className="scc-commit-list">{commitments.completed.map(row)}</ul>
             </>
           ) : null}

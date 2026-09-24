@@ -1529,3 +1529,333 @@ a.scc-decision-row:hover {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Executive Overview: a composed leadership briefing. All presentation is scoped
+   to this page; shared lens foundations and Private Office are unaffected. */
+/* Slightly deepen the existing neutral canvas only while Overview is mounted. */
+.os-canvas-platform:has(.eo-overview),
+.os-canvas-act:has(.eo-overview) {
+  background: color-mix(in srgb, var(--os-canvas) 97%, var(--os-ink-900));
+}
+
+.scc.eo-overview {
+  --eo-surface-edge: color-mix(in srgb, var(--os-rule-strong) 80%, var(--os-ink-faint));
+  --eo-surface-shadow: 0 1px 2px color-mix(in srgb, var(--os-ink-900) 4%, transparent),
+    0 3px 8px color-mix(in srgb, var(--os-ink-900) 3%, transparent);
+  min-width: 0;
+  gap: calc(var(--os-space-4) * 2);
+  padding-top: var(--os-space-2);
+}
+
+/* Masthead and picture form a single instrument with two tonal planes. */
+.eo-overview .eo-masthead {
+  overflow: hidden;
+  border: 1px solid var(--eo-surface-edge);
+  border-top: 3px solid var(--os-accent);
+  border-radius: var(--os-radius-lg);
+  background: var(--os-surface);
+  box-shadow: var(--eo-surface-shadow);
+}
+
+.eo-overview .eo-header {
+  position: relative;
+  margin: 0;
+  padding: var(--os-space-4) clamp(1.25rem, 2.5vw, 2rem) var(--os-space-6);
+  background: var(--os-canvas);
+}
+
+.eo-overview .eo-context-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--os-space-2) var(--os-space-4);
+  padding-bottom: var(--os-space-4);
+  margin-bottom: var(--os-space-5);
+  border-bottom: 1px solid var(--os-rule);
+}
+
+.eo-overview .eo-eyebrow,
+.eo-overview .eo-date {
+  margin: 0;
+  font-size: var(--os-text-label-lg);
+  line-height: 1.5;
+  color: var(--os-ink-muted);
+}
+
+.eo-overview .eo-masthead-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--os-space-6);
+}
+
+.eo-overview .eo-identity { min-width: 0; }
+.eo-overview .eo-kicker {
+  margin: 0;
+  font-size: var(--os-text-label-md);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--os-accent-ink);
+}
+
+.eo-overview .eo-identity h1 {
+  margin: var(--os-space-2) 0;
+  font-size: var(--os-text-display-md);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  color: var(--os-ink);
+}
+
+.eo-overview .eo-situation {
+  margin: 0;
+  color: var(--os-ink-secondary);
+  font-size: var(--os-text-body-md);
+  line-height: 1.5;
+}
+
+.eo-overview .eo-headline-state {
+  display: flex;
+  align-items: center;
+  gap: var(--os-space-3);
+  flex: 0 1 20rem;
+  padding: var(--os-space-4);
+  border: 1px solid var(--os-rule);
+  border-radius: var(--os-radius-md);
+  background: var(--os-surface);
+  color: var(--os-ink-secondary);
+  text-decoration: none;
+  transition: background var(--os-ease), border-color var(--os-ease);
+}
+
+.eo-overview .eo-headline-state > span { flex: 1; min-width: 0; }
+.eo-overview .eo-state-label,
+.eo-overview .eo-state-text { display: block; }
+.eo-overview .eo-state-label { font-size: var(--os-text-label-md); color: var(--os-ink-muted); margin-bottom: var(--os-space-1); }
+.eo-overview .eo-state-text { font-size: var(--os-text-body-sm); line-height: 1.45; font-weight: 500; }
+.eo-overview .eo-state-icon { flex-shrink: 0; color: var(--os-accent); }
+.eo-overview .eo-headline-state[data-tone="attention"] .eo-state-icon { color: var(--os-warning); }
+.eo-overview .eo-headline-state[data-tone="muted"] .eo-state-icon { color: var(--os-ink-muted); }
+.eo-overview .eo-headline-state:hover { background: var(--os-surface); border-color: var(--os-accent-muted); }
+
+.eo-overview .eo-briefing { border-top: 1px solid var(--eo-surface-edge); background: var(--os-surface); }
+.eo-overview .eo-briefing-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--os-space-2);
+  padding: var(--os-space-4) clamp(1.25rem, 2.5vw, 2rem) 0;
+}
+.eo-overview .eo-briefing-head h2 { margin: 0; font-size: var(--os-text-label-lg); font-weight: 600; color: var(--os-ink); }
+.eo-overview .eo-briefing-head p { margin: 0; color: var(--os-ink-muted); font-size: var(--os-text-label-md); font-variant-numeric: tabular-nums; }
+
+.eo-overview .eo-picture {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: var(--os-space-4) 0 var(--os-space-5);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+.eo-overview .eo-picture:has(> :nth-child(3)) { grid-template-columns: 1.15fr 1fr 1fr; }
+.eo-overview .eo-picture-item {
+  min-width: 0;
+  gap: var(--os-space-3);
+  padding: var(--os-space-2) clamp(1.25rem, 2.5vw, 2rem);
+  --eo-signal-color: var(--os-accent);
+}
+.eo-overview .eo-picture-item[data-tone="attention"] { --eo-signal-color: var(--os-warning); }
+.eo-overview .eo-picture-item[data-tone="muted"] { --eo-signal-color: var(--os-ink-muted); }
+.eo-overview .eo-picture-label { display: flex; align-items: center; gap: var(--os-space-2); font-size: var(--os-text-label-md); }
+.eo-overview .eo-signal-dot { width: 0.375rem; height: 0.375rem; flex-shrink: 0; border-radius: 50%; background: var(--eo-signal-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--eo-signal-color) 9%, transparent); }
+.eo-overview .eo-picture-arrow { margin-left: auto; color: var(--os-ink-muted); transition: transform var(--os-ease), color var(--os-ease); }
+.eo-overview .eo-picture-text { font-size: var(--os-text-heading-xl); font-weight: 550; line-height: 1.35; letter-spacing: -0.025em; max-width: 26ch; color: var(--os-ink); }
+.eo-overview .eo-picture-text.eo-tone-muted { font-size: var(--os-text-heading-md); font-weight: 400; color: var(--os-ink-muted); }
+/* These are categorical status rules, never quantitative progress bars. */
+.eo-overview .eo-picture-track { display: flex; margin-top: auto; padding-top: var(--os-space-2); }
+.eo-overview .eo-picture-track > span { width: 100%; height: 2px; background: color-mix(in srgb, var(--eo-signal-color) 22%, var(--os-surface)); }
+.eo-overview .eo-picture-item:hover .eo-picture-arrow { transform: translate(2px, -2px); color: var(--os-accent); }
+.eo-overview .eo-picture-item:hover .eo-picture-track > span { background: var(--eo-signal-color); }
+
+/* Perspectives: a numbered navigation instrument, close to the headline picture. */
+.eo-overview .eo-perspectives { margin-top: calc(-1 * var(--os-space-2)); }
+.eo-overview .eo-perspectives-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--os-space-2); margin-bottom: var(--os-space-3); }
+.eo-overview .eo-perspectives-heading > span:last-child { font-size: var(--os-text-label-lg); color: var(--os-ink-muted); }
+.eo-overview .eo-lenses { gap: 0; border: 1px solid var(--eo-surface-edge); border-radius: var(--os-radius-md); background: var(--os-surface); }
+.eo-overview .eo-lens-link { position: relative; min-width: 0; padding: var(--os-space-4); gap: var(--os-space-2); border: 0; border-radius: 0; background: transparent; }
+.eo-overview .eo-lens-link + .eo-lens-link { border-left: 1px solid var(--os-rule); }
+.eo-overview .eo-lens-link::after { content: ""; position: absolute; inset: auto var(--os-space-4) -1px; height: 2px; background: var(--os-accent); transform: scaleX(0); transform-origin: left; transition: transform var(--os-ease); }
+.eo-overview .eo-lens-top { display: flex; align-items: center; gap: var(--os-space-2); margin-bottom: var(--os-space-1); }
+.eo-overview .eo-lens-icon { display: flex; color: var(--os-accent); }
+.eo-overview .eo-lens-index { margin-left: auto; font-size: var(--os-text-label-sm); color: var(--os-ink-muted); font-variant-numeric: tabular-nums; }
+.eo-overview .eo-lens-go { margin-left: 0; color: var(--os-accent); transition: transform var(--os-ease); }
+.eo-overview .eo-lens-label { color: var(--os-ink); font-size: var(--os-text-body-sm); letter-spacing: -0.01em; text-transform: none; }
+.eo-overview .eo-lens-signal { color: var(--os-ink-muted); font-size: var(--os-text-label-lg); line-height: 1.45; }
+.eo-overview .eo-lens-link:hover { background: var(--os-surface-selected); }
+.eo-overview .eo-lens-link:hover::after,
+.eo-overview .eo-lens-link:focus-visible::after { transform: scaleX(1); }
+.eo-overview .eo-lens-link:hover .eo-lens-go { transform: translate(2px, -2px); }
+
+/* A clear rhythm links awareness, agenda and follow-through. */
+.eo-overview .eo-section-heading { display: flex; align-items: center; gap: var(--os-space-3); margin-bottom: var(--os-space-4); }
+.eo-overview .eo-section-index { align-self: flex-start; margin-top: 0.2rem; color: var(--os-accent); font-size: var(--os-text-label-md); font-weight: 600; font-variant-numeric: tabular-nums; }
+.eo-overview .eo-section-heading h2 { margin: 0; font-size: var(--os-text-heading-lg); font-weight: 600; letter-spacing: -0.025em; color: var(--os-ink); }
+.eo-overview .eo-section-heading p { margin: var(--os-space-1) 0 0; font-size: var(--os-text-body-sm); color: var(--os-ink-muted); }
+.eo-overview .eo-section-rule { flex: 1; min-width: 1rem; height: 1px; background: var(--os-rule-strong); margin-left: var(--os-space-3); }
+
+/* One organisation, four distinct current positions. */
+.eo-overview .eo-pulse-surface { border: 1px solid var(--eo-surface-edge); border-radius: var(--os-radius-md); background: var(--os-surface); overflow: hidden; box-shadow: var(--eo-surface-shadow); }
+.eo-overview .eo-pulse-caption { display: flex; justify-content: space-between; gap: var(--os-space-3); padding: var(--os-space-3) var(--os-space-5); background: var(--os-canvas); border-bottom: 1px solid var(--eo-surface-edge); color: var(--os-ink-muted); font-size: var(--os-text-label-sm); text-transform: uppercase; letter-spacing: 0.1em; }
+.eo-overview .scc-pulse-grid { border: 0; border-radius: 0; gap: 1px; }
+.eo-overview .scc-pulse-card { min-height: 12rem; padding: var(--os-space-5); gap: var(--os-space-5); background: var(--os-surface); }
+.eo-overview .scc-pulse-card::before { content: ""; position: absolute; top: 0; left: var(--os-space-5); right: var(--os-space-5); height: 3px; background: var(--os-success); opacity: 0.65; }
+.eo-overview .scc-pulse-card[data-state="error"]::before,
+.eo-overview .scc-pulse-card[data-partial="true"]::before,
+.eo-overview .scc-pulse-card:has(.scc-pulse-status--warn)::before { background: var(--os-warning); }
+.eo-overview .scc-pulse-card[data-state="restricted"]::before,
+.eo-overview .scc-pulse-card[data-state="unavailable"]::before,
+.eo-overview .scc-pulse-card[data-state="empty"]::before { background: var(--os-ink-faint); }
+.eo-overview .scc-pulse-card--soon { background: var(--os-surface-interactive); }
+.eo-overview .scc-pulse-top { gap: var(--os-space-2); }
+.eo-overview .scc-pulse-icon,
+.eo-overview .scc-pulse-card--soon .scc-pulse-icon { width: 1.25rem; height: 1.25rem; background: transparent; color: var(--os-ink-secondary); }
+.eo-overview .scc-pulse-label { font-size: var(--os-text-body-sm); text-transform: none; letter-spacing: -0.01em; color: var(--os-ink); }
+.eo-overview .scc-pulse-status { font-size: var(--os-text-label-md); line-height: 1.45; margin-top: var(--os-space-2); }
+.eo-overview .scc-pulse-chevron { border: 0; }
+.eo-overview .scc-pulse-body { margin-top: 0; gap: var(--os-space-2); }
+.eo-overview .scc-pulse-line { font-size: var(--os-text-label-lg); line-height: 1.5; color: var(--os-ink-muted); }
+.eo-overview .eo-pulse-headline { margin-bottom: var(--os-space-1); font-size: var(--os-text-heading-sm); line-height: 1.4; font-weight: 550; color: var(--os-ink); letter-spacing: -0.02em; }
+.eo-overview .scc-pulse-card[data-state="restricted"] .eo-pulse-headline,
+.eo-overview .scc-pulse-card[data-state="unavailable"] .eo-pulse-headline { color: var(--os-ink-secondary); font-weight: 400; }
+.eo-overview a.scc-pulse-card:hover { background: var(--os-surface-selected); }
+
+/* Agenda: an open priority column balanced by a deliberate action surface. */
+.eo-overview .eo-agenda-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: var(--os-space-6); align-items: start; }
+.eo-overview .scc-panel { min-width: 0; min-height: 0; padding: var(--os-space-5); border: 0; border-radius: 0; background: transparent; }
+.eo-overview .scc-panel--attention { padding-left: 0; padding-right: 0; border-top: 2px solid var(--os-ink-700); }
+.eo-overview .scc-panel--decisions { border: 1px solid var(--eo-surface-edge); border-top: 2px solid var(--os-accent); border-radius: 0 0 var(--os-radius-md) var(--os-radius-md); background: var(--os-surface); box-shadow: var(--eo-surface-shadow); }
+.eo-overview .eo-panel-overline { display: flex; align-items: center; gap: var(--os-space-2); margin-bottom: var(--os-space-3); font-size: var(--os-text-label-sm); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--os-ink-muted); }
+.eo-overview .eo-priority-mark { width: 0.4rem; height: 0.4rem; border: 1px solid var(--os-ink-muted); transform: rotate(45deg); }
+.eo-overview .scc-panel--decisions .eo-panel-overline { color: var(--os-accent-ink); }
+.eo-overview .scc-panel-head { align-items: baseline; flex-wrap: wrap; gap: var(--os-space-2); padding-bottom: var(--os-space-3); margin-bottom: var(--os-space-3); border-bottom: 1px solid var(--os-rule); }
+.eo-overview .scc-panel-title { color: var(--os-ink); font-size: var(--os-text-heading-md); font-weight: 600; letter-spacing: -0.025em; text-transform: none; }
+.eo-overview .scc-panel-link { font-size: var(--os-text-label-lg); color: var(--os-accent-ink); }
+.eo-overview .scc-attn-summary,
+.eo-overview .scc-panel-scope,
+.eo-overview .scc-attn-coverage { opacity: 1; color: var(--os-ink-muted); font-size: var(--os-text-label-lg); line-height: 1.55; }
+.eo-overview .scc-panel-scope a { color: var(--os-accent-ink); text-underline-offset: 3px; }
+.eo-overview .scc-attn-summary { margin-bottom: var(--os-space-4); }
+.eo-overview .scc-attn-list { gap: 0; }
+.eo-overview .scc-attn-list > li + li { border-top: 1px solid var(--os-rule-strong); }
+.eo-overview .scc-attn-row { padding: var(--os-space-4) var(--os-space-2); grid-template-columns: 4rem minmax(0, 1fr) auto; gap: var(--os-space-3); border-radius: 0; }
+.eo-overview .scc-attn-list > li[data-tone="critical"] .scc-attn-row { border-left: 2px solid var(--os-critical); }
+.eo-overview .scc-attn-tone { padding: var(--os-space-1); font-size: var(--os-text-label-sm); letter-spacing: 0.03em; }
+.eo-overview .scc-attn-body { gap: var(--os-space-1); }
+.eo-overview .scc-attn-title { font-size: var(--os-text-body-md); line-height: 1.45; font-weight: 600; }
+.eo-overview .scc-attn-detail { font-size: var(--os-text-body-sm); line-height: 1.5; }
+.eo-overview .scc-attn-source { margin-top: var(--os-space-1); font-size: var(--os-text-label-sm); }
+.eo-overview .scc-attn-go { margin-top: var(--os-space-1); color: var(--os-accent); }
+.eo-overview .scc-attn-coverage { margin-top: var(--os-space-4); padding: var(--os-space-3); border-left: 2px solid var(--os-rule-strong); background: var(--os-surface); }
+
+.eo-overview .scc-decision-list { gap: 0; }
+.eo-overview .scc-decision-list > li + li { border-top: 1px solid var(--os-rule); }
+.eo-overview .scc-decision-row { grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: var(--os-space-2) var(--os-space-3); padding: var(--os-space-4) var(--os-space-1); }
+.eo-overview .scc-decision-icon { width: 1.75rem; height: 1.75rem; border: 1px solid var(--os-rule); background: var(--os-surface-interactive); color: var(--os-ink-muted); }
+.eo-overview .scc-decision-title { font-size: var(--os-text-body-md); line-height: 1.45; }
+.eo-overview .scc-decision-meta { font-size: var(--os-text-label-lg); line-height: 1.5; }
+.eo-overview .scc-decision-aside { grid-column: 2; flex-direction: row; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--os-space-2); }
+.eo-overview .scc-decision-amount { width: 100%; font-size: var(--os-text-heading-lg); font-weight: 550; letter-spacing: -0.025em; font-variant-numeric: tabular-nums; white-space: normal; overflow-wrap: anywhere; }
+.eo-overview .scc-decision-badge { padding: 0; border: 0; background: transparent; color: var(--os-ink-muted); font-size: var(--os-text-label-sm); }
+.eo-overview .eo-decision-action { display: inline-flex; align-items: center; gap: var(--os-space-1); font-size: var(--os-text-label-lg); font-weight: 600; color: var(--os-accent-ink); }
+.eo-overview .scc-decision-row:hover .eo-decision-action { text-decoration: underline; text-underline-offset: 3px; }
+.eo-overview .scc-quiet-empty { justify-content: flex-start; padding: var(--os-space-5) 0; text-align: left; }
+.eo-overview .scc-quiet-empty p { max-width: 42ch; font-size: var(--os-text-body-sm); line-height: 1.6; }
+
+/* Follow-through has its own register rhythm; history recedes into a timeline. */
+.eo-overview .eo-follow-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: var(--os-space-6); align-items: start; }
+.eo-overview .scc-panel--commitments { border: 1px solid var(--eo-surface-edge); border-radius: var(--os-radius-md); background: var(--os-surface); box-shadow: var(--eo-surface-shadow); }
+.eo-overview .scc-panel--feed { border-top: 1px solid var(--os-rule-strong); padding-inline: 0; }
+.eo-overview .scc-panel--feed:only-child { grid-column: 1 / -1; }
+.eo-overview .scc-commit-group { display: flex; align-items: center; gap: var(--os-space-2); margin: var(--os-space-5) 0 var(--os-space-2); font-size: var(--os-text-label-md); letter-spacing: 0.08em; color: var(--os-ink-secondary); }
+.eo-overview .scc-commit-group > span { display: inline-grid; place-items: center; min-width: 1.25rem; height: 1.25rem; padding-inline: var(--os-space-1); border-radius: var(--os-radius-sm); background: var(--os-surface-interactive); color: var(--os-ink-secondary); font-variant-numeric: tabular-nums; }
+.eo-overview .scc-commit-group[data-group="overdue"] { color: var(--os-warning); }
+.eo-overview .scc-commit-group[data-group="overdue"] > span { color: var(--os-warning); background: var(--os-warning-soft); }
+.eo-overview .scc-commit-row { flex-wrap: wrap; padding: var(--os-space-3) 0 var(--os-space-3) var(--os-space-3); border-top: 0; border-left: 2px solid var(--os-accent-muted); margin-bottom: var(--os-space-2); gap: var(--os-space-2) var(--os-space-3); }
+.eo-overview .scc-commit-row[data-overdue="true"][data-status="open"] { border-left-color: var(--os-warning); background: var(--os-warning-soft); }
+.eo-overview .scc-commit-row[data-status="completed"] { border-left-color: var(--os-rule-strong); }
+.eo-overview .scc-commit-row[data-status="completed"] .scc-commit-title { color: var(--os-ink-muted); font-weight: 400; }
+.eo-overview .scc-commit-main { flex: 1 1 13rem; gap: var(--os-space-1); }
+.eo-overview .scc-commit-title { font-size: var(--os-text-body-md); font-weight: 550; line-height: 1.45; }
+.eo-overview .scc-commit-meta { font-size: var(--os-text-label-lg); line-height: 1.5; }
+.eo-overview .scc-commit-actions { flex-wrap: wrap; gap: var(--os-space-2); }
+.eo-overview .scc-commit-btn,
+.eo-overview .scc-commit-new { min-height: 2rem; font-size: var(--os-text-label-lg); padding: var(--os-space-1) var(--os-space-2); transition: background var(--os-ease), border-color var(--os-ease); }
+.eo-overview .scc-commit-new { color: var(--os-accent-ink); border-color: var(--os-accent-muted); background: var(--os-surface); }
+.eo-overview .scc-commit-btn:hover:not(:disabled),
+.eo-overview .scc-commit-new:hover:not(:disabled) { border-color: var(--os-accent-muted); background: var(--os-surface-selected); }
+.eo-overview .scc-commit-btn--primary { background: var(--os-accent); color: var(--os-surface); }
+.eo-overview .scc-commit-btn--primary:hover:not(:disabled) { background: var(--os-accent-ink); }
+.eo-overview .scc-commit-form :is(input, textarea, select) { width: 100%; min-width: 0; color-scheme: light; font-size: var(--os-text-body-sm); }
+.eo-overview .scc-commit-form label { min-width: 0; font-size: var(--os-text-label-lg); }
+.eo-overview .scc-change-list { gap: 0; }
+.eo-overview .scc-change-list > li { position: relative; }
+.eo-overview .scc-change-list > li:not(:last-child)::before { content: ""; position: absolute; top: 1.4rem; bottom: -1rem; left: 0.375rem; width: 1px; background: var(--os-rule-strong); }
+.eo-overview .scc-change-row { position: relative; padding: var(--os-space-3) var(--os-space-1); gap: var(--os-space-3); }
+.eo-overview .scc-change-dot { background: var(--os-ink-muted); box-shadow: 0 0 0 3px color-mix(in srgb, var(--os-canvas) 97%, var(--os-ink-900)); }
+.eo-overview .scc-change-title { font-size: var(--os-text-body-sm); line-height: 1.5; font-weight: 500; }
+.eo-overview .scc-change-detail { white-space: normal; font-size: var(--os-text-label-lg); line-height: 1.55; }
+
+.eo-overview :is(.scc-attn-title, .scc-attn-detail, .scc-decision-title, .scc-commit-title, .scc-commit-meta, .scc-change-detail) { overflow-wrap: anywhere; }
+.eo-overview :is(a, button, input, textarea, select):focus-visible { outline: 2px solid var(--os-accent); outline-offset: 3px; }
+.eo-overview :is(h2, #commitments) { scroll-margin-top: 5rem; }
+
+@media (max-width: 1180px) {
+  .eo-overview .scc-pulse-card { min-height: 10rem; }
+  .eo-overview .eo-lenses { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .eo-overview .eo-lens-link { padding: var(--os-space-3); }
+  .eo-overview .eo-agenda-grid,
+  .eo-overview .eo-follow-grid { gap: var(--os-space-5); }
+}
+
+@media (max-width: 960px) {
+  .eo-overview .eo-headline-state { flex-basis: 16rem; }
+  .eo-overview .eo-agenda-grid,
+  .eo-overview .eo-follow-grid { grid-template-columns: minmax(0, 1fr); }
+  .eo-overview .eo-lenses { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .eo-overview .eo-lens-link:nth-child(4) { border-left: 0; }
+  .eo-overview .eo-lens-link:nth-child(n+4) { border-top: 1px solid var(--os-rule); }
+  .eo-overview .eo-picture-text { font-size: var(--os-text-heading-lg); }
+}
+
+@media (max-width: 720px) {
+  .scc.eo-overview { gap: var(--os-space-6); }
+  .eo-overview .eo-masthead-main { flex-direction: column; align-items: stretch; gap: var(--os-space-4); }
+  .eo-overview .eo-headline-state { flex-basis: auto; padding: var(--os-space-3); }
+  .eo-overview .eo-picture,
+  .eo-overview .eo-picture:has(> :nth-child(3)) { grid-template-columns: minmax(0, 1fr); padding: 0; }
+  .eo-overview .eo-briefing-head { padding-bottom: var(--os-space-3); }
+  .eo-overview .eo-picture-item { padding-block: var(--os-space-4); gap: var(--os-space-2); }
+  .eo-overview .eo-picture-item + .eo-picture-item { border-left: 0; }
+  .eo-overview .eo-picture-text { max-width: none; }
+  .eo-overview .eo-picture-track { display: none; }
+  .eo-overview .eo-lenses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .eo-overview .eo-lens-link:nth-child(n) { border: 0; }
+  .eo-overview .eo-lens-link:nth-child(even) { border-left: 1px solid var(--os-rule); }
+  .eo-overview .eo-lens-link:nth-child(n+3) { border-top: 1px solid var(--os-rule); }
+  .eo-overview .eo-lens-link:last-child { grid-column: 1 / -1; }
+  .eo-overview .eo-section-rule { display: none; }
+  .eo-overview .scc-pulse-card { min-height: 0; }
+  .eo-overview .scc-panel { padding: var(--os-space-4); }
+  .eo-overview .scc-panel--attention,
+  .eo-overview .scc-panel--feed { padding-inline: 0; }
+  .eo-overview .scc-attn-row { grid-template-columns: 3.5rem minmax(0, 1fr) auto; gap: var(--os-space-2); }
+  .eo-overview .scc-commit-form-row { grid-template-columns: minmax(0, 1fr); }
+  .eo-overview .scc-commit-form-actions { flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eo-overview *, .eo-overview *::after { transition: none; }
+}
