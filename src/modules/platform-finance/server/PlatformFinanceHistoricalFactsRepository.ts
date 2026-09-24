@@ -84,6 +84,9 @@ export class PlatformFinanceHistoricalFactsRepository {
       .from("platform_finance_historical_commercial_facts")
       .select(SELECT_COLUMNS)
       .eq("organisation_id", this.organisationId)
+      // Source payment date/time is the business chronology; codes reflect import order.
+      // Undated evidence follows dated records. Code is unique within the organisation.
+      .order("payment_datetime", { ascending: false, nullsFirst: false })
       .order("code", { ascending: true });
     if (error) throw new ActionError("INTERNAL_ERROR", error.message);
     return (data ?? []).map((row) => mapRow(row as unknown as Row));
