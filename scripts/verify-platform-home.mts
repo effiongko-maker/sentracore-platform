@@ -75,7 +75,11 @@ function main() {
   const phSwitcher = readSrc("src/components/platform/WorkspaceSwitcher.tsx");
   assert(phSwitcher.includes("{onCommandCentre || canUseCommandCentre ? (") && phSwitcher.includes("const canUseCommandCentre = Boolean(workspaceAccess?.commandCentre);"),
     "switcher lists Executive Office only for users with workspaceAccess.commandCentre");
-  assert(/onHome\s*\?\s*"Platform"/.test(phSwitcher) && phSwitcher.includes('{onHome ? "Platform" : "Home"}'), "selector reads Platform at Platform Home only");
+  // The selector establishes Platform as the environment; the sidebar destination within it is simply Home.
+  assert(/onHome\s*\?\s*"Platform"/.test(phSwitcher) && phSwitcher.includes('?.label ?? "Platform"') && !phSwitcher.includes('{onHome ? "Platform" : "Home"}'),
+    "selector identifies the Platform environment (never a bare Home workspace)");
+  assert(homeBranch.includes("<span>Home</span>") && !homeBranch.includes("PLATFORM_HOME.label") && !homeBranch.includes("os-compass-group-label"),
+    "Platform Home sidebar: Home destination with no redundant PLATFORM section heading");
   assert(!/bode/i.test(homeCompass + phSwitcher + home), "no hard-coded individual");
 
   const commandBar = readSrc("src/components/platform/GlobalCommandBar.tsx");

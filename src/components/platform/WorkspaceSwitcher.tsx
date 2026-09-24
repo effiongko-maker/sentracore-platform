@@ -65,7 +65,7 @@ export function WorkspaceSwitcher({
     ? COMMAND_CENTRE_HOME.label
     : onHome
       ? "Platform"
-      : (currentWorkspace ?? fallbackActive)?.label ?? "Home";
+      : (currentWorkspace ?? fallbackActive)?.label ?? "Platform";
 
   useEffect(() => {
     if (!open) return;
@@ -183,7 +183,7 @@ export function WorkspaceSwitcher({
                     {onHome ? (
                       <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
                     ) : null}
-                    {onHome ? "Platform" : "Home"}
+                    Platform
                   </span>
                   <span className="sc-ws-switcher-option-status">
                     {onHome ? "Active" : "Platform-wide home"}

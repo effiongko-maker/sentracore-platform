@@ -502,10 +502,10 @@ export function OrganisationalCompass() {
             </Link>
           </div>
         ) : isPlatformHome ? (
-          // Platform Home: environment switching lives in the workspace switcher and the page's environment cards.
+          // Platform Home: the workspace switcher already establishes Platform as the environment, so the
+          // sidebar needs no section heading. Environment switching lives in the switcher and the page's cards.
           <div className="os-compass-scroll">
             <div className="os-compass-group">
-              <p className="os-compass-group-label">Platform</p>
               <div className="os-compass-modules">
                 <Link
                   href={PLATFORM_HOME.href}
@@ -514,7 +514,7 @@ export function OrganisationalCompass() {
                   className="os-compass-module os-compass-module-active"
                 >
                   <Home className="h-4 w-4 shrink-0" aria-hidden />
-                  <span>{PLATFORM_HOME.label}</span>
+                  <span>Home</span>
                 </Link>
               </div>
             </div>
@@ -552,26 +552,12 @@ export function OrganisationalCompass() {
                     </div>
                   </div>
                 ) : null}
-
-                <div className="os-compass-group">
-                  <p className="os-compass-group-label">Platform</p>
-                  <div className="os-compass-modules">
-                    <Link
-                      href={PLATFORM_HOME.href}
-                      onClick={closeMobileNav}
-                      className="os-compass-module"
-                    >
-                      <Home className="h-4 w-4 shrink-0" aria-hidden />
-                      <span>{PLATFORM_HOME.label}</span>
-                    </Link>
-                  </div>
-                </div>
               </>
             )}
           </div>
         ) : (
+          // Other Platform surfaces: the switcher reads Platform, so no redundant caption here.
           <div className="os-compass-scroll">
-            <p className="os-compass-workspace-caption">Platform</p>
             {sessionLoading ? (
               <p className="os-compass-nav-status" role="status">
                 Loading navigation…
@@ -584,7 +570,7 @@ export function OrganisationalCompass() {
                   className="os-compass-module"
                 >
                   <Home className="h-4 w-4 shrink-0" aria-hidden />
-                  <span>{PLATFORM_HOME.label}</span>
+                  <span>Home</span>
                 </Link>
                 <p className="os-compass-nav-status">
                   Use the workspace switcher to change operating environment.
