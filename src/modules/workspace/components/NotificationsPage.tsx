@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Bell } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ModeFrame, OperateHeader, StreamSurface } from "@/components/platform";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatRelativeTime } from "@/lib/utils";
@@ -30,8 +30,13 @@ const EMPTY_FEED: OperationalNotificationFeed = {
  * Distinct from Home “Requires attention”.
  */
 export function NotificationsPage() {
-  const { can } = useOperatingAccess();
-  const canReadRequests = can("requests.view");
+  const { access, can } = useOperatingAccess();
+  const profileId = access?.sheetUserId ?? "";
+  // Reset feed/read state synchronously whenever identity or access changes.
+  return <NotificationsPageForUser key={JSON.stringify(access)} profileId={profileId} canReadOperations={can("ops.view")} />;
+}
+
+function NotificationsPageForUser({ profileId, canReadOperations }: { profileId: string; canReadOperations: boolean }) {
   const [feed, setFeed] = useState<OperationalNotificationFeed>(EMPTY_FEED);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,10 +47,12 @@ export function NotificationsPage() {
     setError(null);
     try {
       const next = await OperationalNotificationService.getFeed({
-        canReadRequests,
+        canReadRequests: false,
+        profileId,
+        canReadOperations,
       });
       setFeed(next);
-      setReadIds(loadReadNotificationIds());
+      setReadIds(loadReadNotificationIds(profileId));
     } catch (err) {
       setFeed({ ...EMPTY_FEED, incomplete: true });
       setError(
@@ -54,37 +61,37 @@ export function NotificationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canReadRequests]);
+  }, [profileId, canReadOperations]);
 
   useEffect(() => {
-    setReadIds(loadReadNotificationIds());
+    setReadIds(loadReadNotificationIds(profileId));
     void load();
-  }, [load]);
+  }, [load, profileId]);
 
   useEffect(() => {
-    const onReadState = () => setReadIds(loadReadNotificationIds());
+    const onReadState = () => setReadIds(loadReadNotificationIds(profileId));
     window.addEventListener(NOTIFICATION_READ_STATE_EVENT, onReadState);
     return () =>
       window.removeEventListener(NOTIFICATION_READ_STATE_EVENT, onReadState);
-  }, []);
+  }, [profileId]);
 
   const allIds = feed.items.map((item) => item.id);
   const unreadCount = countUnreadNotifications(allIds, readIds);
 
   function handleReadAll() {
     if (unreadCount === 0) return;
-    setReadIds(markAllNotificationsRead(allIds, readIds));
+    setReadIds(markAllNotificationsRead(profileId, allIds, readIds));
   }
 
   function handleOpen(id: string) {
-    setReadIds(markNotificationRead(id, readIds));
+    setReadIds(markNotificationRead(profileId, id, readIds));
   }
 
   return (
     <ModeFrame mode="act">
       <OperateHeader
         title="Notifications"
-        description="Platform attention items across issues, work, work orders, and other operational areas."
+        description="Updates about work and matters assigned to you."
         signalValue={loading ? "—" : unreadCount}
         signalLabel="Unread"
       />
@@ -130,8 +137,8 @@ export function NotificationsPage() {
         ) : feed.items.length === 0 ? (
           <EmptyState
             icon={Bell}
-            title="Nothing needs attention"
-            description="When issues, work, work orders, or other areas raise attention items, they will appear here."
+            title="No notifications for you"
+            description="Updates relevant to your responsibilities will appear here."
           />
         ) : (
           <ul className="os-notify-page-list">

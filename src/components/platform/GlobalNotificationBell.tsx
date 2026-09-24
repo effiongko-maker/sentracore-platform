@@ -42,9 +42,14 @@ const OPERATIONS_BELL_FALLBACK_MS = 35_000;
  * list fan-out does not contend with Workspace or Finance Home requests.
  */
 export function GlobalNotificationBell() {
+  const { access, can } = useOperatingAccess();
+  const profileId = access?.sheetUserId ?? "";
+  // Reset feed/read state synchronously whenever identity or access changes.
+  return <GlobalNotificationBellForUser key={JSON.stringify(access)} profileId={profileId} canReadOperations={can("ops.view")} />;
+}
+
+function GlobalNotificationBellForUser({ profileId, canReadOperations }: { profileId: string; canReadOperations: boolean }) {
   const pathname = usePathname();
-  const { can } = useOperatingAccess();
-  const canReadRequests = can("requests.view");
   const [open, setOpen] = useState(false);
   const [feed, setFeed] = useState<OperationalNotificationFeed>(EMPTY_FEED);
   const [loading, setLoading] = useState(false);
@@ -56,16 +61,18 @@ export function GlobalNotificationBell() {
     setLoading(true);
     try {
       const next = await OperationalNotificationService.getFeed({
-        canReadRequests,
+        canReadRequests: false,
+        profileId,
+        canReadOperations,
       });
       setFeed(next);
-      setReadIds(loadReadNotificationIds());
+      setReadIds(loadReadNotificationIds(profileId));
     } catch {
       setFeed({ ...EMPTY_FEED, incomplete: true });
     } finally {
       setLoading(false);
     }
-  }, [canReadRequests]);
+  }, [profileId, canReadOperations]);
 
   const startInitialLoad = useCallback(() => {
     if (initialLoadStarted.current) return;
@@ -74,7 +81,7 @@ export function GlobalNotificationBell() {
   }, [load]);
 
   useEffect(() => {
-    setReadIds(loadReadNotificationIds());
+    setReadIds(loadReadNotificationIds(profileId));
     initialLoadStarted.current = false;
 
     if (!isOperationsHomePath(pathname)) {
@@ -112,21 +119,21 @@ export function GlobalNotificationBell() {
       removeFinanceListener?.();
       window.clearTimeout(fallback);
     };
-  }, [pathname, startInitialLoad]);
+  }, [pathname, startInitialLoad, profileId]);
 
   useEffect(() => {
-    const onReadState = () => setReadIds(loadReadNotificationIds());
+    const onReadState = () => setReadIds(loadReadNotificationIds(profileId));
     window.addEventListener(NOTIFICATION_READ_STATE_EVENT, onReadState);
     return () =>
       window.removeEventListener(NOTIFICATION_READ_STATE_EVENT, onReadState);
-  }, []);
+  }, [profileId]);
 
   useEffect(() => {
     if (!open) return;
     // User opened the panel — load/refresh even if Home is still settling.
-    setReadIds(loadReadNotificationIds());
+    setReadIds(loadReadNotificationIds(profileId));
     void load();
-  }, [open, load]);
+  }, [open, load, profileId]);
 
   useEffect(() => {
     if (!open) return;
@@ -145,11 +152,11 @@ export function GlobalNotificationBell() {
 
   function handleReadAll() {
     if (unreadCount === 0) return;
-    setReadIds(markAllNotificationsRead(allIds, readIds));
+    setReadIds(markAllNotificationsRead(profileId, allIds, readIds));
   }
 
   function handleItemOpen(id: string) {
-    setReadIds(markNotificationRead(id, readIds));
+    setReadIds(markNotificationRead(profileId, id, readIds));
     setOpen(false);
   }
 
@@ -212,7 +219,7 @@ export function GlobalNotificationBell() {
               data could not be loaded.
             </p>
           ) : feed.visible.length === 0 ? (
-            <p className="os-notify-empty">Nothing needs your attention right now.</p>
+            <p className="os-notify-empty">No notifications for you right now.</p>
           ) : (
             <ul className="os-notify-list">
               {feed.visible.map((item) => {

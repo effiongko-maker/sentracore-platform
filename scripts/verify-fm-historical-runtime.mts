@@ -198,8 +198,11 @@ const workRow = (over: Record<string, unknown>) => ({
     criticalWork: { ok: true, total: 0 }, approvals: { ok: true, data: [] }, facilities: { ok: true, data: [] },
   } as never);
   assert(snap.activity.length === 1 && snap.activity[0]!.entityId === "WO-L", "Home activity: the migrated Work / WI never appear as fresh activity; the live one does");
-  const feed = deriveOperationalNotifications({ asOf: NOW, requests: [{ id: "REQ-H", title: "t", status: "submitted", occurredAt: "2026-06-22T00:00:00Z", createdAt: importedAt }], maintenance: [histWork], workOrders: [histWi], incidents: [] } as never);
-  assert(feed.items.length === 1 && feed.items[0]!.at === "2026-06-22T00:00:00Z", "notifications: an open Request is stamped with its OWN occurrence time, not the import time; unknown Work / WI notify nothing");
+  // Notifications are recipient-specific: intake Requests have no designated recipient and are never broadcast,
+  // and migrated Work / WI never notify even when assigned to the recipient (their createdAt is the import time).
+  const recipient = "p-recipient";
+  const feed = deriveOperationalNotifications({ asOf: NOW, profileId: recipient, requests: [{ id: "REQ-H", title: "t", status: "submitted", occurredAt: "2026-06-22T00:00:00Z", createdAt: importedAt }], maintenance: [{ ...histWork, assignedToUserId: recipient }], workOrders: [{ ...histWi, assignedToUserId: recipient }], incidents: [] } as never);
+  assert(feed.items.length === 0, "notifications: intake is not broadcast; migrated Work / WI notify nothing even when assigned to the recipient");
   const client = readFileSync("src/services/reports/buildClientReport.ts", "utf8");
   assert(/isOpenIncidentStatus\(i\.status\)/.test(client) && !/!\["closed", "resolved", "cancelled"\]\.includes/.test(client), "client report: open incidents require a KNOWN open status (unknown is not open)");
   const modal = readFileSync("src/modules/generator-log/components/ViewGeneratorLogModal.tsx", "utf8");

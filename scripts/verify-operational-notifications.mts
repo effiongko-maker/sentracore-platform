@@ -31,6 +31,8 @@ function readSrc(rel: string): string {
   return readFileSync(resolve(rel), "utf8");
 }
 
+const profileId = "11111111-1111-4111-8111-111111111111";
+const otherProfileId = "22222222-2222-4222-8222-222222222222";
 const asOf = "2026-09-04T12:00:00.000Z";
 
 function installLocalStorageMock() {
@@ -80,6 +82,8 @@ function baseWo(over: Partial<WorkOrder> = {}): WorkOrder {
     facilityId: "FAC-1",
     createdAt: "2026-09-04T09:00:00.000Z",
     updatedAt: "2026-09-04T09:00:00.000Z",
+    assignedToUserId: profileId,
+    recordOrigin: "operational",
     ...over,
   };
 }
@@ -96,6 +100,8 @@ function baseMnt(over: Partial<Maintenance> = {}): Maintenance {
     reportedAt: "2026-09-04T08:00:00.000Z",
     createdAt: "2026-09-04T08:00:00.000Z",
     updatedAt: "2026-09-04T08:00:00.000Z",
+    assignedToUserId: profileId,
+    recordOrigin: "operational",
     ...over,
   };
 }
@@ -113,6 +119,8 @@ function baseInc(over: Partial<Incident> = {}): Incident {
     reportedAt: "2026-09-04T07:00:00.000Z",
     createdAt: "2026-09-04T07:00:00.000Z",
     updatedAt: "2026-09-04T07:00:00.000Z",
+    assignedToUserId: profileId,
+    recordOrigin: "operational",
     ...over,
   };
 }
@@ -120,7 +128,7 @@ function baseInc(over: Partial<Incident> = {}): Incident {
 function main() {
   const results: string[] = [];
   installLocalStorageMock();
-  clearNotificationReadStateForTests();
+  clearNotificationReadStateForTests(profileId);
 
   assert(OPERATIONAL_NOTIFICATION_LIMIT === 5, "hard max-5 limit");
   assert(
@@ -131,6 +139,7 @@ function main() {
 
   const feed = deriveOperationalNotifications({
     asOf,
+    profileId,
     requests: [baseRequest()],
     maintenance: [
       baseMnt({ id: "MNT-CRIT", priority: "critical", title: "Critical HVAC" }),
@@ -158,11 +167,11 @@ function main() {
   assert(feed.items.length === feed.total, "items is full sorted feed");
   assert(
     feed.visible[0]?.kind === "new_issue",
-    "open request ranks as new issue (highest live priority)"
+    "assigned recent work ranks as new issue"
   );
   assert(
     feed.visible[0]?.eventType === "New issue",
-    "New issue label for open Request intake"
+    "New issue label for recent assigned work"
   );
   assert(
     feed.visible.some((n) => n.kind === "work_order_raised"),
@@ -180,14 +189,14 @@ function main() {
 
   const many = deriveOperationalNotifications({
     asOf,
-    requests: Array.from({ length: 8 }, (_, i) =>
-      baseRequest({
-        id: `REQ-${i}`,
+    profileId,
+    maintenance: Array.from({ length: 8 }, (_, i) =>
+      baseMnt({
+        id: `MNT-${i}`,
         title: `Issue ${i}`,
         createdAt: `2026-09-0${(i % 4) + 1}T10:00:00.000Z`,
       })
     ),
-    maintenance: [],
     incidents: [],
     workOrders: [],
   });
@@ -206,25 +215,25 @@ function main() {
   results.push("PASS max-5 + View all → /notifications (not /issues)");
 
   // 1. Read all marks unread notifications as read (notification-state only)
-  clearNotificationReadStateForTests();
+  clearNotificationReadStateForTests(profileId);
   const ids = many.items.map((item) => item.id);
   assert(
-    countUnreadNotifications(ids) === ids.length,
+    countUnreadNotifications(ids, loadReadNotificationIds(profileId)) === ids.length,
     "all unread before Read all"
   );
-  markNotificationRead(ids[0]!);
+  markNotificationRead(profileId, ids[0]!);
   assert(
-    countUnreadNotifications(ids, loadReadNotificationIds()) ===
+    countUnreadNotifications(ids, loadReadNotificationIds(profileId)) ===
       ids.length - 1,
     "single mark-read reduces unread"
   );
-  markAllNotificationsRead(ids);
+  markAllNotificationsRead(profileId, ids);
   assert(
-    countUnreadNotifications(ids, loadReadNotificationIds()) === 0,
+    countUnreadNotifications(ids, loadReadNotificationIds(profileId)) === 0,
     "Read all marks every unread id as read"
   );
   assert(
-    ids.every((id) => loadReadNotificationIds().has(id)),
+    ids.every((id) => loadReadNotificationIds(profileId).has(id)),
     "read set contains all notification ids"
   );
   results.push("PASS Read all marks unread notifications as read");
@@ -232,6 +241,7 @@ function main() {
   // 4. Notification actions route to the correct underlying module
   const routed = deriveOperationalNotifications({
     asOf,
+    profileId,
     requests: [baseRequest({ id: "REQ-ROUTE" })],
     maintenance: [
       // Older critical work → elevated (not competed by “new issue” recency)
@@ -262,8 +272,7 @@ function main() {
   );
   const woRaised = routed.items.find((item) => item.id === "wo-raised-WO-ROUTE");
 
-  assert(req?.href === "/issues?id=REQ-ROUTE", "open request routes to Issues");
-  assert(req?.kind === "new_issue", "open request is generic new_issue");
+  assert(!req, "intake has no designated recipient and must not broadcast");
   assert(
     mntNew?.href === "/work?id=MNT-NEW-ROUTE",
     "new work routes to Work"
@@ -304,6 +313,7 @@ function main() {
 
   const quiet = deriveOperationalNotifications({
     asOf,
+    profileId,
     requests: [baseRequest({ status: "resolved", id: "REQ-DONE" })],
     maintenance: [
       baseMnt({
@@ -318,29 +328,26 @@ function main() {
   assert(quiet.total === 0, "resolved/closed records produce no noise");
   results.push("PASS no noise from settled records");
 
+  const personalInput = { asOf, profileId, requests: [baseRequest()], maintenance: [baseMnt()], incidents: [baseInc()], workOrders: [baseWo()] };
+  assert(deriveOperationalNotifications(personalInput).total === 3, "assigned user receives supported notifications");
+  assert(deriveOperationalNotifications({ ...personalInput, profileId: otherProfileId }).total === 0, "unrelated user receives none");
+  assert(deriveOperationalNotifications({ ...personalInput, profileId: "" }).total === 0, "unknown principal fails closed");
+  for (const origin of ["migrated_historical", undefined] as const) {
+    const historical = deriveOperationalNotifications({ ...personalInput,
+      maintenance: [baseMnt({ recordOrigin: origin, priority: "critical", dueAt: "2026-01-01" })],
+      incidents: [baseInc({ recordOrigin: origin })],
+      workOrders: [baseWo({ recordOrigin: origin, dueAt: "2026-01-01" })],
+    });
+    assert(historical.total === 0, "historical/unknown origin excluded even with recent insertion, critical status or overdue date");
+  }
+  assert(countUnreadNotifications(ids, loadReadNotificationIds(otherProfileId)) === ids.length, "another user's read-all cannot change my unread count");
+  assert(countUnreadNotifications(ids, loadReadNotificationIds(profileId)) === 0, "my reads persist independently");
+  results.push("PASS personal recipients, historical exclusion and user-scoped unread state");
+
   const deriveSrc = readSrc(
     "src/modules/workspace/utils/deriveOperationalNotifications.ts"
   );
-  assert(
-    deriveSrc.includes("fromOpenIntakeRequests") &&
-      deriveSrc.includes('kind: "new_issue"'),
-    "open Request intake classified as generic new_issue"
-  );
-  assert(
-    !deriveSrc.includes("fromNccRaisedRequests") &&
-      !deriveSrc.includes('kind: "ncc_raised_issue"'),
-    "does not assign ncc_raised_issue from Request presence alone"
-  );
-  assert(
-    deriveSrc.includes("ncc_raised_issue") &&
-      deriveSrc.includes("reserved"),
-    "ncc_raised_issue kind reserved until explicit NCC signal exists"
-  );
-  assert(deriveSrc.includes("Formal escalations"), "documents escalation gap");
-  assert(
-    deriveSrc.includes("Submit Request") && deriveSrc.includes("RequestService"),
-    "documents Submit Request → RequestService path"
-  );
+  assert(!deriveSrc.includes("fromOpenIntakeRequests"), "no intake broadcast");
   assert(
     !deriveSrc.includes('viewAllHref: total > OPERATIONAL_NOTIFICATION_LIMIT ? "/issues"'),
     "derivation no longer points View all at /issues"
@@ -349,7 +356,7 @@ function main() {
     deriveSrc.includes("OPERATIONAL_NOTIFICATIONS_HREF"),
     "derivation uses unified notifications href"
   );
-  results.push("PASS open intake is new_issue + documented unsupported escalations");
+  results.push("PASS open intake is not broadcast as a notification");
 
   // 5. Home Requires attention remains unchanged
   const command = readSrc(
@@ -454,16 +461,15 @@ function main() {
     "notification sources must not use loadAllPages"
   );
   assert(
-    service.includes("sharedRequest") &&
-      service.includes("NOTIFICATION_FEED_TTL_MS"),
-    "feed-level in-flight + TTL cache for bell + inbox"
+    !service.includes("sharedRequest"),
+    "no shared feed cache across sessions"
   );
   assert(
     service.includes('status: "active"') &&
       service.includes('dueDate: "overdue"'),
     "notification sources use bounded active/overdue filters"
   );
-  results.push("PASS OperationalNotificationService bounded + cached feed");
+  results.push("PASS OperationalNotificationService bounded feed; no cross-session cache");
 
   const workspace = readSrc("src/services/workspace/WorkspaceService.ts");
   assert(
@@ -537,10 +543,10 @@ function main() {
   const requestTypes = readSrc("src/modules/requests/types.ts");
   assert(
     !/\borigin\b/.test(requestTypes) && !/\bncc\b/i.test(requestTypes),
-    "RequestRecord has no dedicated NCC/origin field — derivation uses open intake"
+    "RequestRecord has no dedicated NCC/origin field"
   );
   results.push(
-    "PASS open Request intake has no NCC origin field (generic new_issue)"
+    "PASS Request intake has no NCC origin field (no recipient signal)"
   );
 
   const nav = readSrc("src/lib/navigation.ts");

@@ -140,15 +140,15 @@ async function main() {
       listIncidents: ok as never,
       listWorkOrders: ok as never,
     };
-    const noAuth = await loadNotificationSources({ canReadRequests: false }, readers);
+    const noAuth = await loadNotificationSources({ canReadRequests: false, profileId: "actor", canReadOperations: true }, readers);
     assert(requestReads === 0, "3: Request sources must not be read without requests.view");
     assert(noAuth.failedSources.length === 0, "3: skipping Requests must not mark the feed incomplete");
-    assert(composeNotificationFeed("2026-09-20T00:00:00.000Z", noAuth).incomplete === undefined, "3: feed is not incomplete");
+    assert(composeNotificationFeed("2026-09-20T00:00:00.000Z", noAuth, "actor").incomplete === undefined, "3: feed is not incomplete");
     pass("3 notifications skip Request sources without requests.view and are not incomplete");
-    const withAuth = await loadNotificationSources({ canReadRequests: true }, readers);
-    assert(requestReads > 0 && withAuth.failedSources.includes("requests"), "4: authorised Request failure recorded");
-    assert(composeNotificationFeed("2026-09-20T00:00:00.000Z", withAuth).incomplete === true, "4: feed stays degraded");
-    pass("4 Request source failure WITH authority remains degraded/incomplete");
+    const withAuth = await loadNotificationSources({ canReadRequests: true, profileId: "actor", canReadOperations: true }, { ...readers, listMaintenance: async () => { throw new Error("unavailable"); } });
+    assert(requestReads === 0 && withAuth.failedSources.includes("maintenance"), "4: assigned Work source failure recorded; Requests remain excluded");
+    assert(composeNotificationFeed("2026-09-20T00:00:00.000Z", withAuth, "actor").incomplete === true, "4: feed stays degraded");
+    pass("4 assigned source failure remains degraded/incomplete");
   }
 
   // ── 5. Assignment does not require users.view ──────────────────────────────

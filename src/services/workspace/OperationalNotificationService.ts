@@ -1,9 +1,8 @@
 /**
- * Global operational notification feed — derived from live records.
+ * Personal operational notification feed — derived from live records.
  * Not a notification store / sheet. Distinct from Home “Requires attention”.
  *
  * Required sources (all must succeed for a definitive empty feed):
- *   - Requests (submitted + under_review)
  *   - Maintenance (active + critical-priority active)
  *   - Incidents (recent + critical)
  *   - Work Orders (recent + overdue)
@@ -22,15 +21,9 @@ import {
 import { IncidentService } from "@/services/incidents/IncidentService";
 import { MaintenanceService } from "@/services/maintenance/MaintenanceService";
 import { RequestService } from "@/services/requests/RequestService";
-import {
-  invalidateSharedRequests,
-  sharedRequest,
-  WORKLOAD_TTL_MS,
-} from "@/services/cache/sharedRequest";
 import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
 
 export const REQUIRED_NOTIFICATION_SOURCES = [
-  "requests",
   "maintenance",
   "incidents",
   "workOrders",
@@ -41,10 +34,6 @@ export type RequiredNotificationSource =
 
 /** Bounded newest/active pools for notification derivation (not full registers). */
 export const NOTIFICATION_SOURCE_POOL_SIZE = 100;
-
-const FEED_CACHE_KEY = "operationalNotifications:feed";
-/** Short TTL so bell + inbox share one rebuild (~30–60s). */
-export const NOTIFICATION_FEED_TTL_MS = WORKLOAD_TTL_MS;
 
 function mergeById<T extends { id: string }>(...groups: T[][]): T[] {
   const byId = new Map<string, T>();
@@ -79,6 +68,8 @@ export type NotificationSourceLoad = {
 export type NotificationAuthority = {
   /** requests.view — Request sources are skipped (not failed) without it. */
   canReadRequests: boolean;
+  profileId: string;
+  canReadOperations: boolean;
 };
 
 export type NotificationSourceReaders = {
@@ -100,15 +91,13 @@ export async function loadNotificationSources(
   readers: NotificationSourceReaders = DEFAULT_READERS
 ): Promise<NotificationSourceLoad> {
   const pool = NOTIFICATION_SOURCE_POOL_SIZE;
-  // Without requests.view the Request read would predictably 403. Skip it:
-  // no call, no existence leak, and the feed is NOT marked incomplete.
-  const requestSource = <T,>(loader: () => Promise<{ data?: T[] }>): Promise<SourceResult<T>> =>
-    authority.canReadRequests
-      ? settleList(loader)
-      : Promise.resolve({ ok: true, data: [] });
+  if (!authority.profileId || !authority.canReadOperations) {
+    return { requests: [], maintenance: [], incidents: [], workOrders: [], failedSources: [] };
+  }
+  const assignedToUserId = authority.profileId;
+  // Intake has no designated recipient. Viewing a request is not responsibility
+  // for triage; do not broadcast it or infer a recipient from its creator.
   const [
-    requestsSubmitted,
-    requestsUnderReview,
     maintenanceActive,
     maintenanceCritical,
     incidentsRecent,
@@ -116,35 +105,29 @@ export async function loadNotificationSources(
     workOrdersRecent,
     workOrdersOverdue,
   ] = await Promise.all([
-    requestSource(() =>
-      readers.listRequests({ page: 1, pageSize: pool, status: "submitted" })
-    ),
-    requestSource(() =>
-      readers.listRequests({ page: 1, pageSize: pool, status: "under_review" })
-    ),
     settleList(() =>
-      readers.listMaintenance({ page: 1, pageSize: pool, status: "active" })
+      readers.listMaintenance({ page: 1, pageSize: pool, assignedToUserId, status: "active" })
     ),
     settleList(() =>
       readers.listMaintenance({
         page: 1,
         pageSize: pool,
+        assignedToUserId,
         status: "active",
         priority: "critical",
       })
     ),
-    settleList(() => readers.listIncidents({ page: 1, pageSize: pool })),
+    settleList(() => readers.listIncidents({ page: 1, pageSize: pool, assignedToUserId })),
     settleList(() =>
-      readers.listIncidents({ page: 1, pageSize: pool, severity: "critical" })
+      readers.listIncidents({ page: 1, pageSize: pool, assignedToUserId, severity: "critical" })
     ),
-    settleList(() => readers.listWorkOrders({ page: 1, pageSize: pool })),
+    settleList(() => readers.listWorkOrders({ page: 1, pageSize: pool, assignedToUserId })),
     settleList(() =>
-      readers.listWorkOrders({ page: 1, pageSize: pool, dueDate: "overdue" })
+      readers.listWorkOrders({ page: 1, pageSize: pool, assignedToUserId, dueDate: "overdue" })
     ),
   ]);
 
   const failedSources: RequiredNotificationSource[] = [];
-  if (!requestsSubmitted.ok || !requestsUnderReview.ok) failedSources.push("requests");
   if (!maintenanceActive.ok || !maintenanceCritical.ok) {
     failedSources.push("maintenance");
   }
@@ -152,7 +135,7 @@ export async function loadNotificationSources(
   if (!workOrdersRecent.ok || !workOrdersOverdue.ok) failedSources.push("workOrders");
 
   return {
-    requests: mergeById(requestsSubmitted.data, requestsUnderReview.data),
+    requests: [],
     maintenance: mergeById(maintenanceActive.data, maintenanceCritical.data),
     incidents: mergeById(incidentsRecent.data, incidentsCritical.data),
     workOrders: mergeById(workOrdersRecent.data, workOrdersOverdue.data),
@@ -162,10 +145,12 @@ export async function loadNotificationSources(
 
 export function composeNotificationFeed(
   asOf: string,
-  sources: NotificationSourceLoad
+  sources: NotificationSourceLoad,
+  profileId: string
 ): OperationalNotificationFeed {
   const derived = deriveOperationalNotifications({
     asOf,
+    profileId,
     requests: sources.requests,
     maintenance: sources.maintenance,
     incidents: sources.incidents,
@@ -182,26 +167,15 @@ async function buildFeed(
   authority: NotificationAuthority
 ): Promise<OperationalNotificationFeed> {
   const sources = await loadNotificationSources(authority);
-  return composeNotificationFeed(asOf, sources);
+  return composeNotificationFeed(asOf, sources, authority.profileId);
 }
 
 export const OperationalNotificationService = {
-  /**
-   * Derived notification feed with in-flight coalescing + short TTL cache.
-   * Shared by GlobalNotificationBell and Notifications inbox.
-   * Incomplete feeds are not TTL-cached so a later retry can recover.
-   */
   async getFeed(
     authority: NotificationAuthority,
     asOf = new Date().toISOString()
   ): Promise<OperationalNotificationFeed> {
-    const key = `${FEED_CACHE_KEY}:${authority.canReadRequests ? "requests" : "no-requests"}`;
-    const feed = await sharedRequest(key, () => buildFeed(asOf, authority), {
-      ttlMs: NOTIFICATION_FEED_TTL_MS,
-    });
-    if (feed.incomplete) {
-      invalidateSharedRequests(key);
-    }
-    return feed;
+    // Always use the current session's gated reads. No cross-session feed cache.
+    return buildFeed(asOf, authority);
   },
 };

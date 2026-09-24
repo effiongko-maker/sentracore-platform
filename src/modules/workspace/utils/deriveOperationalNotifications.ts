@@ -4,19 +4,9 @@
  * Derives high-signal items from existing operational records.
  * Presentation must not reimplement these rules.
  *
- * Request / Issue origin (verified):
- *   Submit Request → RequestService.createRequest → RequestRecord.
- *   RequestRecord has no dedicated origin/source/NCC column.
- *   Issue composition maps Request-backed roots to source "staff_request"
- *   (vs "facility_manager" for standalone Work) — that is not an NCC flag.
- *   Therefore open intake Requests are classified as generic `new_issue`.
- *   Do NOT assign `ncc_raised_issue` merely because a Request/Issue row exists.
- *   `ncc_raised_issue` is reserved for an explicit, reliable NCC-origin signal
- *   (none persisted today).
- *
- * Unsupported (no reliable persisted signal yet):
- * - Formal escalations (no escalation event/status on Issue/Incident/Work)
- * - NCC-raised origin (no durable NCC field on Request/Issue)
+ * Only explicitly assigned operational records are eligible. Intake Requests
+ * have no designated recipient and are deliberately not notification sources.
+ * Historical records never participate. Authorization is enforced by source APIs.
  */
 
 import type { Incident } from "@/modules/incidents/types";
@@ -94,6 +84,7 @@ export const OPERATIONAL_NOTIFICATIONS_HREF = "/notifications";
 
 export type DeriveOperationalNotificationsInput = {
   asOf: string;
+  profileId: string;
   requests?: RequestRecord[];
   maintenance: Maintenance[];
   incidents: Incident[];
@@ -131,33 +122,6 @@ function withinRecent(iso: string | undefined, asOfMs: number): boolean {
 
 function workOrderDue(row: WorkOrder): string | undefined {
   return row.dueAt || row.slaDueAt;
-}
-
-/**
- * Open Request intake rows → generic new issue.
- * Presence in Requests is not proof of NCC origin.
- */
-function fromOpenIntakeRequests(
-  requests: RequestRecord[],
-  asOfMs: number
-): OperationalNotification[] {
-  const items: OperationalNotification[] = [];
-  for (const row of requests) {
-    if (row.status !== "submitted" && row.status !== "under_review") continue;
-    // occurredAt is the business time; createdAt is when the record was written (the import time for migrated rows).
-    const at = row.occurredAt || row.createdAt || new Date(asOfMs).toISOString();
-    items.push({
-      id: `req-new-${row.id}`,
-      kind: "new_issue",
-      eventType: "New issue",
-      title: row.title?.trim() || row.id,
-      at,
-      actionLabel: "View issue →",
-      href: `/issues?id=${encodeURIComponent(row.id)}`,
-      priority: KIND_PRIORITY.new_issue,
-    });
-  }
-  return items;
 }
 
 function fromRecentStandaloneWork(
@@ -323,14 +287,17 @@ export function deriveOperationalNotifications(
   input: DeriveOperationalNotificationsInput
 ): OperationalNotificationFeed {
   const asOfMs = Date.parse(input.asOf) || Date.now();
-  const requests = input.requests ?? [];
+  const eligible = <T extends { assignedToUserId?: string; recordOrigin?: string }>(rows: T[]): T[] =>
+    rows.filter((row) => !!input.profileId && row.assignedToUserId === input.profileId && row.recordOrigin === "operational");
+  const maintenance = eligible(input.maintenance);
+  const incidents = eligible(input.incidents);
+  const workOrders = eligible(input.workOrders);
 
   const combined = [
-    ...fromOpenIntakeRequests(requests, asOfMs),
-    ...fromRecentStandaloneWork(input.maintenance, asOfMs),
-    ...fromElevatedOpenWork(input.maintenance, input.incidents),
-    ...fromWorkOrdersRaised(input.workOrders, asOfMs),
-    ...fromDeadlinesPassed(input.workOrders, input.maintenance, input.asOf),
+    ...fromRecentStandaloneWork(maintenance, asOfMs),
+    ...fromElevatedOpenWork(maintenance, incidents),
+    ...fromWorkOrdersRaised(workOrders, asOfMs),
+    ...fromDeadlinesPassed(workOrders, maintenance, input.asOf),
   ];
 
   const sorted = sortNotifications(dedupeByEntity(combined));

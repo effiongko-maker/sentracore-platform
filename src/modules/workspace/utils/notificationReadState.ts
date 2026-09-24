@@ -3,7 +3,8 @@
  * Does not mutate Issues, Work, Work Orders, Finance, or other records.
  */
 
-const STORAGE_KEY = "sentracore.operationalNotifications.readIds.v1";
+// Legacy unscoped reads cannot safely be attributed to any particular user.
+const storageKey = (profileId: string) => `sentracore.operationalNotifications.readIds.v2:${profileId}`;
 export const NOTIFICATION_READ_STATE_EVENT =
   "sentracore:operational-notifications-read";
 
@@ -20,10 +21,10 @@ function emitReadStateChanged(): void {
   }
 }
 
-export function loadReadNotificationIds(): Set<string> {
-  if (!canUseStorage()) return new Set();
+export function loadReadNotificationIds(profileId: string): Set<string> {
+  if (!profileId || !canUseStorage()) return new Set();
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey(profileId));
     if (!raw) return new Set();
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return new Set();
@@ -35,10 +36,10 @@ export function loadReadNotificationIds(): Set<string> {
   }
 }
 
-function persistReadIds(ids: Set<string>): void {
-  if (!canUseStorage()) return;
+function persistReadIds(profileId: string, ids: Set<string>): void {
+  if (!profileId || !canUseStorage()) return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify([...ids]));
+    window.localStorage.setItem(storageKey(profileId), JSON.stringify([...ids]));
   } catch {
     // Ignore quota / private-mode failures; in-memory state still applies for the session.
   }
@@ -47,42 +48,43 @@ function persistReadIds(ids: Set<string>): void {
 
 export function isNotificationRead(
   id: string,
-  readIds: Set<string> = loadReadNotificationIds()
+  readIds: Set<string>
 ): boolean {
   return readIds.has(id);
 }
 
-export function markNotificationRead(id: string, readIds?: Set<string>): Set<string> {
-  const next = new Set(readIds ?? loadReadNotificationIds());
+export function markNotificationRead(profileId: string, id: string, readIds?: Set<string>): Set<string> {
+  const next = new Set(readIds ?? loadReadNotificationIds(profileId));
   next.add(id);
-  persistReadIds(next);
+  persistReadIds(profileId, next);
   return next;
 }
 
 export function markAllNotificationsRead(
+  profileId: string,
   ids: string[],
   readIds?: Set<string>
 ): Set<string> {
-  const next = new Set(readIds ?? loadReadNotificationIds());
+  const next = new Set(readIds ?? loadReadNotificationIds(profileId));
   for (const id of ids) {
     if (id) next.add(id);
   }
-  persistReadIds(next);
+  persistReadIds(profileId, next);
   return next;
 }
 
 export function countUnreadNotifications(
   ids: string[],
-  readIds: Set<string> = loadReadNotificationIds()
+  readIds: Set<string>
 ): number {
   return ids.reduce((count, id) => (readIds.has(id) ? count : count + 1), 0);
 }
 
 /** Test helper — clears persisted read state. */
-export function clearNotificationReadStateForTests(): void {
-  if (!canUseStorage()) return;
+export function clearNotificationReadStateForTests(profileId: string): void {
+  if (!profileId || !canUseStorage()) return;
   try {
-    window.localStorage.removeItem(STORAGE_KEY);
+    window.localStorage.removeItem(storageKey(profileId));
   } catch {
     // ignore
   }
