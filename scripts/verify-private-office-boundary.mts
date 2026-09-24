@@ -80,10 +80,16 @@ async function main() {
 
   // ── B. Routing ────────────────────────────────────────────────────────────
   {
-    const page = src("src/app/(app)/command-centre/private-office/page.tsx");
-    assert(page.includes("requirePrivateOfficeAccess()") && page.indexOf("requirePrivateOfficeAccess()") < page.indexOf("<PrivateOfficePage"), "B: the route is server-gated before rendering");
-    assert(/notFound\(\)/.test(page) && !/return <div|scc-access-denied/.test(page), "B: unauthorised access fails closed with a plain not-found (existence not confirmed)");
-    assert(!/"use client"/.test(page) && !/router\./.test(page), "B: no client-side gating");
+    // Tranche 1: Notes moved to /notes; every Private Office route (layout + each page) is server-gated first.
+    const dir = "src/app/(app)/command-centre/private-office";
+    const notesPage = src(`${dir}/notes/page.tsx`);
+    assert(notesPage.includes("requirePrivateOfficeAccess()") && notesPage.indexOf("requirePrivateOfficeAccess()") < notesPage.indexOf("<PrivateOfficePage"), "B: the Notes route is server-gated before rendering");
+    for (const [file, marker] of [["layout.tsx", "<PrivateOfficeShell"], ["page.tsx", "<PrivateOfficeArea"], ["accounts/page.tsx", "<PrivateOfficeArea"], ["notes/page.tsx", "<PrivateOfficePage"]] as const) {
+      const page = src(`${dir}/${file}`);
+      assert(page.includes("requirePrivateOfficeAccess()") && page.indexOf("requirePrivateOfficeAccess()") < page.indexOf(marker), `B: ${file} is server-gated before rendering`);
+      assert(/notFound\(\)/.test(page) && !/return <div|scc-access-denied/.test(page), `B: ${file} fails closed with a plain not-found (existence not confirmed)`);
+      assert(!/"use client"/.test(page) && !/router\./.test(page), `B: ${file} has no client-side gating`);
+    }
     assert(!PLATFORM_WORKSPACES.some((w) => /batcave/i.test(`${w.id}${w.label}${w.href ?? ""}`)), "B: Private Office is not a top-level workspace");
     assert(!(LANDING_WORKSPACES as readonly string[]).some((w) => /batcave/i.test(w)) && !/batcave/i.test(src("src/lib/access/landingWorkspace.ts")) && !/batcave/i.test(src("supabase/migrations/20260920210000_profile_landing_workspace.sql")), "B: Private Office is not a landing_workspace option");
     for (const f of ["src/components/platform/WorkspaceSwitcher.tsx", "src/components/platform/OrganisationalCompass.tsx", "src/components/platform/CommandPalette.tsx", "src/lib/platform/workspaces.ts"]) {
@@ -132,7 +138,8 @@ async function main() {
     }
     assert(!/create table/i.test(mig) && !/insert into/i.test(mig), "D: the access-capability migration stays IAM-only — no tables, no seed rows");
     const files = walk("src/modules/private-office");
-    assert(files.every((f) => /modules\/private-office\/(types\.ts|server\/|components\/|notes\/)/.test(f)), "D: Private Office module contains only its gate, doorway/page and the private-notes capability");
+    // Tranche 1 adds exactly two capabilities: the encrypted vault (security/) and its accounting domain (accounting/).
+    assert(files.every((f) => /modules\/private-office\/(types\.ts|server\/|components\/|notes\/|security\/|accounting\/)/.test(f)), "D: Private Office module contains only its gate, doorway/page, private notes, the vault security foundation and its accounting domain");
     const ui = src("src/modules/private-office/components/PrivateOfficePage.tsx") + src("src/modules/private-office/components/PrivateOfficeDoorway.tsx");
     assert(!/Strategic Intelligence|Private Finance|CEO Notes|Confidential Decisions|Kaiso|Private Documents|Coming soon/i.test(ui), "D: no invented feature cards or roadmap teasers");
     assert(!/kaiso|llm|openai|anthropic/i.test(files.map(src).join("\n")), "D: no Kaiso / AI in Private Office");

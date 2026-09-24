@@ -91,8 +91,8 @@ async function main() {
     assert((repo.match(/\.eq\("owner_profile_id", this\.actor\.profileId\)/g) ?? []).length >= 3, "B: every read/update/delete query also pins the acting owner and organisation");
     const route = src("src/app/api/private-office/notes/route.ts");
     assert(route.indexOf("requirePrivateOfficeAccess()") < route.indexOf("switch (body.action)"), "B: the API is authorised before dispatch");
-    const page = src("src/app/(app)/command-centre/private-office/page.tsx");
-    assert(page.indexOf("requirePrivateOfficeAccess()") < page.indexOf("new PrivateOfficeNotesService("), "B: the page is gated before notes are loaded");
+    const page = src("src/app/(app)/command-centre/private-office/notes/page.tsx");
+    assert(page.indexOf("requirePrivateOfficeAccess()") < page.indexOf("new PrivateOfficeNotesService("), "B: the Notes page is gated before notes are loaded");
     assert(!/isPlatformSuperAdmin|roleSlugs|admin_override/i.test(notesCode + strip(src("src/modules/private-office/server/requirePrivateOfficeAccess.ts"))), "B: no Super Admin / override consulted");
     pass("B authority: owner-only via RLS, service_role has no privilege, no Super Admin path, module-bound & cross-org fail closed, gated route/API, LIVE capability key enforced");
   }
@@ -113,7 +113,7 @@ async function main() {
   // ── D. Separation ─────────────────────────────────────────────────────────
   {
     const allowed = (f: string) =>
-      f.startsWith("src/modules/private-office/") || f.startsWith("src/app/api/private-office/") || f === "src/app/(app)/command-centre/private-office/page.tsx";
+      f.startsWith("src/modules/private-office/") || f.startsWith("src/app/api/private-office/") || f.startsWith("src/app/(app)/command-centre/private-office/");
     const offenders = walk("src").filter((f) => /\.(ts|tsx)$/.test(f) && !allowed(f) && /batcave_notes|PrivateOfficeNote|private-office\/notes/i.test(src(f)));
     assert(offenders.length === 0, `D: nothing outside Private Office touches notes (${offenders.join(", ")})`);
     for (const dir of ["src/modules/command-centre", "src/modules/platform-finance", "src/modules/intelligence", "src/lib/intelligence", "src/modules/ecc-operations", "src/lib/events"]) {

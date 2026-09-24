@@ -57,13 +57,20 @@ function buildRecoveryCallbackUrl(request: NextRequest): URL {
   );
 }
 
+/** Request headers forwarded to rendering; Next.js reads the CSP here to nonce its own scripts. */
+function forwardedHeaders(request: NextRequest, contentSecurityPolicy?: string): Headers {
+  const headers = new Headers(request.headers);
+  if (contentSecurityPolicy) headers.set("Content-Security-Policy", contentSecurityPolicy);
+  return headers;
+}
+
 /**
  * Refresh the Supabase Auth session and enforce the authentication boundary.
  */
-export async function updateSession(request: NextRequest) {
+export async function updateSession(request: NextRequest, contentSecurityPolicy?: string) {
   let supabaseResponse = NextResponse.next({
     request: {
-      headers: request.headers,
+      headers: forwardedHeaders(request, contentSecurityPolicy),
     },
   });
 
@@ -77,7 +84,7 @@ export async function updateSession(request: NextRequest) {
           request.cookies.set(name, value)
         );
         supabaseResponse = NextResponse.next({
-          request,
+          request: { headers: forwardedHeaders(request, contentSecurityPolicy) },
         });
         cookiesToSet.forEach(({ name, value, options }) =>
           supabaseResponse.cookies.set(name, value, options)

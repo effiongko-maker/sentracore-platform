@@ -1,0 +1,39 @@
+/* Private Office — a deliberately separate, calm, confidential surface inside Executive Office. */
+.po-vault { background:#141b26; color:#e6eaf0; min-height:75vh; max-width:1040px; margin:20px auto; padding:28px 32px; border-radius:12px; color-scheme:dark; }
+.po-vault h1 { font-size:26px; font-weight:650; letter-spacing:-0.01em; margin:2px 0 0; }
+.po-vault h2 { font-size:17px; font-weight:600; margin:0 0 12px; }
+.po-vault p { line-height:1.6; margin:8px 0; }
+.po-vault a { color:#b7d4ff; }
+.po-eyebrow { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:#8f9bb0; margin:0 !important; }
+.po-head { display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; }
+.po-state { display:flex; align-items:center; gap:10px; font-size:14px; color:#c7d0dd; }
+.po-state-dot { width:9px; height:9px; border-radius:50%; background:#6b7486; box-shadow:0 0 0 3px rgba(107,116,134,.2); }
+.po-state-dot--open { background:#7fd1a6; box-shadow:0 0 0 3px rgba(127,209,166,.2); }
+.po-nav { display:flex; gap:22px; border-bottom:1px solid #334055; padding:18px 0 12px; margin-bottom:8px; overflow-x:auto; }
+.po-nav a { color:#aebbd0; text-decoration:none; padding-bottom:10px; border-bottom:2px solid transparent; white-space:nowrap; }
+.po-nav a[aria-current="page"] { color:#f1f4f8; border-bottom-color:#8fb8ff; }
+.po-panel { margin:20px 0; padding:20px; background:#1c2533; border:1px solid #334055; border-radius:8px; }
+.po-panel--warning { border-color:#b8894a; background:#241f17; }
+.po-muted { color:#9aa6b8; font-size:14px; }
+.po-alert { border-left:3px solid #efb26d; padding:10px 12px; background:#261f15; border-radius:4px; }
+.po-notice { border-left:3px solid #8fb8ff; padding:10px 12px; background:#17233a; border-radius:4px; }
+.po-positions, .po-accounts { list-style:none; margin:0; padding:0; }
+.po-positions li { display:flex; justify-content:space-between; align-items:baseline; gap:12px; padding:10px 0; border-bottom:1px solid #2b3647; }
+.po-accounts li { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid #2b3647; }
+.po-accounts li > div { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.po-amount { font-variant-numeric:tabular-nums; white-space:nowrap; }
+.po-amount--lead { font-size:22px; font-weight:600; }
+.po-vault label { display:flex; flex-direction:column; gap:6px; margin:12px 0; font-size:14px; }
+.po-vault input, .po-vault select, .po-vault textarea { width:100%; max-width:520px; border:1px solid #56627a; border-radius:5px; padding:9px; background:#10161f; color:#f1f4f8; font:inherit; }
+.po-vault textarea { min-height:100px; overflow-wrap:anywhere; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:13px; }
+.po-vault button { margin:8px 12px 8px 0; border:1px solid #688bb5; border-radius:5px; padding:8px 14px; background:#233a56; color:#f1f4f8; cursor:pointer; font:inherit; font-size:14px; }
+.po-vault button:disabled { opacity:.45; cursor:default; }
+.po-state button { margin:0; padding:5px 12px; }
+.po-vault summary { cursor:pointer; font-weight:600; }
+.po-foot { margin-top:28px; color:#a7b2c3; font-size:13px; }
+/* Notes keep their existing component; inside the shell they sit on a light card. */
+.po-vault .scc-private-office { color:var(--os-ink-900, #111827); background:var(--os-surface, #fff); border-radius:8px; padding:20px; margin-top:20px; color-scheme:light; }
+@media (max-width:640px) {
+  .po-vault { margin:0; padding:18px 16px; border-radius:0; }
+  .po-positions li, .po-accounts li { flex-wrap:wrap; }
+}

@@ -1,17 +1,18 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { isActionError } from "@/lib/actions/errors";
 import { requirePrivateOfficeAccess } from "@/modules/private-office/server/requirePrivateOfficeAccess";
 import { PrivateOfficeArea } from "@/modules/private-office/security/client/PrivateOfficeArea";
 
+export const metadata: Metadata = { title: "Private Office accounts" };
 export const dynamic = "force-dynamic";
 
-/** Private Office Overview. Gated here as well as in the layout: a page never relies on its parent alone. */
-export default async function PrivateOfficeOverviewRoute() {
+export default async function PrivateOfficeAccountsRoute() {
   try {
     await requirePrivateOfficeAccess();
   } catch (error) {
     if (isActionError(error) && error.code === "UNAUTHENTICATED") redirect("/login");
     notFound();
   }
-  return <PrivateOfficeArea area="overview" />;
+  return <PrivateOfficeArea area="accounts" />;
 }

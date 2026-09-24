@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { PrivateOfficeNotes } from "@/modules/private-office/components/PrivateOfficeNotes";
 import type { PrivateOfficeNote } from "@/modules/private-office/notes/domain";
 
@@ -17,9 +16,8 @@ export function PrivateOfficePage({
   return (
     <div className="scc scc-private-office">
       <header className="scc-private-office-head">
-        <p className="scc-eyebrow">Executive Office · Private Office</p>
-        <h1 className="scc-private-office-title">Private Office</h1>
-        <p className="scc-lede">Private executive workspace.</p>
+        <h2 className="scc-private-office-title">Notes</h2>
+        <p className="scc-lede">Owner-only notes, kept in separate access-controlled storage from your Private Office financial records.</p>
       </header>
       <section className="scc-panel scc-private-office-body" aria-label="Private notes workspace">
         {notes === null ? (
@@ -33,11 +31,6 @@ export function PrivateOfficePage({
           </>
         )}
       </section>
-      <p className="scc-private-office-back">
-        <Link href="/command-centre" className="scc-panel-link">
-          Back to Executive Office
-        </Link>
-      </p>
     </div>
   );
 }

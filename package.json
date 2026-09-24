@@ -12,6 +12,8 @@
     "apps-script:pack": "node scripts/generate-apps-script-deployment-pack.cjs"
   },
   "dependencies": {
+    "@simplewebauthn/browser": "^14.0.0",
+    "@simplewebauthn/server": "^14.0.2",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.4",
     "class-variance-authority": "^0.7.1",
