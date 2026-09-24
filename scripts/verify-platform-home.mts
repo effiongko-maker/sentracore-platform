@@ -3,12 +3,13 @@
  *
  *   npx tsx --tsconfig tsconfig.json scripts/verify-platform-home.mts
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   FM_FINANCE_HOME,
   PLATFORM_WORKSPACES,
   getWorkspace,
+  listEnterableWorkspaces,
   resolveCurrentWorkspaceId,
   resolveWorkspaceDirectoryState,
 } from "../src/lib/platform/workspaces";
@@ -36,9 +37,46 @@ function main() {
   assert(home.includes("No access"), "inaccessible modules labelled");
   assert(home.includes("resolveWorkspaceDirectoryState"), "directory uses access state");
   assert(
-    home.includes("/platform/hero-architecture.jpg"),
-    "supplied hero visual asset integrated"
+    home.includes("/platform/hero-connected-enterprise.jpg"),
+    "connected-enterprise hero visual integrated"
   );
+
+  assert(existsSync("public/platform/hero-connected-enterprise.jpg"), "hero asset stored locally");
+
+  // Workspace switcher: authorised entries only (Platform Home no longer duplicates them in the sidebar).
+  const financeOnly = listEnterableWorkspaces({
+    enabledModules: [],
+    sessionLoading: false,
+    isSuperAdmin: false,
+    workspaceAccess: { facilityManagement: false, eccOperations: false, platformFinance: true },
+  });
+  assert(financeOnly.length === 1 && financeOnly[0].href === "/platform-finance",
+    "sidebar list excludes denied and planned environments");
+  assert(listEnterableWorkspaces({ enabledModules: null, sessionLoading: true }).length === 0,
+    "sidebar list exposes no unresolved entry links");
+  const denied = listEnterableWorkspaces({
+    enabledModules: [], sessionLoading: false, isSuperAdmin: true,
+    workspaceAccess: { facilityManagement: false, eccOperations: false, platformFinance: false },
+  });
+  assert(denied.length === 0, "admin status alone does not override resolved workspace denial");
+
+  // Platform Home corrections: integrated hero, minimal sidebar, IAM-gated Executive Office, "Platform" label.
+  const phCss = readSrc("src/styles/sentracore-os.css");
+  const heroVisual = phCss.slice(phCss.indexOf(".sc-ph-hero-visual {"), phCss.indexOf("}", phCss.indexOf(".sc-ph-hero-visual {")));
+  assert(/mask-image:\s*radial-gradient/.test(heroVisual), "hero image fades into the hero background");
+  assert(!/border-radius|border:|box-shadow|background:/.test(heroVisual), "hero image has no card treatment");
+  const homeCompass = readSrc("src/components/platform/OrganisationalCompass.tsx");
+  const homeBranch = homeCompass.slice(homeCompass.indexOf(") : isPlatformHome ? ("), homeCompass.indexOf(") : showPlatformDirectory ? ("));
+  assert(homeBranch.includes("PLATFORM_HOME.href") && !/listEnterableWorkspaces|workspace\.href|COMMAND_CENTRE_HOME/.test(homeBranch),
+    "Platform Home sidebar: Home only — no FM / ECC / Finance / Executive entries");
+  assert(/\{isSuperAdmin \? \(\s*<div className="os-compass-control-plane">/.test(homeCompass), "Admin Console still only when authorised");
+  assert(/\{canUseCommandCentre \? \(\s*<div className="os-compass-group os-compass-group-active">\s*<p className="os-compass-workspace-caption">Executive Office<\/p>/.test(homeCompass) && !/Executive Office[\s\S]{0,400}No access/.test(homeCompass),
+    "sidebar Executive Office navigation only with IAM access (never a No access entry)");
+  const phSwitcher = readSrc("src/components/platform/WorkspaceSwitcher.tsx");
+  assert(phSwitcher.includes("{onCommandCentre || canUseCommandCentre ? (") && phSwitcher.includes("const canUseCommandCentre = Boolean(workspaceAccess?.commandCentre);"),
+    "switcher lists Executive Office only for users with workspaceAccess.commandCentre");
+  assert(/onHome\s*\?\s*"Platform"/.test(phSwitcher) && phSwitcher.includes('{onHome ? "Platform" : "Home"}'), "selector reads Platform at Platform Home only");
+  assert(!/bode/i.test(homeCompass + phSwitcher + home), "no hard-coded individual");
 
   const commandBar = readSrc("src/components/platform/GlobalCommandBar.tsx");
   assert(

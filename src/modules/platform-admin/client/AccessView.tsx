@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Building2, ChevronRight, KeyRound, Landmark, ShieldCheck, Users } from "lucide-react";
+import { Building2, ChevronRight, KeyRound, ShieldCheck, Users } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useToast } from "@/components/ui/Toast";
@@ -12,7 +12,7 @@ import { PLATFORM_ADMINISTRABLE_CAPABILITIES } from "../types";
 import type { AdminFacilityAssignment, AdminModuleRecord, AdminPersonDetail, AdminPersonSummary, OrganisationAdminRecord, PlatformCapabilityBatchResult } from "../types";
 import { AssignmentDialog } from "./PersonView";
 import { AdminApiError, adminCall } from "./adminApi";
-import { FinanceAccess } from "./FinanceAccess";
+import { FinanceAccessPanel } from "./FinanceAccessPanel";
 import { ContextStrip, DataBoundary, Note, OrgGate, PageHead, displayName, moduleStatusMark, useAdminData } from "./ui";
 import { Avatar, Panel, Pill, StatusPill } from "./kit";
 
@@ -254,7 +254,7 @@ function PersonAccess({ organisationId, profileId, onChanged }: { organisationId
                 </div>
                 <div className="ac-posture-cell" role="listitem">
                   <div className="ac-posture-label">Platform Finance</div>
-                  <div className="ac-posture-value">{financePresent ? "Present" : "None"}<small>read-only</small></div>
+                  <div className="ac-posture-value">{financePresent ? "Present" : "None"}<small>see below</small></div>
                 </div>
               </div>
             </Panel>
@@ -398,10 +398,7 @@ function PersonAccess({ organisationId, profileId, onChanged }: { organisationId
                 }}
               />
 
-              <Panel title="Platform Finance access" icon={Landmark} aside="Read-only here">
-                <FinanceAccess access={p.financeAccess} />
-                <p className="ac-secondary" style={{ marginTop: 10 }}>Platform Finance access is administered inside Platform Finance. It is shown here so the full picture of a person’s access is visible.</p>
-              </Panel>
+              <FinanceAccessPanel organisationId={organisationId} profileId={p.profileId} access={p.financeAccess} onSaved={person.reload} />
             </div>
           </div>
         );

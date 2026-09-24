@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronDown, Hexagon, Home, ShieldCheck } from "lucide-react";
+import { ChevronDown, Home, ShieldCheck } from "lucide-react";
+import { EXECUTIVE_OFFICE_NAV_ITEMS, isExecutiveNavItemActive } from "@/modules/command-centre/nav";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -20,7 +21,6 @@ import {
   isCommandCentrePath,
   ADMIN_CONSOLE_HOME,
   PLATFORM_HOME,
-  COMMAND_CENTRE_HOME,
 } from "@/lib/platform/workspaces";
 import { hasModule } from "@/lib/actions/moduleAccess";
 import { cn } from "@/lib/utils";
@@ -50,7 +50,7 @@ import {
 /**
  * Sidebar = actions within the current operating environment.
  * Cross-workspace switching lives only in WorkspaceSwitcher — do not
- * duplicate workspace directory lists here.
+ * duplicate workspace directory lists here. Platform Home: Home (+ Admin Console when authorised).
  */
 export function OrganisationalCompass() {
   const pathname = usePathname();
@@ -501,47 +501,57 @@ export function OrganisationalCompass() {
               <span>Platform Home</span>
             </Link>
           </div>
-        ) : showPlatformDirectory ? (
+        ) : isPlatformHome ? (
+          // Platform Home: environment switching lives in the workspace switcher and the page's environment cards.
           <div className="os-compass-scroll">
-            {sessionLoading ? (
+            <div className="os-compass-group">
+              <p className="os-compass-group-label">Platform</p>
+              <div className="os-compass-modules">
+                <Link
+                  href={PLATFORM_HOME.href}
+                  onClick={closeMobileNav}
+                  aria-current="page"
+                  className="os-compass-module os-compass-module-active"
+                >
+                  <Home className="h-4 w-4 shrink-0" aria-hidden />
+                  <span>{PLATFORM_HOME.label}</span>
+                </Link>
+              </div>
+            </div>
+          </div>
+        ) : showPlatformDirectory ? (
+          // Executive Office: its own concise navigation, offered only to identities with the Executive Office grant
+          // (workspaceAccess.commandCentre). The route itself is gated server-side (guardExecutiveOffice).
+          <div className="os-compass-scroll">
+            {sessionLoading || workspaceAccess == null ? (
               <p className="os-compass-nav-status" role="status">
                 Loading navigation…
               </p>
             ) : (
               <>
-                <div className="os-compass-command-block">
-                  <p className="os-compass-workspace-caption">Executive Office</p>
-                  {sessionLoading || workspaceAccess == null ? (
-                    <p className="os-compass-nav-status" role="status">
-                      Checking access…
-                    </p>
-                  ) : canUseCommandCentre ? (
-                    <>
-                      <Link
-                        href={COMMAND_CENTRE_HOME.href}
-                        onClick={closeMobileNav}
-                        aria-current={inCommandCentre ? "page" : undefined}
-                        className={cn(
-                          "os-compass-command-centre",
-                          inCommandCentre && "os-compass-command-centre-active"
-                        )}
-                      >
-                        <Hexagon
-                          className="h-4 w-4 shrink-0 opacity-80"
-                          aria-hidden
-                        />
-                        <span className="os-compass-command-centre-label">
-                          {COMMAND_CENTRE_HOME.label}
-                        </span>
-                      </Link>
-                      <p className="os-compass-command-centre-hint">
-                        Your organisation
-                      </p>
-                    </>
-                  ) : (
-                    <p className="os-compass-nav-status">No access</p>
-                  )}
-                </div>
+                {canUseCommandCentre ? (
+                  <div className="os-compass-group os-compass-group-active">
+                    <p className="os-compass-workspace-caption">Executive Office</p>
+                    <div className="os-compass-modules">
+                      {EXECUTIVE_OFFICE_NAV_ITEMS.map((item) => {
+                        const Icon = item.icon;
+                        const active = isExecutiveNavItemActive(item, pathname);
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            onClick={closeMobileNav}
+                            aria-current={active ? "page" : undefined}
+                            className={cn("os-compass-module", active && "os-compass-module-active")}
+                          >
+                            <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                            <span>{item.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="os-compass-group">
                   <p className="os-compass-group-label">Platform</p>
@@ -549,11 +559,7 @@ export function OrganisationalCompass() {
                     <Link
                       href={PLATFORM_HOME.href}
                       onClick={closeMobileNav}
-                      aria-current={isPlatformHome ? "page" : undefined}
-                      className={cn(
-                        "os-compass-module",
-                        isPlatformHome && "os-compass-module-active"
-                      )}
+                      className="os-compass-module"
                     >
                       <Home className="h-4 w-4 shrink-0" aria-hidden />
                       <span>{PLATFORM_HOME.label}</span>

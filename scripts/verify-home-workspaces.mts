@@ -145,7 +145,7 @@ async function main() {
       assert(/MODULE_BOUND_HOME_OPTIONS/.test(s), `${f.split("/").pop()} renders homes from the registry`);
     }
     const p = read("src/modules/platform-admin/client/PeopleView.tsx");
-    assert(/LANDING_OPTIONS/.test(p) && /facilityContext/.test(p) && /Finance authority is not granted here/.test(p), "landing options from the registry; facility fields conditional on facility context; Finance disclosure shown");
+    assert(/LANDING_OPTIONS/.test(p) && /facilityContext/.test(p) && /Access to Platform Finance is assigned separately\./.test(p) && !/Finance authority is not granted here/.test(p), "landing options from the registry; facility fields conditional on facility context; concise Finance note (access assigned separately)");
     assert(workspaceEntry("platform_finance")!.label === "Platform Finance", "labels come from the registry");
     pass("F UI: home/landing options and labels come from the registry; facility/role fields only where a facility context exists");
   }

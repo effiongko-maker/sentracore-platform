@@ -1173,3 +1173,359 @@ a.scc-decision-row:hover {
 .scc-notes-item-date { font-size: 0.66rem; color: var(--scc-ink-faint); }
 .scc-notes-empty { margin: 0.5rem 0; font-size: 0.8rem; color: var(--scc-ink-soft); }
 .scc-notes-editor textarea { min-height: 14rem; resize: vertical; }
+
+/* ══ Executive Office in the SentraCore application language ═══════════════════════════════════════════
+ * Executive Office pages (.scc--app) use the platform's light canvas, surfaces, typography and status
+ * conventions — SentraCore at executive altitude, not a separate theme. Scoped to .scc--app so Private Office
+ * (which shares the .scc base) keeps its own presentation. Uses only existing --os-* tokens.
+ */
+
+.os-canvas-platform:has(.scc--app),
+.os-canvas-act:has(.scc--app) {
+  background: var(--os-canvas);
+  color: var(--os-ink);
+}
+
+.os-canvas-platform:has(.scc--app) .os-canvas-identity,
+.os-canvas-act:has(.scc--app) .os-canvas-identity {
+  color: var(--os-ink-faint);
+  border-color: var(--os-rule);
+}
+
+.scc.scc--app {
+  --scc-ink: var(--os-ink);
+  --scc-ink-soft: var(--os-ink-secondary);
+  --scc-ink-faint: var(--os-ink-muted);
+  --scc-line: var(--os-rule-strong);
+  --scc-surface: var(--os-surface);
+  --scc-surface-raise: var(--os-surface-interactive);
+  /* Links / interactive accents follow the platform accent; attention uses the warning status token. */
+  --scc-gold: var(--os-accent);
+  --scc-serif: var(--os-font);
+  gap: var(--os-density-section-gap);
+  color: var(--os-ink);
+  font-family: var(--os-font);
+}
+
+/* Section and panel titles: the platform's quiet uppercase label style. */
+.scc--app .scc-section-title,
+.scc--app .scc-panel-title {
+  font-size: var(--os-text-label-lg);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--os-ink-secondary);
+}
+
+/* Organisational Pulse: standard platform surface. */
+.scc--app .scc-pulse-grid {
+  gap: 1px;
+  border: 1px solid var(--os-rule);
+  border-radius: var(--os-radius-md);
+  background: var(--os-rule);
+}
+
+.scc--app .scc-pulse-card,
+.scc--app .scc-pulse-card--soon {
+  background: var(--os-surface);
+}
+
+.scc--app a.scc-pulse-card:hover {
+  background: var(--os-surface-interactive);
+}
+
+.scc--app .scc-pulse-icon,
+.scc--app .scc-pulse-card--soon .scc-pulse-icon {
+  color: var(--os-accent);
+  background: var(--os-accent-soft);
+}
+
+.scc--app .scc-pulse-label {
+  color: var(--os-ink-secondary);
+}
+
+.scc--app .scc-pulse-status--ok {
+  color: var(--os-success);
+}
+
+.scc--app .scc-pulse-status--warn {
+  color: var(--os-warning);
+}
+
+.scc--app .scc-pulse-chevron {
+  border-color: var(--os-rule-strong);
+}
+
+.scc--app .scc-pulse-chevron--disabled {
+  color: var(--os-ink-disabled);
+}
+
+.scc--app .scc-pulse-crane {
+  display: none;
+}
+
+/* Executive panels: standard platform surface with a quiet header rule. */
+.scc--app .scc-panel,
+.scc--app .scc-panel--attention,
+.scc--app .scc-panel--decisions {
+  border: 1px solid var(--os-rule);
+  border-radius: var(--os-radius-md);
+  background: var(--os-surface);
+}
+
+.scc--app .scc-panel-head {
+  border-bottom-color: var(--os-rule);
+}
+
+.scc--app .scc-quiet-empty p {
+  color: var(--os-ink-muted);
+}
+
+.scc--app .scc-change-dot {
+  background: var(--os-accent);
+  box-shadow: 0 0 0 3px var(--os-accent-soft);
+}
+
+/* Attention tones: the platform status conventions (critical / warning / info). */
+.scc--app .scc-attn-tone--critical {
+  color: var(--os-critical);
+  background: var(--os-critical-soft);
+}
+
+.scc--app .scc-attn-tone--high,
+.scc--app .scc-attn-tone--medium {
+  color: var(--os-warning);
+  background: var(--os-warning-soft);
+}
+
+.scc--app .scc-attn-tone--info {
+  color: var(--os-accent-ink);
+  background: var(--os-info-soft);
+}
+
+.scc--app .scc-attn-source {
+  color: var(--os-ink-muted);
+}
+
+.scc--app .scc-decision-icon {
+  color: var(--os-accent);
+  background: var(--os-accent-soft);
+}
+
+.scc--app .scc-decision-amount {
+  color: var(--os-ink);
+}
+
+.scc--app .scc-decision-badge {
+  color: var(--os-ink-secondary);
+  background: var(--os-surface-interactive);
+  border-color: var(--os-rule-strong);
+}
+
+/* Commitments: platform controls; overdue uses the warning status. */
+.scc--app .scc-commit-btn--primary {
+  border-color: var(--os-accent);
+  color: var(--os-accent-ink);
+}
+
+.scc--app .scc-commit-meta--overdue {
+  color: var(--os-warning);
+}
+
+.scc--app .scc-commit-error {
+  color: var(--os-critical);
+}
+
+.scc--app .scc-commit-form input,
+.scc--app .scc-commit-form textarea,
+.scc--app .scc-commit-form select {
+  background: var(--os-surface);
+}
+
+.scc--app .scc-access-denied {
+  border-color: var(--os-rule);
+  border-radius: var(--os-radius-md);
+  background: var(--os-surface);
+}
+
+.scc--app .scc-access-denied h1 {
+  font-family: var(--os-font);
+  font-size: var(--os-type-section);
+  font-weight: 600;
+  color: var(--os-ink);
+}
+
+/* ── Header, executive picture, lenses, lens foundation (.eo-*) ─────────────────────────────────── */
+
+.eo-header {
+  margin-bottom: 0;
+}
+
+.eo-eyebrow {
+  margin: 0 0 0.35rem;
+  font-size: var(--os-text-label-lg);
+  color: var(--os-ink-muted);
+}
+
+.eo-eyebrow-date {
+  color: var(--os-ink-faint);
+}
+
+/* Attention / Decisions / Commitments: one compact platform surface, divided — not three cards. */
+.eo-picture {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--os-rule);
+  border-radius: var(--os-radius-md);
+  background: var(--os-surface);
+  overflow: hidden;
+}
+
+.eo-picture-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: var(--os-space-3) var(--os-space-4);
+  color: inherit;
+  text-decoration: none;
+  transition: background var(--os-ease);
+}
+
+.eo-picture-item + .eo-picture-item {
+  border-left: 1px solid var(--os-rule);
+}
+
+.eo-picture-item:hover {
+  background: var(--os-surface-interactive);
+}
+
+.eo-picture-label,
+.eo-lens-label {
+  font-size: var(--os-text-label-md);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--os-ink-muted);
+}
+
+.eo-picture-text {
+  font-size: var(--os-text-body-lg);
+  font-weight: 600;
+}
+
+.eo-tone-attention {
+  color: var(--os-warning);
+}
+
+.eo-tone-neutral {
+  color: var(--os-ink);
+}
+
+.eo-tone-muted {
+  color: var(--os-ink-muted);
+  font-weight: 400;
+}
+
+/* Lens navigation: a quiet row of links on the canvas. */
+.eo-lenses {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--os-space-3);
+}
+
+.eo-lens-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: var(--os-space-3);
+  border: 1px solid var(--os-rule);
+  border-radius: var(--os-radius-md);
+  background: var(--os-surface);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color var(--os-ease), background var(--os-ease);
+}
+
+.eo-lens-link:hover {
+  border-color: var(--os-accent-muted);
+  background: var(--os-surface-selected);
+}
+
+.eo-lens-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--os-ink-secondary);
+}
+
+.eo-lens-go {
+  margin-left: auto;
+  color: var(--os-ink-faint);
+}
+
+.eo-lens-signal {
+  font-size: var(--os-text-body-sm);
+  line-height: 1.4;
+}
+
+.eo-foundation {
+  display: flex;
+  gap: var(--os-space-4);
+  align-items: flex-start;
+  max-width: 44rem;
+  padding: var(--os-space-5);
+  border: 1px solid var(--os-rule);
+  border-radius: var(--os-radius-md);
+  background: var(--os-surface);
+}
+
+.eo-foundation-icon {
+  display: inline-flex;
+  color: var(--os-ink-muted);
+  padding-top: 0.1rem;
+}
+
+.eo-foundation-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.eo-foundation-text {
+  margin: 0;
+  font-size: var(--os-text-body-md);
+  line-height: var(--os-leading-relaxed);
+  color: var(--os-ink-secondary);
+}
+
+.eo-foundation-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--os-text-body-sm);
+  font-weight: 500;
+  color: var(--os-accent-ink);
+  text-decoration: none;
+}
+
+.eo-foundation-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 1100px) {
+  .eo-lenses {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .eo-picture {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .eo-picture-item + .eo-picture-item {
+    border-left: 0;
+    border-top: 1px solid var(--os-rule);
+  }
+  .eo-lenses {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

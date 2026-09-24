@@ -64,7 +64,7 @@ export function WorkspaceSwitcher({
   const triggerLabel = onCommandCentre
     ? COMMAND_CENTRE_HOME.label
     : onHome
-      ? "Home"
+      ? "Platform"
       : (currentWorkspace ?? fallbackActive)?.label ?? "Home";
 
   useEffect(() => {
@@ -115,6 +115,8 @@ export function WorkspaceSwitcher({
         <div className="sc-ws-switcher-panel" id={listId} role="listbox">
           <p className="sc-ws-switcher-panel-title">Switch workspace</p>
           <ul className="sc-ws-switcher-list">
+            {/* Executive Office is listed only for users whose IAM grants it (workspaceAccess.commandCentre). */}
+            {onCommandCentre || canUseCommandCentre ? (
             <li>
               <button
                 type="button"
@@ -160,6 +162,7 @@ export function WorkspaceSwitcher({
                 </span>
               </button>
             </li>
+            ) : null}
 
             <li>
               <button
@@ -180,7 +183,7 @@ export function WorkspaceSwitcher({
                     {onHome ? (
                       <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
                     ) : null}
-                    Home
+                    {onHome ? "Platform" : "Home"}
                   </span>
                   <span className="sc-ws-switcher-option-status">
                     {onHome ? "Active" : "Platform-wide home"}

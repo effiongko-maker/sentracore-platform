@@ -1,3 +1,4 @@
+import { executiveOfficeSectionLabel } from "@/modules/command-centre/nav";
 import {
   AlertTriangle,
   Bell,
@@ -340,7 +341,9 @@ export function resolveBreadcrumbSegments(pathname: string): string[] {
       pathname === "/command-centre" ||
       pathname.startsWith("/command-centre/")
     ) {
-      return ["Executive Office"];
+      // Executive Office lenses read "Executive Office › <Lens>"; the Overview stays "Executive Office".
+      const section = executiveOfficeSectionLabel(pathname);
+      return section && section !== "Overview" ? ["Executive Office", section] : ["Executive Office"];
     }
     return ["Platform Home"];
   }

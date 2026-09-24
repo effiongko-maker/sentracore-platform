@@ -186,12 +186,8 @@ async function main() {
     }
     const page = src("src/modules/command-centre/components/CommandCentrePage.tsx");
     assert(!/Ask SentraCore|askSentraCore/.test(page) && !/scc-hero-pillars|Organisation pillars/.test(page), "D/G: no placeholder AI panel and no decorative pillars");
-    // Editorial brand copy is permitted, but must stay purely editorial: no data, status, timestamp or provenance attached.
-    for (const cls of ["scc-hero-quote", "scc-editorial-quote"]) {
-      const block = page.slice(page.indexOf(`className="${cls}"`), page.indexOf("</p>", page.indexOf(`className="${cls}"`)));
-      assert(block.length > 0, `D/G: ${cls} present`);
-      assert(!/snapshot\./.test(block), `D/G: ${cls} carries no data`);
-    }
+    // Executive Office Overview: the marketing hero quote and editorial brand panel were retired (executive header instead).
+    assert(!/scc-hero-quote|scc-editorial|Clarity today|Extraordinary organisations/.test(page), "D/G: no marketing hero quote or editorial brand copy on the Executive Office Overview");
     pass("D Your Assignments and Legacy Incidents Assigned are absent from Command Centre (FM data untouched)");
   }
 

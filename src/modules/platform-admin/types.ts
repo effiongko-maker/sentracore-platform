@@ -31,6 +31,32 @@ export const PLATFORM_IAM_AUDIT_ACTIONS = [
 export type PlatformIamAuditAction = (typeof PLATFORM_IAM_AUDIT_ACTIONS)[number];
 
 /**
+ * Control-plane authority to administer another person's Platform Finance company access and Finance capabilities
+ * from the Admin Console. Stored in platform_capability_grants — never in finance_capability_grants — so it grants no
+ * Platform Finance entry, company access, Finance capability or Finance data. Never implied by Super Admin or
+ * platform.admin_override.
+ */
+export const PLATFORM_FINANCE_ACCESS_MANAGE = "platform_finance.access.manage" as const;
+
+/** Admin Console → Access → Platform Finance Access editor state for one person. */
+export type FinanceAccessEditor =
+  | {
+      canManage: true;
+      companies: Array<{ id: string; name: string }>;
+      selectedCompanyIds: string[];
+      selectedCapabilities: string[];
+      assignableCapabilities: string[];
+    }
+  | { canManage: false; reason: string | null };
+
+export type FinanceAccessUpdateResult = {
+  granted: number;
+  revoked: number;
+  selectedCompanyIds: string[];
+  selectedCapabilities: string[];
+};
+
+/**
  * Platform-domain capabilities administrable through the control plane.
  * Includes FM AccessCapability strings. Platform-finance company grants stay separate.
  */
@@ -46,6 +72,7 @@ export const PLATFORM_ADMINISTRABLE_CAPABILITIES = [
   COMMAND_CENTRE_CAPABILITIES.commitmentsView,
   COMMAND_CENTRE_CAPABILITIES.commitmentsManage,
   PRIVATE_OFFICE_CAPABILITIES.access,
+  PLATFORM_FINANCE_ACCESS_MANAGE,
   "ops.view",
   "ops.create",
   "ops.edit",
@@ -116,6 +143,12 @@ export type PlatformIdentityAdminRecord = {
 };
 
 /** Result of attaching an EXISTING sign-in identity to an organisation (no email is sent by this action). */
+/**
+ * Create Account recovery marker: the email belongs to an existing sign-in identity that is attached to no organisation
+ * (status "invited"), so the existing attachProfileToOrganisation path applies instead of creating anything.
+ */
+export const ATTACH_EXISTING_ACCOUNT_RECOVERY = "attach_existing_account" as const;
+
 export type AttachProfileResult = {
   email: string;
   profileId: string | null;

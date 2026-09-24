@@ -93,7 +93,11 @@ check("Every admin read/write is behind requirePlatformAdmin; actor never truste
   assert(route.indexOf("requirePlatformAdmin()") > 0 && route.indexOf("requirePlatformAdmin()") < route.indexOf("switch (action)"), "guard precedes dispatch");
   assert(!/body\.actor/.test(route) && !/actorProfileId:\s*body/.test(route), "client-supplied actor");
   for (const a of ["getOverview", "listPeople", "getPerson", "listModules", "listFacilities", "listAudit", "setFacilityAssignment"]) assert(route.includes(`"${a}"`), `${a} missing`);
-  assert(!/grantSuperAdmin|revokeSuperAdmin|createOrganisation|editOrganisation|impersonat|resetPassword|(grant|revoke|set|insert|update)Finance(Grant|Access|Company)/i.test(route + service + reader), "unsupported administrative power added");
+  // The one sanctioned Finance-access write: updateFinanceAccess, gated by the explicit control-plane grant
+  // platform_finance.access.manage and persisted only through the audited finance_iam_* functions.
+  const financeAdmin = read("src/modules/platform-admin/server/financeAccessAdministration.ts");
+  assert(/requires platform_finance\.access\.manage/.test(financeAdmin) && /admin\.rpc\(fn/.test(financeAdmin) && !/\.(insert|upsert|delete|update)\(/.test(financeAdmin), "Finance access writes are access.manage-gated and audited RPC only");
+  assert(!/grantSuperAdmin|revokeSuperAdmin|createOrganisation|editOrganisation|impersonat|resetPassword|(grant|revoke|set|insert|update)Finance(Grant|Access|Company)/i.test((route + service + reader).replace(/\bupdateFinanceAccess\b/g, "")), "unsupported administrative power added");
 });
 check("Tenant protections remain: assignment writes verify the profile belongs to the organisation", () => {
   assert(/target\.organisation_id !== input\.organisationId/.test(service), "profile/organisation check");
@@ -126,7 +130,7 @@ check("Operating role / facility assignment / title never confer capability", ()
 // ------------------------------------------------------------------ CATALOG / AUDIT DESCRIPTION
 check("Capability catalog covers all administrable capabilities exactly once; labels are human-first", () => {
   assert(catalogCoversAllAdministrableCapabilities(), "catalog does not cover every administrable capability");
-  assert(PLATFORM_ADMINISTRABLE_CAPABILITIES.length === 25, "expected 25 (24 + Private Office entry)");
+  assert(PLATFORM_ADMINISTRABLE_CAPABILITIES.length === 26, "expected 26 (24 + Private Office entry + Platform Finance access administration)");
   assert(CAPABILITY_DOMAINS.every((d) => d.capabilities.every((c) => c.label && c.label !== c.key)), "raw keys used as labels");
   assert(describeCapability("ops.edit").label === "Edit operational records" && !describeCapability("nope.nope").known, "describeCapability");
 });

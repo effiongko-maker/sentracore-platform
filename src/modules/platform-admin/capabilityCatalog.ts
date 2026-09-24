@@ -18,7 +18,8 @@ export type CapabilityDomainId =
   | "fm_protected"
   | "ecc"
   | "command_centre"
-  | "private_office";
+  | "private_office"
+  | "platform_finance_admin";
 
 export type CapabilityDomain = {
   id: CapabilityDomainId;
@@ -59,7 +60,7 @@ export const CAPABILITY_DOMAINS: readonly CapabilityDomain[] = [
   {
     id: "fm_costs",
     label: "Facility Management · Costs and claims",
-    summary: "FM operational costs and reimbursement claims (the finance.* capabilities). NOT Platform Finance — the separate accounting domain (platform_finance.*), whose access is shown on a person's page and is never granted from here.",
+    summary: "FM operational costs and reimbursement claims (the finance.* capabilities). NOT Platform Finance — the separate accounting domain (platform_finance.*), whose access is administered in the person's Platform Finance access panel, never from this domain.",
     moduleSlug: "facility_management",
     capabilities: [
       { key: "finance.view", label: "View FM costs and claims", detail: "Read FM cost records, claims, authorisations and payments as records. Read-only; confers no authority to authorise or pay." },
@@ -121,6 +122,15 @@ export const CAPABILITY_DOMAINS: readonly CapabilityDomain[] = [
     moduleSlug: null,
     capabilities: [
       { key: "platform.executive.private_office.access", label: "Enter Private Office", detail: "Private executive workspace. Not implied by Executive Office, Super Admin or any other capability, and granting it does not let the administrator enter." },
+    ],
+  },
+  {
+    id: "platform_finance_admin",
+    label: "Platform Finance administration",
+    summary: "Administer other people's Platform Finance access from the Admin Console.",
+    moduleSlug: null,
+    capabilities: [
+      { key: "platform_finance.access.manage", label: "Administer Platform Finance access", detail: "Assign company access and Finance capabilities to other people. Does not grant entry to Platform Finance or any Finance access." },
     ],
   },
 ] as const;

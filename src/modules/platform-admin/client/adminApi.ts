@@ -7,7 +7,9 @@ export class AdminApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
-    readonly code?: string
+    readonly code?: string,
+    /** Server-provided structured details (e.g. a recovery marker). */
+    readonly details?: Record<string, unknown> | null
   ) {
     super(message);
     this.name = "AdminApiError";
@@ -28,14 +30,14 @@ export async function adminCall<T>(action: string, payload: Record<string, unkno
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     throw new AdminApiError("Unable to reach SentraCore™. Check your connection and try again.", 0);
   }
-  let json: { success?: boolean; data?: T; message?: string; code?: string } = {};
+  let json: { success?: boolean; data?: T; message?: string; code?: string; details?: Record<string, unknown> | null } = {};
   try {
     json = await response.json();
   } catch {
     throw new AdminApiError(`Unexpected response (status ${response.status}).`, response.status);
   }
   if (!response.ok || json.success === false) {
-    throw new AdminApiError(json.message ?? `Request failed (status ${response.status}).`, response.status, json.code);
+    throw new AdminApiError(json.message ?? `Request failed (status ${response.status}).`, response.status, json.code, json.details ?? null);
   }
   if (json.data === undefined) throw new AdminApiError("The control plane returned no data.", response.status);
   return json.data;

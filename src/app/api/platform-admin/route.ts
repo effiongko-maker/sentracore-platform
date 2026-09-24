@@ -25,7 +25,9 @@ type PlatformAdminAction =
   | "listModules"
   | "listFacilities"
   | "listAudit"
-  | "setFacilityAssignment";
+  | "setFacilityAssignment"
+  | "getFinanceAccessEditor"
+  | "updateFinanceAccess";
 
 type RequestBody = {
   action?: PlatformAdminAction;
@@ -54,6 +56,9 @@ type RequestBody = {
   capabilities?: string[];
   grantCapabilities?: string[];
   revokeCapabilities?: string[];
+  /** Platform Finance access editor: the complete desired selection (the server saves only differences). */
+  companyIds?: string[];
+  financeCapabilities?: string[];
 };
 
 function actionErrorStatus(code: string): number {
@@ -347,6 +352,23 @@ export async function POST(request: Request) {
           operationalRole: body.operationalRole,
           status: body.status,
           assignmentId: body.assignmentId,
+        });
+        return NextResponse.json({ success: true, data });
+      }
+      case "getFinanceAccessEditor":
+      case "updateFinanceAccess": {
+        if (!body.organisationId || !body.profileId) {
+          return NextResponse.json({ success: false, message: "organisationId and profileId are required." }, { status: 400 });
+        }
+        if (action === "getFinanceAccessEditor") {
+          const data = await service.getFinanceAccessEditor(ctx, { organisationId: body.organisationId, profileId: body.profileId });
+          return NextResponse.json({ success: true, data });
+        }
+        const data = await service.updateFinanceAccess(ctx, {
+          organisationId: body.organisationId,
+          profileId: body.profileId,
+          companyIds: body.companyIds,
+          capabilities: body.financeCapabilities,
         });
         return NextResponse.json({ success: true, data });
       }

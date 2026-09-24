@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import {
@@ -18,6 +17,14 @@ import type {
 } from "@/modules/command-centre/presentationTypes";
 import { cn } from "@/lib/utils";
 import { CommitmentsPanel } from "@/modules/command-centre/components/CommitmentsPanel";
+import { EXECUTIVE_OFFICE_LENSES } from "@/modules/command-centre/nav";
+import {
+  attentionSignal,
+  commitmentsSignal,
+  decisionsSignal,
+  lensSignal,
+  type ExecutiveSignal,
+} from "@/modules/command-centre/executiveSignals";
 
 const PULSE_ICON = {
   finance: Landmark,
@@ -347,6 +354,15 @@ function LastVisitBlock({
   );
 }
 
+function PictureSignal({ label, signal, href }: { label: string; signal: ExecutiveSignal; href: string }) {
+  return (
+    <a href={href} className="eo-picture-item">
+      <span className="eo-picture-label">{label}</span>
+      <span className={cn("eo-picture-text", `eo-tone-${signal.tone}`)}>{signal.text}</span>
+    </a>
+  );
+}
+
 export function CommandCentrePage({
   snapshot,
   footer,
@@ -360,35 +376,44 @@ export function CommandCentrePage({
   const checkedLabel = formatCheckedTime(snapshot.checkedAt, snapshot.timeZone);
 
   return (
-    <div className="scc">
-      <header className="scc-hero">
-        <div className="scc-hero-media" aria-hidden>
-          <Image
-            src="/command-centre/hero-city-sunset.png"
-            alt=""
-            fill
-            priority
-            className="scc-hero-image"
-            sizes="100vw"
-          />
-        </div>
-        <div className="scc-hero-veil" aria-hidden />
-        <div className="scc-hero-inner">
-          <div className="scc-hero-copy">
-            <p className="scc-eyebrow">Executive Office</p>
-            <h1 className="scc-greeting">{snapshot.greeting}</h1>
-            <p className="scc-lede">{snapshot.lede}</p>
-          </div>
-          <div className="scc-hero-centre">
-            <span className="scc-hero-rule" aria-hidden />
-            <p className="scc-hero-quote">
-              Clarity today.
-              <br />
-              A stronger tomorrow.
-            </p>
-          </div>
+    <div className="scc scc--app">
+      <header className="os-module-header eo-header">
+        <div className="min-w-0">
+          <p className="eo-eyebrow">
+            {snapshot.greeting}
+            {dateLabel ? <span className="eo-eyebrow-date"> · {dateLabel}</span> : null}
+          </p>
+          <h1 className="os-module-title">Executive Office</h1>
+          <p className="os-module-desc">
+            Organisation-wide visibility across operations, finance, commitments and executive action.
+          </p>
         </div>
       </header>
+
+      {/* Executive picture: what needs awareness or action now — only signals the snapshot actually supports. */}
+      <section className="eo-picture" aria-label="Executive picture">
+        <PictureSignal label="Attention" signal={attentionSignal(attention)} href="#scc-attention" />
+        <PictureSignal label="Decisions" signal={decisionsSignal(decisions)} href="#scc-decisions" />
+        <PictureSignal label="Commitments" signal={commitmentsSignal(snapshot.commitments)} href="#commitments" />
+      </section>
+
+      {/* Executive lenses: views into the organisation; each lens links to its own route. */}
+      <nav className="eo-lenses" aria-label="Executive lenses">
+        {EXECUTIVE_OFFICE_LENSES.map((lens) => {
+          const Icon = lens.icon;
+          const signal = lensSignal(lens.id, snapshot);
+          return (
+            <Link key={lens.id} href={lens.href} className="eo-lens-link">
+              <span className="eo-lens-head">
+                <Icon className="h-4 w-4 shrink-0" strokeWidth={1.6} aria-hidden />
+                <span className="eo-lens-label">{lens.label}</span>
+                <ChevronRight className="eo-lens-go h-3.5 w-3.5" aria-hidden />
+              </span>
+              <span className={cn("eo-lens-signal", `eo-tone-${signal.tone}`)}>{signal.text}</span>
+            </Link>
+          );
+        })}
+      </nav>
 
       <section className="scc-pulse" aria-labelledby="scc-pulse-heading">
         <div className="scc-section-head">
@@ -454,26 +479,6 @@ export function CommandCentrePage({
             />
             <LastVisitBlock lastVisit={snapshot.lastVisit} />
           </article>
-
-          {/* Editorial brand copy and imagery — carries no data, status or claim. */}
-          <aside className="scc-editorial" aria-label="SentraCore™ brand">
-            <div className="scc-editorial-media" aria-hidden>
-              <Image
-                src="/command-centre/editorial-mountain-sunset.png"
-                alt=""
-                fill
-                className="scc-editorial-image"
-                sizes="(max-width: 900px) 100vw, 28vw"
-              />
-            </div>
-            <div className="scc-editorial-veil" aria-hidden />
-            <p className="scc-editorial-quote">
-              Extraordinary organisations aren&apos;t found.
-              <br />
-              They&apos;re built.
-            </p>
-            <p className="scc-editorial-mark">SentraCore™</p>
-          </aside>
         </div>
       </section>
       {footer}

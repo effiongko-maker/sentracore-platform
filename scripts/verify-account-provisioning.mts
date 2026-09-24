@@ -163,7 +163,12 @@ async function main() {
     assert(/this\.setAccessScope\(ctx/.test(svc) && /this\.setFacilityAssignment\(ctx/.test(svc) && /this\.repo\.grantPlatformCapability/.test(svc) && /attachInvitedProfile/.test(svc), "provisioning reuses the existing attach / scope / assignment / grant mechanisms (no parallel IAM)");
     const fm = CAPABILITY_DOMAINS.find((d) => d.id === "fm_costs")!;
     assert(/NOT Platform Finance/.test(fm.summary) && /platform_finance\./.test(fm.summary) && fm.capabilities.every((c) => /FM/.test(c.label)), "the Admin Console separates FM costs (finance.*) from Platform Finance (platform_finance.*) in copy and labels");
-    assert(!CAPABILITY_DOMAINS.some((d) => d.capabilities.some((c) => c.key.startsWith("platform_finance."))), "platform_finance.* is not administrable from this console");
+    // Operational platform_finance.* capabilities are never granted as platform capabilities. The only platform_finance.*
+    // key here is the control-plane platform_finance.access.manage (administer others' Finance access; no Finance entry).
+    assert(
+      CAPABILITY_DOMAINS.flatMap((d) => d.capabilities.map((c) => c.key)).filter((k) => k.startsWith("platform_finance.")).join() === "platform_finance.access.manage",
+      "only the control-plane platform_finance.access.manage is administrable from this console"
+    );
     pass("F lifecycle + Finance: canonical status/sign-in path, no hard delete, no parallel IAM; FM finance.* and Platform Finance are explicitly distinct");
   }
 

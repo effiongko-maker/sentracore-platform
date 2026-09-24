@@ -10,9 +10,6 @@ import {
   HardHat,
   Headphones,
   Layers,
-  Lock,
-  Network,
-  Scale,
   TrendingUp,
   type LucideIcon,
 } from "lucide-react";
@@ -44,29 +41,7 @@ const ENV_ICON: Record<WorkspaceId, LucideIcon> = {
   "projects-events": CalendarDays,
 };
 
-const PLATFORM_PILLARS: Array<{
-  label: string;
-  detail: string;
-  icon: LucideIcon;
-}> = [
-  {
-    label: "Connected",
-    detail: "A unified view across operating environments",
-    icon: Network,
-  },
-  {
-    label: "Secure",
-    detail: "Role-based access with clear accountability",
-    icon: Lock,
-  },
-  {
-    label: "Scalable",
-    detail: "Designed for growth and new capabilities",
-    icon: Scale,
-  },
-];
-
-const HERO_VISUAL_SRC = "/platform/hero-architecture.jpg";
+const HERO_VISUAL_SRC = "/platform/hero-connected-enterprise.jpg";
 
 function orderedEnvironments(): PlatformWorkspace[] {
   const byId = new Map(PLATFORM_WORKSPACES.map((w) => [w.id, w]));
@@ -185,10 +160,10 @@ function PlatformHeroVisual() {
     <div className="sc-ph-hero-visual">
       <Image
         src={HERO_VISUAL_SRC}
-        alt="Architectural glass towers with People, Places, Operations, Possibilities — a more connected tomorrow."
+        alt="Interconnected glass planes forming a unified architectural landscape."
         fill
         priority
-        sizes="(min-width: 960px) min(28rem, 38vw), (min-width: 640px) 90vw, 100vw"
+        sizes="(min-width: 960px) 320px, 1px"
         className="sc-ph-hero-image"
       />
     </div>
@@ -213,27 +188,9 @@ export function PlatformHomePage() {
             One platform. Multiple operating environments.
           </h1>
           <p className="sc-ph-lede">
-            SentraCore™ brings specialised operating environments together to
-            help the organisation manage activity, information and decisions
-            across the business.
+            Access your authorised environments to manage operations, information
+            and decisions across the organisation.
           </p>
-
-          <ul className="sc-ph-pillars">
-            {PLATFORM_PILLARS.map((pillar) => {
-              const Icon = pillar.icon;
-              return (
-                <li key={pillar.label} className="sc-ph-pillar">
-                  <span className="sc-ph-pillar-icon" aria-hidden>
-                    <Icon className="h-4 w-4" strokeWidth={1.75} />
-                  </span>
-                  <span className="sc-ph-pillar-copy">
-                    <span className="sc-ph-pillar-label">{pillar.label}</span>
-                    <span className="sc-ph-pillar-detail">{pillar.detail}</span>
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
         </div>
         <PlatformHeroVisual />
       </header>

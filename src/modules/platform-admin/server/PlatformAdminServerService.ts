@@ -1,4 +1,9 @@
 import { normaliseRequestedAssignments } from "./facilityAssignmentRequest";
+import {
+  ATTACH_EXISTING_ACCOUNT_RECOVERY,
+  EXISTING_ACCOUNT_MESSAGES,
+  classifyExistingAccount,
+} from "./existingAccountRecovery";
 import { ActionError } from "@/lib/actions/errors";
 import { createAdminClient } from "@/utils/supabase/admin";
 import type { ProfileStatus } from "@/lib/auth/types";
@@ -44,6 +49,12 @@ import { isLandingWorkspace } from "@/lib/access/landingWorkspace";
 import { AdminConsoleReader } from "./AdminConsoleReader";
 import { PlatformAdminRepository } from "./PlatformAdminRepository";
 import type { PlatformAdminContext } from "./requirePlatformAdmin";
+import {
+  loadFinanceAccessEditor,
+  updateFinanceAccess,
+  type FinanceAccessEditor,
+  type FinanceAccessUpdateResult,
+} from "./financeAccessAdministration";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -226,8 +237,26 @@ export class PlatformAdminServerService {
         throw new ActionError("VALIDATION_ERROR", "A requested capability is not administrable on the platform control plane.");
       }
     }
-    if (await findAuthUserIdByEmail(this.admin, email)) {
-      throw new ActionError("VALIDATION_ERROR", "An account with this email already exists. Use Issue Temporary Password for an existing account.");
+    const existingUserId = await findAuthUserIdByEmail(this.admin, email);
+    if (existingUserId) {
+      // Never create a second identity. Say what the administrator can do — without revealing another organisation.
+      const { data: existingProfile, error: existingError } = await this.admin
+        .from("profiles")
+        .select("organisation_id, status")
+        .eq("id", existingUserId)
+        .maybeSingle();
+      if (existingError) throw new ActionError("INTERNAL_ERROR", "The existing account could not be read.");
+      const state = classifyExistingAccount(
+        existingProfile
+          ? { organisation_id: existingProfile.organisation_id ? String(existingProfile.organisation_id) : null, status: String(existingProfile.status) }
+          : null,
+        organisation.id
+      );
+      throw new ActionError(
+        "VALIDATION_ERROR",
+        EXISTING_ACCOUNT_MESSAGES[state],
+        state === "recoverable_invited" ? { details: { recovery: ATTACH_EXISTING_ACCOUNT_RECOVERY } } : undefined
+      );
     }
 
     const temporaryPassword = generateTemporaryPassword();
@@ -379,9 +408,14 @@ export class PlatformAdminServerService {
       throw new ActionError("VALIDATION_ERROR", "This account's sign-in is disabled. Reactivate it before issuing a temporary password.");
     }
     const temporaryPassword = generateTemporaryPassword();
+    // The live project requires confirmed emails for password sign-in. An administrator-issued credential yields the
+    // same usable state as Create Account (which pre-confirms): an identity recovered from the earlier invite model is
+    // confirmed here. Only this authorised, audited administrator path does so — self-registration is unaffected.
+    const confirmEmail = !authUser.user.email_confirmed_at;
     const { error } = await this.admin.auth.admin.updateUserById(input.profileId, {
       password: temporaryPassword,
       app_metadata: { [MUST_CHANGE_PASSWORD_KEY]: true },
+      ...(confirmEmail ? { email_confirm: true } : {}),
     });
     if (error) throw new ActionError("INTERNAL_ERROR", "The temporary password could not be issued.");
     await this.repo.insertAuditEvent({
@@ -390,7 +424,11 @@ export class PlatformAdminServerService {
       action: "user.temporary_password_issued",
       objectType: "profile",
       objectId: input.profileId,
-      details: { credentialDelivery: "administrator_one_time", mustChangePassword: true },
+      details: {
+        credentialDelivery: "administrator_one_time",
+        mustChangePassword: true,
+        ...(confirmEmail ? { emailConfirmedByAdministrator: true } : {}),
+      },
     });
     return { profileId: input.profileId, email: authUser.user.email ?? "", temporaryPassword, mustChangePassword: true };
   }
@@ -815,6 +853,41 @@ export class PlatformAdminServerService {
 
   reader(): AdminConsoleReader {
     return new AdminConsoleReader(this.admin);
+  }
+
+  /** Platform Finance access editor for one person (explicit platform_finance.access.manage only). */
+  async getFinanceAccessEditor(
+    ctx: PlatformAdminContext,
+    input: { organisationId: string; profileId: string }
+  ): Promise<FinanceAccessEditor> {
+    const organisation = await this.repo.getOrganisationById(input.organisationId);
+    if (!organisation) throw new ActionError("VALIDATION_ERROR", "Organisation not found.");
+    const target = await this.repo.getProfile(input.profileId);
+    return loadFinanceAccessEditor(this.admin, {
+      organisationId: input.organisationId,
+      profileId: input.profileId,
+      actorProfileId: ctx.actorProfileId,
+      target: target ? { organisation_id: target.organisation_id, status: String(target.status) } : null,
+    });
+  }
+
+  /** Save a person's Platform Finance company access and capabilities: only differences, each audited. */
+  async updateFinanceAccess(
+    ctx: PlatformAdminContext,
+    input: { organisationId: string; profileId: string; companyIds: unknown; capabilities: unknown }
+  ): Promise<FinanceAccessUpdateResult> {
+    const organisation = await this.repo.getOrganisationById(input.organisationId);
+    if (!organisation) throw new ActionError("VALIDATION_ERROR", "Organisation not found.");
+    if (organisation.status !== "active") throw new ActionError("ORGANISATION_INACTIVE");
+    const target = await this.repo.getProfile(input.profileId);
+    return updateFinanceAccess(this.admin, {
+      organisationId: input.organisationId,
+      profileId: input.profileId,
+      actorProfileId: ctx.actorProfileId,
+      target: target ? { organisation_id: target.organisation_id, status: String(target.status) } : null,
+      companyIds: input.companyIds,
+      capabilities: input.capabilities,
+    });
   }
 
   async offboardUser(

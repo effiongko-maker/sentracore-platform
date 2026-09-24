@@ -9,7 +9,13 @@ import { Modal } from "@/components/modals/Modal";
 import { useToast } from "@/components/ui/Toast";
 import type { ProfileStatus } from "@/lib/auth/types";
 import { v1OperatingRoleLabel } from "@/lib/access/roles";
-import type { AdminPersonSummary, CreateAccountResult, OrganisationAdminRecord } from "../types";
+import {
+  ATTACH_EXISTING_ACCOUNT_RECOVERY,
+  type AdminPersonSummary,
+  type AttachProfileResult,
+  type CreateAccountResult,
+  type OrganisationAdminRecord,
+} from "../types";
 import { FACILITY_MANAGER_OPERATING_PACKAGE } from "@/lib/access/facilityManagerPackage";
 import { V1_OPERATING_ROLES } from "@/lib/access/roles";
 import { TemporaryCredential } from "./TemporaryCredential";
@@ -213,6 +219,9 @@ function CreateAccountDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CreateAccountResult | null>(null);
+  // Existing sign-in identity attached to no organisation (earlier invite model): offer the existing attach path.
+  const [recoverable, setRecoverable] = useState<{ email: string; message: string } | null>(null);
+  const [attached, setAttached] = useState<AttachProfileResult | null>(null);
   const facilities = useAdminData<Array<{ id: string; name: string; status: string }>>(
     (signal) => (open ? adminCall("listFacilities", { organisationId }, signal) : Promise.resolve([])),
     [open, organisationId]
@@ -230,8 +239,31 @@ function CreateAccountDialog({
     setRole("");
     setPkg(false);
     setError(null);
+    setRecoverable(null);
+    setAttached(null);
     setResult(null);
     onClose();
+  }
+
+  /** Reuses the existing, audited attachProfileToOrganisation path. Creates nothing and grants no access. */
+  async function attachExisting() {
+    if (busy || !recoverable) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const data = await adminCall<AttachProfileResult>("attachProfileToOrganisation", {
+        organisationId,
+        email: recoverable.email,
+      });
+      setAttached(data);
+      setRecoverable(null);
+      onDone();
+      toast({ type: "success", title: "Existing account attached", description: data.email });
+    } catch (err) {
+      setError(err instanceof AdminApiError ? err.message : "The existing account could not be attached.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   const homeEntry = scope === "module" ? workspaceEntry(homeModule) : null;
@@ -264,7 +296,11 @@ function CreateAccountDialog({
       onDone();
       toast({ type: "success", title: "Account created", description: data.email });
     } catch (err) {
-      setError(err instanceof AdminApiError ? err.message : "The account could not be created.");
+      if (err instanceof AdminApiError && err.details?.recovery === ATTACH_EXISTING_ACCOUNT_RECOVERY) {
+        setRecoverable({ email: email.trim().toLowerCase(), message: err.message });
+      } else {
+        setError(err instanceof AdminApiError ? err.message : "The account could not be created.");
+      }
     } finally {
       setBusy(false);
     }
@@ -278,7 +314,20 @@ function CreateAccountDialog({
       description={`A sign-in account in ${organisationName}. No email is sent — you give them a temporary password.`}
       size="md"
       footer={
-        result ? (
+        attached ? (
+          <button type="button" className="ac-btn ac-btn-primary" onClick={close}>
+            Close
+          </button>
+        ) : recoverable ? (
+          <>
+            <button type="button" className="ac-btn ac-btn-secondary" onClick={() => setRecoverable(null)} disabled={busy}>
+              Back
+            </button>
+            <button type="button" className="ac-btn ac-btn-primary" onClick={() => void attachExisting()} disabled={busy}>
+              {busy ? "Attaching…" : "Attach existing account"}
+            </button>
+          </>
+        ) : result ? (
           <button type="button" className="ac-btn ac-btn-primary" onClick={close}>
             I have recorded the password — close
           </button>
@@ -294,7 +343,31 @@ function CreateAccountDialog({
         )
       }
     >
-      {result ? (
+      {attached ? (
+        <div role="status">
+          <p className="ac-state-title">Existing account attached</p>
+          <p className="ac-note" style={{ marginTop: 8 }}>
+            {attached.email} now belongs to {organisationName} and appears in People. No access was granted — open them in
+            People to issue a temporary password and set their access.
+          </p>
+        </div>
+      ) : recoverable ? (
+        <div role="alert">
+          <p className="ac-state-title">Existing account found</p>
+          <p className="ac-note ac-note-strong" style={{ marginTop: 8 }}>
+            {recoverable.message}
+          </p>
+          <p className="ac-note" style={{ marginTop: 8 }}>
+            Attaching adds {recoverable.email} to {organisationName} using their existing sign-in identity and name. It
+            grants no access; the scope and facility chosen in this form are not applied.
+          </p>
+          {error ? (
+            <p className="ac-form-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
+      ) : result ? (
         <div>
           <TemporaryCredential email={result.email} password={result.temporaryPassword} intro="Account created" />
           <dl className="ac-kv" style={{ marginTop: 12 }}>
@@ -343,8 +416,8 @@ function CreateAccountDialog({
                 ))}
               </select>
               <span className="ac-hint">
-                The operating boundary and default destination. Selecting it grants no capability — authority is always explicit.
-                {homeEntry ? ` ${homeEntry.note}` : ""}
+                Where this person lands after signing in. Access is managed separately.
+                {homeEntry?.id === "platform_finance" ? " Access to Platform Finance is assigned separately." : ""}
               </span>
             </div>
           ) : (
@@ -358,16 +431,6 @@ function CreateAccountDialog({
               </select>
             </div>
           )}
-          {scope === "module" && homeEntry?.id === "platform_finance" ? (
-            <div className="ac-field">
-              <p className="ac-hint" role="note">
-                <strong>Finance authority is not granted here.</strong> Platform Finance company access and platform_finance.*
-                capabilities are assigned explicitly through Platform Finance&apos;s own access model. Until they are, this person
-                signs in and lands in Platform Finance but sees &ldquo;No access&rdquo;. They cannot open Facility Management, ECC
-                Operations, Executive Office or the Admin Console.
-              </p>
-            </div>
-          ) : null}
           {facilityContext ? (
           <div className="ac-field">
             <label htmlFor="ac-create-facility">Facility (optional)</label>

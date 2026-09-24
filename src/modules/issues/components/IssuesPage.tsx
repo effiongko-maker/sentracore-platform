@@ -29,11 +29,11 @@ import {
 import type { LogIssueResult } from "../actions/logIssue";
 import {
   buildUnifiedIssueList,
-  originLabel,
   type UnifiedIssueListItem,
 } from "../lib/buildUnifiedIssueList";
+import { useFacilities } from "@/modules/facilities/hooks/useFacilities";
 import { restrictedRequestsNotice } from "../lib/requestsAccessNotice";
-import { IssueOperationalPanel } from "./IssueOperationalPanel";
+import { IssueOperationalPanel, issueOriginDisplay, issueStateDisplay } from "./IssueOperationalPanel";
 import { LogIssueModal } from "./LogIssueModal";
 
 /** Issues list page size — presentation only. */
@@ -81,6 +81,12 @@ export function IssuesPage() {
   const canReadRequests = can("requests.view");
   const canCreateOps = can("ops.create");
   const canMutateOps = can("ops.edit");
+  // Presentation only: facility names for the queue rows (same source the Log Issue form uses).
+  const { facilities } = useFacilities();
+  const facilityNameById = useMemo(
+    () => new Map(facilities.map((facility) => [facility.id, facility.name?.trim() ?? ""])),
+    [facilities]
+  );
   const [items, setItems] = useState<UnifiedIssueListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -369,73 +375,69 @@ export function IssuesPage() {
               </button>
             </div>
           ) : null}
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)]">
+          <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
             <StreamSurface>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-[var(--sc-border)] text-[var(--sc-muted)]">
-                      <th className="px-3 py-2 font-medium">Reference</th>
-                      <th className="px-3 py-2 font-medium">What needs attention</th>
-                      <th className="px-3 py-2 font-medium">Origin</th>
-                      <th className="px-3 py-2 font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading ? (
-                      <tr>
-                        <td
-                          colSpan={4}
-                          className="px-3 py-6 text-[var(--sc-muted)]"
-                        >
-                          Loading…
-                        </td>
-                      </tr>
-                    ) : items.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={4}
-                          className="px-3 py-6 text-[var(--sc-muted)]"
-                        >
-                          No Issues yet. Log something that needs attention, or
-                          wait for a staff request.
-                        </td>
-                      </tr>
-                    ) : (
-                      pageItems.map(({ issue }) => {
-                        const selected = issue.id === selectedIssueId;
-                        return (
-                          <tr
-                            key={issue.id}
-                            className={`cursor-pointer border-b border-[var(--sc-border)] ${
-                              selected ? "bg-[var(--sc-accent-soft)]" : ""
+              {/* Issue queue: an operational inbox — reference secondary, what needs attention primary. */}
+              {loading ? (
+                <p className="px-4 py-6 text-sm text-[var(--sc-muted)]">Loading…</p>
+              ) : items.length === 0 ? (
+                <p className="px-4 py-6 text-sm text-[var(--sc-muted)]">
+                  No Issues yet. Log something that needs attention, or
+                  wait for a staff request.
+                </p>
+              ) : (
+                <ul role="listbox" aria-label="Issues" className="divide-y divide-[var(--sc-border)]">
+                  {pageItems.map(({ issue }) => {
+                    const selected = issue.id === selectedIssueId;
+                    // Name only — never a raw facility id (blank until facility names have loaded).
+                    const facility = facilityNameById.get(issue.facilityId) ?? "";
+                    const status = issueStateDisplay(issue.status);
+                    const meta = [facility, status].filter(Boolean).join(" · ");
+                    return (
+                      <li
+                        key={issue.id}
+                        role="option"
+                        aria-selected={selected}
+                        tabIndex={0}
+                        className={`cursor-pointer px-4 py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--sc-accent)] ${
+                          selected
+                            ? "bg-[var(--sc-accent-soft)] shadow-[inset_3px_0_0_var(--sc-accent)]"
+                            : "hover:bg-[var(--sc-surface-hover,rgba(15,23,42,0.03))]"
+                        }`}
+                        onClick={() => setSelectedIssueId(issue.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setSelectedIssueId(issue.id);
+                          }
+                        }}
+                      >
+                        <div className="flex items-baseline justify-between gap-3">
+                          <span
+                            className={`font-mono text-[11px] ${
+                              selected ? "font-semibold text-[var(--sc-accent)]" : "text-[var(--sc-muted)]"
                             }`}
-                            aria-selected={selected}
-                            onClick={() => setSelectedIssueId(issue.id)}
                           >
-                            <td
-                              className={`px-3 py-2 font-mono text-xs ${
-                                selected
-                                  ? "font-semibold shadow-[inset_3px_0_0_var(--sc-accent)]"
-                                  : ""
-                              }`}
-                            >
-                              {issue.reference}
-                            </td>
-                            <td className="px-3 py-2">{issue.title}</td>
-                            <td className="px-3 py-2 text-[var(--sc-muted)]">
-                              {originLabel(issue)}
-                            </td>
-                            <td className="px-3 py-2">
-                              {issue.status.replace(/_/g, " ")}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                            {issue.reference}
+                          </span>
+                          <span className="shrink-0 text-[11px] text-[var(--sc-muted)]">
+                            {issueOriginDisplay(issue)}
+                          </span>
+                        </div>
+                        <p
+                          className="mt-0.5 line-clamp-2 text-sm font-medium leading-snug text-[var(--sc-fg)]"
+                          title={issue.title}
+                        >
+                          {issue.title}
+                        </p>
+                        {meta ? (
+                          <p className="mt-0.5 truncate text-xs capitalize text-[var(--sc-muted)]">{meta}</p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
 
               {!loading && total > 0 ? (
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--sc-border)] px-3 py-2.5">
@@ -489,12 +491,14 @@ export function IssuesPage() {
               ) : null}
             </StreamSurface>
 
+            <div className="lg:sticky lg:top-4">
             <IssueOperationalPanel
               view={view}
               loading={detailLoading && !view}
               canCreate={canCreateOps}
               canMutate={canMutateOps}
             />
+            </div>
           </div>
           </>
         )}

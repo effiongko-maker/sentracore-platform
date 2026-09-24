@@ -811,9 +811,13 @@ function IssuePasswordDialog({ open, person, onClose, onDone }: { open: boolean;
 
   function close() {
     if (busy) return;
+    const issued = result !== null;
     setError(null);
     setResult(null); // discards the one-time credential
     onClose();
+    // Refresh only after the credential has been shown: reloading the person unmounts this dialog (DataBoundary shows
+    // its loading state), which would discard the one-time password and reopen the confirmation step.
+    if (issued) onDone();
   }
   async function confirm() {
     if (busy) return;
@@ -822,7 +826,6 @@ function IssuePasswordDialog({ open, person, onClose, onDone }: { open: boolean;
     try {
       const data = await adminCall<IssueTemporaryPasswordResult>("issueTemporaryPassword", { profileId: person.profileId });
       setResult(data);
-      onDone();
       toast({ type: "success", title: "Temporary password issued", description: name });
     } catch (err) {
       setError(err instanceof AdminApiError ? err.message : "The temporary password could not be issued.");
