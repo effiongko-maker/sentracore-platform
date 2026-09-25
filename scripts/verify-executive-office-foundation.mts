@@ -95,6 +95,13 @@ function main() {
   check(commitmentsSignal(commitments("healthy", 1)).text === "1 commitment overdue", "overdue commitments");
   check(commitmentsSignal(commitments("error")).text === "Not available right now" && commitmentsSignal(commitments("restricted")).tone === "muted", "commitments failure / restricted");
   check(financialPositionSignal([]).text === "Not available right now", "no finance pulse ⇒ not available");
+  const card = (domain: "finance" | "facility_management", financialLine: string | null, state: "healthy" | "restricted" = "healthy") =>
+    ({ domain, label: domain, state, statusLabel: "", lines: financialLine ? [financialLine] : [], href: null, disabledNavigationLabel: null, financialLine });
+  const both = financialPositionSignal([card("finance", "2 pending CEO decisions"), card("facility_management", "Pending payments outstanding ₦67,644,404 · 8 requests")]);
+  check(/^Finance: .*Facility Management: Pending payments outstanding/.test(both.text) && !/not included/.test(both.text), "financial position includes Facility Management");
+  const fmRestricted = financialPositionSignal([card("finance", "2 pending CEO decisions"), card("facility_management", null, "restricted")]);
+  check(/\(Facility Management not included\)$/.test(fmRestricted.text), "an environment the actor cannot see is named as not included — never implied");
+  check(decisionsSignal(decisions("empty", 0)).text === "No Finance decisions waiting", "empty decisions claim is scoped to Finance");
   out.push("PASS 5 Overview signals come only from the existing snapshot; restricted / unavailable / partial are never shown as zero");
 
   for (const line of out) console.log(line);

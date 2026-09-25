@@ -41,7 +41,6 @@ import {
   loadOperationalPictureSummary,
   type OperationalPictureSummary,
 } from "@/services/workspace/CommandCentreFmSummaryService";
-import { buildOperationalPictureMetricsFromAggregate } from "@/modules/workspace/operationalPicture";
 import { COMMAND_CENTRE_CAPABILITIES } from "@/modules/command-centre/types";
 import {
   organisationLocalHour,
@@ -52,7 +51,15 @@ import {
 } from "@/modules/command-centre/commitments/domain";
 import { ExecutiveCommitmentsService } from "@/modules/command-centre/commitments/server/ExecutiveCommitmentsService";
 import { readCommitmentCapabilities } from "@/modules/command-centre/commitments/server/requireCommitmentsAccess";
-import { composeLastVisitChanges } from "@/modules/command-centre/server/composeLastVisitChanges";
+import {
+  composeLastVisitChanges,
+  type FmChangeVisibility,
+} from "@/modules/command-centre/server/composeLastVisitChanges";
+import type { OperatingAccess } from "@/lib/access/resolveAccess";
+import { FmCostServerService, resolveFmCostOrganisation } from "@/modules/finance/server/FmCostServerService";
+import { summarizeSubmissionPayments } from "@/modules/finance/utils/submissionPayment";
+import type { CostSubmission, ReimbursementAuthorization, ReimbursementPayment } from "@/lib/operational/finance/types";
+import type { PaginatedResult } from "@/types";
 import {
   composeFinanceDecisionQueue,
   decisionScopeNote,
@@ -190,6 +197,13 @@ function measuredFromLabel(iso: string, timeZone: string | null): string {
   }
 }
 
+/** Facility Management Pending Payments outstanding (Costs & Claims), as FM's own Costs & Claims overview derives it. */
+type FmOutstandingResult =
+  | { status: "not_enabled" | "restricted" | "unavailable" }
+  | { status: "loaded"; amount: number; count: number };
+
+const FM_OUTSTANDING_POOL = 500;
+
 type FinanceQueueResult =
   | { status: "not_enabled" | "restricted" | "unavailable" }
   | {
@@ -227,23 +241,34 @@ export class CommandCentreServerService {
     // The FM domain enforces its own view authority. Command Centre never weakens that gate:
     // without FM view access the FM projection is RESTRICTED (not "unavailable", not zero).
     const fmViewAllowed = fmEnabled && accessCan(operatingAccess, "ops.view");
+    // Costs & Claims (Pending Payments, receipts) keeps its own FM authority: finance.view.
+    const fmCostsClaimsAllowed = fmEnabled && accessCan(operatingAccess, "finance.view");
+    const fmOutstanding = this.loadFmOutstanding(access, operatingAccess, fmEnabled, fmCostsClaimsAllowed);
     const operationalPicture = fmViewAllowed
       ? loadOperationalPictureSummary(asOf)
       : Promise.resolve<OperationalPictureSummary | null>(null);
 
-    const [financePulse, operationsPulse, financeQueue, eccAttention, fmAttention, lastVisit, commitmentsResult] =
+    const fmChangeVisibility: FmChangeVisibility | null =
+      fmEnabled && (fmViewAllowed || fmCostsClaimsAllowed)
+        ? { operations: fmViewAllowed, costsClaims: fmCostsClaimsAllowed, scope: operatingAccess.fmFacilityScope }
+        : null;
+
+    const [financePulse, facilityManagementPulse, financeQueue, eccAttention, fmAttention, lastVisit, commitmentsResult] =
       await Promise.all([
         this.composeFinancePulse(access, workspaceEntry, asOf, organisationTimeZone),
-        this.composeOperationsPulse(
+        this.composeFacilityManagementPulse(
           access,
           workspaceEntry,
           operationalPicture,
-          { asOf, timeZone: organisationTimeZone, fmViewAllowed }
+          { asOf, timeZone: organisationTimeZone, fmViewAllowed, outstanding: fmOutstanding }
         ),
         this.loadFinanceQueue(access),
         this.evaluateEccAttention(access),
         this.evaluateFmAttention(access, operationalPicture, fmViewAllowed),
-        this.composeLastVisit(access, asOf, workspaceEntry),
+        this.composeLastVisit(access, asOf, workspaceEntry, {
+          fmEnabled,
+          fm: fmChangeVisibility,
+        }),
         this.loadCommitments(access, now, organisationTimeZone),
       ]);
     const eccPulse = await this.composeEccPulse(
@@ -262,7 +287,7 @@ export class CommandCentreServerService {
 
     const pulse: CommandCentrePulseCard[] = [
       financePulse,
-      operationsPulse,
+      facilityManagementPulse,
       eccPulse,
       {
         domain: "projects_construction",
@@ -364,26 +389,78 @@ export class CommandCentreServerService {
     }
   }
 
-  private async composeOperationsPulse(
+  /**
+   * Facility Management's Pending Payments outstanding — the SAME derivation as FM's Costs & Claims overview
+   * (live Pending Payments, receipt-derived, 2025 history excluded by FM's own default), read through FM's own
+   * actor-scoped service. A truncated pool is unavailable, never a lower figure.
+   */
+  private async loadFmOutstanding(
+    access: CommandCentreAccessContext,
+    operatingAccess: OperatingAccess,
+    fmEnabled: boolean,
+    allowed: boolean
+  ): Promise<FmOutstandingResult> {
+    if (!fmEnabled) return { status: "not_enabled" };
+    if (!allowed) return { status: "restricted" };
+    try {
+      const { organisationId, profileId } = resolveFmCostOrganisation(access.session);
+      const fm = new FmCostServerService({ organisationId, profileId, session: access.session, access: operatingAccess });
+      const pool = { page: 1, pageSize: FM_OUTSTANDING_POOL };
+      const [submissions, payments, authorizations] = (await Promise.all([
+        fm.listSubmissions(pool),
+        fm.listPayments(pool),
+        fm.listAuthorizations(pool),
+      ])) as [PaginatedResult<CostSubmission>, PaginatedResult<ReimbursementPayment>, PaginatedResult<ReimbursementAuthorization>];
+      const truncated = [submissions, payments, authorizations].some((p) => p.total > p.data.length);
+      if (truncated) return { status: "unavailable" };
+      let amount = 0;
+      let count = 0;
+      for (const submission of submissions.data) {
+        if (submission.status !== "submitted" && submission.status !== "queried") continue;
+        const summary = summarizeSubmissionPayments(submission, payments.data, authorizations.data);
+        if (summary.outstandingAmount > 0) {
+          count += 1;
+          amount += summary.outstandingAmount;
+        }
+      }
+      return { status: "loaded", amount: Math.round(amount * 100) / 100, count };
+    } catch {
+      return { status: "unavailable" };
+    }
+  }
+
+  /**
+   * Facility Management pulse — mapped from FM's existing signals only: Work (critical / in progress / overdue),
+   * Work Orders (overdue / awaiting action), Payment Approvals awaiting action (Operational Picture), and Pending
+   * Payments outstanding (Costs & Claims). Each part keeps FM's own authority; a part the actor may not see or that
+   * failed is said so — never a zero.
+   */
+  private async composeFacilityManagementPulse(
     access: CommandCentreAccessContext,
     workspaceEntry: WorkspaceAccessChrome,
     operationalPicture: Promise<OperationalPictureSummary | null>,
-    context: { asOf: string; timeZone: string | null; fmViewAllowed: boolean } = {
+    context: {
+      asOf: string;
+      timeZone: string | null;
+      fmViewAllowed: boolean;
+      outstanding?: Promise<FmOutstandingResult>;
+    } = {
       asOf: new Date().toISOString(),
       timeZone: null,
       fmViewAllowed: true,
     }
   ): Promise<CommandCentrePulseCard> {
+    const href = workspaceEntry.facilityManagement ? "/operations" : null;
+    const disabledNavigationLabel = workspaceEntry.facilityManagement ? null : "Workspace access required";
     const base: CommandCentrePulseCard = {
-      domain: "operations",
-      label: "Operations",
+      domain: "facility_management",
+      label: "Facility Management",
       state: "unavailable",
       statusLabel: "Unavailable",
       lines: ["Facility Management data is unavailable."],
-      href: workspaceEntry.facilityManagement ? "/operations" : null,
-      disabledNavigationLabel: workspaceEntry.facilityManagement
-        ? null
-        : "Workspace access required",
+      href,
+      disabledNavigationLabel,
+      financialLine: null,
     };
 
     const moduleEnabled =
@@ -399,26 +476,64 @@ export class CommandCentreServerService {
         disabledNavigationLabel: null,
       };
     }
+
+    const outstanding = context.outstanding ? await context.outstanding.catch(() => ({ status: "unavailable" }) as const) : null;
+    const financialLine =
+      outstanding?.status === "loaded"
+        ? outstanding.count === 0
+          ? "No pending payments outstanding"
+          : `Pending payments outstanding ${formatAmount(outstanding.amount, "NGN")} · ${outstanding.count} ${outstanding.count === 1 ? "request" : "requests"}`
+        : null;
+    const financialUnavailable = outstanding?.status === "unavailable";
+
     if (!context.fmViewAllowed) {
+      // Operational figures need FM operational access; Costs & Claims keeps its own grant.
+      if (!financialLine) {
+        return {
+          ...base,
+          state: "restricted",
+          statusLabel: "Restricted",
+          lines: ["Facility Management figures need Facility Management access."],
+          href: null,
+          disabledNavigationLabel: null,
+        };
+      }
       return {
         ...base,
-        state: "restricted",
-        statusLabel: "Restricted",
-        lines: ["Facility Management figures need Facility Management access."],
-        href: null,
-        disabledNavigationLabel: null,
+        state: "healthy",
+        statusLabel: "Partial view",
+        partial: true,
+        lines: [financialLine, "Work figures need Facility Management operational access."],
+        financialLine,
       };
     }
 
     try {
       const aggregate = await operationalPicture;
-      if (!aggregate) return base;
-      const picture = buildOperationalPictureMetricsFromAggregate(aggregate);
-      const value = (count: number | null) =>
-        count == null ? "Unavailable" : count.toLocaleString("en-NG");
-      const available = Object.values(picture).some((count) => count != null);
+      if (!aggregate) return { ...base, financialLine };
+      const { maintenance, workOrders, approvals } = aggregate;
+      const n = (count: number) => count.toLocaleString("en-NG");
+      const lines: string[] = [];
+      lines.push(
+        maintenance.state === "healthy"
+          ? `Work: ${n(maintenance.critical)} critical · ${n(maintenance.inProgress)} in progress · ${n(maintenance.overdue)} overdue`
+          : "Work unavailable"
+      );
+      lines.push(
+        workOrders.state === "healthy"
+          ? `Work Orders: ${n(workOrders.overdue)} overdue · ${n(workOrders.awaitingAction)} awaiting action`
+          : "Work Orders unavailable"
+      );
+      lines.push(
+        approvals.state === "healthy"
+          ? `Payment Approvals: ${n(approvals.awaitingAction)} awaiting action`
+          : "Payment Approvals unavailable"
+      );
+      if (financialLine) lines.push(financialLine);
+      else if (financialUnavailable) lines.push("Pending payments unavailable");
 
-      if (!available) {
+      const states = [maintenance.state, workOrders.state, approvals.state];
+      if (states.every((st) => st !== "healthy") && !financialLine) {
         return {
           ...base,
           state: "error",
@@ -426,27 +541,21 @@ export class CommandCentreServerService {
           lines: ["Facility Management pulse could not be loaded."],
         };
       }
-
-      const partial = Object.values(picture).some((count) => count == null);
-      const exception = (picture.critical ?? 0) > 0 || (picture.overdue ?? 0) > 0;
+      const partial = states.some((st) => st !== "healthy") || financialUnavailable;
+      const exception =
+        (maintenance.state === "healthy" && (maintenance.critical > 0 || maintenance.overdue > 0)) ||
+        (workOrders.state === "healthy" && workOrders.overdue > 0);
       return {
-        domain: "operations",
-        label: "Operations",
+        ...base,
         state: "healthy",
-        statusLabel: partial
-          ? "Partial view"
-          : exception
-            ? "Needs attention"
+        statusLabel: exception
+          ? "Needs attention"
+          : partial
+            ? "Partial view"
             : `Checked ${checkedTimeLabel(context.asOf, context.timeZone)}`.trim(),
         partial,
-        lines: [
-          `Critical ${value(picture.critical)} · In Progress ${value(picture.inProgress)}`,
-          `Awaiting Action ${value(picture.awaitingAction)} · Overdue ${value(picture.overdue)}`,
-        ],
-        href: workspaceEntry.facilityManagement ? "/operations" : null,
-        disabledNavigationLabel: workspaceEntry.facilityManagement
-          ? null
-          : "Workspace access required",
+        lines,
+        financialLine,
       };
     } catch {
       return {
@@ -454,6 +563,7 @@ export class CommandCentreServerService {
         state: "error",
         statusLabel: "Unable to load",
         lines: ["Facility Management pulse could not be loaded."],
+        financialLine,
       };
     }
   }
@@ -542,6 +652,7 @@ export class CommandCentreServerService {
             : `Checked ${checkedTimeLabel(asOf, timeZone)}`.trim(),
         partial: payablesFailed,
         lines,
+        financialLine: lines[0] ?? null,
         href: workspaceEntry.platformFinance ? "/platform-finance" : null,
         disabledNavigationLabel: workspaceEntry.platformFinance
           ? null
@@ -910,20 +1021,34 @@ export class CommandCentreServerService {
   private async composeLastVisit(
     access: CommandCentreAccessContext,
     asOf: string,
-    workspaceEntry: WorkspaceAccessChrome
+    workspaceEntry: WorkspaceAccessChrome,
+    fmContext: { fmEnabled: boolean; fm: FmChangeVisibility | null } = { fmEnabled: false, fm: null }
   ): Promise<CommandCentreSnapshot["lastVisit"]> {
     const timeZone = organisationTimeZoneOrNull(access.session);
     const visibility = {
       finance: financeModuleEnabled(access.session),
       ecc: hasModule(access.session.enabledModules, ECC_MODULE_SLUG),
+      fm: fmContext.fm,
     };
-    // Facility Management is deliberately NOT part of this feed: its only change history is the
-    // legacy operational_events stream, which is not reconciled to current FM records.
-    const covered = [visibility.finance ? "Finance" : null, visibility.ecc ? "ECC" : null].filter(
-      Boolean
-    ) as string[];
+    // Facility Management changes come from FM's own authoritative records (never the legacy operational_events
+    // stream), within the actor's FM authority and authorised facilities.
+    const covered = [
+      visibility.finance ? "Finance" : null,
+      visibility.ecc ? "ECC" : null,
+      visibility.fm ? "Facility Management" : null,
+    ].filter(Boolean) as string[];
+    const fmNotes: string[] = [];
+    if (visibility.fm) {
+      if (!visibility.fm.operations) fmNotes.push("Facility Management covers Costs & Claims only for your access");
+      if (!visibility.fm.costsClaims) fmNotes.push("Facility Management Costs & Claims changes need Costs & Claims access");
+      if (!visibility.fm.scope.unrestricted) fmNotes.push("Facility Management is limited to your authorised facilities");
+    } else if (fmContext.fmEnabled) {
+      fmNotes.push("Facility Management changes need Facility Management access");
+    }
+    const listed =
+      covered.length <= 1 ? covered.join("") : `${covered.slice(0, -1).join(", ")} and ${covered[covered.length - 1]}`;
     const scope = covered.length
-      ? `Covers ${covered.join(" and ")} activity only. Facility Management changes are not included.`
+      ? [`Covers ${listed} activity.`, ...fmNotes.map((note) => `${note}.`)].join(" ")
       : "No change sources are enabled for this organisation.";
     if (covered.length === 0) {
       return {
@@ -981,7 +1106,11 @@ export class CommandCentreServerService {
       previous,
       asOf,
       visibility,
-      workspaceEntry,
+      workspaceEntry: {
+        platformFinance: workspaceEntry.platformFinance,
+        eccOperations: workspaceEntry.eccOperations,
+        facilityManagement: workspaceEntry.facilityManagement,
+      },
       timeZone,
     });
     if (changes.sourceErrors.length > 0) {

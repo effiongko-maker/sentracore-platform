@@ -46,9 +46,9 @@ assert.deepEqual(overviewPulseLines({ ...finance, lines: ["0 pending CEO decisio
 for (const state of ["partial", "error", "restricted", "unavailable"] as const) {
   assert.equal(overviewPulseLines(finance, { ...snapshot.decisions, state }).length, 2, "organisation-wide count survives narrower or unreadable queue");
 }
-assert.match(overviewPulseLines({ ...finance, lines: ["2 pending CEO decisions", finance.lines[1]] }, snapshot.decisions)[0], /^Organisation-wide/);
+assert.match(overviewPulseLines({ ...finance, lines: ["2 pending CEO decisions", finance.lines[1]] }, snapshot.decisions)[0], /^All Finance companies · /);
 assert.equal(overviewPulseLines(finance, { ...snapshot.decisions, items: [{ ...snapshot.decisions.items[0], source: "vendor_bill" }] }).length, 2, "vendor bills are not request counts");
 assert.deepEqual(overviewPulseLines({ ...finance, lines: ["Pending CEO decisions unavailable", finance.lines[1]] }, snapshot.decisions), ["Pending CEO decisions unavailable", finance.lines[1]]);
 assert.equal(overviewPulseLines({ ...finance, lines: [finance.lines[0]] }, snapshot.decisions).length, 1, "no empty domain surface");
-assert.deepEqual(overviewPulseLines({ ...finance, domain: "operations" }, snapshot.decisions), finance.lines, "FM workload is not the executive decision queue");
+assert.deepEqual(overviewPulseLines({ ...finance, domain: "facility_management" }, snapshot.decisions), finance.lines, "FM workload is not the executive decision queue");
 console.log("PASS pulse: only proven complete-scope duplication is removed; narrower scopes, failures, domain workload and unknown formats remain visible");

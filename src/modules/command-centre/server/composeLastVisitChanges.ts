@@ -1,14 +1,33 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CommandCentreChangeItem } from "@/modules/command-centre/presentationTypes";
+import {
+  scopeAllowsFacilities,
+  scopeAllowsFmWide,
+  type FmFacilityScope,
+} from "@/lib/access/facilityScope";
 
 type WorkspaceEntry = {
   platformFinance: boolean;
   eccOperations: boolean;
+  facilityManagement?: boolean;
+};
+
+/**
+ * Facility Management visibility for the acting executive — the SAME authority the FM environment applies:
+ * `operations` = FM operational view (Issues, Work, Work Orders, Payment Approvals; ops.view),
+ * `costsClaims` = Costs & Claims view (Pending Payments, receipts; finance.view), both inside `scope` (the actor's
+ * authorised facilities). null = FM is not part of this actor's feed.
+ */
+export type FmChangeVisibility = {
+  operations: boolean;
+  costsClaims: boolean;
+  scope: FmFacilityScope;
 };
 
 type DomainVisibility = {
   finance: boolean;
   ecc: boolean;
+  fm?: FmChangeVisibility | null;
 };
 
 type Json = Record<string, unknown>;
@@ -49,8 +68,10 @@ function text(value: unknown): string | null {
 }
 
 /**
- * Change composition covers Finance and ECC authoritative history only. Facility Management
- * operational_events are intentionally NOT read here (legacy, unreconciled stream).
+ * Change composition reads authoritative history only: Finance request/audit events, ECC audit events, and Facility
+ * Management's own Supabase records (their recorded timestamps — logged, created, submitted, decided, received,
+ * followed up). The legacy FM operational_events stream is NOT read (unreconciled). Imported FM records (listed in
+ * fm_migration_provenance / record_origin migrated_historical) are history, not activity, and never appear.
  */
 function number(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -92,6 +113,256 @@ function amountLabel(amount: number | null, currency = "NGN"): string | null {
     currency,
     maximumFractionDigits: 0,
   }).format(amount);
+}
+
+const FM_SUBMISSION_TITLES: Record<string, string> = {
+  payment_request: "Payment request raised",
+  contract_instalment: "Contract instalment requested",
+  reimbursement_claim: "Reimbursement claim submitted",
+};
+
+/** Facility Management activity from its own authoritative records, inside the actor's FM authority and scope. */
+async function fmChanges(input: {
+  db: SupabaseClient;
+  organisationId: string;
+  previous: string;
+  asOf: string;
+  fm: FmChangeVisibility;
+  href: (path: string) => string | null;
+  timeZone: string | null;
+}): Promise<{ items: CommandCentreChangeItem[]; errors: string[] }> {
+  const { db, organisationId, previous, asOf, fm, href, timeZone } = input;
+  const items: CommandCentreChangeItem[] = [];
+  const errors: string[] = [];
+  const LIMIT = 20;
+  const inWindow = <Q extends { gt: (c: string, v: string) => Q; lte: (c: string, v: string) => Q }>(q: Q, column: string) =>
+    q.gt(column, previous).lte(column, asOf);
+  const push = (key: string, id: string, title: string, detail: Array<string | null | undefined>, occurredAt: string, path: string) =>
+    items.push({
+      id: `fm:${key}:${id}`,
+      sourceId: id,
+      sourceType: "fm_record_event",
+      title,
+      detail: compact([...detail, "Facility Management"]),
+      sourceLabel: "Facility Management",
+      occurredAt,
+      timeLabel: relativeTime(occurredAt, asOf, timeZone),
+      href: href(path),
+    });
+  /** Imported (migrated) record ids of a table among `ids` — history, never "activity since your visit". */
+  const imported = async (table: string, ids: string[]): Promise<Set<string> | null> => {
+    if (!ids.length) return new Set();
+    const { data, error } = await db
+      .from("fm_migration_provenance")
+      .select("target_id")
+      .eq("organisation_id", organisationId)
+      .eq("target_table", table)
+      .in("target_id", ids);
+    if (error) return null;
+    return new Set((data ?? []).map((r) => String(r.target_id)));
+  };
+  /** Extra facilities of multi-facility records ("Both"), keyed by record id. */
+  const extraFacilities = async (table: "fm_work_facilities" | "fm_work_instruction_facilities", column: string, ids: string[]) => {
+    const map = new Map<string, string[]>();
+    if (!ids.length || fm.scope.unrestricted) return map;
+    const { data, error } = await db.from(table).select(`${column},facility_id`).eq("organisation_id", organisationId).in(column, ids);
+    if (error) throw error;
+    for (const r of (data ?? []) as unknown as Json[]) {
+      const key = String(r[column]);
+      map.set(key, [...(map.get(key) ?? []), String(r.facility_id)]);
+    }
+    return map;
+  };
+
+  if (fm.operations) {
+    // Issues logged.
+    try {
+      const { data, error } = await inWindow(
+        db.from("fm_requests").select("id,code,title,facility_id,created_at").eq("organisation_id", organisationId),
+        "created_at"
+      ).order("created_at", { ascending: false }).limit(LIMIT);
+      if (error) throw error;
+      const rows = (data ?? []) as Json[];
+      const skip = await imported("fm_requests", rows.map((r) => String(r.id)));
+      if (!skip) throw new Error("provenance");
+      for (const r of rows) {
+        if (skip.has(String(r.id)) || !scopeAllowsFacilities(fm.scope, [text(r.facility_id)])) continue;
+        push("issue", String(r.id), "Issue logged", [text(r.title), text(r.code)], String(r.created_at), "/issues");
+      }
+    } catch {
+      errors.push("Facility Management Issues");
+    }
+
+    // Work created / completed (operational Work only; imported history is excluded).
+    try {
+      const select = "id,code,title,facility_id,created_at,completed_at,record_origin";
+      const base = () => db.from("fm_work").select(select).eq("organisation_id", organisationId).neq("record_origin", "migrated_historical");
+      const [created, completed] = await Promise.all([
+        inWindow(base(), "created_at").order("created_at", { ascending: false }).limit(LIMIT),
+        inWindow(base(), "completed_at").order("completed_at", { ascending: false }).limit(LIMIT),
+      ]);
+      if (created.error || completed.error) throw created.error ?? completed.error;
+      const rows = [...((created.data ?? []) as Json[]), ...((completed.data ?? []) as Json[])];
+      const extra = await extraFacilities("fm_work_facilities", "work_id", [...new Set(rows.map((r) => String(r.id)))]);
+      const allowed = (r: Json) => scopeAllowsFacilities(fm.scope, [text(r.facility_id), ...(extra.get(String(r.id)) ?? [])]);
+      for (const r of (created.data ?? []) as Json[]) {
+        if (allowed(r)) push("work-created", String(r.id), "Work created", [text(r.title), text(r.code)], String(r.created_at), "/work");
+      }
+      for (const r of (completed.data ?? []) as Json[]) {
+        if (allowed(r)) push("work-completed", String(r.id), "Work completed", [text(r.title), text(r.code)], String(r.completed_at), "/work");
+      }
+    } catch {
+      errors.push("Facility Management Work");
+    }
+
+    // Work Orders / Job Orders recorded.
+    try {
+      const { data, error } = await inWindow(
+        db.from("fm_work_instructions").select("id,code,title,order_type,facility_id,created_at").eq("organisation_id", organisationId).neq("record_origin", "migrated_historical"),
+        "created_at"
+      ).order("created_at", { ascending: false }).limit(LIMIT);
+      if (error) throw error;
+      const rows = (data ?? []) as Json[];
+      const extra = await extraFacilities("fm_work_instruction_facilities", "work_instruction_id", rows.map((r) => String(r.id)));
+      for (const r of rows) {
+        if (!scopeAllowsFacilities(fm.scope, [text(r.facility_id), ...(extra.get(String(r.id)) ?? [])])) continue;
+        push("wo-created", String(r.id), r.order_type === "job_order" ? "Job Order recorded" : "Work Order recorded", [text(r.title), text(r.code)], String(r.created_at), "/work-orders");
+      }
+    } catch {
+      errors.push("Facility Management Work Orders");
+    }
+
+    // Payment Approvals submitted to the client / decided by the client (their recorded dates).
+    try {
+      const select = "id,code,title,approval_amount,currency,decision_outcome,submitted_at,decision_at,work_instruction_id,work_id";
+      const base = () => db.from("fm_approvals").select(select).eq("organisation_id", organisationId);
+      const [submitted, decided] = await Promise.all([
+        inWindow(base(), "submitted_at").order("submitted_at", { ascending: false }).limit(LIMIT),
+        inWindow(base(), "decision_at").order("decision_at", { ascending: false }).limit(LIMIT),
+      ]);
+      if (submitted.error || decided.error) throw submitted.error ?? decided.error;
+      const rows = [...((submitted.data ?? []) as Json[]), ...((decided.data ?? []) as Json[])];
+      const skip = await imported("fm_approvals", [...new Set(rows.map((r) => String(r.id)))]);
+      if (!skip) throw new Error("provenance");
+      // An Approval's facility is derived through its Work Order or Work (as FM's own Approvals scope does).
+      const facilityOf = new Map<string, string | null>();
+      if (!fm.scope.unrestricted) {
+        for (const [table, column] of [["fm_work_instructions", "work_instruction_id"], ["fm_work", "work_id"]] as const) {
+          const ids = [...new Set(rows.map((r) => text(r[column])).filter(Boolean) as string[])];
+          if (!ids.length) continue;
+          const { data: parents, error: parentError } = await db.from(table).select("id,facility_id").eq("organisation_id", organisationId).in("id", ids);
+          if (parentError) throw parentError;
+          for (const p of (parents ?? []) as Json[]) facilityOf.set(String(p.id), text(p.facility_id));
+        }
+      }
+      const allowed = (r: Json) => {
+        if (fm.scope.unrestricted) return true;
+        const parent = text(r.work_instruction_id) ?? text(r.work_id);
+        if (!parent) return fm.scope.includeUnattributed;
+        return scopeAllowsFacilities(fm.scope, [facilityOf.get(parent) ?? null]);
+      };
+      const amount = (r: Json) => amountLabel(r.approval_amount == null ? null : Number(r.approval_amount), text(r.currency) ?? "NGN");
+      for (const r of (submitted.data ?? []) as Json[]) {
+        if (skip.has(String(r.id)) || !allowed(r)) continue;
+        push("approval-submitted", String(r.id), "Payment Approval submitted to the client", [text(r.title), amount(r)], String(r.submitted_at), "/approvals");
+      }
+      for (const r of (decided.data ?? []) as Json[]) {
+        if (skip.has(String(r.id)) || !allowed(r)) continue;
+        const outcome = text(r.decision_outcome);
+        push("approval-decided", String(r.id), outcome ? `Payment Approval decision recorded: ${outcome.replaceAll("_", " ")}` : "Payment Approval decision recorded", [text(r.title), amount(r)], String(r.decision_at), "/approvals");
+      }
+    } catch {
+      errors.push("Facility Management Payment Approvals");
+    }
+  }
+
+  if (fm.costsClaims) {
+    // Pending Payments raised (their submission date) and receipts recorded against them.
+    try {
+      const { data, error } = await inWindow(
+        db.from("fm_cost_submissions").select("id,code,submission_kind,description,period_label,claim_amount,currency,facility_id,submitted_at").eq("organisation_id", organisationId),
+        "submitted_at"
+      ).order("submitted_at", { ascending: false }).limit(LIMIT);
+      if (error) throw error;
+      const rows = (data ?? []) as Json[];
+      const skip = await imported("fm_cost_submissions", rows.map((r) => String(r.id)));
+      if (!skip) throw new Error("provenance");
+      for (const r of rows) {
+        if (skip.has(String(r.id)) || !scopeAllowsFmWide(fm.scope, text(r.facility_id))) continue;
+        push(
+          "payment-raised", String(r.id),
+          FM_SUBMISSION_TITLES[String(r.submission_kind)] ?? "Pending payment raised",
+          [text(r.period_label) ?? text(r.description), amountLabel(r.claim_amount == null ? null : Number(r.claim_amount), text(r.currency) ?? "NGN"), text(r.code)],
+          String(r.submitted_at), `/finance/submissions/${encodeURIComponent(String(r.code))}`
+        );
+      }
+    } catch {
+      errors.push("Facility Management Pending Payments");
+    }
+
+    try {
+      const { data, error } = await inWindow(
+        db.from("fm_reimbursement_payments").select("id,submission_id,received_amount,currency,received_at,created_at").eq("organisation_id", organisationId),
+        "created_at"
+      ).order("created_at", { ascending: false }).limit(LIMIT);
+      if (error) throw error;
+      const rows = (data ?? []) as Json[];
+      const subIds = [...new Set(rows.map((r) => String(r.submission_id)))];
+      const subs = new Map<string, Json>();
+      if (subIds.length) {
+        const { data: s, error: subError } = await db.from("fm_cost_submissions").select("id,code,period_label,description,facility_id").eq("organisation_id", organisationId).in("id", subIds);
+        if (subError) throw subError;
+        for (const row of (s ?? []) as Json[]) subs.set(String(row.id), row);
+      }
+      for (const r of rows) {
+        const sub = subs.get(String(r.submission_id));
+        // A receipt is in scope exactly when its Pending Payment is.
+        if (!sub || !scopeAllowsFmWide(fm.scope, text(sub.facility_id))) continue;
+        push(
+          "receipt", String(r.id), "Payment received",
+          [text(sub.period_label) ?? text(sub.description), amountLabel(Number(r.received_amount), text(r.currency) ?? "NGN"), text(sub.code)],
+          String(r.created_at), `/finance/submissions/${encodeURIComponent(String(sub.code))}`
+        );
+      }
+    } catch {
+      errors.push("Facility Management receipts");
+    }
+  }
+
+  // Commercial follow-ups on a Work Order (operations) or a Pending Payment (Costs & Claims).
+  if (fm.operations || fm.costsClaims) {
+    try {
+      const { data, error } = await inWindow(
+        db.from("fm_commercial_follow_ups").select("id,work_instruction_id,cost_submission_id,method,followed_up_at,created_at").eq("organisation_id", organisationId),
+        "created_at"
+      ).order("created_at", { ascending: false }).limit(LIMIT);
+      if (error) throw error;
+      const rows = (data ?? []) as Json[];
+      const wiIds = [...new Set(rows.map((r) => text(r.work_instruction_id)).filter(Boolean) as string[])];
+      const subIds = [...new Set(rows.map((r) => text(r.cost_submission_id)).filter(Boolean) as string[])];
+      const [wis, subs, extra] = await Promise.all([
+        wiIds.length ? db.from("fm_work_instructions").select("id,code,title,facility_id").eq("organisation_id", organisationId).in("id", wiIds) : Promise.resolve({ data: [], error: null }),
+        subIds.length ? db.from("fm_cost_submissions").select("id,code,period_label,description,facility_id").eq("organisation_id", organisationId).in("id", subIds) : Promise.resolve({ data: [], error: null }),
+        extraFacilities("fm_work_instruction_facilities", "work_instruction_id", wiIds),
+      ]);
+      if (wis.error || subs.error) throw wis.error ?? subs.error;
+      const wiById = new Map(((wis.data ?? []) as Json[]).map((w) => [String(w.id), w]));
+      const subById = new Map(((subs.data ?? []) as Json[]).map((x) => [String(x.id), x]));
+      for (const r of rows) {
+        const wi = text(r.work_instruction_id) ? wiById.get(String(r.work_instruction_id)) : undefined;
+        const sub = text(r.cost_submission_id) ? subById.get(String(r.cost_submission_id)) : undefined;
+        if (wi && fm.operations && scopeAllowsFacilities(fm.scope, [text(wi.facility_id), ...(extra.get(String(wi.id)) ?? [])])) {
+          push("follow-up", String(r.id), "Follow-up recorded", [text(wi.title), text(r.method), text(wi.code)], String(r.created_at), "/work-orders");
+        } else if (sub && fm.costsClaims && scopeAllowsFmWide(fm.scope, text(sub.facility_id))) {
+          push("follow-up", String(r.id), "Follow-up recorded", [text(sub.period_label) ?? text(sub.description), text(r.method), text(sub.code)], String(r.created_at), `/finance/submissions/${encodeURIComponent(String(sub.code))}`);
+        }
+      }
+    } catch {
+      errors.push("Facility Management follow-ups");
+    }
+  }
+
+  return { items, errors };
 }
 
 export async function composeLastVisitChanges(input: {
@@ -256,6 +527,20 @@ export async function composeLastVisitChanges(input: {
         href: workspaceEntry.eccOperations ? "/ecc-operations" : null,
       });
     }
+  }
+
+  if (visibility.fm && (visibility.fm.operations || visibility.fm.costsClaims)) {
+    const fmResult = await fmChanges({
+      db,
+      organisationId,
+      previous,
+      asOf,
+      fm: visibility.fm,
+      href: (path) => (workspaceEntry.facilityManagement ? path : null),
+      timeZone,
+    });
+    items.push(...fmResult.items);
+    sourceErrors.push(...fmResult.errors);
   }
 
   return {

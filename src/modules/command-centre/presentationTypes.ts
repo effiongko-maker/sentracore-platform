@@ -16,7 +16,7 @@ export type CommandCentreSurfaceState =
 
 export type CommandCentrePulseDomain =
   | "finance"
-  | "operations"
+  | "facility_management"
   | "ecc"
   | "projects_construction";
 
@@ -30,15 +30,21 @@ export type CommandCentrePulseCard = {
   disabledNavigationLabel: string | null;
   /** True when part of this domain's picture could not be evaluated (a metric/source is missing). */
   partial?: boolean;
+  /**
+   * The line of this card that states a FINANCIAL position (e.g. Finance decisions, Facility Management pending
+   * payments outstanding), when the actor may see it. null/absent = this environment states no financial position
+   * for this actor (restricted, not enabled or not evaluated) — never a zero.
+   */
+  financialLine?: string | null;
 };
 
 export type CommandCentreChangeItem = {
   id: string;
   sourceId: string;
-  sourceType: "finance_request_event" | "finance_audit_event" | "ecc_audit_event";
+  sourceType: "finance_request_event" | "finance_audit_event" | "ecc_audit_event" | "fm_record_event";
   title: string;
   detail: string;
-  sourceLabel: "Finance" | "ECC";
+  sourceLabel: "Finance" | "ECC" | "Facility Management";
   occurredAt: string;
   timeLabel: string;
   href: string | null;

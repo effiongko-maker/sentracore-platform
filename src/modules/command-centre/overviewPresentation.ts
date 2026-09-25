@@ -18,7 +18,7 @@ export function overviewAttention(snapshot: Pick<CommandCentreSnapshot, "attenti
 }
 
 /** Keep domain workload in Pulse. Only suppress a proven duplicate of the complete decision queue.
- * Finance Pulse counts requests across all companies; the queue can be partial and also includes bills.
+ * Finance Pulse counts requests across all Finance companies; the queue can be partial and also includes bills.
  * Unrecognised strings, mismatched counts and unavailable/partial queues are never treated as equivalent.
  */
 export function overviewPulseLines(card: CommandCentrePulseCard, decisions: CommandCentreSnapshot["decisions"]): string[] {
@@ -32,6 +32,7 @@ export function overviewPulseLines(card: CommandCentrePulseCard, decisions: Comm
   });
   // A future single-line pulse still needs a position to display.
   return (result.length > 0 ? result : lines).map((line) =>
-    /^\d+ pending CEO decisions?$/.test(line) ? `Organisation-wide · ${line}` : line
+    // Scoped to what it counts: every Finance company (not every operating environment).
+    /^\d+ pending CEO decisions?$/.test(line) ? `All Finance companies · ${line}` : line
   );
 }

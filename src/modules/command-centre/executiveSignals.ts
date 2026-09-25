@@ -37,7 +37,8 @@ export function decisionsSignal(decisions: CommandCentreSnapshot["decisions"]): 
     case "healthy":
       return { text: plural(count, "decision awaiting you", "decisions awaiting you"), tone: count > 0 ? "attention" : "neutral" };
     case "empty":
-      return { text: "No decisions waiting", tone: "neutral" };
+      // The executive decision queue is Finance's (Facility Management approvals are client decisions).
+      return { text: "No Finance decisions waiting", tone: "neutral" };
     case "partial":
       return count > 0
         ? { text: `${plural(count, "decision", "decisions")} visible (limited company access)`, tone: "attention" }
@@ -61,13 +62,28 @@ export function commitmentsSignal(commitments: CommandCentreSnapshot["commitment
   return { text: "No open commitments", tone: "neutral" };
 }
 
-/** Finance's position as the existing pulse card states it (status label + its first line). */
+/**
+ * Financial position across the environments that state one: Platform Finance and Facility Management (Pending
+ * Payments outstanding), each as its own pulse card states it (`financialLine`). An environment the actor may not see,
+ * or that failed, is named as not included — the signal never implies an organisation-wide position it does not have.
+ */
 export function financialPositionSignal(pulse: CommandCentreSnapshot["pulse"]): ExecutiveSignal {
-  const finance = pulse.find((card) => card.domain === "finance");
-  if (!finance) return { text: "Not available right now", tone: "muted" };
-  const muted = finance.state !== "healthy" && finance.state !== "partial";
-  const line = finance.lines[0];
-  return { text: line && !muted ? `${finance.statusLabel} · ${line}` : finance.statusLabel, tone: muted ? "muted" : "neutral" };
+  const sources: Array<{ domain: "finance" | "facility_management"; label: string }> = [
+    { domain: "finance", label: "Finance" },
+    { domain: "facility_management", label: "Facility Management" },
+  ];
+  const parts: string[] = [];
+  const missing: string[] = [];
+  for (const source of sources) {
+    const card = pulse.find((c) => c.domain === source.domain);
+    const reporting = card && (card.state === "healthy" || card.state === "partial");
+    const line = reporting ? (card.financialLine ?? null) : null;
+    if (line) parts.push(`${source.label}: ${line}`);
+    else if (card) missing.push(source.label);
+  }
+  if (parts.length === 0) return { text: "Not available right now", tone: "muted" };
+  const scope = missing.length ? ` (${missing.join(" and ")} not included)` : "";
+  return { text: `${parts.join(" · ")}${scope}`, tone: "neutral" };
 }
 
 /** How many live operating environments reported a current position in the pulse. */

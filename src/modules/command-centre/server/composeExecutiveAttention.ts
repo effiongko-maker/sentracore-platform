@@ -17,7 +17,7 @@ import type {
  *   Finance — items genuinely in pending_ceo_approval (existing Finance workflow semantics)
  *   ECC     — escalated Issues; open Issues at high/critical severity; open Requests at high/urgent
  *             priority (existing ECC semantics); a shift IN EFFECT with agents assigned and none signed in
- *   FM      — Critical Work; Overdue Work / Work Instructions (existing Operational Picture semantics)
+ *   Facility Management — Critical Work; Overdue Work / Work Orders (existing Operational Picture semantics)
  *   Commitments — OVERDUE open Executive Commitments only (an explicitly tracked obligation past its date);
  *             evaluated only for identities holding commitments.view, otherwise not applicable
  *
@@ -168,8 +168,8 @@ export function fmAttentionFromPicture(picture: OperationalPictureAggregate): {
       id: "fm:overdue_work_instructions",
       title:
         workOrders.overdue === 1
-          ? "1 overdue Work Instruction"
-          : `${workOrders.overdue} overdue Work Instructions`,
+          ? "1 overdue Work Order"
+          : `${workOrders.overdue} overdue Work Orders`,
       detail: "Past due date, not completed",
       tone: "high",
       href: "/work-orders",
@@ -180,7 +180,7 @@ export function fmAttentionFromPicture(picture: OperationalPictureAggregate): {
     return { status: "loaded", items, note: null };
   }
   if (maintenance.state === "healthy" || workOrders.state === "healthy") {
-    const missing = maintenance.state === "healthy" ? "Work Instructions" : "Work";
+    const missing = maintenance.state === "healthy" ? "Work Orders" : "Work";
     return { status: "partial", items, note: `${missing} could not be evaluated.` };
   }
   return { status: "unavailable", items, note: "Facility Management could not be read." };

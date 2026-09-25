@@ -135,7 +135,7 @@ async function main() {
     assert(!ok.partial && /^Checked 11:00/.test(ok.statusLabel) && ok.lines.join(" ").includes("0 open payables"), "B: zero payables stays a valid zero; freshness is request-time 'Checked' in the organisation timezone");
     // FM restricted (domain gate respected) is not unavailable and never queries the picture
     let queried = false;
-    const restrictedFm = (await proto.composeOperationsPulse.call({}, { session: { roleSlugs: [], enabledModules: [{ slug: "facility_management", status: "enabled" }] } }, { facilityManagement: false }, (queried = true, Promise.resolve(null)), { asOf: "2026-09-20T10:00:00Z", timeZone: null, fmViewAllowed: false })) as { state: string; statusLabel: string };
+    const restrictedFm = (await proto.composeFacilityManagementPulse.call({}, { session: { roleSlugs: [], enabledModules: [{ slug: "facility_management", status: "enabled" }] } }, { facilityManagement: false }, (queried = true, Promise.resolve(null)), { asOf: "2026-09-20T10:00:00Z", timeZone: null, fmViewAllowed: false })) as { state: string; statusLabel: string };
     void queried;
     assert(restrictedFm.state === "restricted" && restrictedFm.statusLabel === "Restricted", "B: FM without FM view access is restricted, not unavailable");
     const service = src("src/modules/command-centre/server/CommandCentreServerService.ts");
@@ -172,9 +172,48 @@ async function main() {
     assert(!tables.includes("operational_events") && res.items.every((i) => i.sourceLabel !== ("Operations" as never)) && !res.items.some((i) => /WO-2026/.test(i.detail)), "C: stale FM operational_events cannot surface");
     assert(res.items.length === 1 && res.items[0].sourceLabel === "ECC" && tables.includes("finance_request_events") && tables.includes("finance_audit_events"), "C: Finance and ECC authoritative history remain supported");
     const service = src("src/modules/command-centre/server/CommandCentreServerService.ts");
-    assert(/Facility Management changes are not included/.test(service), "C: the feed states its scope honestly");
+    assert(/visibility\.fm \? "Facility Management" : null/.test(service) && !/Facility Management changes are not included/.test(service), "C: Facility Management is a covered source, and the scope names what is covered");
+
+    // Facility Management activity: its own authoritative records, inside FM authority + authorised facilities;
+    // imported history never appears.
+    const ANNEX = "fac-annex", CSIRT = "fac-csirt";
+    const fmRows: Record<string, unknown[]> = {
+      fm_requests: [
+        { id: "R1", code: "REQ-1", title: "Leaking roof", facility_id: ANNEX, created_at: "2026-09-20T09:50:00Z" },
+        { id: "R2", code: "REQ-2", title: "CSIRT door", facility_id: CSIRT, created_at: "2026-09-20T09:51:00Z" },
+        { id: "R3", code: "REQ-3", title: "Imported", facility_id: ANNEX, created_at: "2026-09-20T09:52:00Z" },
+      ],
+      fm_migration_provenance: [{ target_id: "R3" }],
+      fm_work: [], fm_work_instructions: [], fm_approvals: [], fm_commercial_follow_ups: [],
+      fm_cost_submissions: [{ id: "S1", code: "SUB-9", submission_kind: "contract_instalment", period_label: "October 2026", claim_amount: 100, currency: "NGN", facility_id: null, submitted_at: "2026-09-20T09:55:00Z" }],
+      fm_reimbursement_payments: [],
+      finance_request_events: [], finance_audit_events: [], ecc_audit_events: [],
+    };
+    const fmTables: string[] = [];
+    const fmDb = {
+      from(table: string) {
+        fmTables.push(table);
+        const chain: Record<string, unknown> = {};
+        for (const m of ["select", "eq", "neq", "gt", "lte", "in", "order", "limit"]) chain[m] = () => chain;
+        chain.then = (resolveFn: (v: unknown) => void) => resolveFn({ data: fmRows[table] ?? [], error: null });
+        return chain;
+      },
+    };
+    const scoped = await composeLastVisitChanges({
+      db: fmDb as never, organisationId: "o", previous: "2026-09-20T09:00:00Z", asOf: "2026-09-20T10:00:00Z",
+      visibility: { finance: false, ecc: false, fm: { operations: true, costsClaims: false, scope: { unrestricted: false, facilityIds: [ANNEX], includeUnattributed: false } } },
+      workspaceEntry: { platformFinance: false, eccOperations: false, facilityManagement: true }, timeZone: "Africa/Lagos",
+    });
+    assert(scoped.items.length === 1 && scoped.items[0].title === "Issue logged" && scoped.items[0].sourceLabel === "Facility Management" && /Leaking roof/.test(scoped.items[0].detail), "C: FM activity appears, only in the authorised facility; imported history excluded");
+    assert(!fmTables.includes("fm_cost_submissions") && !fmTables.includes("operational_events"), "C: Costs & Claims changes need Costs & Claims access; legacy stream never read");
+    const withCosts = await composeLastVisitChanges({
+      db: fmDb as never, organisationId: "o", previous: "2026-09-20T09:00:00Z", asOf: "2026-09-20T10:00:00Z",
+      visibility: { finance: false, ecc: false, fm: { operations: false, costsClaims: true, scope: { unrestricted: true } } },
+      workspaceEntry: { platformFinance: false, eccOperations: false, facilityManagement: false }, timeZone: "Africa/Lagos",
+    });
+    assert(withCosts.items.some((i) => i.title === "Contract instalment requested" && i.href === null) && !withCosts.items.some((i) => i.title === "Issue logged"), "C: Costs & Claims activity with its own grant; no link without workspace access; no operational items without ops access");
     assert(service.includes('.update({ last_visited_at: asOf })') && service.includes("Contract preserved"), "C: per-profile last-visited marker preserved (limitation documented)");
-    pass("C feed: FM operational_events not consumed; Finance/ECC history preserved; scope stated");
+    pass("C feed: FM activity from authoritative FM records within FM authority and scope; legacy stream not consumed; Finance/ECC history preserved; scope stated");
   }
 
   // ── D. Assignments ────────────────────────────────────────────────────────

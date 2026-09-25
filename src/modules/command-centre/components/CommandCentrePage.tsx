@@ -31,7 +31,7 @@ import { overviewAttention, overviewPulseLines } from "@/modules/command-centre/
 
 const PULSE_ICON = {
   finance: Landmark,
-  operations: Building2,
+  facility_management: Building2,
   ecc: Headphones,
   projects_construction: HardHat,
 } as const;

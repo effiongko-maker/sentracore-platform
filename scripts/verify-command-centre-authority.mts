@@ -220,7 +220,7 @@ function runStatic(results: CheckResult[]) {
         composer.includes("ECC_TITLES") &&
         !composer.includes("OPERATION_TITLES") &&
         !composer.includes("operational_events\""),
-      "whitelists meaningful Finance/ECC executive events; FM operational_events are not read"
+      "whitelists meaningful Finance/ECC/Facility Management executive events; the legacy FM operational_events stream is not read"
     );
     assert(!service.includes("composeAssignments"), "personal FM assignment tray is no longer part of Command Centre (executive console V1)");
     assert(
