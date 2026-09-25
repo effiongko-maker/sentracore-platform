@@ -413,6 +413,7 @@ export function CommandCentrePage({
               <ArrowUpRight className="h-4 w-4 shrink-0" aria-hidden />
             </a>
           </div>
+          {footer}
         </header>
 
         <section className="eo-briefing" aria-labelledby="eo-picture-heading">
@@ -507,13 +508,16 @@ export function CommandCentrePage({
         <div className="eo-follow-grid">
           <CommitmentsPanel commitments={snapshot.commitments} />
           <article className="scc-panel scc-panel--feed" aria-labelledby="scc-last-visit">
-            <div className="eo-panel-overline">Continuity</div>
-            <PanelHead id="scc-last-visit" title="Since Your Last Visit" />
-            <LastVisitBlock lastVisit={snapshot.lastVisit} />
+            <div className="eo-continuity-heading">
+              <div className="eo-panel-overline">Continuity</div>
+              <PanelHead id="scc-last-visit" title="Since Your Last Visit" />
+            </div>
+            <div className="eo-continuity-body">
+              <LastVisitBlock lastVisit={snapshot.lastVisit} />
+            </div>
           </article>
         </div>
       </section>
-      {footer}
     </div>
   );
 }

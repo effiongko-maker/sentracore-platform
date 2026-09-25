@@ -125,7 +125,7 @@ async function main() {
     assert(!/batcave|private.office|note/i.test(strip(commitments).replace(/notes?:\s*string/gi, "")), "D: Executive Commitments consume no note data");
     assert(!/batcave|private.office/i.test(src("src/modules/command-centre/presentationTypes.ts")) && !/batcave|private.office/i.test(src("src/modules/command-centre/server/CommandCentreServerService.ts")), "D: Executive Office is content-blind (no note count, latest, titles or existence)");
     const door = src("src/modules/private-office/components/PrivateOfficeDoorway.tsx");
-    assert(!/note|count|latest|\{/.test(strip(door).replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/export function PrivateOfficeDoorway\(\) \{/, "").replace(/href="[^"]*"/, "")), "D: the doorway shows no note data");
+    assert(!/note|count|latest|\{/.test(strip(door).replace(/^import [^;]*;$/gm, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/export function PrivateOfficeDoorway\(\) \{/, "").replace(/href="[^"]*"/, "")), "D: the doorway shows no note data");
     pass("D separation: Executive Office, Finance, Intelligence, Commitments, events and Kaiso are blind to notes");
   }
 

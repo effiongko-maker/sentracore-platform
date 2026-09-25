@@ -1575,6 +1575,13 @@ a.scc-decision-row:hover {
   border-bottom: 1px solid var(--os-rule);
 }
 
+/* An owner-only threshold, separate from organisational navigation. */
+.eo-overview .scc-private-office-door { margin-top: var(--os-space-5); padding: var(--os-space-3) 0 0; border-top: 1px solid var(--eo-surface-edge); }
+.eo-overview .scc-private-office-door-link { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: var(--os-space-2) var(--os-space-3); min-height: 2.25rem; padding: var(--os-space-2) var(--os-space-3); border: 1px solid transparent; border-radius: var(--os-radius-md); color: var(--os-ink); text-transform: none; letter-spacing: normal; font-size: var(--os-text-body-sm); }
+.eo-overview .scc-private-office-door-sub { font-size: var(--os-text-label-lg); font-weight: 400; letter-spacing: normal; color: var(--os-ink-muted); }
+.eo-overview .scc-private-office-door-action { display: inline-flex; align-items: center; gap: var(--os-space-2); margin-left: var(--os-space-3); color: var(--os-accent-ink); font-size: var(--os-text-label-lg); }
+.eo-overview .scc-private-office-door-link:hover { border-color: var(--eo-surface-edge); background: var(--os-surface); text-decoration: none; }
+
 .eo-overview .eo-eyebrow,
 .eo-overview .eo-date {
   margin: 0;
@@ -1735,7 +1742,7 @@ a.scc-decision-row:hover {
 /* Agenda: an open priority column balanced by a deliberate action surface. */
 .eo-overview .eo-agenda-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: var(--os-space-6); align-items: start; }
 .eo-overview .scc-panel { min-width: 0; min-height: 0; padding: var(--os-space-5); border: 0; border-radius: 0; background: transparent; }
-.eo-overview .scc-panel--attention { padding-left: 0; padding-right: 0; border-top: 2px solid var(--os-ink-700); }
+.eo-overview .scc-panel--attention { padding-left: 0; padding-right: 0; padding-bottom: 0; border-top: 2px solid var(--os-ink-700); }
 .eo-overview .scc-panel--decisions { border: 1px solid var(--eo-surface-edge); border-top: 2px solid var(--os-accent); border-radius: 0 0 var(--os-radius-md) var(--os-radius-md); background: var(--os-surface); box-shadow: var(--eo-surface-shadow); }
 .eo-overview .eo-panel-overline { display: flex; align-items: center; gap: var(--os-space-2); margin-bottom: var(--os-space-3); font-size: var(--os-text-label-sm); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--os-ink-muted); }
 .eo-overview .eo-priority-mark { width: 0.4rem; height: 0.4rem; border: 1px solid var(--os-ink-muted); transform: rotate(45deg); }
@@ -1777,8 +1784,14 @@ a.scc-decision-row:hover {
 /* Follow-through has its own register rhythm; history recedes into a timeline. */
 .eo-overview .eo-follow-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: var(--os-space-6); align-items: start; }
 .eo-overview .scc-panel--commitments { border: 1px solid var(--eo-surface-edge); border-radius: var(--os-radius-md); background: var(--os-surface); box-shadow: var(--eo-surface-shadow); }
-.eo-overview .scc-panel--feed { border-top: 1px solid var(--os-rule-strong); padding-inline: 0; }
-.eo-overview .scc-panel--feed:only-child { grid-column: 1 / -1; }
+.eo-overview .scc-panel--feed { border-block: 1px solid var(--eo-surface-edge); padding: var(--os-space-5); background: var(--os-canvas); }
+.eo-overview .scc-panel--feed:only-child { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(12rem, 0.45fr) minmax(0, 1fr); gap: var(--os-space-6); }
+.eo-overview .scc-panel--feed .scc-panel-head { border: 0; padding: 0; margin: 0; }
+.eo-overview .eo-continuity-body { min-width: 0; }
+.eo-overview .scc-panel--feed .scc-quiet-empty { padding: 0; flex: none; }
+.eo-overview .scc-panel--feed .scc-quiet-empty p { max-width: none; }
+.eo-overview .scc-panel--feed .scc-panel-scope { margin-top: var(--os-space-2); }
+.eo-overview .scc-panel--feed:not(:only-child) .eo-continuity-body { margin-top: var(--os-space-4); }
 .eo-overview .scc-commit-group { display: flex; align-items: center; gap: var(--os-space-2); margin: var(--os-space-5) 0 var(--os-space-2); font-size: var(--os-text-label-md); letter-spacing: 0.08em; color: var(--os-ink-secondary); }
 .eo-overview .scc-commit-group > span { display: inline-grid; place-items: center; min-width: 1.25rem; height: 1.25rem; padding-inline: var(--os-space-1); border-radius: var(--os-radius-sm); background: var(--os-surface-interactive); color: var(--os-ink-secondary); font-variant-numeric: tabular-nums; }
 .eo-overview .scc-commit-group[data-group="overdue"] { color: var(--os-warning); }
@@ -1831,6 +1844,11 @@ a.scc-decision-row:hover {
 }
 
 @media (max-width: 720px) {
+  .eo-overview .scc-private-office-door { justify-content: flex-start; }
+  .eo-overview .scc-private-office-door-link { padding-inline: 0; }
+  .eo-overview .scc-private-office-door-sub { flex-basis: 100%; order: 1; }
+  .eo-overview .scc-private-office-door-action { margin-left: auto; }
+  .eo-overview .scc-panel--feed:only-child { grid-template-columns: minmax(0, 1fr); gap: var(--os-space-3); }
   .scc.eo-overview { gap: var(--os-space-6); }
   .eo-overview .eo-masthead-main { flex-direction: column; align-items: stretch; gap: var(--os-space-4); }
   .eo-overview .eo-headline-state { flex-basis: auto; padding: var(--os-space-3); }
