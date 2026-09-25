@@ -167,7 +167,7 @@ async function main() {
     };
     const res = await composeLastVisitChanges({
       db: db as never, organisationId: "o", previous: "2026-09-20T09:00:00Z", asOf: "2026-09-20T10:00:00Z",
-      visibility: { finance: true, ecc: true }, workspaceEntry: { platformFinance: true, eccOperations: true }, timeZone: "Africa/Lagos",
+      visibility: { finance: { companyIds: ["co-1"] }, ecc: true }, workspaceEntry: { platformFinance: true, eccOperations: true }, timeZone: "Africa/Lagos",
     });
     assert(!tables.includes("operational_events") && res.items.every((i) => i.sourceLabel !== ("Operations" as never)) && !res.items.some((i) => /WO-2026/.test(i.detail)), "C: stale FM operational_events cannot surface");
     assert(res.items.length === 1 && res.items[0].sourceLabel === "ECC" && tables.includes("finance_request_events") && tables.includes("finance_audit_events"), "C: Finance and ECC authoritative history remain supported");

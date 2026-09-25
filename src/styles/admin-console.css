@@ -149,6 +149,12 @@
 .ac-note-strong { background: var(--ac-accent-soft); border-color: rgba(37, 99, 235, 0.18); color: var(--ac-ink-soft); }
 .ac-note-critical { background: var(--ac-critical-soft); border-color: var(--ac-critical-line); }
 
+/* Contextual focus (e.g. arriving from Platform Finance → Settings): same Access screen, stated scope. */
+.ac-focus-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; padding: 0.625rem 0.875rem; margin: 0 0 1rem; border-radius: var(--ac-radius-sm); background: var(--ac-accent-soft); border: 1px solid rgba(37, 99, 235, 0.18); font-size: 12.5px; color: var(--ac-ink-soft); }
+.ac-focus-bar > svg { color: var(--ac-accent, #2563eb); flex-shrink: 0; }
+.ac-focus-bar > span { flex: 1 1 18rem; }
+.ac-focus-bar strong { color: var(--ac-ink); font-weight: 600; }
+
 /* ── Directory table ────────────────────────────────────────────── */
 .ac-table-wrap { overflow-x: auto; }
 .ac-table { width: 100%; border-collapse: collapse; font-size: 13px; }

@@ -4,7 +4,7 @@ import type { CommandCentrePulseCard, CommandCentreSnapshot } from "../src/modul
 
 const snapshot: Pick<CommandCentreSnapshot, "attention" | "decisions" | "commitments"> = {
   attention: {
-    state: "healthy", complete: false, hiddenCount: 3, summary: "Partial view", coverage: [],
+    state: "healthy", complete: false, hiddenCount: 3, summary: "Partial view", coverage: [], allItems: [],
     items: [
       { id: "finance:pending_ceo", title: "Finance decisions", detail: null, tone: "high", href: "/platform-finance", sourceLabel: "Finance" },
       { id: "commitments:c1", title: "Follow up", detail: null, tone: "high", href: "/command-centre#commitments", sourceLabel: "Commitments" },
@@ -13,7 +13,7 @@ const snapshot: Pick<CommandCentreSnapshot, "attention" | "decisions" | "commitm
   },
   decisions: {
     state: "healthy", reason: null, scopeNote: null, viewAllHref: null,
-    items: [{ id: "finance_request:f1", source: "finance_request", title: "Approve", reference: null, categoryLabel: null, amountLabel: "NGN 10", currency: "NGN", decisionLabel: "Financial Request", href: "/platform-finance/requests/f1" }],
+    items: [{ id: "finance_request:f1", source: "finance_request", environment: "Finance", stateLabel: "Awaiting CEO approval", reason: "Needs CEO approval.", submittedAt: null, title: "Approve", reference: null, categoryLabel: null, amountLabel: "NGN 10", currency: "NGN", decisionLabel: "Financial Request", href: "/platform-finance/requests/f1" }],
   },
   commitments: {
     state: "healthy", reason: null, canManage: true, currentProfileId: "p1", today: "2026-09-24",

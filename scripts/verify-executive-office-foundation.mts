@@ -69,14 +69,16 @@ function main() {
   check(/commandCentre:\s*\n?\s*boundaryAllows\(input\.boundary, "platform"\) && hasCommandCentreGrant/.test(read("src/lib/access/workspaceAccessChrome.ts")), "chrome flag derives from the same grant");
   out.push("PASS 3 sidebar / selector expose Executive Office only with the grant; Platform Home sidebar unchanged");
 
-  // 4. Lenses are honest foundations — no invented data, no duplicated registers.
+  // 4. Lenses render the shared Executive Office projection only — no own data access, no duplicated registers.
+  //    (Superseded: lenses were data-free foundations; they now present the same projection as the Overview.)
   const lensPage = read("src/modules/command-centre/components/ExecutiveLensPage.tsx");
-  check(!/snapshot|Service|Repository|fetch\(|await /.test(strip(lensPage)), "lens page loads no data");
+  check(!/Service|Repository|fetch\(|await |createAdminClient|\.from\(/.test(strip(lensPage)), "lens component performs no data access of its own");
+  check(/snapshot\?: CommandCentreSnapshot/.test(lensPage), "lens content comes from the shared Executive Office snapshot");
   for (const lens of EXECUTIVE_OFFICE_LENSES) {
     check(/will appear here as Executive Office capabilities are introduced\.$/.test(lens.foundation), `${lens.label}: restrained foundation statement`);
   }
   check(read("src/modules/command-centre/components/CommandCentrePage.tsx").includes("EXECUTIVE_OFFICE_LENSES.map"), "Overview links every lens");
-  out.push("PASS 4 future lenses are foundation routes with honest copy and no data or duplicated registers");
+  out.push("PASS 4 lenses present the shared projection (foundation copy kept as fallback); no own data access or duplicated registers");
 
   // 5. Overview signals never turn restricted / unavailable / partial into zero.
   const attention = (over: Partial<CommandCentreSnapshot["attention"]>) =>

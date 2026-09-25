@@ -252,5 +252,5 @@ export function composeExecutiveAttention(
     summary = "Attention could not be fully evaluated.";
   }
 
-  return { state, items, hiddenCount, complete, summary, coverage };
+  return { state, items, hiddenCount, complete, summary, coverage, allItems: all };
 }

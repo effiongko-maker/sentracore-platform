@@ -42,7 +42,7 @@ export const EXECUTIVE_OFFICE_LENSES: readonly ExecutiveLens[] = [
     label: "Decisions",
     icon: Gavel,
     match: "prefix",
-    purpose: "What is awaiting your executive decision — Finance approvals. Facility Management Payment Approvals are client decisions, followed in Facility Management.",
+    purpose: "Matters awaiting your decision.",
     foundation: "Decision intelligence will appear here as Executive Office capabilities are introduced.",
     overviewSection: { anchor: "scc-decisions", label: "Your Decisions" },
   },

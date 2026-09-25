@@ -53,7 +53,15 @@ export type CommandCentreChangeItem = {
 export type CommandCentreDecisionItem = {
   id: string;
   source: "finance_request" | "vendor_bill";
+  /** Originating operating environment (provenance). Only Finance has executive (CEO) decisions today. */
+  environment: "Finance";
   decisionLabel: "Financial Request" | "Vendor Bill";
+  /** Current workflow state, in the source's own terms. */
+  stateLabel: string;
+  /** Why executive action is required. */
+  reason: string;
+  /** When the record entered its current review cycle (submitted), or null when the source does not record it. */
+  submittedAt: string | null;
   title: string;
   reference: string | null;
   categoryLabel: string | null;
@@ -133,6 +141,8 @@ export type CommandCentreSnapshot = {
     complete: boolean;
     summary: string;
     coverage: CommandCentreAttentionCoverage[];
+    /** Every qualifying item (the Risk & Attention lens); `items` is the Overview's bounded display. */
+    allItems: CommandCentreAttentionItem[];
   };
   /**
    * Executive Commitments register for the acting executive (created/delegated + owned).
@@ -157,4 +167,76 @@ export type CommandCentreSnapshot = {
     scope: string;
     items: CommandCentreChangeItem[];
   };
+  /** Financial Position lens — separate positions per source; never one blended total. */
+  financialPosition: CommandCentreFinancialPosition;
+  /** Performance lens — each environment's current position plus the throughput signals its source supports. */
+  performance: CommandCentrePerformanceEnvironment[];
+  /** Commitments lens — approved Finance obligations with a due date (alongside Executive Commitments). */
+  obligations: CommandCentreObligations;
+};
+
+/** A value that is either known (possibly zero) or honestly not known. */
+export type CommandCentreFigure =
+  | { state: "known"; label: string; count?: number }
+  | { state: "no_access"; label: string }
+  | { state: "unavailable"; label: string };
+
+export type CommandCentreFinancialPosition = {
+  finance: {
+    state: CommandCentreSurfaceState;
+    reason: string | null;
+    /** Coverage statement (e.g. organisation-wide Finance companies). */
+    scope: string | null;
+    periodLabel: string | null;
+    periodStatus: "open" | "closed" | "none" | null;
+    receivablesOpen: CommandCentreFigure;
+    receivablesOverdue: CommandCentreFigure;
+    payablesOpen: CommandCentreFigure;
+    payablesOverdue: CommandCentreFigure;
+    postedRevenue: CommandCentreFigure;
+    postedExpenses: CommandCentreFigure;
+    postedNet: CommandCentreFigure;
+    unpostedItems: CommandCentreFigure;
+    href: string | null;
+  };
+  facilityManagement: {
+    state: CommandCentreSurfaceState;
+    reason: string | null;
+    pendingPaymentsOutstanding: CommandCentreFigure;
+    href: string | null;
+  };
+  /** What is deliberately not part of this position. */
+  exclusions: string[];
+};
+
+export type CommandCentrePerformanceEnvironment = {
+  domain: CommandCentrePulseDomain;
+  label: string;
+  state: CommandCentreSurfaceState;
+  statusLabel: string;
+  /** The environment's current position (its pulse lines, unabridged). */
+  position: string[];
+  /** Throughput signals the source genuinely records for the current period, or a not-established statement. */
+  throughput: string[];
+  href: string | null;
+};
+
+export type CommandCentreObligationItem = {
+  id: string;
+  environment: "Finance";
+  title: string;
+  statusLabel: string;
+  amountLabel: string;
+  dueDate: string;
+  overdue: boolean;
+  href: string;
+};
+
+export type CommandCentreObligations = {
+  state: CommandCentreSurfaceState;
+  reason: string | null;
+  /** Aggregate (organisation-wide Finance projection) — known even when record detail is restricted. */
+  summary: string | null;
+  /** Record-level items; empty when the actor lacks payable view / company access (see reason). */
+  items: CommandCentreObligationItem[];
 };

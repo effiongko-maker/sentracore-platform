@@ -7,6 +7,9 @@ import styles from "./PlatformFinanceSettingsPage.module.css";
 import { PlatformFinanceSettingsService } from "@/services/platform-finance/PlatformFinanceSettingsService";
 import type { FinanceReadinessState, FinanceSettingsSnapshot } from "@/modules/platform-finance/settings";
 
+/** Admin Console → Access, focused on Platform Finance (see platform-admin AccessView). No person is pre-selected. */
+const PLATFORM_FINANCE_ACCESS_HREF = "/admin/access?focus=platform-finance";
+
 const STATE_LABEL: Record<FinanceReadinessState, string> = {
   configured: "Configured",
   system_managed: "System managed",
@@ -14,6 +17,8 @@ const STATE_LABEL: Record<FinanceReadinessState, string> = {
   not_available: "Not available",
 };
 const STATE_ICON = { configured: CheckCircle2, system_managed: Cog, requires_configuration: CircleDashed, not_available: XCircle };
+/** Presentation order: what blocks operation first. */
+const STATE_ORDER: FinanceReadinessState[] = ["requires_configuration", "configured", "system_managed", "not_available"];
 
 /** Document references as the code generates them — none is configurable today. */
 const NUMBERING: Array<{ document: string; format: string; note: string }> = [
@@ -66,23 +71,43 @@ export function PlatformFinanceSettingsPage() {
   }, []);
 
   const counts = data
-    ? (Object.keys(STATE_LABEL) as FinanceReadinessState[]).map((state) => ({ state, n: data.readiness.filter((r) => r.state === state).length }))
+    ? STATE_ORDER.map((state) => ({ state, n: data.readiness.filter((r) => r.state === state).length }))
     : [];
+  const pending = data ? data.readiness.filter((r) => r.state === "requires_configuration") : [];
 
   return (
     <div className={`pf-reports ${styles.page}`}>
       <header className={styles.header}>
-        <div className={styles.headerCopy}>
-          <p className="pf-ov-eyebrow">Platform Finance</p>
-          <h1 className={styles.title}>Settings</h1>
-          <p className={styles.intro}>What governs Finance, what is configured, and what still needs configuration before a capability can operate fully.</p>
+        <div className={styles.headerTop}>
+          <span className={styles.headerIcon} aria-hidden><Cog size={20} strokeWidth={1.6} /></span>
+          <div className={styles.headerCopy}>
+            <p className={styles.eyebrow}>Platform Finance</p>
+            <h1 className={styles.title}>Settings</h1>
+            <p className={styles.intro}>What governs Finance, what is configured, and what still needs configuration before a capability can operate fully.</p>
+          </div>
         </div>
         {data ? (
-          <dl className={styles.summary} aria-label="Readiness summary">
-            {counts.map(({ state, n }) => (
-              <div key={state} data-state={state}><dt>{STATE_LABEL[state]}</dt><dd>{n}</dd></div>
-            ))}
-          </dl>
+          <div className={styles.assessment} aria-label="Finance readiness assessment">
+            <div className={styles.verdict}>
+              <span className={styles.verdictLabel}>Readiness assessment</span>
+              <span className={styles.verdictValue}>
+                {pending.length === 0 ? "Finance is ready to operate" : `${pending.length} ${pending.length === 1 ? "capability requires" : "capabilities require"} configuration`}
+              </span>
+              <span className={styles.verdictSub}>{data.readiness.length} capabilities assessed</span>
+            </div>
+            <div className={styles.meter}>
+              <div className={styles.bar} role="img" aria-label={counts.map(({ state, n }) => `${n} ${STATE_LABEL[state].toLowerCase()}`).join(", ")}>
+                {counts.filter(({ n }) => n > 0).map(({ state, n }) => (
+                  <span key={state} data-state={state} style={{ flexGrow: n }} />
+                ))}
+              </div>
+              <dl className={styles.legend}>
+                {counts.map(({ state, n }) => (
+                  <div key={state} data-state={state}><dt><span aria-hidden />{STATE_LABEL[state]}</dt><dd>{n}</dd></div>
+                ))}
+              </dl>
+            </div>
+          </div>
         ) : null}
       </header>
 
@@ -92,24 +117,40 @@ export function PlatformFinanceSettingsPage() {
       {data ? (
         <>
           <section className={styles.readiness} aria-labelledby="pf-settings-readiness">
-            <h2 id="pf-settings-readiness" className={styles.kicker}>Finance readiness</h2>
-            <ul className={styles.readinessGrid}>
-              {data.readiness.map((item) => {
-                const Icon = STATE_ICON[item.state];
-                const body = (
-                  <>
-                    <span className={styles.state} data-state={item.state}><Icon size={13} aria-hidden="true" />{STATE_LABEL[item.state]}</span>
-                    <h3>{item.label}</h3>
-                    <p>{item.detail}</p>
-                  </>
-                );
+            <div className={styles.blockHead}>
+              <h2 id="pf-settings-readiness">Finance readiness</h2>
+              <p>Each capability, assessed against the live configuration.</p>
+            </div>
+            <div className={styles.readinessGroups}>
+              {STATE_ORDER.map((state) => {
+                const items = data.readiness.filter((r) => r.state === state);
+                if (!items.length) return null;
+                const Icon = STATE_ICON[state];
                 return (
-                  <li key={item.id}>
-                    {item.href ? <Link href={item.href} className={styles.readinessCard}>{body}</Link> : <div className={styles.readinessCard}>{body}</div>}
-                  </li>
+                  <div key={state} className={styles.readinessGroup} data-state={state}>
+                    <p className={styles.groupLabel}><Icon size={14} aria-hidden="true" />{STATE_LABEL[state]} <span>{items.length}</span></p>
+                    <ul className={styles.readinessList}>
+                      {items.map((item) => {
+                        const body = (
+                          <>
+                            <span className={styles.readinessMain}>
+                              <h3>{item.label}</h3>
+                              <p>{item.detail}</p>
+                            </span>
+                            {item.href ? <span className={styles.readinessGo}>{state === "requires_configuration" ? "Resolve" : "View"} <ArrowRight size={13} aria-hidden="true" /></span> : null}
+                          </>
+                        );
+                        return (
+                          <li key={item.id}>
+                            {item.href ? <Link href={item.href} className={styles.readinessRow}>{body}</Link> : <div className={styles.readinessRow}>{body}</div>}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
                 );
               })}
-            </ul>
+            </div>
           </section>
 
           <div className={styles.columns}>
@@ -194,11 +235,16 @@ export function PlatformFinanceSettingsPage() {
             </Section>
           </div>
 
-          <aside className={styles.access}>
+          {/* Finance Settings owns no permissions: authority is granted centrally (Admin Console / IAM). */}
+          <section className={styles.access} aria-labelledby="pf-settings-access">
             <ShieldCheck size={17} aria-hidden="true" />
-            <p>Who may review, approve, post or close periods — and which companies they can see — is granted in the Admin Console, not here.</p>
-            <Link className={styles.link} href="/admin/access">Finance access <ArrowRight size={13} aria-hidden="true" /></Link>
-          </aside>
+            <div className={styles.accessCopy}>
+              <h2 id="pf-settings-access">Access &amp; responsibilities</h2>
+              <p>Finance access is managed centrally through SentraCore’s Admin Console. Business capabilities determine what each person can view or do in Finance.</p>
+              <p className={styles.accessNote}>Responsibility for a piece of work — for example who prepares an invoice — is separate from access: a responsible person must still hold the matching Finance capability.</p>
+            </div>
+            <Link className={styles.link} href={PLATFORM_FINANCE_ACCESS_HREF}>Manage Finance access <ArrowRight size={13} aria-hidden="true" /></Link>
+          </section>
         </>
       ) : null}
     </div>

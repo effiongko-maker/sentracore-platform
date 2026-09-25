@@ -61,7 +61,11 @@ export function composeFinanceDecisionQueue(input: {
       return {
         id: `finance_request:${candidate.row.id}`,
         source: "finance_request",
+        environment: "Finance",
         decisionLabel: "Financial Request",
+        stateLabel: "Awaiting CEO approval",
+        reason: "Finance review is complete; funding needs CEO approval.",
+        submittedAt: candidate.row.submittedAt ?? null,
         title: candidate.row.purpose?.trim() || "Financial request",
         reference: candidate.row.externalReference,
         categoryLabel: categoryById.get(candidate.row.categoryId) ?? null,
@@ -74,7 +78,11 @@ export function composeFinanceDecisionQueue(input: {
     return {
       id: `vendor_bill:${candidate.row.id}`,
       source: "vendor_bill",
+      environment: "Finance",
       decisionLabel: "Vendor Bill",
+      stateLabel: "Awaiting CEO approval",
+      reason: "Finance review is complete; the supplier bill needs CEO approval.",
+      submittedAt: candidate.row.submittedAt ?? null,
       title: candidate.row.purpose?.trim() || "Vendor bill",
       reference: candidate.row.invoiceReference,
       categoryLabel: candidate.row.payeeName?.trim() || null,

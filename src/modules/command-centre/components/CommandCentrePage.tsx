@@ -23,9 +23,11 @@ import { EXECUTIVE_OFFICE_LENSES } from "@/modules/command-centre/nav";
 import {
   attentionSignal,
   decisionsSignal,
+  lensSignal,
   performanceSignal,
   type ExecutiveSignal,
 } from "@/modules/command-centre/executiveSignals";
+import { presentLine } from "@/modules/command-centre/metricPresentation";
 
 import { overviewAttention, overviewPulseLines } from "@/modules/command-centre/overviewPresentation";
 
@@ -166,11 +168,27 @@ function PulseCard({ card, decisions }: { card: CommandCentrePulseCard; decision
         ) : null}
       </div>
       <div className="scc-pulse-body">
-        {overviewPulseLines(card, decisions).map((line, index) => (
-          <p key={line} className={index === 0 ? "scc-pulse-line eo-pulse-headline" : "scc-pulse-line"}>
-            {line}
-          </p>
-        ))}
+        {overviewPulseLines(card, decisions).map((line, index) => {
+          const p = presentLine(line);
+          if (p.kind === "text") {
+            return (
+              <p key={line} className={index === 0 ? "scc-pulse-line eo-pulse-headline" : "scc-pulse-line"}>
+                {line}
+              </p>
+            );
+          }
+          return (
+            <div key={line} className={index === 0 ? "eo-pulse-metrics eo-pulse-metrics--lead" : "eo-pulse-metrics"}>
+              {p.group ? <span className="eo-pulse-group">{p.group}</span> : null}
+              {p.metrics.map((m) => (
+                <span key={`${m.value}-${m.label}`} className="eo-pulse-metric">
+                  <strong>{m.value}</strong>
+                  {m.label ? <span>{m.label}</span> : null}
+                </span>
+              ))}
+            </div>
+          );
+        })}
       </div>
       {isSoon ? <span className="scc-pulse-crane" aria-hidden /> : null}
     </>
@@ -184,12 +202,12 @@ function PulseCard({ card, decisions }: { card: CommandCentrePulseCard; decision
 
   if (card.href) {
     return (
-      <Link href={card.href} className={className} data-state={card.state} data-partial={card.partial || card.state === "partial"}>
+      <Link href={card.href} className={className} data-env={card.domain} data-state={card.state} data-status={/needs attention/i.test(card.statusLabel) ? "attention" : undefined} data-partial={card.partial || card.state === "partial"}>
         {body}
       </Link>
     );
   }
-  return <div className={className} data-state={card.state} data-partial={card.partial || card.state === "partial"}>{body}</div>;
+  return <div className={className} data-env={card.domain} data-state={card.state} data-status={/needs attention/i.test(card.statusLabel) ? "attention" : undefined} data-partial={card.partial || card.state === "partial"}>{body}</div>;
 }
 
 function AttentionBlock({ snapshot }: { snapshot: CommandCentreSnapshot }) {
@@ -348,11 +366,11 @@ function LastVisitBlock({
         return (
           <li key={item.id}>
             {item.href ? (
-              <Link href={item.href} className="scc-change-row">
+              <Link href={item.href} className="scc-change-row" data-source={item.sourceLabel}>
                 {body}
               </Link>
             ) : (
-              <div className="scc-change-row">{body}</div>
+              <div className="scc-change-row" data-source={item.sourceLabel}>{body}</div>
             )}
           </li>
         );
@@ -442,13 +460,14 @@ export function CommandCentrePage({
           {EXECUTIVE_OFFICE_LENSES.map((lens, index) => {
             const Icon = lens.icon;
             return (
-              <Link key={lens.id} href={lens.href} className="eo-lens-link">
+              <Link key={lens.id} href={lens.href} className="eo-lens-link" data-tone={lensSignal(lens.id, snapshot).tone}>
                 <span className="eo-lens-top">
                   <span className="eo-lens-icon"><Icon className="h-4 w-4" strokeWidth={1.5} aria-hidden /></span>
                   <span className="eo-lens-index" aria-hidden>0{index + 1}</span>
                   <ArrowUpRight className="eo-lens-go h-3.5 w-3.5" aria-hidden />
                 </span>
                 <span className="eo-lens-label">{lens.label}</span>
+                <span className="eo-lens-live"><span className="eo-signal-dot" aria-hidden />{lensSignal(lens.id, snapshot).text}</span>
                 <span className="eo-lens-signal">{lens.purpose}</span>
               </Link>
             );

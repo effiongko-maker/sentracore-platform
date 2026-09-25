@@ -25,7 +25,8 @@ export type FmChangeVisibility = {
 };
 
 type DomainVisibility = {
-  finance: boolean;
+  /** Finance activity within these Finance companies (the actor's finance_company_access); false = not visible. */
+  finance: false | { companyIds: string[] };
   ecc: boolean;
   fm?: FmChangeVisibility | null;
 };
@@ -397,7 +398,7 @@ export async function composeLastVisitChanges(input: {
       if (requestIds.length) {
         const { data: requests, error: requestError } = await db
           .from("finance_requests")
-          .select("id,purpose,requested_amount,currency")
+          .select("id,company_id,purpose,requested_amount,currency")
           .eq("organisation_id", organisationId)
           .in("id", requestIds);
         if (requestError) sourceErrors.push("Finance records");
@@ -405,9 +406,12 @@ export async function composeLastVisitChanges(input: {
           requestById.set(String(request.id), request as Json);
         }
       }
+      const financeCompanies = new Set(visibility.finance.companyIds);
       for (const row of data ?? []) {
         const requestId = String(row.request_id);
         const request = requestById.get(requestId);
+        // Only records in the actor's Finance companies; a record whose company cannot be established is not shown.
+        if (!request || !financeCompanies.has(String(request.company_id))) continue;
         const occurredAt = String(row.created_at);
         items.push({
           id: `finance:${row.id}`,
@@ -452,7 +456,7 @@ export async function composeLastVisitChanges(input: {
       if (transactionIds.length) {
         const { data: transactions, error: transactionError } = await db
           .from("finance_transactions")
-          .select("id,reference,description,amount,currency")
+          .select("id,company_id,reference,description,amount,currency")
           .eq("organisation_id", organisationId)
           .in("id", transactionIds);
         if (transactionError) sourceErrors.push("Finance transactions");
@@ -463,7 +467,7 @@ export async function composeLastVisitChanges(input: {
       if (billIds.length) {
         const { data: bills, error: billError } = await db
           .from("finance_vendor_bills")
-          .select("id,purpose,billed_amount,currency")
+          .select("id,company_id,purpose,billed_amount,currency")
           .eq("organisation_id", organisationId)
           .in("id", billIds);
         if (billError) sourceErrors.push("Finance vendor bills");
@@ -471,9 +475,25 @@ export async function composeLastVisitChanges(input: {
           billById.set(String(bill.id), bill as Json);
         }
       }
+      const periodIds = (audits ?? [])
+        .filter((row) => row.object_type === "finance_period")
+        .map((row) => String(row.object_id));
+      const periodCompany = new Map<string, string>();
+      if (periodIds.length) {
+        const { data: periods, error: periodError } = await db
+          .from("finance_periods")
+          .select("id,company_id")
+          .eq("organisation_id", organisationId)
+          .in("id", periodIds);
+        if (periodError) sourceErrors.push("Finance periods");
+        for (const period of periods ?? []) periodCompany.set(String(period.id), String(period.company_id));
+      }
+      const auditCompanies = new Set(visibility.finance.companyIds);
       for (const row of audits ?? []) {
         const transaction = transactionById.get(String(row.object_id));
         const bill = billById.get(String(row.object_id));
+        const companyId = text(transaction?.company_id) ?? text(bill?.company_id) ?? periodCompany.get(String(row.object_id)) ?? null;
+        if (!companyId || !auditCompanies.has(companyId)) continue;
         const details = (row.details ?? {}) as Json;
         const occurredAt = String(row.created_at);
         items.push({

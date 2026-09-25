@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Building2, ChevronRight, KeyRound, ShieldCheck, Users } from "lucide-react";
+import { ArrowLeft, Building2, ChevronRight, KeyRound, Landmark, ShieldCheck, Users } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useToast } from "@/components/ui/Toast";
@@ -30,23 +30,55 @@ export function AccessView() {
 const LEDE =
   "Access is explicit. A person can do only what has been granted to them — never what their title, operating role, facility or administrative authority might suggest.";
 
+/**
+ * Contextual focus for arriving from a business environment (e.g. Platform Finance → Settings). It only changes what
+ * this same screen emphasises — never the grants, the permission model or who may edit them. Unknown values are
+ * ignored, so a malformed deep link is simply the ordinary Access screen.
+ */
+export type AccessFocus = "platform-finance";
+export const ACCESS_FOCUS_PLATFORM_FINANCE: AccessFocus = "platform-finance";
+const FINANCE_LEDE =
+  "Platform Finance access for each person: what they can view or do in Finance, and which companies they can see. Choose a person to review or change it.";
+
+function readFocus(value: string | null): AccessFocus | null {
+  return value === ACCESS_FOCUS_PLATFORM_FINANCE ? value : null;
+}
+
 function AccessBody({ organisation }: { organisation: OrganisationAdminRecord }) {
   const router = useRouter();
   const params = useSearchParams();
   const selected = params.get("person");
+  const focus = readFocus(params.get("focus"));
   const people = useAdminData<AdminPersonSummary[]>(
     (signal) => adminCall<AdminPersonSummary[]>("listPeople", { organisationId: organisation.id }, signal),
     [organisation.id]
   );
+  // Every existing query value (including the focus) is kept, so switching people keeps the Finance context.
   function pick(id: string) {
     const next = new URLSearchParams(params.toString());
     next.set("person", id);
     router.replace(`/admin/access?${next.toString()}`);
   }
+  const allAccessHref = (() => {
+    const next = new URLSearchParams(params.toString());
+    next.delete("focus");
+    const query = next.toString();
+    return query ? `/admin/access?${query}` : "/admin/access";
+  })();
 
   return (
     <>
-      <PageHead title="Access" lede={LEDE} />
+      <PageHead title={focus ? "Access · Platform Finance" : "Access"} lede={focus ? FINANCE_LEDE : LEDE} />
+      {focus ? (
+        <div className="ac-focus-bar" role="note" aria-label="Access focus">
+          <Landmark className="h-4 w-4" aria-hidden />
+          <span>Managing <strong>Platform Finance</strong> access. Grants are the same central grants used everywhere.</span>
+          <Link href="/platform-finance/settings" className="ac-btn ac-btn-quiet ac-btn-sm">
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Finance Settings
+          </Link>
+          <Link href={allAccessHref} className="ac-btn ac-btn-secondary ac-btn-sm">Show all access</Link>
+        </div>
+      ) : null}
       <DataBoundary
         state={people}
         onRetry={people.reload}
@@ -55,13 +87,16 @@ function AccessBody({ organisation }: { organisation: OrganisationAdminRecord })
         empty={<p>No people are attached to this organisation, so there is no access to administer.</p>}
       >
         {(list) => {
-          const current = list.find((p) => p.profileId === selected) ?? list[0];
+          // Generic Access keeps its established default (the first person). A focused arrival never treats an
+          // arbitrary person as the target: until someone is chosen (or the requested person is not found), it asks.
+          const requested = list.find((p) => p.profileId === selected) ?? null;
+          const current = focus ? requested : requested ?? list[0];
           return (
             <div className="ac-split">
               <Panel title="People" icon={Users} flush className="ac-rail" aside={<span className="ac-num">{list.length}</span>}>
                 <nav aria-label="People">
                   {list.map((p) => (
-                    <button key={p.profileId} type="button" className="ac-pick" aria-current={p.profileId === current.profileId} onClick={() => pick(p.profileId)}>
+                    <button key={p.profileId} type="button" className="ac-pick" aria-current={p.profileId === current?.profileId} onClick={() => pick(p.profileId)}>
                       <Avatar name={displayName(p)} size="sm" platform={p.isPlatformSuperAdmin} muted={p.status !== "active"} />
                       <span className="ac-pick-text">
                         <span className="ac-pick-name">{displayName(p)}</span>
@@ -75,7 +110,17 @@ function AccessBody({ organisation }: { organisation: OrganisationAdminRecord })
                   ))}
                 </nav>
               </Panel>
-              <PersonAccess key={current.profileId} organisationId={organisation.id} profileId={current.profileId} onChanged={people.reload} />
+              {current ? (
+                <PersonAccess key={current.profileId} organisationId={organisation.id} profileId={current.profileId} onChanged={people.reload} focus={focus} allAccessHref={allAccessHref} />
+              ) : (
+                <Panel title="Choose a person" icon={Landmark}>
+                  <p className="ac-secondary" style={{ margin: 0 }}>
+                    {selected
+                      ? "That person is not in this organisation. Choose someone from the list to review their Platform Finance access."
+                      : "Choose someone from the list to review their Platform Finance access."}
+                  </p>
+                </Panel>
+              )}
             </div>
           );
         }}
@@ -84,7 +129,19 @@ function AccessBody({ organisation }: { organisation: OrganisationAdminRecord })
   );
 }
 
-function PersonAccess({ organisationId, profileId, onChanged }: { organisationId: string; profileId: string; onChanged: () => void }) {
+function PersonAccess({
+  organisationId,
+  profileId,
+  onChanged,
+  focus = null,
+  allAccessHref = "/admin/access",
+}: {
+  organisationId: string;
+  profileId: string;
+  onChanged: () => void;
+  focus?: AccessFocus | null;
+  allAccessHref?: string;
+}) {
   const { toast } = useToast();
   const person = useAdminData<AdminPersonDetail>(
     (signal) => adminCall<AdminPersonDetail>("getPerson", { organisationId, profileId }, signal),
@@ -273,6 +330,17 @@ function PersonAccess({ organisationId, profileId, onChanged }: { organisationId
               )}
             </Panel>
 
+            {focus === ACCESS_FOCUS_PLATFORM_FINANCE ? (
+              <>
+                {/* Platform Finance focus: the same audited Finance access panel, first and full width. */}
+                <FinanceAccessPanel organisationId={organisationId} profileId={p.profileId} access={p.financeAccess} onSaved={person.reload} />
+                <Note>
+                  Other business capabilities and operating context are not shown while managing Platform Finance access.{" "}
+                  <Link href={allAccessHref}>Show all access</Link>
+                </Note>
+              </>
+            ) : (
+              <>
             <Panel
               title="Business capabilities"
               icon={KeyRound}
@@ -400,6 +468,8 @@ function PersonAccess({ organisationId, profileId, onChanged }: { organisationId
 
               <FinanceAccessPanel organisationId={organisationId} profileId={p.profileId} access={p.financeAccess} onSaved={person.reload} />
             </div>
+              </>
+            )}
           </div>
         );
       }}

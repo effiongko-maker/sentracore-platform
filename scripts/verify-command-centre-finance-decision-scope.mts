@@ -98,8 +98,11 @@ async function main() {
   (PlatformFinancePayablesServerService.prototype as unknown as Record<string, unknown>).listCommandCentrePayables = async () => [];
   const pulse = (await proto.composeFinancePulse.call({}, { organisationId: "o", profileId: "p", session: { roleSlugs: [], enabledModules: [{ slug: "platform_finance", status: "enabled" }] } }, { platformFinance: true }, "2026-09-20T10:00:00Z", "Africa/Lagos")) as { lines: string[]; statusLabel: string };
   assert(pulse.lines[0] === "4 pending CEO decisions" && pulse.statusLabel === "Needs attention", "G: the pulse keeps the organisation-wide count, independent of the actor's queue scope");
-  const pulseBody = svc.slice(svc.indexOf("private async composeFinancePulse"), svc.indexOf("private async loadFinanceQueue"));
-  assert(pulseBody.includes("getCommandCentreOverview") && !pulseBody.includes("readDecisionScope") && !pulseBody.includes("finance_company_access"), "G: the pulse is not narrowed by (or coupled to) company access");
+  // The pulse reads the shared Finance projection (one read per request); that loader is the organisation-wide
+  // Executive Office projection and is not narrowed by company access.
+  const pulseBody = svc.slice(svc.indexOf("private async composeFinancePulse"), svc.indexOf("// ── Lens compositions"));
+  const loaderBody = svc.slice(svc.indexOf("async function loadFinanceProjection"), svc.indexOf("export class CommandCentreServerService"));
+  assert(pulseBody.includes("loadFinanceProjection") && loaderBody.includes("getCommandCentreOverview") && ![pulseBody, loaderBody].some((b) => b.includes("readDecisionScope") || b.includes("finance_company_access")), "G: the pulse is not narrowed by (or coupled to) company access");
   pass("G pulse stays an organisation-wide projection");
 
   // I. Authority unchanged

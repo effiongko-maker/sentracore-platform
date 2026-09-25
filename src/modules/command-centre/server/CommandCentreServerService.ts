@@ -28,7 +28,15 @@ import {
   type DomainAttentionResult,
 } from "@/modules/command-centre/server/composeExecutiveAttention";
 import { EccOperationsServerService } from "@/modules/ecc-operations/server/EccOperationsServerService";
-import { ECC_MODULE_SLUG } from "@/modules/ecc-operations/types";
+import { ECC_CAPABILITIES, ECC_MODULE_SLUG } from "@/modules/ecc-operations/types";
+import type { FinanceOverviewSnapshot } from "@/modules/platform-finance/overviewTypes";
+import { FINANCE_PAYABLE_CAPABILITIES, type FinancePayableView } from "@/modules/platform-finance/domain/payables";
+import type {
+  CommandCentreFigure,
+  CommandCentreFinancialPosition,
+  CommandCentreObligations,
+  CommandCentrePerformanceEnvironment,
+} from "@/modules/command-centre/presentationTypes";
 import {
   FINANCIAL_REQUEST_CAPABILITIES,
   PLATFORM_FINANCE_MODULE_SLUG,
@@ -204,6 +212,25 @@ type FmOutstandingResult =
 
 const FM_OUTSTANDING_POOL = 500;
 
+/**
+ * ONE read of the Finance executive projection per request (overview + payables), shared by the Finance pulse,
+ * Financial Position, Performance and Commitments — never re-queried per section.
+ */
+type FinanceProjection =
+  | { status: "not_enabled" | "restricted" | "unavailable" }
+  | { status: "loaded"; overview: FinanceOverviewSnapshot; payables: FinancePayableView[] | null };
+
+/** Record-level Finance visibility (feed, obligation rows): Finance workspace access + company access. */
+type FinanceRecordScope = { companyIds: string[]; payableView: boolean } | null;
+
+export type CommandCentreLoadOptions = {
+  /**
+   * Evaluate "Since your last visit" and advance the visit marker. Only the Overview does this; lens pages read the
+   * same projection without moving the marker.
+   */
+  trackVisit?: boolean;
+};
+
 type FinanceQueueResult =
   | { status: "not_enabled" | "restricted" | "unavailable" }
   | {
@@ -212,6 +239,33 @@ type FinanceQueueResult =
       scope: DecisionScope;
     };
 
+/**
+ * The Finance executive projection, read once. The Finance domain itself authorises the organisation-wide
+ * projection for the explicit Executive Office grant (getCommandCentreOverview / listCommandCentrePayables) — an
+ * aggregate view; record-level detail still needs the Finance capability (see readFinanceRecordScope).
+ */
+async function loadFinanceProjection(access: CommandCentreAccessContext): Promise<FinanceProjection> {
+  if (!financeModuleEnabled(access.session)) return { status: "not_enabled" };
+  try {
+    const overview = await new PlatformFinanceServerService(access.organisationId).getCommandCentreOverview({
+      profileId: access.profileId,
+    });
+    let payables: FinancePayableView[] | null;
+    try {
+      payables = await new PlatformFinancePayablesServerService(access.organisationId).listCommandCentrePayables(
+        access.profileId
+      );
+    } catch {
+      payables = null; // an explicit partial state — never "no payables"
+    }
+    return { status: "loaded", overview, payables };
+  } catch (error) {
+    if (isActionError(error) && error.code === "FORBIDDEN") return { status: "restricted" };
+    return { status: "unavailable" };
+  }
+}
+
+
 export class CommandCentreServerService {
   /**
    * Compose the executive console for an authorised CEO/orchestrator actor.
@@ -219,8 +273,10 @@ export class CommandCentreServerService {
    * domain never contributes zero / "stable" / "nothing requires attention".
    */
   async load(
-    access: CommandCentreAccessContext
+    access: CommandCentreAccessContext,
+    options: CommandCentreLoadOptions = {}
   ): Promise<CommandCentreSnapshot> {
+    const trackVisit = options.trackVisit !== false;
     const asOf = new Date().toISOString();
     const now = new Date(asOf);
     const displayName = displayNameFromSession(access.session);
@@ -253,9 +309,17 @@ export class CommandCentreServerService {
         ? { operations: fmViewAllowed, costsClaims: fmCostsClaimsAllowed, scope: operatingAccess.fmFacilityScope }
         : null;
 
+    // ECC keeps its own authority: the explicit ECC view grant (null = the grant could not be read).
+    const eccEnabled = hasModule(access.session.enabledModules, ECC_MODULE_SLUG);
+    const eccViewGrant = eccEnabled
+      ? await hasPlatformCapability(access.organisationId, access.profileId, ECC_CAPABILITIES.view)
+      : false;
+    const financeProjection = loadFinanceProjection(access);
+    const financeRecordScope = this.readFinanceRecordScope(access);
+
     const [financePulse, facilityManagementPulse, financeQueue, eccAttention, fmAttention, lastVisit, commitmentsResult] =
       await Promise.all([
-        this.composeFinancePulse(access, workspaceEntry, asOf, organisationTimeZone),
+        this.composeFinancePulse(access, workspaceEntry, asOf, organisationTimeZone, financeProjection),
         this.composeFacilityManagementPulse(
           access,
           workspaceEntry,
@@ -263,20 +327,39 @@ export class CommandCentreServerService {
           { asOf, timeZone: organisationTimeZone, fmViewAllowed, outstanding: fmOutstanding }
         ),
         this.loadFinanceQueue(access),
-        this.evaluateEccAttention(access),
+        this.evaluateEccAttention(access, eccViewGrant),
         this.evaluateFmAttention(access, operationalPicture, fmViewAllowed),
-        this.composeLastVisit(access, asOf, workspaceEntry, {
-          fmEnabled,
-          fm: fmChangeVisibility,
-        }),
+        trackVisit
+          ? financeRecordScope.then((financeScope) =>
+              this.composeLastVisit(access, asOf, workspaceEntry, {
+                fmEnabled,
+                fm: fmChangeVisibility,
+                financeScope,
+                ecc: eccViewGrant === true,
+                eccEnabled,
+              })
+            )
+          : Promise.resolve<CommandCentreSnapshot["lastVisit"]>({
+              state: "unavailable",
+              message: "Shown on the Overview.",
+              detail: "",
+              scope: "",
+              items: [],
+            }),
         this.loadCommitments(access, now, organisationTimeZone),
       ]);
     const eccPulse = await this.composeEccPulse(
       access,
       workspaceEntry,
       eccAttention.coverage,
-      { asOf, timeZone: organisationTimeZone }
+      { asOf, timeZone: organisationTimeZone },
+      eccViewGrant
     );
+    const [finance, recordScope, fmOutstandingResult] = await Promise.all([
+      financeProjection,
+      financeRecordScope,
+      fmOutstanding,
+    ]);
 
     const attention = composeExecutiveAttention([
       this.financeAttentionResult(financeQueue),
@@ -317,6 +400,9 @@ export class CommandCentreServerService {
       attention,
       commitments: commitmentsResult.section,
       lastVisit,
+      financialPosition: this.composeFinancialPosition(finance, fmOutstandingResult, workspaceEntry),
+      performance: this.composePerformance(pulse, finance),
+      obligations: this.composeObligations(finance, recordScope, asOf),
     };
   }
 
@@ -568,11 +654,38 @@ export class CommandCentreServerService {
     }
   }
 
+  /**
+   * Record-level Finance visibility for this actor: Finance workspace access (any Finance grant) plus the companies
+   * they may see (finance_company_access); payable rows additionally need the payable view grant. null = none.
+   */
+  private async readFinanceRecordScope(access: CommandCentreAccessContext): Promise<FinanceRecordScope> {
+    if (!financeModuleEnabled(access.session)) return null;
+    try {
+      const admin = createAdminClient();
+      const { data: grants, error } = await admin
+        .from("finance_capability_grants")
+        .select("capability")
+        .eq("organisation_id", access.organisationId)
+        .eq("profile_id", access.profileId);
+      if (error || !grants?.length) return null;
+      const companies = await new PlatformFinanceServerService(access.organisationId).listAccessibleCompanies(
+        access.profileId
+      );
+      return {
+        companyIds: companies.map((c) => c.id),
+        payableView: grants.some((g) => g.capability === FINANCE_PAYABLE_CAPABILITIES.view),
+      };
+    } catch {
+      return null;
+    }
+  }
+
   private async composeFinancePulse(
     access: CommandCentreAccessContext,
     workspaceEntry: WorkspaceAccessChrome,
     asOf: string = new Date().toISOString(),
-    timeZone: string | null = null
+    timeZone: string | null = null,
+    projection?: Promise<FinanceProjection>
   ): Promise<CommandCentrePulseCard> {
     const base: CommandCentrePulseCard = {
       domain: "finance",
@@ -586,7 +699,8 @@ export class CommandCentreServerService {
         : "Workspace access required",
     };
 
-    if (!financeModuleEnabled(access.session)) {
+    const finance = await (projection ?? loadFinanceProjection(access));
+    if (finance.status === "not_enabled") {
       return {
         ...base,
         state: "restricted",
@@ -596,86 +710,262 @@ export class CommandCentreServerService {
         disabledNavigationLabel: null,
       };
     }
-
-    try {
-      const finance = new PlatformFinanceServerService(access.organisationId);
-      const overview = await finance.getCommandCentreOverview({
-        profileId: access.profileId,
-      });
-
-      // A failed payables read is an explicit partial state — never a silently missing line.
-      let openPayablesLine: string;
-      let payablesFailed = false;
-      try {
-        const payablesSvc = new PlatformFinancePayablesServerService(
-          access.organisationId
-        );
-        const payables = await payablesSvc.listCommandCentrePayables(
-          access.profileId
-        );
-        const open = payables.filter(
-          (p) =>
-            p.status !== "paid" &&
-            p.status !== "cancelled" &&
-            p.status !== "rejected"
-        );
-        openPayablesLine =
-          open.length === 1 ? "1 open payable" : `${open.length} open payables`;
-      } catch {
-        payablesFailed = true;
-        openPayablesLine = "Open payables unavailable";
-      }
-
-      const pending = overview.pendingCeoDecisions.count;
-      const awaiting = overview.requests.awaitingReview.count;
-      const lines: string[] = [];
-      lines.push(
-        pending === 1
-          ? "1 pending CEO decision"
-          : `${pending} pending CEO decisions`
-      );
-      const awaitingLine =
-        awaiting === 1
-          ? "1 awaiting Finance review"
-          : `${awaiting} awaiting Finance review`;
-      lines.push(`${awaitingLine} · ${openPayablesLine}`);
-
-      const busy = pending > 0 || awaiting > 0;
-      return {
-        domain: "finance",
-        label: "Finance",
-        state: "healthy",
-        statusLabel: payablesFailed
-          ? "Partial view"
-          : busy
-            ? "Needs attention"
-            : `Checked ${checkedTimeLabel(asOf, timeZone)}`.trim(),
-        partial: payablesFailed,
-        lines,
-        financialLine: lines[0] ?? null,
-        href: workspaceEntry.platformFinance ? "/platform-finance" : null,
-        disabledNavigationLabel: workspaceEntry.platformFinance
-          ? null
-          : "Workspace access required",
-      };
-    } catch (error) {
-      if (isActionError(error) && error.code === "FORBIDDEN") {
-        return {
-          ...base,
-          state: "restricted",
-          statusLabel: "Restricted",
-          lines: ["Finance data is restricted for your account."],
-          href: null,
-          disabledNavigationLabel: null,
-        };
-      }
+    if (finance.status === "restricted") {
       return {
         ...base,
-        state: "error",
-        statusLabel: "Unable to load",
-        lines: ["Finance pulse could not be loaded."],
+        state: "restricted",
+        statusLabel: "Restricted",
+        lines: ["Finance data is restricted for your account."],
+        href: null,
+        disabledNavigationLabel: null,
       };
     }
+    if (finance.status !== "loaded") {
+      return { ...base, state: "error", statusLabel: "Unable to load", lines: ["Finance pulse could not be loaded."] };
+    }
+
+    const { overview, payables } = finance;
+    // A failed payables read is an explicit partial state — never a silently missing line.
+    const payablesFailed = payables === null;
+    const open = (payables ?? []).filter(
+      (p) => p.status !== "paid" && p.status !== "cancelled" && p.status !== "rejected"
+    );
+    const openPayablesLine = payablesFailed
+      ? "Open payables unavailable"
+      : open.length === 1
+        ? "1 open payable"
+        : `${open.length} open payables`;
+
+    const pending = overview.pendingCeoDecisions.count;
+    const awaiting = overview.requests.awaitingReview.count;
+    const lines: string[] = [];
+    lines.push(pending === 1 ? "1 pending CEO decision" : `${pending} pending CEO decisions`);
+    const awaitingLine = awaiting === 1 ? "1 awaiting Finance review" : `${awaiting} awaiting Finance review`;
+    lines.push(`${awaitingLine} · ${openPayablesLine}`);
+
+    const busy = pending > 0 || awaiting > 0;
+    return {
+      domain: "finance",
+      label: "Finance",
+      state: "healthy",
+      statusLabel: payablesFailed
+        ? "Partial view"
+        : busy
+          ? "Needs attention"
+          : `Checked ${checkedTimeLabel(asOf, timeZone)}`.trim(),
+      partial: payablesFailed,
+      lines,
+      financialLine: lines[0] ?? null,
+      href: workspaceEntry.platformFinance ? "/platform-finance" : null,
+      disabledNavigationLabel: workspaceEntry.platformFinance
+        ? null
+        : "Workspace access required",
+    };
+  }
+
+  // ── Lens compositions — pure projections of data already read in this request ──────────────────────────────
+
+  private composeFinancialPosition(
+    finance: FinanceProjection,
+    fmOutstanding: FmOutstandingResult,
+    workspaceEntry: WorkspaceAccessChrome
+  ): CommandCentreFinancialPosition {
+    const known = (label: string, count?: number): CommandCentreFigure => ({ state: "known", label, count });
+    const unavailable = (label = "Unavailable"): CommandCentreFigure => ({ state: "unavailable", label });
+    const noAccess = (label = "No access"): CommandCentreFigure => ({ state: "no_access", label });
+    const bucket = (b: { count: number; totalAmount: number }) =>
+      known(`${formatAmount(b.totalAmount, "NGN")} · ${b.count} ${b.count === 1 ? "item" : "items"}`, b.count);
+
+    const financeBase = {
+      periodLabel: null,
+      periodStatus: null,
+      receivablesOpen: unavailable(),
+      receivablesOverdue: unavailable(),
+      payablesOpen: unavailable(),
+      payablesOverdue: unavailable(),
+      postedRevenue: unavailable(),
+      postedExpenses: unavailable(),
+      postedNet: unavailable(),
+      unpostedItems: unavailable(),
+      scope: null,
+      href: workspaceEntry.platformFinance ? "/platform-finance" : null,
+    } as const;
+    let financePosition: CommandCentreFinancialPosition["finance"];
+    if (finance.status !== "loaded") {
+      financePosition = {
+        ...financeBase,
+        state: finance.status === "unavailable" ? "error" : "restricted",
+        reason:
+          finance.status === "not_enabled"
+            ? "Platform Finance is not enabled for this organisation."
+            : finance.status === "restricted"
+              ? "Finance figures are restricted for your account."
+              : "Finance could not be read.",
+        receivablesOpen: finance.status === "unavailable" ? unavailable() : noAccess(),
+        receivablesOverdue: finance.status === "unavailable" ? unavailable() : noAccess(),
+        payablesOpen: finance.status === "unavailable" ? unavailable() : noAccess(),
+        payablesOverdue: finance.status === "unavailable" ? unavailable() : noAccess(),
+        postedRevenue: finance.status === "unavailable" ? unavailable() : noAccess(),
+        postedExpenses: finance.status === "unavailable" ? unavailable() : noAccess(),
+        postedNet: finance.status === "unavailable" ? unavailable() : noAccess(),
+        unpostedItems: finance.status === "unavailable" ? unavailable() : noAccess(),
+      };
+    } else {
+      const { overview, payables } = finance;
+      const today = overview.asOf.slice(0, 10);
+      const openPayables = (payables ?? []).filter(
+        (p) => p.status !== "paid" && p.status !== "cancelled" && p.status !== "rejected" && p.outstandingAmount > 0
+      );
+      // Payables keep their own currencies; totals are stated per currency, never blended.
+      const byCurrency = (rows: FinancePayableView[]) => {
+        const totals = new Map<string, number>();
+        for (const r of rows) totals.set(r.currency || "NGN", (totals.get(r.currency || "NGN") ?? 0) + r.outstandingAmount);
+        return [...totals.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([c, n]) => formatAmount(n, c)).join(" + ");
+      };
+      const payablesFigure = (rows: FinancePayableView[]) =>
+        rows.length === 0 ? known("None", 0) : known(`${byCurrency(rows)} · ${rows.length} ${rows.length === 1 ? "payable" : "payables"}`, rows.length);
+      const overduePayables = openPayables.filter((p) => p.dueDate != null && p.dueDate < today);
+      const acc = overview.accounting;
+      const money = (value: number | null) => (value == null ? unavailable("No posted accounting in this period") : known(formatAmount(value, "NGN")));
+      financePosition = {
+        ...financeBase,
+        state: payables === null ? "partial" : "healthy",
+        reason: payables === null ? "Payables could not be read; other Finance figures are shown." : null,
+        scope: "All Finance companies (Executive Office projection).",
+        periodLabel: acc.periodLabel,
+        periodStatus: acc.periodStatus,
+        receivablesOpen: overview.receivables ? bucket(overview.receivables.open) : noAccess("Needs receivables access"),
+        receivablesOverdue: overview.receivables ? bucket(overview.receivables.overdue) : noAccess("Needs receivables access"),
+        payablesOpen: payables === null ? unavailable() : payablesFigure(openPayables),
+        payablesOverdue: payables === null ? unavailable() : payablesFigure(overduePayables),
+        postedRevenue: money(acc.revenue),
+        postedExpenses: money(acc.expenses),
+        postedNet: money(acc.netProfit),
+        unpostedItems: known(String(acc.unpostedItems), acc.unpostedItems),
+      };
+    }
+
+    const fm: CommandCentreFinancialPosition["facilityManagement"] =
+      fmOutstanding.status === "loaded"
+        ? {
+            state: "healthy",
+            reason: null,
+            pendingPaymentsOutstanding:
+              fmOutstanding.count === 0
+                ? known("None outstanding", 0)
+                : known(`${formatAmount(fmOutstanding.amount, "NGN")} · ${fmOutstanding.count} ${fmOutstanding.count === 1 ? "request" : "requests"}`, fmOutstanding.count),
+            href: workspaceEntry.facilityManagement ? "/finance/submissions" : null,
+          }
+        : {
+            state: fmOutstanding.status === "unavailable" ? "error" : "restricted",
+            reason:
+              fmOutstanding.status === "not_enabled"
+                ? "Facility Management is not enabled for this organisation."
+                : fmOutstanding.status === "restricted"
+                  ? "Needs Facility Management Costs & Claims access."
+                  : "Pending payments could not be fully evaluated.",
+            pendingPaymentsOutstanding: fmOutstanding.status === "unavailable" ? unavailable() : noAccess(),
+            href: null,
+          };
+
+    return {
+      finance: financePosition,
+      facilityManagement: fm,
+      exclusions: [
+        "Finance and Facility Management positions are shown separately: FM pending payments are amounts FM has requested from its client, not Platform Finance receivables, so they are never added together.",
+        "Historical commercial facts (imported pre-SentraCore™ records) are context only and are not part of any position here.",
+        "Cash and bank balances are not included in this view.",
+      ],
+    };
+  }
+
+  private composePerformance(
+    pulse: CommandCentrePulseCard[],
+    finance: FinanceProjection
+  ): CommandCentrePerformanceEnvironment[] {
+    const notEstablished = "Throughput over time is not established yet — it needs recorded operational history.";
+    return pulse.map((card) => {
+      let throughput: string[] = [notEstablished];
+      if (card.domain === "finance" && finance.status === "loaded") {
+        const { overview } = finance;
+        const approved = overview.requests.approvedThisMonth;
+        const acc = overview.accounting;
+        throughput = [
+          `Financial requests approved this month: ${approved.count} · ${formatAmount(approved.totalAmount, "NGN")}`,
+          acc.netProfit == null
+            ? `Posted results${acc.periodLabel ? ` (${acc.periodLabel})` : ""}: no posted accounting yet`
+            : `Posted results${acc.periodLabel ? ` (${acc.periodLabel})` : ""}: revenue ${formatAmount(acc.revenue ?? 0, "NGN")} · expenses ${formatAmount(acc.expenses ?? 0, "NGN")} · net ${formatAmount(acc.netProfit, "NGN")}`,
+        ];
+      }
+      if (card.domain === "projects_construction") throughput = [];
+      return {
+        domain: card.domain,
+        label: card.label,
+        state: card.state,
+        statusLabel: card.statusLabel,
+        position: card.lines,
+        throughput,
+        href: card.href,
+      };
+    });
+  }
+
+  private composeObligations(finance: FinanceProjection, scope: FinanceRecordScope, asOf: string): CommandCentreObligations {
+    if (finance.status !== "loaded") {
+      return {
+        state: finance.status === "unavailable" ? "error" : "restricted",
+        reason:
+          finance.status === "not_enabled"
+            ? "Platform Finance is not enabled for this organisation."
+            : finance.status === "restricted"
+              ? "Finance obligations are restricted for your account."
+              : "Finance could not be read.",
+        summary: null,
+        items: [],
+      };
+    }
+    if (finance.payables === null) {
+      return { state: "error", reason: "Payables could not be read.", summary: null, items: [] };
+    }
+    const today = asOf.slice(0, 10);
+    // An approved obligation with a stated due date is a commitment; drafts, rejected and paid items are not.
+    const committed = finance.payables.filter(
+      (p) =>
+        (p.status === "approved" || p.status === "scheduled" || p.status === "payment_pending") &&
+        p.outstandingAmount > 0 &&
+        p.dueDate != null
+    );
+    const overdue = committed.filter((p) => p.dueDate! < today);
+    const summary =
+      committed.length === 0
+        ? "No approved Finance payables with a due date are outstanding."
+        : `${committed.length} approved ${committed.length === 1 ? "payable" : "payables"} with a due date · ${overdue.length} overdue`;
+    const visible = scope && scope.payableView ? new Set(scope.companyIds) : null;
+    const items = visible
+      ? committed
+          .filter((p) => visible.has(p.companyId))
+          .sort((a, b) => a.dueDate!.localeCompare(b.dueDate!))
+          .map((p) => ({
+            id: `payable:${p.id}`,
+            environment: "Finance" as const,
+            title: p.payeeName || p.description || "Payable",
+            statusLabel: p.status.replaceAll("_", " "),
+            amountLabel: formatAmount(p.outstandingAmount, p.currency || "NGN"),
+            dueDate: p.dueDate!,
+            overdue: p.dueDate! < today,
+            href: `/platform-finance/payables/${p.id}`,
+          }))
+      : [];
+    return {
+      state: committed.length === 0 ? "empty" : visible ? "healthy" : "partial",
+      reason: visible
+        ? items.length < committed.length
+          ? "Only payables in your Finance companies are listed."
+          : null
+        : "Individual payables need Finance payable access; the summary is shown.",
+      summary,
+      items,
+    };
   }
 
   /** One read of the Finance CEO decision queue, shared by Decisions and Attention. */
@@ -864,11 +1154,24 @@ export class CommandCentreServerService {
    * shift are read independently so one failed source is a visible partial — never zero.
    */
   private async evaluateEccAttention(
-    access: CommandCentreAccessContext
+    access: CommandCentreAccessContext,
+    /** The actor's ECC view grant: ECC keeps its own authority (null = the grant could not be read). */
+    eccViewGrant: boolean | null = true
   ): Promise<{ result: DomainAttentionResult; coverage: "gap" | "ok" | "unknown" }> {
     if (!hasModule(access.session.enabledModules, ECC_MODULE_SLUG)) {
       return {
         result: { domain: "ecc", status: "not_enabled", items: [] },
+        coverage: "unknown",
+      };
+    }
+    if (eccViewGrant !== true) {
+      return {
+        result: {
+          domain: "ecc",
+          status: eccViewGrant === null ? "unavailable" : "restricted",
+          items: [],
+          note: eccViewGrant === null ? "ECC access could not be verified." : "ECC attention needs ECC access.",
+        },
         coverage: "unknown",
       };
     }
@@ -914,8 +1217,20 @@ export class CommandCentreServerService {
     context: { asOf: string; timeZone: string | null } = {
       asOf: new Date().toISOString(),
       timeZone: null,
-    }
+    },
+    eccViewGrant: boolean | null = true
   ): Promise<CommandCentrePulseCard> {
+    if (hasModule(access.session.enabledModules, ECC_MODULE_SLUG) && eccViewGrant !== true) {
+      return {
+        domain: "ecc",
+        label: "ECC",
+        state: eccViewGrant === null ? "error" : "restricted",
+        statusLabel: eccViewGrant === null ? "Unable to load" : "Restricted",
+        lines: [eccViewGrant === null ? "ECC access could not be verified." : "ECC figures need ECC access."],
+        href: null,
+        disabledNavigationLabel: null,
+      };
+    }
     if (!hasModule(access.session.enabledModules, ECC_MODULE_SLUG)) {
       return {
         domain: "ecc",
@@ -1022,14 +1337,26 @@ export class CommandCentreServerService {
     access: CommandCentreAccessContext,
     asOf: string,
     workspaceEntry: WorkspaceAccessChrome,
-    fmContext: { fmEnabled: boolean; fm: FmChangeVisibility | null } = { fmEnabled: false, fm: null }
+    fmContext: {
+      fmEnabled: boolean;
+      fm: FmChangeVisibility | null;
+      /** Record-level Finance visibility (Finance access + companies); null = none. */
+      financeScope?: FinanceRecordScope;
+      /** ECC view grant held. */
+      ecc?: boolean;
+      eccEnabled?: boolean;
+    } = { fmEnabled: false, fm: null }
   ): Promise<CommandCentreSnapshot["lastVisit"]> {
     const timeZone = organisationTimeZoneOrNull(access.session);
+    const financeEnabled = financeModuleEnabled(access.session);
+    const eccEnabled = fmContext.eccEnabled ?? hasModule(access.session.enabledModules, ECC_MODULE_SLUG);
+    const financeScope = fmContext.financeScope ?? null;
     const visibility = {
-      finance: financeModuleEnabled(access.session),
-      ecc: hasModule(access.session.enabledModules, ECC_MODULE_SLUG),
+      // Finance activity names records (purposes, amounts): it needs Finance access and stays in the actor's companies.
+      finance: financeEnabled && financeScope && financeScope.companyIds.length ? { companyIds: financeScope.companyIds } : false,
+      ecc: eccEnabled && fmContext.ecc === true,
       fm: fmContext.fm,
-    };
+    } as const;
     // Facility Management changes come from FM's own authoritative records (never the legacy operational_events
     // stream), within the actor's FM authority and authorised facilities.
     const covered = [
@@ -1038,6 +1365,9 @@ export class CommandCentreServerService {
       visibility.fm ? "Facility Management" : null,
     ].filter(Boolean) as string[];
     const fmNotes: string[] = [];
+    if (financeEnabled && !visibility.finance) fmNotes.push("Finance activity needs Finance access with company access");
+    else if (visibility.finance) fmNotes.push("Finance activity is limited to your Finance companies");
+    if (eccEnabled && !visibility.ecc) fmNotes.push("ECC activity needs ECC access");
     if (visibility.fm) {
       if (!visibility.fm.operations) fmNotes.push("Facility Management covers Costs & Claims only for your access");
       if (!visibility.fm.costsClaims) fmNotes.push("Facility Management Costs & Claims changes need Costs & Claims access");

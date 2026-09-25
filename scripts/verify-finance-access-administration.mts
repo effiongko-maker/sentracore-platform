@@ -349,6 +349,18 @@ async function main() {
   check(norm(fnBody(migration, "platform_iam_is_allowed_platform_capability")).replace(" 'platform_finance.access.manage',", "") === norm(fnBody(prev, "platform_iam_is_allowed_platform_capability")), "platform allowlist otherwise identical");
   out.push("PASS migration re-states the previous platform capability check and allowlist exactly, plus access.manage");
 
+  // 19. Finance Settings → Access: contextual navigation only; IAM stays central.
+  const settingsUi = read("src/modules/platform-finance/components/PlatformFinanceSettingsPage.tsx");
+  const accessUi = read("src/modules/platform-admin/client/AccessView.tsx");
+  check(/Access &amp; responsibilities/.test(settingsUi) && /Manage Finance access/.test(settingsUi) && /"\/admin\/access\?focus=platform-finance"/.test(settingsUi), "Settings links to Access with Finance focus");
+  check(!/adminCall|batchUpdateCapabilities|updateFinanceAccess|finance_capability_grants|person=/.test(settingsUi), "Finance Settings owns no permissions and names no person");
+  check(/return value === ACCESS_FOCUS_PLATFORM_FINANCE \? value : null;/.test(accessUi), "only the known focus value is honoured; anything else is the ordinary screen");
+  check(/const current = focus \? requested : requested \?\? list\[0\];/.test(accessUi), "focused arrival never selects an arbitrary person; generic default unchanged");
+  check(/const next = new URLSearchParams\(params\.toString\(\)\);\s*next\.set\("person", id\);/.test(accessUi), "switching people keeps the Finance focus");
+  check(/focus === ACCESS_FOCUS_PLATFORM_FINANCE \?[\s\S]{0,200}<FinanceAccessPanel/.test(accessUi) && /href="\/platform-finance\/settings"/.test(accessUi), "focused view shows the same audited Finance access panel and a way back");
+  check((accessUi.match(/<FinanceAccessPanel /g) ?? []).length === 2 && (accessUi.match(/batchUpdateCapabilities/g) ?? []).length === 1, "no second access editor or grant path");
+  out.push("PASS 19 Finance Settings → Access keeps Finance context; no local permissions; no arbitrary person; generic Access unchanged");
+
   for (const line of out) console.log(line);
   console.log("verify-finance-access-administration: PASS");
 }

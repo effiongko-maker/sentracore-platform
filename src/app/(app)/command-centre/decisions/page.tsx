@@ -2,14 +2,16 @@ import type { Metadata } from "next";
 import { ExecutiveLensPage } from "@/modules/command-centre/components/ExecutiveLensPage";
 import { getExecutiveLens } from "@/modules/command-centre/nav";
 import { guardExecutiveOffice } from "@/modules/command-centre/server/guardExecutiveOffice";
+import { CommandCentreServerService } from "@/modules/command-centre/server/CommandCentreServerService";
 
 const lens = getExecutiveLens("decisions");
 
 export const metadata: Metadata = { title: `${lens.label} · Executive Office` };
 
-/** Executive Office → decisions lens (foundation route; same server-side gate as the Overview). */
+/** Executive Office → decisions lens (the same Executive Office projection and gate as the Overview; never moves the last-visit marker). */
 export default async function ExecutiveDecisionsRoute() {
   const gate = await guardExecutiveOffice();
   if (!gate.ok) return gate.node;
-  return <ExecutiveLensPage lens={lens} />;
+  const snapshot = await new CommandCentreServerService().load(gate.access, { trackVisit: false });
+  return <ExecutiveLensPage lens={lens} snapshot={snapshot} />;
 }
