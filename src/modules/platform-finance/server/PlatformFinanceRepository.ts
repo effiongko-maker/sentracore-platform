@@ -28,6 +28,63 @@ function throwDb(
   throw new Error(error?.message?.trim() || fallback);
 }
 
+export type PostedMovementRow = {
+  period_id: string;
+  account_id: string;
+  account_code: string;
+  account_name: string;
+  account_type: string;
+  total_debit: number | string | null;
+  total_credit: number | string | null;
+};
+
+/** The minimal PostgREST query surface the posted-movement scan uses (lets the scan be verified against Postgres). */
+type PostedMovementQuery = {
+  eq(column: string, value: string): PostedMovementQuery;
+  order(column: string, options: { ascending: boolean }): PostedMovementQuery;
+  range(from: number, to: number): PromiseLike<{ data: unknown[] | null; error: { message?: string } | null }>;
+};
+export type PostedMovementClient = {
+  from(relation: "finance_trial_balance_v"): { select(columns: string): PostedMovementQuery };
+};
+
+export const POSTED_MOVEMENT_PAGE_SIZE = 1000;
+
+/**
+ * Every posted period × account movement row for a company, exactly once.
+ *
+ * finance_trial_balance_v groups by (company, period, account), so (period_id, account_id) is unique within a company.
+ * Ordering by both gives a TOTAL order: offset pages are deterministic and a page boundary can never skip or repeat a
+ * row, however many accounts share a period. Ordering changes nothing about which rows exist or their amounts.
+ */
+export async function fetchPostedMovementRows(
+  client: PostedMovementClient,
+  input: { organisationId: string; companyId: string; pageSize?: number }
+): Promise<PostedMovementRow[]> {
+  const pageSize = input.pageSize ?? POSTED_MOVEMENT_PAGE_SIZE;
+  const raw: PostedMovementRow[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    if (offset >= 1_000_000) {
+      throw new Error("Posted account movement scan exceeded the v1 limit.");
+    }
+    const { data, error } = await client
+      .from("finance_trial_balance_v")
+      .select(
+        "period_id, account_id, account_code, account_name, account_type, total_debit, total_credit"
+      )
+      .eq("organisation_id", input.organisationId)
+      .eq("company_id", input.companyId)
+      .order("period_id", { ascending: true })
+      .order("account_id", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error) throwDb(error, "Failed to load posted account movements.");
+    const batch = (data ?? []) as PostedMovementRow[];
+    raw.push(...batch);
+    if (batch.length < pageSize) break;
+  }
+  return raw;
+}
+
 type CompanyRow = {
   id: string;
   organisation_id: string;
@@ -1164,7 +1221,10 @@ export class PlatformFinanceRepository {
       if (input.dateFrom) totalsQuery = totalsQuery.gte("entry_date", input.dateFrom);
       if (input.dateTo) totalsQuery = totalsQuery.lte("entry_date", input.dateTo);
       if (input.searchOr) totalsQuery = totalsQuery.or(input.searchOr);
-      const { data, error } = await totalsQuery.range(offset, offset + pageSize - 1);
+      // journal_line_id is unique: a total order, so page boundaries cannot skip or repeat a line.
+      const { data, error } = await totalsQuery
+        .order("journal_line_id", { ascending: true })
+        .range(offset, offset + pageSize - 1);
       if (error) throwDb(error, "Failed to load general ledger totals.");
       const batch = (data ?? []) as Array<{
         debit: number | string | null;
@@ -1193,35 +1253,11 @@ export class PlatformFinanceRepository {
   async listPostedAccountMovements(
     companyId: string
   ): Promise<PostedAccountMovement[]> {
-    const pageSize = 1000;
-    const raw: Array<{
-      period_id: string;
-      account_id: string;
-      account_code: string;
-      account_name: string;
-      account_type: string;
-      total_debit: number | string | null;
-      total_credit: number | string | null;
-    }> = [];
-    let offset = 0;
-    for (;;) {
-      const { data, error } = await db()
-        .from("finance_trial_balance_v")
-        .select(
-          "period_id, account_id, account_code, account_name, account_type, total_debit, total_credit"
-        )
-        .eq("organisation_id", this.organisationId)
-        .eq("company_id", companyId)
-        .range(offset, offset + pageSize - 1);
-      if (error) throwDb(error, "Failed to load posted account movements.");
-      const batch = (data ?? []) as typeof raw;
-      raw.push(...batch);
-      if (batch.length < pageSize) break;
-      offset += pageSize;
-      if (offset >= 1_000_000) {
-        throw new Error("Posted account movement scan exceeded the v1 limit.");
-      }
-    }
+    // Structural view of the Supabase client (its full generic type is too deep to check against the narrow surface).
+    const raw = await fetchPostedMovementRows(db() as unknown as PostedMovementClient, {
+      organisationId: this.organisationId,
+      companyId,
+    });
 
     if (raw.length === 0) return [];
 

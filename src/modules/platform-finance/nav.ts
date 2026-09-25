@@ -177,11 +177,10 @@ export const PLATFORM_FINANCE_NAV_ITEMS: readonly PlatformFinanceNavItem[] = [
     icon: Archive,
   },
   {
-    href: null,
+    href: "/platform-finance/reports",
     label: "Reports",
     match: "prefix",
     icon: BarChart3,
-    comingSoon: true,
   },
   {
     href: null,

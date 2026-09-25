@@ -73,8 +73,9 @@ function main() {
       nav.includes('{ href: null, label: "Cash Flow"'),
     "Cash Flow comingSoon"
   );
-  assert(nav.includes('comingSoon: true'), "Cash Flow / Reports still comingSoon");
-  assert(nav.includes('label: "Reports"') && nav.includes("comingSoon: true"), "Reports dark");
+  assert(nav.includes('comingSoon: true'), "Cash Flow still comingSoon");
+  // Reports is live (Platform Finance → Reports); it presents these statements, never a Cash Flow statement.
+  assert(nav.includes('href: "/platform-finance/reports",\n    label: "Reports"'), "Reports live");
 
   const route = readSrc("src/app/api/platform-finance/route.ts");
   for (const action of [
