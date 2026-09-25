@@ -63,6 +63,7 @@ export const HOME_FINANCIAL_POSITION_YEAR = FINANCE_OPERATING_YEAR;
 async function settleCostTotals(): Promise<{
   totalAmount: number;
   currency: string;
+  orderValueAmount: number;
 } | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => {
@@ -74,7 +75,7 @@ async function settleCostTotals(): Promise<{
       HOME_FINANCIAL_POSITION_YEAR,
       { signal: controller.signal }
     );
-    return { totalAmount: result.totalAmount, currency: result.currency };
+    return { totalAmount: result.totalAmount, currency: result.currency, orderValueAmount: result.orderValueAmount };
   } catch {
     return null;
   } finally {

@@ -109,9 +109,11 @@ const workRow = (over: Record<string, unknown>) => ({
   assert(historical.startMeterReading === 3265.1 && historical.endMeterReading === 3271.5 && historical.logBasis === "hour_meter", "hour-meter facts are exposed");
   const clock = map({ id: "u2", code: "GENLOG-2", log_date: "2026-08-16", generator: "Gen 1", started_at: "2026-08-16T08:00:00Z", ended_at: "2026-08-16T10:00:00Z", hours: 2, fuel_used: 0, remarks: null });
   assert(clock.fuelUsed === 0 && clock.logBasis === "clock_times" && clock.recordOrigin === "operational", "a genuine recorded fuel of 0 stays 0; legacy rows default to clock_times/operational");
-  const parsed = (GENERATOR_SPEC.parseCreate as (p: unknown) => { columns: Record<string, unknown> })({ date: "2026-08-16", generator: "Gen 1", startedAt: "2026-08-16T08:00:00Z", endedAt: "2026-08-16T09:00:00Z", fuelUsed: 5, logBasis: "hour_meter", recordOrigin: "migrated_historical" });
-  assert(!("log_basis" in parsed.columns) && !("record_origin" in parsed.columns) && !("start_meter_reading" in parsed.columns), "the product cannot create hour-meter/historical generator logs");
-  pass("Generator logs: unknown fuel/times preserved; forward creation stays strictly clock-based");
+  // Operator review: Start/End are generator hour-meter READINGS, so the product records every new log on the
+  // hour-meter basis — but it can never declare a log historical.
+  const parsed = (GENERATOR_SPEC.parseCreate as (p: unknown) => { columns: Record<string, unknown> })({ date: "2026-08-16", generator: "Gen 1", startMeterReading: 10, endMeterReading: 12, fuelUsed: 5, logBasis: "clock_times", recordOrigin: "migrated_historical" });
+  assert(parsed.columns.log_basis === "hour_meter" && !("record_origin" in parsed.columns) && parsed.columns.started_at === null, "the product creates hour-meter logs and can never mark one historical");
+  pass("Generator logs: unknown fuel/times preserved; forward creation records hour-meter readings, never historical origin");
 }
 
 // Incidents: unknown status/severity (migrated historical) — mapping, forward strictness

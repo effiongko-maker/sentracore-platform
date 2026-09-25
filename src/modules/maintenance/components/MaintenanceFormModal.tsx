@@ -1,6 +1,6 @@
 "use client";
 
-import { AuthorisedFacilitySelect } from "@/components/operational/AuthorisedFacilitySelect";
+import { AuthorisedFacilitySelect, facilityIdsForSelection } from "@/components/operational/AuthorisedFacilitySelect";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useOperatingAccess } from "@/hooks/useOperatingAccess";
@@ -89,7 +89,7 @@ export function MaintenanceFormModal({
 }: MaintenanceFormModalProps) {
   const { toast } = useToast();
   // Same capability the Approvals page uses; the server enforces it too (approval.request_for_work).
-  const { can } = useOperatingAccess();
+  const { can, access } = useOperatingAccess();
   const canManageApprovals = can("approvals.manage");
   const [form, setForm] = useState<MaintenanceFormValues>(toCreateFormValues());
   const [errors, setErrors] = useState<
@@ -157,11 +157,11 @@ export function MaintenanceFormModal({
     });
   }, [open, facilities, maintenance?.facilityId, resolveScoped]);
 
-  const filteredAssets = form.facilityId
-    ? assets.filter(
-        (asset) =>
-          asset.facilityId === form.facilityId
-      )
+  // "Both" stands for the genuine multi-facility Work (primary facility first + fm_work_facilities).
+  const selectedFacilityIds = facilityIdsForSelection(form.facilityId, access?.authorisedFacilities ?? []);
+  const primaryFacilityId = selectedFacilityIds[0] ?? "";
+  const filteredAssets = selectedFacilityIds.length
+    ? assets.filter((asset) => selectedFacilityIds.includes(asset.facilityId))
     : assets;
 
   function updateField<K extends keyof MaintenanceFormValues>(
@@ -236,7 +236,8 @@ export function MaintenanceFormModal({
         description,
         categoryId: optionalString(form.categoryId),
         department: optionalString(form.department),
-        facilityId: form.facilityId.trim(),
+        facilityId: primaryFacilityId,
+        facilityIds: selectedFacilityIds,
         assetId: optionalString(form.assetId),
         reportedByUserId: optionalString(form.reportedByUserId),
         assignedToUserId: optionalString(form.assignedToUserId),
@@ -438,7 +439,8 @@ export function MaintenanceFormModal({
         description,
         categoryId: optionalString(form.categoryId),
         department: optionalString(form.department),
-        facilityId: form.facilityId.trim(),
+        facilityId: primaryFacilityId,
+        facilityIds: selectedFacilityIds,
         assetId: optionalString(form.assetId),
         reportedByUserId: optionalString(form.reportedByUserId),
         assignedToUserId: optionalString(form.assignedToUserId),
@@ -526,7 +528,8 @@ export function MaintenanceFormModal({
           description,
           categoryId: optionalString(form.categoryId),
           department: optionalString(form.department),
-          facilityId: form.facilityId.trim(),
+          facilityId: primaryFacilityId,
+        facilityIds: selectedFacilityIds,
           assetId: optionalString(form.assetId),
           reportedByUserId: optionalString(form.reportedByUserId),
           assignedToUserId: optionalString(form.assignedToUserId),
@@ -755,6 +758,7 @@ export function MaintenanceFormModal({
           <AuthorisedFacilitySelect
             id="mnt-facility"
             value={form.facilityId}
+            allowBoth
             currentName={facilityDisplayName(facilities, form.facilityId)}
             onChange={(facilityId) => {
               updateField("facilityId", facilityId);
@@ -884,7 +888,7 @@ export function MaintenanceFormModal({
             valueMode="name"
             value={form.department ?? ""}
             onChange={(value) => updateField("department", value)}
-            facilityId={form.facilityId || undefined}
+            facilityId={primaryFacilityId || undefined}
             enabled={open}
             emptyOptionLabel="Select department"
             loadingPlaceholder="Loading departments…"
@@ -1000,7 +1004,7 @@ export function MaintenanceFormModal({
                   href={`/finance/client-payments/new?workOrder=${encodeURIComponent(linkedWorkOrderId)}`}
                   className="inline-block text-sm font-medium text-primary hover:underline"
                 >
-                  Request client payment for {linkedWorkOrderId} →
+                  Raise payment request for {linkedWorkOrderId} →
                 </Link>
               )
             ) : null}

@@ -19,9 +19,22 @@ import type { ApiRequestEnvelope } from "@/lib/api/requestEnvelope";
  * (fm_work_instructions). Compatibility route: /api/work-orders.
  * No Apps Script call. No dual-write. Sheet Work Orders are frozen legacy.
  * Reads: ops.view. Creates: ops.create. Updates/deactivates: ops.edit.
+ * Commercial submissions: createSubmission → ops.create; updateSubmission / recordFollowUp → ops.edit;
+ * listFollowUps → ops.view.
  */
 
-const SERVED_ACTIONS = new Set(["getAll", "getById", "create", "update", "deactivate"]);
+const SERVED_ACTIONS = new Set([
+  "getAll",
+  "getById",
+  "create",
+  "update",
+  "deactivate",
+  // Commercial submission package (WO/JO): create → ops.create; update / follow-up → ops.edit; history → ops.view.
+  "createSubmission",
+  "updateSubmission",
+  "recordFollowUp",
+  "listFollowUps",
+]);
 
 function fail(status: number, message: string, extra?: { errorClass?: string }) {
   return NextResponse.json(

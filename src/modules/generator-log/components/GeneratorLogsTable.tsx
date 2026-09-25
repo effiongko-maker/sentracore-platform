@@ -7,17 +7,9 @@ import { formatDate } from "@/lib/utils";
 import type { GeneratorLog } from "../types";
 import { GeneratorLogRowActions } from "./GeneratorLogRowActions";
 
-function formatDateTime(iso?: string): string {
-  if (!iso) return "—";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+/** Hour-meter readings are counter values, not times. */
+function formatReading(value: number | null): string {
+  return value == null ? "—" : value.toLocaleString("en-GB", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
 }
 
 function formatHours(hours: number): string {
@@ -25,9 +17,13 @@ function formatHours(hours: number): string {
   return hours.toFixed(2);
 }
 
-function formatFuel(fuelUsed: number): string {
-  if (!Number.isFinite(fuelUsed)) return "—";
-  return String(fuelUsed);
+/**
+ * Diesel is ONE total per date for all generators (carried by one log of the date). Other logs of that date show that
+ * their fuel is inside that date total — never an amount of their own. null with no date total = not recorded (never 0).
+ */
+function formatFuel(fuelUsed: number | null, dateHasTotal: boolean): string {
+  if (fuelUsed != null) return `${fuelUsed.toLocaleString("en-GB")} L · date total`;
+  return dateHasTotal ? "In date total" : "Not recorded";
 }
 
 interface GeneratorLogsTableProps {
@@ -53,6 +49,12 @@ export function GeneratorLogsTable({
   onEdit,
   canMutate = true,
 }: GeneratorLogsTableProps) {
+  // Dates in view whose diesel total is carried by one of their logs.
+  const datesWithTotal = useMemo(
+    () => new Set(entries.filter((entry) => entry.fuelUsed != null).map((entry) => entry.date)),
+    [entries]
+  );
+
   const columns = useMemo<Column<GeneratorLog>[]>(
     () => [
       {
@@ -75,22 +77,22 @@ export function GeneratorLogsTable({
         ),
       },
       {
-        key: "startedAt",
-        header: "Start",
+        key: "startMeterReading",
+        header: "Start reading",
         render: (entry) => (
-          <span className="text-muted">{formatDateTime(entry.startedAt)}</span>
+          <span className="tabular-nums text-muted">{formatReading(entry.startMeterReading)}</span>
         ),
       },
       {
-        key: "endedAt",
-        header: "End",
+        key: "endMeterReading",
+        header: "End reading",
         render: (entry) => (
-          <span className="text-muted">{formatDateTime(entry.endedAt)}</span>
+          <span className="tabular-nums text-muted">{formatReading(entry.endMeterReading)}</span>
         ),
       },
       {
         key: "hours",
-        header: "Hours",
+        header: "Run hours",
         render: (entry) => (
           <span className="tabular-nums text-foreground">
             {formatHours(entry.hours)}
@@ -99,10 +101,10 @@ export function GeneratorLogsTable({
       },
       {
         key: "fuelUsed",
-        header: "Diesel Used",
+        header: "Diesel (date total, all generators)",
         render: (entry) => (
-          <span className="tabular-nums text-muted">
-            {formatFuel(entry.fuelUsed)}
+          <span className="tabular-nums text-muted" title="Total diesel used on this date by all generators — not this generator's own consumption.">
+            {formatFuel(entry.fuelUsed, datesWithTotal.has(entry.date))}
           </span>
         ),
       },
@@ -129,7 +131,7 @@ export function GeneratorLogsTable({
         ),
       },
     ],
-    [onView, onEdit, canMutate]
+    [onView, onEdit, canMutate, datesWithTotal]
   );
 
   return (

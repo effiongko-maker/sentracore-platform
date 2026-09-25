@@ -96,7 +96,7 @@ export function ApprovalsTable({
       },
       {
         key: "approvalAmount",
-        header: "Estimated Cost",
+        header: "Requested amount",
         render: (row) => (
           <span className="text-muted">{approvalAmountLabel(row)}</span>
         ),

@@ -44,7 +44,7 @@ export function useCostSubmissionsList(
     } finally {
       if (id === requestId.current) setLoading(false);
     }
-  }, [page, pageSize, params.search, params.status, params.facilityId, params.kind]);
+  }, [page, pageSize, params.search, params.status, params.facilityId, params.kind, params.includeHistory]);
 
   useEffect(() => {
     void load();

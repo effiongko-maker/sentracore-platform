@@ -50,6 +50,7 @@ export function WorkPage() {
   const canCreateOps = can("ops.create");
   const openId = useQueryRecordId();
   const {
+    includeHistory, setIncludeHistory,
     items,
     loading,
     error,
@@ -236,6 +237,7 @@ export function WorkPage() {
         })}
       </div>
 
+      <label className="mb-3 flex items-center gap-2 text-sm text-muted"><input type="checkbox" checked={includeHistory} onChange={(e) => setIncludeHistory(e.target.checked)} />Include 2025 history</label>
       <WorkToolbar
         scope={scope}
         search={search}

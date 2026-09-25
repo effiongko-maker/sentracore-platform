@@ -15,6 +15,7 @@ import {
   mapFmAuthorizationRow,
   mapFmCostRecordRow,
   mapFmCostSubmissionRow,
+  parseSubmissionFollowUpInput,
   mapFmPaymentRow,
   paginateRows,
   parseAuthorizationIdPayload,
@@ -279,6 +280,11 @@ export class FmCostServerService {
         if (action === "getById") return this.getSubmission(parseSubmissionIdPayload(payload));
         if (action === "create") return this.createSubmission(payload);
         if (action === "update") return this.updateSubmission(payload, options);
+        if (action === "recordFollowUp") {
+          const row = await this.repo().recordSubmissionFollowUp(parseSubmissionFollowUpInput(payload), this.ctx.profileId);
+          return (await this.hydrateSubmissions([row]))[0];
+        }
+        if (action === "listFollowUps") return this.repo().listSubmissionFollowUps(parseSubmissionIdPayload(payload));
         break;
       case "reimbursement-authorizations":
         if (action === "getAll") return this.listAuthorizations(payload);

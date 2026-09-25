@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { CostsClaimsNav } from "./CostsClaimsNav";
+import { COSTS_CLAIMS_AREAS, activeCostsClaimsArea } from "../costsClaimsSections";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, FileText, Pencil } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -40,6 +42,10 @@ import {
 } from "../utils/monetaryInput";
 import { detailsFromPackage } from "./SubmissionDetailsForm";
 import { MonetaryInput } from "./MonetaryInput";
+import {
+  COMMERCIAL_FOLLOW_UP_METHODS,
+  CommercialFollowUpModal,
+} from "@/components/commercial/CommercialFollowUpModal";
 import { resolveSubmissionCosts } from "../utils/resolveSubmissionCosts";
 import {
   canAuthorizeSubmission,
@@ -155,6 +161,23 @@ export function SubmissionDetailPage({
   const [paymentMethod, setPaymentMethod] = useState("");
   const [paymentNotes, setPaymentNotes] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
+  // Follow-up (chasing) — contract instalments / payment requests only; never a payment state.
+  const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [followUps, setFollowUps] = useState<
+    Array<{ id: string; followedUpAt: string; method: string; contactPerson?: string; outcomeNotes: string; nextFollowUpAt?: string }>
+  >([]);
+  const [followUpsVersion, setFollowUpsVersion] = useState(0);
+
+  useEffect(() => {
+    if (!submission || submission.submissionKind === "reimbursement_claim") return;
+    let cancelled = false;
+    CostSubmissionService.listFollowUps(submission.submissionId)
+      .then((list) => !cancelled && setFollowUps(list))
+      .catch(() => !cancelled && setFollowUps([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [submission, followUpsVersion]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -627,27 +650,33 @@ export function SubmissionDetailPage({
     }
   }
 
+  // The record's own Costs & Claims area (Pending Payments / Contract Payments / Reimbursements) — never a generic "claims".
+  const areaForRecord =
+    COSTS_CLAIMS_AREAS.find((a) => a.id === activeCostsClaimsArea("/finance/submissions", null, submission?.submissionKind ?? null)) ??
+    COSTS_CLAIMS_AREAS.find((a) => a.id === "pending-payments")!;
+
   return (
     <ModeFrame mode="act">
       <div className="fin-page">
+        <CostsClaimsNav recordKind={submission?.submissionKind ?? null} />
         <div className="mb-4">
           <Link
-            href="/finance/submissions"
+            href={areaForRecord.href}
             className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
           >
-            <ArrowLeft className="h-4 w-4" /> Back to claims
+            <ArrowLeft className="h-4 w-4" /> Back to {areaForRecord.label}
           </Link>
         </div>
 
         {loading ? (
-          <p className="fin-section-lede">Loading claim…</p>
+          <p className="fin-section-lede">Loading…</p>
         ) : error || !submission || !reviewDetails || !paymentSummary ? (
           <EmptyState
             icon={FileText}
-            title="Claim unavailable"
-            description={error ?? "This claim could not be found."}
-            actionLabel="Back to claims"
-            onAction={() => router.push("/finance/submissions")}
+            title="Record unavailable"
+            description={error ?? "This record could not be found."}
+            actionLabel={`Back to ${areaForRecord.label}`}
+            onAction={() => router.push(areaForRecord.href)}
           />
         ) : (
           <>
@@ -791,7 +820,7 @@ export function SubmissionDetailPage({
               </div>
               ) : (
               <div className="fin-submission-review-block">
-                <p className="fin-form-kicker">Client payment</p>
+                <p className="fin-form-kicker">Pending payment</p>
                 <dl className="fin-submission-review-dl">
                   <div><dt>Type</dt><dd>{CLIENT_PAYMENT_KIND_LABELS[kind]}</dd></div>
                   <div><dt>Status</dt><dd>{clientPaymentStatusLabel}</dd></div>
@@ -807,6 +836,11 @@ export function SubmissionDetailPage({
                     <dt>Submitted</dt>
                     <dd>{submission.submittedAt ? formatTimestamp(submission.submittedAt) : "—"}</dd>
                   </div>
+                  {submission.submissionPackage?.packageType ? <div><dt>Supporting document type</dt><dd>{submission.submissionPackage.packageType}</dd></div> : null}
+                  {submission.submissionPackage?.packageDate ? <div><dt>Supporting document date</dt><dd>{formatTimestamp(submission.submissionPackage.packageDate)}</dd></div> : null}
+                  {submission.submissionPackage?.notes ? <div><dt>Supporting documents / evidence references</dt><dd className="whitespace-pre-wrap">{submission.submissionPackage.notes}</dd></div> : null}
+                  {submission.notes ? <div><dt>Processing update / notes</dt><dd className="whitespace-pre-wrap">{submission.notes}</dd></div> : null}
+                  {submission.approvalId ? <div><dt>Related Payment Approval</dt><dd><Link href={`/approvals?id=${encodeURIComponent(submission.approvalId)}`}>{submission.approvalId}</Link></dd></div> : null}
                   <div><dt>Client location</dt><dd>{submission.clientLocation ?? "Not recorded"}</dd></div>
                   <div>
                     <dt>Requested</dt>
@@ -824,7 +858,32 @@ export function SubmissionDetailPage({
                     // Verbatim source evidence — read-only, never a status.
                     <div><dt>Source note</dt><dd>{submission.sourceNote}</dd></div>
                   ) : null}
+                  <div>
+                    <dt>Last follow-up</dt>
+                    <dd>{submission.lastFollowUpAt ? formatTimestamp(submission.lastFollowUpAt) : "None recorded"}</dd>
+                  </div>
                 </dl>
+                {followUps.length ? (
+                  <div className="mt-3">
+                    <p className="fin-form-kicker">Follow-up history</p>
+                    <p className="fin-form-hint">Following up does not change payment state — only recorded receipts do.</p>
+                    <ul className="mt-2 space-y-2">
+                      {followUps.map((f) => (
+                        <li key={f.id} className="rounded-md bg-muted/30 px-3 py-2 text-sm">
+                          <p className="font-medium text-foreground">
+                            {formatTimestamp(f.followedUpAt)} ·{" "}
+                            {COMMERCIAL_FOLLOW_UP_METHODS.find((m) => m.value === f.method)?.label ?? f.method}
+                            {f.contactPerson ? ` · ${f.contactPerson}` : ""}
+                          </p>
+                          <p className="text-muted">{f.outcomeNotes}</p>
+                          {f.nextFollowUpAt ? (
+                            <p className="text-xs text-muted">Next follow-up {formatTimestamp(f.nextFollowUpAt)}</p>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </div>
               )}
 
@@ -919,6 +978,18 @@ export function SubmissionDetailPage({
                     {isClaim ? "Record payment reference" : "Record receipt"}
                   </Button>
                 ) : null}
+                {canCreateFinance && !isClaim && !paymentSummary.fullyPaid ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="fin-detail-action"
+                    disabled={acting}
+                    onClick={() => setFollowUpOpen(true)}
+                  >
+                    Record follow-up
+                  </Button>
+                ) : null}
                 </div>
               </div>
 
@@ -927,7 +998,7 @@ export function SubmissionDetailPage({
                   <p className="sm:col-span-2 fin-form-hint">
                     Reimbursement authorization sets the amount that may be
                     paid. It is the client&apos;s authorisation of this claim and is
-                    separate from Work Order approvals.
+                    separate from Payment Approvals.
                     Outstanding and fully reimbursed use the authorized amount.
                   </p>
                   <FormField
@@ -1340,6 +1411,18 @@ export function SubmissionDetailPage({
           }
         }}
       />
+      {submission && !isClaim ? (
+        <CommercialFollowUpModal
+          open={followUpOpen}
+          reference={submission.submissionId}
+          onClose={() => setFollowUpOpen(false)}
+          onSave={async (draft) => {
+            const updated = await CostSubmissionService.recordFollowUp(submission.submissionId, draft);
+            setSubmission(updated);
+            setFollowUpsVersion((v) => v + 1);
+          }}
+        />
+      ) : null}
     </ModeFrame>
   );
 }

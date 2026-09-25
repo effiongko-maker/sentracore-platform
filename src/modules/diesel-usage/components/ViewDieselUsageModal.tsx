@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { formatDate } from "@/lib/utils";
 import { DIESEL_USAGE_FIELD_LABELS } from "../constants";
 import { useFacilityName } from "@/hooks/useEntityLabel";
-import { dieselGeneratorPresentation, getDieselUsageFlagLabels } from "../utils";
+import { dieselGeneratorPresentation, dieselVariance, formatLitres, getDieselUsageFlagLabels } from "../utils";
 import type { DieselUsage } from "../types";
 
 interface ViewDieselUsageModalProps {
@@ -37,6 +37,8 @@ export function ViewDieselUsageModal({
 
   const flags = getDieselUsageFlagLabels(entry.consumption, entry.recordOrigin);
   const generator = dieselGeneratorPresentation(entry);
+  const variance = dieselVariance(entry);
+  const recorded = (v: number | null | undefined) => (v == null ? "Not recorded" : String(v));
 
   return (
     <Modal
@@ -73,8 +75,7 @@ export function ViewDieselUsageModal({
           </p>
           <p className="mt-1 text-sm text-muted">
             {entry.date ? formatDate(entry.date) : "—"} · Facility{" "}
-            {facilityName || "—"} · Consumption{" "}
-            {Number.isFinite(entry.consumption) ? entry.consumption : "—"} L
+            {facilityName || "—"} · Consumption {formatLitres(entry.consumption)}
           </p>
           {flags.length > 0 ? (
             <p className="mt-1 text-sm text-danger">{flags.join(" · ")}</p>
@@ -98,30 +99,34 @@ export function ViewDieselUsageModal({
         />
         <Detail
           label={DIESEL_USAGE_FIELD_LABELS.openingLevel}
-          value={
-            Number.isFinite(entry.openingLevel)
-              ? String(entry.openingLevel)
-              : "—"
-          }
+          value={recorded(entry.openingLevel)}
+        />
+        <Detail
+          label={DIESEL_USAGE_FIELD_LABELS.undergroundTankQty}
+          value={recorded(entry.undergroundTankQty)}
+        />
+        <Detail
+          label={DIESEL_USAGE_FIELD_LABELS.surfaceTankQty}
+          value={recorded(entry.surfaceTankQty)}
         />
         <Detail
           label={DIESEL_USAGE_FIELD_LABELS.added}
-          value={entry.added == null ? "—" : String(entry.added)}
+          value={recorded(entry.added)}
         />
         <Detail
           label={DIESEL_USAGE_FIELD_LABELS.closingLevel}
-          value={
-            Number.isFinite(entry.closingLevel)
-              ? String(entry.closingLevel)
-              : "—"
-          }
+          value={recorded(entry.closingLevel)}
         />
         <Detail
           label={DIESEL_USAGE_FIELD_LABELS.consumption}
+          value={recorded(entry.consumption)}
+        />
+        <Detail
+          label="Reading variance (L)"
           value={
-            Number.isFinite(entry.consumption)
-              ? String(entry.consumption)
-              : "—"
+            variance
+              ? `${variance.variance > 0 ? "+" : ""}${variance.variance} — (opening${variance.addedRecorded ? " + added" : ""} − closing) − consumption; readings are physical measurements, shown not corrected${variance.addedRecorded ? "" : " (no delivery recorded)"}`
+              : "Not available — a reading or consumption is not recorded"
           }
         />
       </div>

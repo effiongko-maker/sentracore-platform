@@ -3318,3 +3318,43 @@
     transition: none !important;
   }
 }
+
+/* Costs & Claims — compact context line ("Costs & Claims › <area>"). Area switching lives in the sidebar sub-nav. */
+.fm-cc-context {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  min-width: 0;
+}
+
+.fm-cc-context-parent {
+  color: var(--os-ink-muted);
+  text-decoration: none;
+}
+
+.fm-cc-context-parent:hover {
+  color: var(--os-ink);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.fm-cc-context-sep {
+  width: 0.75rem;
+  height: 0.75rem;
+  color: var(--os-ink-faint);
+  flex-shrink: 0;
+}
+
+.fm-cc-context-current {
+  color: var(--os-ink);
+  text-decoration: none;
+}
+
+a.fm-cc-context-current:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}

@@ -35,9 +35,10 @@ export function FinanceSubmissionsSection({
     <section className="fin-v13-panel">
       <div className="fin-v13-section-head">
         <div>
-          <h2 className="fin-v13-section-title">Client payments</h2>
+          <h2 className="fin-v13-section-title">Pending payments</h2>
           <p className="fin-v13-section-lede">
-            Amounts requested from the client · <Link href="/finance/submissions?kind=reimbursement_claim" className="fin-v13-text-action">Reimbursement claims</Link>
+            Amounts requested from the client
+            {snapshot?.outstandingCount ? ` · ${snapshot.outstandingCount} outstanding` : ""} · <Link href="/finance/submissions?kind=reimbursement_claim" className="fin-v13-text-action">Reimbursement claims</Link>
           </p>
         </div>
         <Link href="/finance/submissions" className="fin-v13-text-action">
@@ -47,12 +48,12 @@ export function FinanceSubmissionsSection({
 
       {error || snapshot?.available === false ? (
         <p className="fin-v13-empty">
-          {error ?? "Client payments are temporarily unavailable."}
+          {error ?? "Pending payments are temporarily unavailable."}
         </p>
       ) : loading ? (
         <div className="fin-v13-skel-block" />
       ) : total === 0 ? (
-        <p className="fin-v13-empty">No client payments recorded in SentraCore™ yet.</p>
+        <p className="fin-v13-empty">No pending payments recorded in SentraCore™ yet.</p>
       ) : (
         <div className="fin-v13-table-scroll">
         <table className="fin-v13-table fin-v13-table--compact fin-v13-table--client-payments">

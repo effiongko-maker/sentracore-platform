@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CostsClaimsNav } from "./CostsClaimsNav";
 import { ArrowLeft, CalendarClock } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { ModeFrame, OperateHeader, StreamSurface } from "@/components/platform";
@@ -72,6 +73,7 @@ export function MonthlyContractPaymentDetailPage({ slug }: { slug: string }) {
 
   return (
     <ModeFrame mode="act">
+      <CostsClaimsNav />
       <div className="mb-4">
         <Link
           href="/finance/monthly-payments"

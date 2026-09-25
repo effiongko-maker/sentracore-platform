@@ -197,6 +197,6 @@ export function workNextStep(input: {
       : "Carry out the work — no prior client approval is needed.";
   }
   if (!input.workOrderCode) return "Work completed — submit the Work Order.";
-  if (!input.clientPaymentCode) return `Request client payment for Work Order ${input.workOrderCode}.`;
+  if (!input.clientPaymentCode) return `Raise payment request for Work Order ${input.workOrderCode}.`;
   return `Client payment ${input.clientPaymentCode} requested for ${input.workOrderCode} — record receipts in Client Payments.`;
 }

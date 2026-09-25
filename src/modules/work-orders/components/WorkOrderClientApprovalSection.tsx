@@ -79,7 +79,7 @@ export function WorkOrderClientApprovalSection({
             </p>
           ) : classifiedRoute === "work_order" ? (
             <p className="mt-1 text-xs text-muted">
-              Work Orders do not require prior client approval. Payment is requested through a Client Payment
+              Work Orders do not require prior client approval. Payment is requested through a Payment Request
               {workOrder.clientPaymentId ? (
                 <>
                   :{" "}
@@ -98,7 +98,7 @@ export function WorkOrderClientApprovalSection({
                     href={`/finance/client-payments/new?workOrder=${encodeURIComponent(workOrder.id)}`}
                     className="font-medium text-primary hover:underline"
                   >
-                    request client payment →
+                    raise payment request →
                   </Link>
                 </>
               ) : (

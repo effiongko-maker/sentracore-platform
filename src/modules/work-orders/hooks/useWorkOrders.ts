@@ -5,10 +5,8 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   DEFAULT_WORK_ORDER_SORT,
   WORK_ORDERS_PAGE_SIZE,
-  WORK_ORDER_ORDER_TYPE_SCOPE_FETCH_SIZE,
   type WorkOrderOrderTypeScope,
 } from "../constants";
-import { resolveWorkInstructionKind } from "../instructionKind";
 import { WorkOrderService } from "../services/WorkOrderService";
 import { sortWorkOrders } from "../utils";
 import type {
@@ -40,6 +38,8 @@ export function useWorkOrders() {
     "all"
   );
   const [sort, setSortState] = useState<WorkOrderSort>(DEFAULT_WORK_ORDER_SORT);
+  /** 2025 register history is excluded from the current operating picture unless explicitly included. */
+  const [includeHistory, setIncludeHistoryState] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -92,6 +92,11 @@ export function useWorkOrders() {
     setPage(1);
   }, []);
 
+  const setIncludeHistory = useCallback((value: boolean) => {
+    setIncludeHistoryState(value);
+    setPage(1);
+  }, []);
+
   const clearAll = useCallback(() => {
     setSearch("");
     setOrderTypeScopeState("all");
@@ -121,13 +126,12 @@ export function useWorkOrders() {
       try {
         const t0 =
           typeof performance !== "undefined" ? performance.now() : Date.now();
-        const scoped = orderTypeScope !== "all";
+        // The Work Order / Job Order tabs are a server filter on the persisted Order Type (never inferred).
         const result = await WorkOrderService.listWorkOrders({
-          page: scoped ? 1 : nextPage,
-          pageSize: scoped
-            ? WORK_ORDER_ORDER_TYPE_SCOPE_FETCH_SIZE
-            : WORK_ORDERS_PAGE_SIZE,
+          page: nextPage,
+          pageSize: WORK_ORDERS_PAGE_SIZE,
           search: debouncedSearch,
+          orderType: orderTypeScope,
           status,
           priority,
           facilityId,
@@ -136,6 +140,7 @@ export function useWorkOrders() {
           maintenanceId,
           dueDate,
           sort,
+          includeHistory,
         });
         const elapsedMs = Math.round(
           (typeof performance !== "undefined" ? performance.now() : Date.now()) -
@@ -151,30 +156,9 @@ export function useWorkOrders() {
 
         if (id !== requestId.current) return;
 
-        let rows = sortWorkOrders(result.data, sort);
-        if (scoped) {
-          rows = rows.filter(
-            (workOrder) =>
-              resolveWorkInstructionKind(workOrder) === orderTypeScope
-          );
-          const scopedTotal = rows.length;
-          const scopedTotalPages = Math.max(
-            1,
-            Math.ceil(scopedTotal / WORK_ORDERS_PAGE_SIZE)
-          );
-          const safePage = Math.min(nextPage, scopedTotalPages);
-          const start = (safePage - 1) * WORK_ORDERS_PAGE_SIZE;
-          setWorkOrders(rows.slice(start, start + WORK_ORDERS_PAGE_SIZE));
-          setTotal(scopedTotal);
-          setTotalPages(scopedTotalPages);
-          if (safePage !== nextPage) {
-            setPage(safePage);
-          }
-        } else {
-          setWorkOrders(rows);
-          setTotalPages(result.totalPages);
-          setTotal(result.total);
-        }
+        setWorkOrders(sortWorkOrders(result.data, sort));
+        setTotalPages(result.totalPages);
+        setTotal(result.total);
       } catch (err) {
         if (id !== requestId.current) return;
         setError(
@@ -201,6 +185,7 @@ export function useWorkOrders() {
       maintenanceId,
       dueDate,
       sort,
+      includeHistory,
     ]
   );
 
@@ -248,6 +233,8 @@ export function useWorkOrders() {
     setMaintenanceId,
     sort,
     setSort,
+    includeHistory,
+    setIncludeHistory,
     clearAll,
     page,
     setPage,

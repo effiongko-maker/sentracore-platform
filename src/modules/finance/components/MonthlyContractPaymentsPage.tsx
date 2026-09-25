@@ -1,5 +1,7 @@
 "use client";
 
+import { CostsClaimsNav } from "./CostsClaimsNav";
+
 import Link from "next/link";
 import { ArrowLeft, CalendarClock } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -96,7 +98,7 @@ export function MonthlyContractPaymentsPage() {
               // Live FM Client Payment for this instalment — its receipt state, not the historical source status.
               <p className="text-xs text-muted">
                 <Link href={`/finance/submissions/${encodeURIComponent(row.clientPayment.code)}`} className="text-primary hover:underline">
-                  Client payment
+                  Pending payment
                 </Link>
                 {" · "}
                 {row.clientPayment.state === "received"

@@ -77,7 +77,10 @@ export class FmWorkServerService {
     }
   > {
     const parsed = parseWorkListParams(params);
-    const rows = await this.repo().listRows();
+    const allRows = await this.repo().listRows();
+    // 2025 register history is preserved but kept out of the current operating picture unless asked for.
+    const history = parsed.includeHistory ? new Set<string>() : new Set(await this.repo().historical2025Ids());
+    const rows = history.size ? allRows.filter((row) => !history.has(row.id)) : allRows;
     const mapped = rows.map(mapFmWorkRowToMaintenance);
     const filtered = filterWorkRows(mapped, parsed);
     const sorted = sortWorkRows(filtered, parsed.sort);

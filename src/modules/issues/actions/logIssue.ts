@@ -13,7 +13,6 @@ import {
 } from "@/lib/operational/issues";
 import { orchestrateRequestMaintenance } from "@/lib/operational/orchestration";
 import { MAINTENANCE_PRIORITIES } from "@/modules/maintenance/constants";
-import type { WorkCommercialRoute } from "@/modules/maintenance/types";
 
 /**
  * @deprecated Phase 15 — Log Issue no longer classifies Issues.
@@ -24,11 +23,12 @@ export type LogIssueClassification = "ordinary" | "significant";
 export type LogIssueInput = {
   title: string;
   description?: string;
-  facilityId: string;
+  /** Single facility (legacy callers). */
+  facilityId?: string;
+  /** Facilities the Issue concerns, primary first ("Both" = NCC Annex + CSIRT). */
+  facilityIds?: string[];
   locationDetail?: string;
   urgency?: "low" | "medium" | "high" | "critical";
-  /** Execution basis of the Work this Issue creates — required, never defaulted (validated at the Work boundary). */
-  commercialRoute: WorkCommercialRoute;
   /**
    * @deprecated Ignored. FM Log Issue always creates Work (Maintenance backing).
    */
@@ -74,7 +74,8 @@ export async function logIssue(
     input,
     handler: async (context, raw) => {
       const title = raw.title?.trim() ?? "";
-      const facilityId = raw.facilityId?.trim() ?? "";
+      const facilityIds = [...new Set((raw.facilityIds ?? [raw.facilityId ?? ""]).map((id) => id?.trim() ?? "").filter(Boolean))];
+      const facilityId = facilityIds[0] ?? "";
       const description = raw.description?.trim() || undefined;
       const locationDetail = raw.locationDetail?.trim() || undefined;
       const urgencyRaw = (raw.urgency ?? "medium").toString();
@@ -100,13 +101,15 @@ export async function logIssue(
           title,
           description: `${description || title}${locationBlock}`.trim(),
           facilityId,
+          ...(facilityIds.length > 1 ? { facilityIds } : {}),
           type: "corrective",
           source: "manual",
           priority: urgencyRaw,
           status: "requested",
           reportedAt: context.now,
           requiresWorkOrder: false,
-          commercialRoute: raw.commercialRoute,
+          // No execution basis: an Issue records what needs attention. How the Work is executed (Work Order /
+          // Job Order route) is decided when the Work is treated.
           createdByUserId: context.userId,
           updatedByUserId: context.userId,
           reportedByUserId: context.operatingAccess?.sheetUserId,

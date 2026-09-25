@@ -41,16 +41,16 @@ export function FinancePositionSection({
       <div className="fin-v13-section-head">
         <div>
           <h2 id="fin-auth-heading" className="fin-v13-section-title">
-            Work Order approvals
+            Payment Approvals
           </h2>
           <p className="fin-v13-section-lede">
             {loading
               ? "Loading approvals…"
               : !available
-                ? "Work Order approvals are temporarily unavailable."
+                ? "Payment Approvals are temporarily unavailable."
                 : totalAuthorisations > 0
-                ? "Latest client approvals to proceed with Work."
-                : "Client approval to proceed with Work — separate from reimbursement authorisation."}
+                ? "Requests awaiting client processing and decisions."
+                : "Payment requests, follow-ups and recorded decisions."}
           </p>
         </div>
         <Link href="/approvals" className="fin-v13-text-action">
@@ -63,7 +63,7 @@ export function FinancePositionSection({
       ) : !available ? (
         <p className="fin-v13-empty">Temporarily unavailable.</p>
       ) : visible.length === 0 ? (
-        <p className="fin-v13-empty">No Work Order approvals recorded in SentraCore™ yet.</p>
+        <p className="fin-v13-empty">No Payment Approvals recorded in SentraCore™ yet.</p>
       ) : (
         <table className="fin-v13-table fin-v13-table--compact">
           <thead>

@@ -1,5 +1,6 @@
 "use client";
 
+import { FacilityNames } from "@/components/operational/FacilityNames";
 import Link from "next/link";
 import { useState } from "react";
 import { Modal } from "@/components/modals/Modal";
@@ -216,7 +217,7 @@ export function WorkDetailModal({
             label="Location"
             value={
               <div>
-                <div>{facilityName || work.facilityId}</div>
+                <div>{(work.facilityIds?.length ?? 0) > 1 ? <FacilityNames ids={work.facilityIds} /> : facilityName || work.facilityId}</div>
                 {notes.location ? (
                   <p className="mt-1 text-xs text-muted">{notes.location}</p>
                 ) : null}

@@ -122,6 +122,8 @@ export type FmWorkRow = {
   job_order_codes: string[];
   /** The Work-level client Approval (fm_approvals.work_id) — derived, not columns. */
   client_approval_code: string | null;
+  /** Every facility a multi-facility Work covers (fm_work_facilities, primary first); [] = single facility. */
+  covered_facility_ids?: string[];
   client_approval_status: string | null;
   assigned_to_profile_id: string | null;
   reported_by_profile_id: string | null;
@@ -311,6 +313,7 @@ export function mapFmWorkRowToMaintenance(row: FmWorkRow): Maintenance {
     categoryId: row.category_id ?? undefined,
     department: row.department ?? undefined,
     facilityId: row.facility_id,
+    facilityIds: row.covered_facility_ids?.length ? [...row.covered_facility_ids] : [row.facility_id],
     assetId: row.asset_id ?? undefined,
     reportedByUserId: row.reported_by_profile_id ?? undefined,
     assignedToUserId: row.assigned_to_profile_id ?? undefined,
@@ -364,7 +367,13 @@ export type ParsedCreateWork = {
   status: MaintenanceStatus;
   holdReason?: string;
   requiresWorkInstruction: boolean;
-  commercialRoute: WorkCommercialRoute;
+  /** Facilities the Work ALSO covers beyond facilityId ("Both"). Undefined on update = unchanged. */
+  additionalFacilityRefs?: string[];
+  /**
+   * Execution basis. null = not decided yet: an Issue records what needs attention; how the Work is executed is decided
+   * when it is treated (Work form / Incident triage). Never defaulted.
+   */
+  commercialRoute: WorkCommercialRoute | null;
   operationalEventId?: string;
   reportedAt: string;
   scheduledStartAt?: string;
@@ -377,17 +386,30 @@ export type ParsedCreateWork = {
 
 export type ParsedUpdateWork = Partial<ParsedCreateWork> & { id: string };
 
+/**
+ * "Both" / multi-facility selection: facilityIds (primary first). Absent = single facilityId as before.
+ * Refuses an empty list rather than guessing a facility.
+ */
+function parseFacilityCoverage(value: unknown): string[] | null {
+  if (value === undefined || value === null) return null;
+  if (!Array.isArray(value)) throw new FmWorkValidationError("Facilities must be a list.");
+  const ids = [...new Set(value.map((v) => optionalTrimmed(v)).filter((v): v is string => !!v))];
+  if (ids.length === 0) throw new FmWorkValidationError("Facility is required.");
+  return ids;
+}
+
 export function parseCreateWorkInput(payload: unknown): ParsedCreateWork {
   const raw = asRecord(payload);
   const title = requireTrimmed(raw.title, "Title");
-  const facilityId = requireTrimmed(raw.facilityId, "Facility");
+  const coverage = parseFacilityCoverage(raw.facilityIds);
+  const facilityId = coverage ? coverage[0]! : requireTrimmed(raw.facilityId, "Facility");
   const priority = parsePriority(raw.priority);
   const status = parseStatus(raw.status, "requested");
   const source = parseSource(raw.source, "manual");
   const workKind = parseWorkKind(raw.type ?? raw.workKind);
-  // Required for every new Work, on every creation path. Never defaulted.
-  const commercialRoute = parseCommercialRoute(raw.commercialRoute);
-  if (!commercialRoute) throw new FmWorkValidationError("Execution basis is required.");
+  // Optional at creation: a Work raised from an Issue has no execution basis until it is treated. When supplied it
+  // must be valid (work_order | job_order); it is never defaulted.
+  const commercialRoute = parseCommercialRoute(raw.commercialRoute) ?? null;
   const reportedAt =
     optionalTrimmed(raw.reportedAt) ?? new Date().toISOString();
 
@@ -403,6 +425,7 @@ export function parseCreateWorkInput(payload: unknown): ParsedCreateWork {
     source,
     categoryId: optionalTrimmed(raw.categoryId),
     department: optionalTrimmed(raw.department),
+    additionalFacilityRefs: coverage ? coverage.slice(1) : undefined,
     facilityId,
     assetRef: optionalTrimmed(raw.assetId),
     sourceRequestRef: optionalTrimmed(raw.sourceRequestId),
@@ -437,6 +460,11 @@ export function parseUpdateWorkInput(payload: unknown): ParsedUpdateWork {
   const raw = asRecord(payload);
   const id = requireTrimmed(raw.id, "Work id");
   const out: ParsedUpdateWork = { id };
+  const coverage = parseFacilityCoverage(raw.facilityIds);
+  if (coverage) {
+    out.facilityId = coverage[0]!;
+    out.additionalFacilityRefs = coverage.slice(1);
+  }
 
   if (raw.title !== undefined) out.title = requireTrimmed(raw.title, "Title");
   if (raw.description !== undefined) {
@@ -563,6 +591,7 @@ export function parseWorkListParams(
       raw.includeOperationalPictureTotals
     ),
     asOf: optionalTrimmed(raw.asOf),
+    includeHistory: raw.includeHistory === true || raw.includeHistory === "true",
   };
 }
 

@@ -80,21 +80,25 @@ check("facility scope follows the product: generator & energy are organisation-l
   const gen = sql.match(/create table public\.fm_generator_logs[\s\S]*?\n\);/)?.[0] ?? "";
   assert(!/facility_id/.test(gen), "generator logs must not invent a facility column");
 });
-check("derived values are GENERATED columns and can never be supplied (hours, consumption, closing)", () => {
+check("derived values are GENERATED columns and can never be supplied (hours, closing); diesel consumption is a recorded value", () => {
   assert(/hours numeric\(10, 2\) generated always as/.test(sql), "hours");
   assert(/consumption numeric\(12, 2\) generated always as/.test(sql), "consumption");
   assert(/closing numeric\(14, 2\) generated always as/.test(sql), "closing");
-  const g = FM_LOG_SPECS["generator-log"].parseCreate({ date: "2026-09-19", generator: "G", startedAt: "2026-09-19T08:00:00Z", endedAt: "2026-09-19T10:00:00Z", fuelUsed: 3, hours: 999 });
+  const g = FM_LOG_SPECS["generator-log"].parseCreate({ date: "2026-09-19", generator: "G", startMeterReading: 3265.1, endMeterReading: 3271.5, fuelUsed: 3, hours: 999 });
   assert(!("hours" in g.columns), "supplied hours must be ignored");
-  const d = FM_LOG_SPECS["diesel-usage"].parseCreate({ date: "2026-09-19", facilityId: FAC, generatorId: "GEN-1", openingLevel: 100, closingLevel: 90, consumption: 999 });
-  assert(!("consumption" in d.columns) && d.columns.added === 0, "supplied consumption ignored; added defaults to 0");
+  // Diesel consumption became a RECORDED value (20260925153000: physical readings need not reconcile); added blank = not recorded.
+  assert(/alter column consumption drop expression/.test(readFileSync("supabase/migrations/20260925153000_fm_diesel_usage_observations.sql", "utf8")), "diesel consumption is recorded, not generated");
+  const d = FM_LOG_SPECS["diesel-usage"].parseCreate({ date: "2026-09-19", facilityId: FAC, generatorId: "GEN-1", openingLevel: 100, closingLevel: 90, consumption: 12 });
+  assert(d.columns.consumption === 12 && d.columns.added === null, "consumption as recorded; blank added is NULL (never 0)");
   const c = FM_LOG_SPECS["consumables-update"].parseCreate({ date: "2026-09-19", facilityId: FAC, itemName: "Soap", opening: 10, issued: 2, closing: 999 });
   assert(!("closing" in c.columns) && c.columns.received === 0, "supplied closing ignored");
 });
 check("domain-specific required fields and validation", () => {
   const G = FM_LOG_SPECS["generator-log"], E = FM_LOG_SPECS["energy-reading"], D = FM_LOG_SPECS["diesel-usage"], W = FM_LOG_SPECS["waste-log"], F = FM_LOG_SPECS["fumigation-log"], C = FM_LOG_SPECS["deep-cleaning-log"], K = FM_LOG_SPECS["consumables-update"];
-  throwsValidation(() => G.parseCreate({ date: "2026-09-19", generator: "G", startedAt: "2026-09-19T08:00:00Z", fuelUsed: 1 }), "generator needs End");
-  throwsValidation(() => G.parseCreate({ date: "bad", generator: "G", startedAt: "2026-09-19T08:00:00Z", endedAt: "2026-09-19T09:00:00Z", fuelUsed: 1 }), "bad date");
+  // Start/End are generator hour-meter READINGS (operator review), never clock times.
+  throwsValidation(() => G.parseCreate({ date: "2026-09-19", generator: "G", startMeterReading: 10, fuelUsed: 1 }), "generator needs End reading");
+  throwsValidation(() => G.parseCreate({ date: "2026-09-19", generator: "G", startedAt: "2026-09-19T08:00:00Z", endedAt: "2026-09-19T09:00:00Z", fuelUsed: 1 }), "clock times are not readings");
+  throwsValidation(() => G.parseCreate({ date: "bad", generator: "G", startMeterReading: 1, endMeterReading: 2 }), "bad date");
   throwsValidation(() => E.parseCreate({ date: "2026-09-19", meter: "M" }), "energy needs reading");
   throwsValidation(() => E.parseCreate({ date: "2026-09-19", meter: "M", reading: "abc" }), "reading must be numeric");
   throwsValidation(() => D.parseCreate({ date: "2026-09-19", generatorId: "G", openingLevel: 1, closingLevel: 1 }), "diesel needs a facility — never guessed");

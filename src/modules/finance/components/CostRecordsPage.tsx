@@ -1,5 +1,7 @@
 "use client";
 
+import { CostsClaimsNav } from "./CostsClaimsNav";
+
 import Link from "next/link";
 import { ArrowLeft, ReceiptText } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -15,6 +17,9 @@ import { CostRecordService } from "@/services/finance/CostRecordService";
 import { useFacilityName } from "@/hooks/useEntityLabel";
 import { formatFinancialAmount } from "../utils/formatFinancialAmount";
 import { COST_REIMBURSABILITY_LABELS } from "../constants";
+import { FM_2025_HISTORY_NOTE, FM_ORDER_REGISTER_VALUE_NOTE } from "@/lib/fm/sourceRegisterScope";
+
+type CostRegisterView = "costs" | "order_values";
 
 const COST_RECORDS_PAGE_SIZE = 25;
 
@@ -42,7 +47,10 @@ function FacilityLocationCell({ record }: { record: CostRecord }) {
   );
 }
 
-export function CostRecordsPage() {
+export function CostRecordsPage({ initialView = "costs" }: { initialView?: CostRegisterView } = {}) {
+  // The source-register view is a subset of Costs, not a separate financial total.
+  const [view, setView] = useState<CostRegisterView>(initialView);
+  const [includeHistory, setIncludeHistory] = useState(false);
   const [records, setRecords] = useState<CostRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +67,8 @@ export function CostRecordsPage() {
       const result = await CostRecordService.listCostRecords({
         page: nextPage,
         pageSize: COST_RECORDS_PAGE_SIZE,
+        valueScope: view,
+        includeHistory,
       });
       if (id !== requestId.current) return;
       setRecords(result.data);
@@ -74,10 +84,11 @@ export function CostRecordsPage() {
     } finally {
       if (id === requestId.current) setLoading(false);
     }
-  }, []);
+  }, [view, includeHistory]);
 
   useEffect(() => {
-    void load(page);
+    const timer = window.setTimeout(() => void load(page), 0);
+    return () => window.clearTimeout(timer);
   }, [load, page]);
 
   const columns = useMemo<Column<CostRecord>[]>(
@@ -115,7 +126,9 @@ export function CostRecordsPage() {
             <p className="font-medium text-foreground">{record.description}</p>
             <p className="text-xs text-muted">
               {record.costId}
-              {record.recordOrigin === "migrated_historical" ? <span> · Imported record</span> : null}
+              {record.valueKind === "order_value"
+                ? <span> · {record.sourceRegister ?? "Order register"} · Execution cost</span>
+                : record.recordOrigin === "migrated_historical" ? <span> · Imported record</span> : null}
             </p>
           </div>
         ),
@@ -140,7 +153,7 @@ export function CostRecordsPage() {
       },
       {
         key: "actualAmount",
-        header: "Actual amount",
+        header: view === "order_values" ? "Execution cost" : "Actual amount",
         render: (record) => (
           <span className="font-medium text-foreground">
             {formatFinancialAmount(record.actualAmount, record.currency)}
@@ -189,7 +202,7 @@ export function CostRecordsPage() {
         ),
       },
     ],
-    []
+    [view]
   );
 
   return (
@@ -202,12 +215,46 @@ export function CostRecordsPage() {
           <ArrowLeft className="h-4 w-4" /> Back to Costs & Claims
         </Link>
       </div>
+      <CostsClaimsNav />
       <OperateHeader
-        title="Cost records"
-        description="Every recorded operational cost, including its receipt or invoice when one was uploaded."
+        title={view === "order_values" ? "WO/JO execution costs" : "Cost records"}
+        description={
+          view === "order_values"
+            ? FM_ORDER_REGISTER_VALUE_NOTE
+            : "Every recorded operational cost, including its receipt or invoice when one was uploaded."
+        }
         signalValue={loading ? "—" : total}
-        signalLabel="Recorded"
+        signalLabel={view === "order_values" ? "Orders" : "Recorded"}
       />
+      <div className="mt-4 flex flex-wrap items-center gap-3 text-sm" role="group" aria-label="Register view">
+        {(["costs", "order_values"] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            aria-pressed={view === option}
+            onClick={() => {
+              setView(option);
+              setPage(1);
+            }}
+            className={`rounded-full border px-3 py-1 font-medium ${view === option ? "border-primary bg-primary text-white" : "border-border text-muted hover:text-foreground"}`}
+          >
+            {option === "costs" ? "Costs" : "WO/JO execution costs"}
+          </button>
+        ))}
+        {(
+          <label className="inline-flex items-center gap-2 text-muted" title={FM_2025_HISTORY_NOTE}>
+            <input
+              type="checkbox"
+              checked={includeHistory}
+              onChange={(event) => {
+                setIncludeHistory(event.target.checked);
+                setPage(1);
+              }}
+            />
+            Include 2025 history
+          </label>
+        )}
+      </div>
       <StreamSurface className="mt-4">
         {error ? (
           <EmptyState
@@ -228,8 +275,12 @@ export function CostRecordsPage() {
             total={total}
             onPageChange={setPage}
             emptyIcon={ReceiptText}
-            emptyTitle="No costs recorded in SentraCore™ yet"
-            emptyDescription="Record a cost from the Costs & Claims overview when an execution cost is incurred. Historical costs from before SentraCore™ are not loaded here."
+            emptyTitle={view === "order_values" ? "No WO/JO execution costs in this view" : "No costs recorded in SentraCore™ yet"}
+            emptyDescription={
+              view === "order_values"
+                ? FM_2025_HISTORY_NOTE
+                : "Record a cost from the Costs & Claims overview when an execution cost is incurred. WO/JO execution costs are included here, with their source provenance."
+            }
           />
         )}
       </StreamSurface>

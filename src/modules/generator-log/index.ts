@@ -19,12 +19,10 @@ export {
   GENERATOR_LOG_SORT_OPTIONS,
 } from "./constants";
 export {
-  calculateGeneratorLogHours,
-  fromDatetimeLocalValue,
+  calculateRunHoursFromReadings,
   labelize,
   optionalString,
   toCreateFormValues,
   toCreateGeneratorLogInput,
   toDateInputValue,
-  toDatetimeLocalValue,
 } from "./utils";

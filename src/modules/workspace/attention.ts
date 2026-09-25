@@ -289,10 +289,10 @@ function fromOverdueApprovalFollowUps(
       severity: "high",
       title: row.title?.trim() || row.id,
       location: facilityLabel(row.facilityId, facilityNameById),
-      entityLabel: "Client approval",
+      entityLabel: "Payment Approval",
       reason: row.lastFollowUpAt
-        ? `Client approval awaiting decision — no follow-up for ${days} day${days === 1 ? "" : "s"}.`
-        : `Client approval awaiting decision — submitted ${days} day${days === 1 ? "" : "s"} ago; record a follow-up or decision.`,
+        ? `Payment Approval awaiting decision — no follow-up for ${days} day${days === 1 ? "" : "s"}.`
+        : `Payment Approval awaiting decision — submitted ${days} day${days === 1 ? "" : "s"} ago; record a follow-up or decision.`,
       actionLabel: "Record follow-up →",
       href: "/approvals",
       entityId: row.id,
@@ -333,7 +333,7 @@ function fromApprovals(
     .filter((row) => APPROVAL_ATTENTION_STATUSES.has(row.status))
     .map((row): AttentionMatter => {
       const rejected = row.status === "rejected" || row.status === "returned";
-      let reason = "Client approval requires action.";
+      let reason = "Payment Approval requires action.";
       let actionLabel = "Open approval →";
       if (row.status === "draft" || row.status === "generated" || row.status === "awaiting_submission") {
         reason = "Approval package generated — submit to the client.";
@@ -343,7 +343,7 @@ function fromApprovals(
         row.status === "submitted" ||
         row.status === "awaiting_response"
       ) {
-        reason = "Client approval awaiting decision — track and follow up.";
+        reason = "Payment Approval awaiting decision — track and follow up.";
         actionLabel = "Track approval →";
       } else if (row.status === "rejected") {
         reason = "Approval rejected — revise scope or re-submit.";
@@ -358,7 +358,7 @@ function fromApprovals(
         severity: rejected ? "critical" : "high",
         title: row.title?.trim() || row.id,
         location: facilityLabel(row.facilityId, facilityNameById),
-        entityLabel: "Client approval",
+        entityLabel: "Payment Approval",
         reason,
         actionLabel,
         href: "/approvals",
@@ -508,7 +508,7 @@ function fromApprovalRequiredWorkOrders(
       title: row.title?.trim() || row.id,
       location: facilityLabel(row.facilityId, facilityNameById),
       entityLabel: "Work Order",
-      reason: "Client approval required — generate an approval package.",
+      reason: "Payment Approval required — generate an approval package.",
       actionLabel: "Create approval →",
       href: "/approvals",
       entityId: row.id,

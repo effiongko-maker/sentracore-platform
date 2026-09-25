@@ -38,6 +38,7 @@ export type CostSubmissionListParams = {
   status?: CostSubmissionLifecycleStatus | "all";
   approvalId?: string;
   kind?: ClientPaymentKind | "all";
+  includeHistory?: boolean;
 };
 
 export type CreateCostSubmissionInput = {
@@ -170,11 +171,32 @@ export const CostSubmissionService = {
           status: params.status,
           approvalId: params.approvalId,
           kind: params.kind,
+          includeHistory: params.includeHistory,
         },
         { signal: options?.signal }
       );
       return toPaginatedCostSubmissions(data, params);
     });
+  },
+
+  /**
+   * Record a follow-up (chasing) on a contract instalment / payment request. Never changes its status and never
+   * implies payment — receipts remain the only payment evidence.
+   */
+  async recordFollowUp(
+    submissionId: string,
+    input: { followedUpAt: string; method: string; contactPerson?: string; outcomeNotes: string; nextFollowUpAt?: string }
+  ): Promise<CostSubmission> {
+    const data = await postCostSubmissions<RemoteCostSubmission>("recordFollowUp", { id: submissionId, ...input });
+    onCostSubmissionMutation();
+    return mapRemoteCostSubmission(data);
+  },
+
+  async listFollowUps(submissionId: string): Promise<
+    Array<{ id: string; followedUpAt: string; method: string; contactPerson?: string; outcomeNotes: string; nextFollowUpAt?: string }>
+  > {
+    const data = await postCostSubmissions<unknown>("listFollowUps", { submissionId });
+    return Array.isArray(data) ? (data as Array<{ id: string; followedUpAt: string; method: string; contactPerson?: string; outcomeNotes: string; nextFollowUpAt?: string }>) : [];
   },
 
   async getCostSubmission(

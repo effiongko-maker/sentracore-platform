@@ -112,16 +112,17 @@ async function main() {
   );
   out.push("PASS 2 legacy NULL Work reads normally as unclassified (server + client mappers)");
 
-  // 3. New Work requires an explicit basis at the Work create boundary — every creation path goes through it.
-  check(throwsWith(() => parseCreateWorkInput(baseCreate), /Execution basis is required/), "missing basis rejected");
-  check(throwsWith(() => parseCreateWorkInput({ ...baseCreate, commercialRoute: "" }), /Execution basis is required/), "blank basis rejected");
+  // 3. Operator review: an Issue records what needs attention; the execution basis is decided when the Work is
+  //    TREATED. So a basis is optional at the Work create boundary (absent/blank = not decided, stored NULL, never
+  //    defaulted); when supplied it must be valid. Treatment surfaces (Work form, Request → Work, Incident triage) keep it.
+  check(parseCreateWorkInput(baseCreate).commercialRoute === null, "missing basis = not decided (null), never defaulted");
+  check(parseCreateWorkInput({ ...baseCreate, commercialRoute: "" }).commercialRoute === null, "blank basis = not decided");
   check(throwsWith(() => parseCreateWorkInput({ ...baseCreate, commercialRoute: "both" }), /Invalid execution basis/), "invalid basis rejected");
   const service = read("src/modules/maintenance/server/FmWorkServerService.ts");
   check(/async create\(payload: unknown\)[\s\S]{0,120}parseCreateWorkInput\(payload\)/.test(service), "Work create always parses via parseCreateWorkInput");
   const forms: Array<[string, string]> = [
     ["src/modules/maintenance/components/MaintenanceFormModal.tsx", "Work form"],
     ["src/modules/requests/components/CreateMaintenanceFromRequestModal.tsx", "Request → Work"],
-    ["src/modules/issues/components/LogIssueModal.tsx", "Log Issue"],
     ["src/modules/incidents/components/ViewIncidentModal.tsx", "Incident triage"],
   ];
   for (const [path, label] of forms) {
@@ -140,7 +141,9 @@ async function main() {
   const orchestration = read("src/lib/operational/orchestration/index.ts");
   const triageGuard = orchestration.indexOf('throw new ActionError("VALIDATION_ERROR", "Execution basis is required.")');
   check(triageGuard > 0 && triageGuard < orchestration.indexOf("// Idempotent resolve: do not re-triage"), "triage validates the basis before any write");
-  out.push("PASS 3 new Work requires an explicit basis (domain boundary + Work form, Request → Work, Log Issue, Incident triage)");
+  const logIssue = read("src/modules/issues/components/LogIssueModal.tsx") + read("src/modules/issues/actions/logIssue.ts");
+  check(!/ExecutionBasisField|commercialRoute/.test(logIssue.replace(/\/\/.*$/gm, "")), "Log Issue neither asks for nor sends an execution basis");
+  out.push("PASS 3 execution basis is chosen at treatment (Work form, Request → Work, Incident triage), not at Log Issue; never defaulted");
 
   // 4. Both routes persist / read.
   for (const route of ["work_order", "job_order"] as const) {
@@ -149,13 +152,13 @@ async function main() {
     check(parseUpdateWorkInput({ id: "WRK-2026-000001", commercialRoute: route }).commercialRoute === route, `${route} correctable`);
   }
   const repo = read("src/modules/maintenance/server/FmWorkRepository.ts");
-  check(repo.includes("commercial_route: input.commercialRoute,"), "create persists the parsed basis");
+  check(repo.includes("commercial_route: input.commercialRoute ?? null,"), "create persists the parsed basis (or NULL = not decided)");
   check(repo.includes("if (input.commercialRoute !== undefined) patch.commercial_route = input.commercialRoute;"), "update persists a correction");
   out.push("PASS 4 work_order and job_order parse, persist and read back");
 
   // 5. No amount-based (or any other) inference.
   check(
-    throwsWith(() => parseCreateWorkInput({ ...baseCreate, estimatedCost: 5_000_000, actualCost: 2_000_000 }), /Execution basis is required/),
+    parseCreateWorkInput({ ...baseCreate, estimatedCost: 5_000_000, actualCost: 2_000_000 }).commercialRoute === null,
     "a large amount never supplies a basis"
   );
   check(parseCreateWorkInput({ ...baseCreate, commercialRoute: "work_order", estimatedCost: 50_000_000 }).commercialRoute === "work_order", "amount never changes the chosen basis");
@@ -166,7 +169,7 @@ async function main() {
 
   // 6. Historical data untouched: no backfill (1), and historical Work stays read-only BEFORE the route guard runs.
   const readOnly = repo.indexOf('if (existing.record_origin === "migrated_historical") throw new FmWorkReadOnlyError();');
-  const guard = repo.indexOf("assertCommercialRouteChangeAllowed(existing, input.commercialRoute);");
+  const guard = repo.indexOf("assertCommercialRouteChangeAllowed(existing, input.commercialRoute ?? undefined);");
   check(readOnly > 0 && guard > readOnly, "historical Work refused before any route change");
   check(throwsWith(() => parseUpdateWorkInput({ id: "WRK-2026-000001", commercialRoute: "" }), /Execution basis is required/), "a basis cannot be cleared");
   out.push("PASS 6 historical Work / WO / JO untouched: no backfill, historical Work stays read-only");

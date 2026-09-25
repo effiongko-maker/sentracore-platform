@@ -43,7 +43,7 @@ export function FinancialPositionSection() {
                     !snapshot?.expectedAvailable ||
                     !snapshot?.outstandingAvailable
                   ? "Some figures are temporarily unavailable. Open Costs & Claims for the full record."
-                  : `${HOME_FINANCIAL_POSITION_YEAR} operating year — recorded costs and client payment requests`}
+                  : `${HOME_FINANCIAL_POSITION_YEAR} operating year — recorded execution expenditure and pending payments`}
           </p>
         </div>
         <div className="sc-fm-finance-header-actions">
@@ -66,7 +66,7 @@ export function FinancialPositionSection() {
       <div className="sc-fm-finance-metrics" role="list">
         <div className="sc-fm-finance-metric" role="listitem">
           <p className="sc-fm-finance-label">
-            Spent ({HOME_FINANCIAL_POSITION_YEAR})
+            Spent · recorded costs ({HOME_FINANCIAL_POSITION_YEAR})
           </p>
           <MetricValue
             loading={loading}
@@ -76,7 +76,7 @@ export function FinancialPositionSection() {
         </div>
         <div className="sc-fm-finance-metric" role="listitem">
           <p className="sc-fm-finance-label">
-            Client payments requested ({HOME_FINANCIAL_POSITION_YEAR})
+            Payment requests ({HOME_FINANCIAL_POSITION_YEAR})
           </p>
           <MetricValue
             loading={loading}
@@ -86,7 +86,7 @@ export function FinancialPositionSection() {
         </div>
         <div className="sc-fm-finance-metric" role="listitem">
           <p className="sc-fm-finance-label">
-            Client payments outstanding ({HOME_FINANCIAL_POSITION_YEAR})
+            Pending payments ({HOME_FINANCIAL_POSITION_YEAR})
           </p>
           <MetricValue
             loading={loading}

@@ -27,6 +27,8 @@ type WorkListStatus = MaintenanceStatus | "all" | "active";
  * Does not invent a second store or sheet.
  */
 export function useWork() {
+  const [includeHistory, setIncludeHistoryState] = useState(false);
+  const setIncludeHistory = (value: boolean) => { setIncludeHistoryState(value); setPage(1); };
   const [items, setItems] = useState<Maintenance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -110,6 +112,7 @@ export function useWork() {
 
       try {
         const result = await MaintenanceService.listMaintenance({
+          includeHistory,
           page: nextPage,
           pageSize: WORK_PAGE_SIZE,
           search: debouncedSearch,
@@ -155,7 +158,7 @@ export function useWork() {
         }
       }
     },
-    [
+    [includeHistory,
       page,
       debouncedSearch,
       priority,
@@ -255,6 +258,7 @@ export function useWork() {
   }, [reconcileItem]);
 
   return {
+    includeHistory, setIncludeHistory,
     items,
     loading,
     error,

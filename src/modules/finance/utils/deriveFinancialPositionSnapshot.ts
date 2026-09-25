@@ -36,7 +36,7 @@ export type FinancialPositionSnapshotInput = {
    * figure instead of summing the bounded preview pool, so Home never presents a
    * partial in-view total as if it were the whole register.
    */
-  costTotals?: { totalAmount: number; currency: string } | null;
+  costTotals?: { totalAmount: number; currency: string; orderValueAmount?: number } | null;
   /**
    * When set, `costTotals` is that operating year's complete-register total and Spent is ONLY that figure:
    * if it failed to load, Spent is unavailable — never the bounded all-year pool (which would mix years).
@@ -54,6 +54,12 @@ export type FinancialPositionSnapshot = {
   outstandingReimbursementAmount: number | null;
   currency: string;
   spentLabel: string | null;
+  /**
+   * The operating year's WO/JO execution cost from the imported order registers — already included in spend. null when the
+   * year total could not be loaded.
+   */
+  orderValueAmount: number | null;
+  orderValueLabel: string | null;
   expectedLabel: string | null;
   outstandingLabel: string | null;
   /** True when any available source pool is truncated relative to API totals. */
@@ -196,6 +202,12 @@ export function deriveFinancialPositionSnapshot(
     outstandingReimbursementAmount,
     currency,
     spentLabel: labelOrNull(spentAvailable, spentAmount, currency),
+    orderValueAmount: input.costTotals?.orderValueAmount ?? null,
+    orderValueLabel: labelOrNull(
+      input.costTotals?.orderValueAmount != null,
+      input.costTotals?.orderValueAmount ?? null,
+      currency
+    ),
     expectedLabel: labelOrNull(
       expectedAvailable,
       expectedReimbursementAmount,

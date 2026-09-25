@@ -40,17 +40,17 @@ function attentionCopy(item: FinancePendingActionItem): {
       };
     case "client_authorisation_awaiting":
       return {
-        title: "Client authorisation awaiting decision",
+        title: "Payment approval awaiting decision",
         context: item.title,
       };
     case "client_authorisation_returned":
       return {
-        title: "Client authorisation returned",
+        title: "Payment approval returned",
         context: item.title,
       };
     case "client_authorisation_draft":
       return {
-        title: "Client authorisation draft",
+        title: "Payment approval draft",
         context: item.title,
       };
     default:

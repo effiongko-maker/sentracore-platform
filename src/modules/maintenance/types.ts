@@ -60,6 +60,8 @@ export interface Maintenance {
   department?: string;
 
   facilityId: string;
+  /** Every facility the Work covers (primary first); a single-facility Work lists only facilityId. */
+  facilityIds?: string[];
   assetId?: string;
   reportedByUserId?: string;
   assignedToUserId?: string;
@@ -117,6 +119,8 @@ export interface CreateMaintenanceInput {
   categoryId?: string;
   department?: string;
   facilityId: string;
+  /** "Both": every facility the Work covers, primary first. Omit for a single facility. */
+  facilityIds?: string[];
   assetId?: string;
   reportedByUserId?: string;
   assignedToUserId?: string;
@@ -132,8 +136,8 @@ export interface CreateMaintenanceInput {
   status: MaintenanceStatus;
   holdReason?: string;
   requiresWorkOrder?: boolean;
-  /** Execution basis — required for new Work (validated at the Work create boundary). */
-  commercialRoute: WorkCommercialRoute;
+  /** Execution basis — optional at creation (an Issue has none until treated); never defaulted. */
+  commercialRoute?: WorkCommercialRoute;
   reportedAt: string;
   scheduledStartAt?: string;
   scheduledEndAt?: string;
@@ -171,6 +175,8 @@ export interface MaintenanceListParams {
   includeOperationalPictureTotals?: boolean;
   /** ISO-8601 UTC timestamp for overdue day comparison. */
   asOf?: string;
+  /** Include Work imported from the 2025 registers (history). Default false: current operating picture only. */
+  includeHistory?: boolean;
 }
 
 /** Lightweight reference row for filter dropdowns — id + title only. */

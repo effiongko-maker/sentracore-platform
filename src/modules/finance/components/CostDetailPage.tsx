@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CostsClaimsNav } from "./CostsClaimsNav";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ReceiptText } from "lucide-react";
 import { MasterDataSelect } from "@/components/forms/MasterDataSelect";
@@ -509,6 +510,7 @@ export function CostDetailPage({ costId }: { costId: string }) {
 
   return (
     <ModeFrame mode="act">
+      <CostsClaimsNav />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <Link
           href="/finance/costs"

@@ -189,9 +189,13 @@ export type FinanceOverviewMeta = {
 /** Operating-year spend for the Costs & Claims headline (complete register, that year only). */
 export type FinanceOperatingYearSpend = {
   year: number;
+  /** Costs only — imported order-register values are never counted here. */
   totalCount: number;
   totalAmount: number;
   currency: string;
+  /** That year's WO/JO execution cost from the imported order registers — reported separately, already included in spend. */
+  orderValueCount?: number;
+  orderValueAmount?: number;
 };
 
 export type FinanceOverview = {
@@ -200,6 +204,8 @@ export type FinanceOverview = {
   position: FinancePositionMetric[];
   clientAuthorisationStages: FinancePipelineStage[];
   pendingActions: FinancePendingActionItem[];
+  /** Payment Approval items only (awaiting decision, returned, draft) for the overview's Payment Approvals card. */
+  paymentApprovals: FinancePendingActionItem[];
   operationalCostLenses: FinanceOperationalCostLens[];
   operationalCostSummary: FinanceOperationalCostSummary | null;
   /** null when the operating-year total could not be loaded (never the all-year or preview figure). */

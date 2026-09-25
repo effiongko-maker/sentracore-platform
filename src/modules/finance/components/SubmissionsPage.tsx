@@ -1,5 +1,7 @@
 "use client";
 
+import { CostsClaimsNav } from "./CostsClaimsNav";
+
 import Link from "next/link";
 import { ArrowLeft, FileStack, Plus } from "lucide-react";
 import { useSearchParams } from "next/navigation";
@@ -34,8 +36,9 @@ const KIND_TABS: Array<{ id: ClientPaymentKind | "all"; label: string }> = [
   { id: "reimbursement_claim", label: "Reimbursement claims" },
 ];
 
-/** FM Client Payments register. `?kind=reimbursement_claim` is the direct Reimbursement claims view. */
+/** FM Pending Payments register. `?kind=reimbursement_claim` is the direct Reimbursement claims view. */
 export function SubmissionsPage() {
+  const [includeHistory, setIncludeHistory] = useState(false);
   const [page, setPage] = useState(1);
   const searchParams = useSearchParams();
   const rawKind = searchParams.get("kind");
@@ -48,6 +51,7 @@ export function SubmissionsPage() {
       page,
       pageSize: SUBMISSIONS_LIST_PAGE_SIZE,
       kind,
+      includeHistory,
     });
 
   const columns = useMemo<Column<CostSubmission>[]>(
@@ -120,6 +124,7 @@ export function SubmissionsPage() {
   return (
     <ModeFrame mode="act">
       <div className="fin-page">
+        <CostsClaimsNav />
         <div className="mb-4">
           <Link
             href="/finance"
@@ -129,9 +134,11 @@ export function SubmissionsPage() {
           </Link>
         </div>
 
+        {kind === "contract_instalment" ? <Link className="fin-v13-text-action mb-3 inline-block" href="/finance/monthly-payments">View recorded monthly contract receipts →</Link> : null}
+        <label className="mb-3 flex items-center gap-2 text-sm text-muted"><input type="checkbox" checked={includeHistory} onChange={(e) => { setIncludeHistory(e.target.checked); setPage(1); }} />Include 2025 history</label>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <OperateHeader
-            title={claimsOnly ? "Reimbursement claims" : "Client payments"}
+            title={claimsOnly ? "Reimbursements" : kind === "contract_instalment" ? "Contract Payments" : "Pending Payments"}
             description={
               claimsOnly
                 ? "Prepare and track reimbursement claims from operational costs."
@@ -140,6 +147,11 @@ export function SubmissionsPage() {
             signalValue={loading ? "—" : total}
             signalLabel={claimsOnly ? "Claims" : "Requests"}
           />
+          {canCreateClaim && !claimsOnly ? (
+            <Link className="fin-v13-btn-primary" href={`/finance/client-payments/new?kind=${kind === "contract_instalment" ? "contract_instalment" : "payment_request"}`}>
+              <Plus className="h-4 w-4" /> {kind === "contract_instalment" ? "Record contract instalment" : "Raise payment request"}
+            </Link>
+          ) : null}
           {canCreateClaim && claimsOnly ? (
             <Link
               href="/finance/submissions/new"
@@ -151,7 +163,7 @@ export function SubmissionsPage() {
           ) : null}
         </div>
 
-        <nav className="mt-4 flex flex-wrap gap-2" aria-label="Client payment type">
+        <nav className="mt-4 flex flex-wrap gap-2" aria-label="Pending payment type">
           {KIND_TABS.map((tab) => (
             <Link
               key={tab.id}
@@ -170,7 +182,7 @@ export function SubmissionsPage() {
           {error ? (
             <EmptyState
               icon={FileStack}
-              title="Unable to load claims"
+              title={claimsOnly ? "Unable to load claims" : "Unable to load pending payments"}
               description={error}
               actionLabel="Try again"
               onAction={() => void reload()}
@@ -186,7 +198,7 @@ export function SubmissionsPage() {
               total={total}
               onPageChange={setPage}
               emptyIcon={FileStack}
-              emptyTitle={claimsOnly ? "No reimbursement claims recorded in SentraCore™ yet" : "No client payments recorded yet"}
+              emptyTitle={claimsOnly ? "No reimbursement claims recorded in SentraCore™ yet" : "No pending payments recorded yet"}
               emptyDescription={
                 claimsOnly
                   ? "Create a claim to group reimbursable costs for reimbursement."

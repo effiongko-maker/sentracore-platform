@@ -1,5 +1,6 @@
 "use client";
 
+import { FacilityNames } from "@/components/operational/FacilityNames";
 import Link from "next/link";
 import { useMemo } from "react";
 import { Wrench } from "lucide-react";
@@ -49,7 +50,9 @@ function FacilityCell({ row }: { row: Maintenance }) {
 
   return (
     <div>
-      <span className="text-foreground">{name || row.facilityId || "—"}</span>
+      <span className="text-foreground">
+        {(row.facilityIds?.length ?? 0) > 1 ? <FacilityNames ids={row.facilityIds} /> : name || row.facilityId || "—"}
+      </span>
       {location ? <p className="text-xs text-muted">{location}</p> : null}
     </div>
   );

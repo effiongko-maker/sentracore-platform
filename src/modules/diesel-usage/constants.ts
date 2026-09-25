@@ -23,6 +23,8 @@ export const DIESEL_USAGE_FIELD_LABELS = {
   facilityId: "Facility ID",
   generatorId: "Generator ID",
   openingLevel: "Opening Level (L)",
+  undergroundTankQty: "Underground tank (L)",
+  surfaceTankQty: "Surface tank (L)",
   added: "Added (L)",
   closingLevel: "Closing Level (L)",
   consumption: "Consumption (L)",

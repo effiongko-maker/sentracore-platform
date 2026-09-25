@@ -5,7 +5,7 @@ import { Fuel } from "lucide-react";
 import { DataTable, type Column } from "@/components/tables/DataTable";
 import { formatDate } from "@/lib/utils";
 import { useFacilityName } from "@/hooks/useEntityLabel";
-import { dieselGeneratorPresentation, getDieselUsageFlagLabels } from "../utils";
+import { dieselGeneratorPresentation, dieselVariance, getDieselUsageFlagLabels } from "../utils";
 import type { DieselUsage } from "../types";
 import { DieselUsageRowActions } from "./DieselUsageRowActions";
 
@@ -13,8 +13,9 @@ function FacilityLabel({ id }: { id: string }) {
   return <>{useFacilityName(id) || "—"}</>;
 }
 
-function formatLitres(value: number | undefined): string {
-  if (value == null || !Number.isFinite(value)) return "—";
+/** null = not recorded (never 0). */
+function formatLitres(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "Not recorded";
   return String(value);
 }
 
@@ -81,9 +82,14 @@ export function DieselUsageTable({
         key: "openingLevel",
         header: "Opening (L)",
         render: (entry) => (
-          <span className="tabular-nums text-muted">
-            {formatLitres(entry.openingLevel)}
-          </span>
+          <div>
+            <span className="tabular-nums text-muted">{formatLitres(entry.openingLevel)}</span>
+            {entry.undergroundTankQty != null || entry.surfaceTankQty != null ? (
+              <p className="text-xs text-muted">
+                Underground {formatLitres(entry.undergroundTankQty)} · Surface {formatLitres(entry.surfaceTankQty)}
+              </p>
+            ) : null}
+          </div>
         ),
       },
       {
@@ -91,7 +97,7 @@ export function DieselUsageTable({
         header: "Added (L)",
         render: (entry) => (
           <span className="tabular-nums text-muted">
-            {entry.added == null ? "—" : formatLitres(entry.added)}
+            {formatLitres(entry.added)}
           </span>
         ),
       },
@@ -109,11 +115,17 @@ export function DieselUsageTable({
         header: "Consumption (L)",
         render: (entry) => {
           const flags = getDieselUsageFlagLabels(entry.consumption, entry.recordOrigin);
+          const v = dieselVariance(entry);
           return (
             <div>
               <span className="tabular-nums font-medium text-foreground">
                 {formatLitres(entry.consumption)}
               </span>
+              {v && Math.abs(v.variance) >= 0.005 ? (
+                <p className="mt-0.5 text-xs text-muted" title="Readings are physical measurements; the difference is shown, not corrected.">
+                  Reading variance {v.variance > 0 ? "+" : ""}{v.variance} L
+                </p>
+              ) : null}
               {flags.length > 0 ? (
                 <p className="mt-0.5 text-xs text-danger">{flags.join(" · ")}</p>
               ) : null}

@@ -32,7 +32,7 @@ async function main() {
   check(has(workNextStep({ route: "work_order", status: "requested" }), /no prior client approval/), "WO: execute");
   check(has(workNextStep({ route: "work_order", status: "in_progress" }), /Complete the work, then submit the Work Order/), "WO: executing");
   check(has(workNextStep({ route: "work_order", status: "completed" }), /submit the Work Order/), "WO: completed awaiting Work Order");
-  check(has(workNextStep({ route: "work_order", status: "completed", workOrderCode: "WO-2026-000010" }), /Request client payment for Work Order WO-2026-000010/), "WO: awaiting Client Payment");
+  check(has(workNextStep({ route: "work_order", status: "completed", workOrderCode: "WO-2026-000010" }), /Raise payment request for Work Order WO-2026-000010/), "WO: awaiting Client Payment");
   check(has(workNextStep({ route: "work_order", status: "completed", workOrderCode: "WO-2026-000010", clientPaymentCode: "SUB-2026-000020" }), /Client payment SUB-2026-000020 requested/), "WO: payment requested");
   check(workNextStep({ route: null, status: "requested" }) === null, "legacy: no invented step");
   check(workNextStep({ route: "work_order", status: "completed", recordOrigin: "migrated_historical" }) === null, "historical: no step");
@@ -73,10 +73,11 @@ async function main() {
   check(pkg.includes("{workLevel ? null : (") && pkg.includes("Work Order form"), "no empty Work Order form section for Work-level; legacy section kept");
   out.push("PASS 3 Work-level Approval edit form and package show Work: WRK-…, never a blank Work Order");
 
-  // 4. Job Orders register: no direct creation; Work Orders tab unchanged.
+  // 4. Superseded by the operator review: WO/JO are commercial submission packages created directly from their own
+  //    tab (+ New Work Order / + New Job Order); the All tab keeps its no-create behaviour.
   const register = read("src/modules/work-orders/components/WorkOrdersPage.tsx");
-  check(!register.includes('"New Job Order"') && register.includes('label: "New Work Order"'), "no New Job Order; New Work Order kept");
-  out.push("PASS 4 Job Orders register has no direct New Job Order action (Work Orders tab unchanged)");
+  check(register.includes('label: "New Job Order"') && register.includes('label: "New Work Order"') && /: null;/.test(register), "WO and JO tabs create their own type; All does not");
+  out.push("PASS 4 Work Orders / Job Orders tabs each create their own type directly (All tab unchanged)");
 
   // 5. New Job Order-route Work cannot pick an executing status.
   check(EXECUTION_STATUSES.includes("in_progress") && EXECUTION_STATUSES.includes("completed"), "execution statuses");
@@ -107,7 +108,11 @@ async function main() {
     "Edit only with ops.edit and never for historical WO/JO (same rule as the register)"
   );
   const registerPage = read("src/modules/work-orders/components/WorkOrdersPage.tsx");
-  check(/canMutateOps && !\(modal\.type === "view" && modal\.workOrder\.recordOrigin === "migrated_historical"\)/.test(registerPage), "register rule it mirrors");
+  check(
+    /const isHistorical = \(workOrder: WorkOrder\) => workOrder\.recordOrigin === "migrated_historical"/.test(registerPage) &&
+      /canMutateOps && !\(modal\.type === "view" && isHistorical\(modal\.workOrder\)\)/.test(registerPage),
+    "register rule it mirrors"
+  );
   check(/<WorkOrderFormModal\s+open=\{Boolean\(editWorkOrder\)\}\s+mode="edit"/.test(workPage), "opens the existing Work Order edit form (with its Client Payment section)");
   check(!/clientPayment/i.test(read("src/modules/work-orders/components/ViewWorkOrderModal.tsx")), "no Client Payment controls duplicated into the read-only view");
   out.push("PASS 7 operational WO/JO opened from Work Detail offers Edit (ops.edit, not historical) → existing WO → Client Payment path");

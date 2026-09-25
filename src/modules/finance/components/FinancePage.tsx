@@ -1,5 +1,7 @@
 "use client";
 
+import { CostsClaimsNav } from "./CostsClaimsNav";
+
 import "@/styles/finance.css";
 
 import { useState } from "react";
@@ -13,9 +15,7 @@ import { CostRecordFormModal } from "./CostRecordFormModal";
 import { FinanceHeader, FinanceSummaryRow } from "./FinanceHeader";
 import { FinanceIntelligencePreview } from "./FinanceIntelligencePreview";
 import { FinanceOperationalCostSection } from "./FinanceOperationalCostSection";
-import { MonthlyContractPaymentsSection } from "./MonthlyContractPaymentsSection";
-import { FinancePendingActionSection } from "./FinancePendingActionSection";
-import { FinancePositionSection } from "./FinancePositionSection";
+import { FinancePaymentApprovalsSection } from "./FinancePaymentApprovalsSection";
 import { FinanceSubmissionsSection } from "./FinanceSubmissionsSection";
 import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 
@@ -39,34 +39,25 @@ export function FinancePage() {
     );
   }
 
-  const costAvailable = overview?.meta.costRecordsAvailable !== false;
   const submissionsAvailable = overview?.meta.submissionsAvailable !== false;
   const approvalsAvailable = overview?.meta.approvalsAvailable !== false;
-  const costTotal = costAvailable ? (overview?.meta.costRecordsTotal ?? 0) : null;
-  const submissionTotal = submissionsAvailable
-    ? (overview?.meta.submissionsTotal ?? 0)
-    : null;
   // Headline = the operating year's complete-register spend only. If that total failed it is Unavailable —
   // never the all-year register or the bounded preview pool (either would misstate the year).
   const yearSpend = overview?.operatingYearSpend ?? null;
   const spendLabel = yearSpend
     ? formatFinancialAmount(yearSpend.totalAmount, yearSpend.currency)
     : "Unavailable";
-  const outstandingCount = overview?.submissions.outstandingCount;
+  // Headline KPI = the outstanding amount; the count stays in the Pending Payments area.
   const outstandingAmount = overview?.submissions.outstandingAmount;
-  const clientPaymentsOutstanding = !submissionsAvailable
-    ? "Unavailable"
-    : outstandingCount == null || outstandingAmount == null
-      ? submissionTotal && submissionTotal > 0
-        ? `${submissionTotal} requests · see Client payments`
-        : "Unavailable"
-      : outstandingCount === 0
-        ? "None"
-        : `${outstandingCount} · ${formatFinancialAmount(outstandingAmount, "NGN")}`;
+  const clientPaymentsOutstanding =
+    !submissionsAvailable || outstandingAmount == null
+      ? "Unavailable"
+      : formatFinancialAmount(outstandingAmount, "NGN");
 
   return (
     <ModeFrame mode="understand">
       <div className="fin-page fin-page--v13">
+        <CostsClaimsNav />
         <FinanceHeader
           derivedAt={overview?.meta.derivedAt}
           loading={loading}
@@ -79,9 +70,6 @@ export function FinancePage() {
           operationalSpendLabel={loading ? "—" : spendLabel}
           operatingYear={FINANCE_OPERATING_YEAR}
           operatingYearRecordCount={yearSpend?.totalCount ?? null}
-          costRecordsTotal={
-            loading ? "—" : costTotal == null ? "Unavailable" : costTotal
-          }
           clientPaymentsOutstanding={
             loading ? "—" : clientPaymentsOutstanding
           }
@@ -105,44 +93,37 @@ export function FinancePage() {
                 Financial activity
               </h2>
               <p className="fin-v13-section-lede">
-                Recent operational costs and reimbursement claims.
+                Outstanding client actions, then recorded operational costs.
               </p>
             </div>
           </div>
           <div className="fin-v13-main">
-            <FinanceOperationalCostSection
-              lenses={overview?.operationalCostLenses ?? []}
-              summary={overview?.operationalCostSummary ?? null}
-              recentCosts={overview?.recentCosts ?? []}
-              loading={loading}
-              available={overview?.meta.costRecordsAvailable !== false}
-            />
             <FinanceSubmissionsSection
               snapshot={overview?.submissions ?? null}
               loading={loading}
               error={
                 overview && overview.submissions.available === false
-                  ? "Client payments are temporarily unavailable."
+                  ? "Pending payments are temporarily unavailable."
                   : null
               }
             />
+            <FinancePaymentApprovalsSection
+              items={overview?.paymentApprovals ?? []}
+              awaitingCount={
+                overview?.clientAuthorisationStages.find((stage) => stage.id === "awaiting_decision")?.count ?? null
+              }
+              loading={loading}
+              available={approvalsAvailable}
+            />
           </div>
+          <FinanceOperationalCostSection
+            lenses={overview?.operationalCostLenses ?? []}
+            summary={overview?.operationalCostSummary ?? null}
+            recentCosts={overview?.recentCosts ?? []}
+            loading={loading}
+            available={overview?.meta.costRecordsAvailable !== false}
+          />
         </section>
-
-        <MonthlyContractPaymentsSection />
-
-        <FinancePositionSection
-          approvals={overview?.sourceApprovals ?? []}
-          loading={loading}
-          totalAuthorisations={overview?.meta.totalApprovals ?? 0}
-          available={overview?.meta.approvalsAvailable !== false}
-        />
-
-        <FinancePendingActionSection
-          items={overview?.pendingActions ?? []}
-          loading={loading}
-          incomplete={Boolean(overview?.meta.pendingIncomplete)}
-        />
 
         <div className="fin-v13-footer">
           <FinanceIntelligencePreview summary={overview?.operationalCostSummary ?? null} />

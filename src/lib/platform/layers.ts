@@ -6,7 +6,6 @@ import {
   ClipboardList,
   Database,
   FileBarChart2,
-  FileCheck2,
   Package,
   ScanSearch,
   CircleDot,
@@ -82,6 +81,7 @@ export const OPERATING_LAYERS: OperatingLayer[] = [
         href: FM_FINANCE_HOME.href,
         icon: Banknote,
         title: "Costs & Claims",
+        matchHrefs: ["/approvals"],
         description:
           "Operational costs, reimbursement submissions, and payment position",
       }),
@@ -176,13 +176,6 @@ export const OPERATING_LAYERS: OperatingLayer[] = [
         title: "Work Orders",
         description: "Plan, assign, and track Work Orders and Job Orders",
       }),
-      fm({
-        label: "Approvals",
-        href: "/approvals",
-        icon: FileCheck2,
-        title: "Approvals",
-        description: "Client authorisation to proceed",
-      }),
     ],
   },
 ];
@@ -241,7 +234,10 @@ export function filterOperatingLayers(
   return moduleFiltered
     .map((layer) => ({
       ...layer,
-      modules: layer.modules.filter((mod) => canSeeHref(visibility, mod.href)),
+      modules: layer.modules
+        .map((mod) => mod.href === FM_FINANCE_HOME.href && !canSeeHref(visibility, mod.href) && canSeeHref(visibility, "/approvals")
+          ? { ...mod, href: "/approvals" } : mod)
+        .filter((mod) => canSeeHref(visibility, mod.href)),
     }))
     .filter((layer) => layer.modules.length > 0);
 }

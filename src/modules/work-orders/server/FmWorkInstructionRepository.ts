@@ -1,5 +1,13 @@
 import "server-only";
 import {
+  FM_HISTORICAL_2025_SHEETS,
+  FM_ORDER_REGISTER_SHEETS,
+  FM_SOURCE_REGISTER_WORKBOOK,
+  loadProvenanceTargetIds,
+  notInList,
+  type ProvenanceClient,
+} from "@/lib/fm/sourceRegisterScope";
+import {
   applyFacilityScope,
   scopeAllowsFacilities,
   UNRESTRICTED_REPO_SCOPE,
@@ -30,7 +38,14 @@ import {
   type InstructionFields,
   type ParsedCreateInstruction,
   type ParsedUpdateInstruction,
+  type ParsedCreateSubmission,
+  type ParsedFollowUp,
+  type ParsedUpdateSubmission,
+  type WorkOrderSubmissionStatus,
+  assertSubmissionComplete,
 } from "./fmWorkInstructionDomain";
+import type { CommercialFollowUp } from "@/modules/work-orders/types";
+import { latestFollowUp } from "@/lib/fm/commercialFollowUp";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 const CODE_RETRY_LIMIT = 5;
@@ -76,7 +91,7 @@ function asRow(value: unknown): FmWorkInstructionRow {
     organisation_id: String(rec.organisation_id),
     code: String(rec.code ?? ""),
     order_type: String(rec.order_type ?? ""),
-    work_id: String(rec.work_id),
+    work_id: rec.work_id != null ? String(rec.work_id) : null,
     facility_id: String(rec.facility_id),
     title: String(rec.title ?? ""),
     description: txt(rec, "description"),
@@ -111,6 +126,10 @@ function asRow(value: unknown): FmWorkInstructionRow {
     requires_approval: Boolean(rec.requires_approval),
     client_reference: txt(rec, "client_reference"),
     operational_event_id: txt(rec, "operational_event_id"),
+    submission_date: txt(rec, "submission_date"),
+    submission_amount: num(rec.submission_amount),
+    submission_status: txt(rec, "submission_status"),
+    last_follow_up_at: txt(rec, "last_follow_up_at"),
     created_by_profile_id: txt(rec, "created_by_profile_id"),
     updated_by_profile_id: txt(rec, "updated_by_profile_id"),
     created_at: String(rec.created_at ?? ""),
@@ -319,6 +338,12 @@ export class FmWorkInstructionRepository {
       .select(FM_WORK_INSTRUCTION_SELECT, { count: "exact" })
       .eq("organisation_id", this.organisationId);
     query = applyFacilityScope(query, this.scope.read);
+    // 2025 register history is preserved but kept out of the current operating picture unless asked for.
+    if (!params.includeHistory) {
+      const history = await this.historical2025Ids();
+      if (history.length) query = query.not("id", "in", notInList(history));
+    }
+    if (params.orderType && params.orderType !== "all") query = query.eq("order_type", params.orderType);
 
     if (params.status && params.status !== "all") query = query.eq("status", params.status);
     if (params.priority && params.priority !== "all") query = query.eq("priority", params.priority);
@@ -378,6 +403,19 @@ export class FmWorkInstructionRepository {
     return { rows: (data ?? []).map(asRow), total: count ?? 0 };
   }
 
+  /** Work Instructions imported from the 2025 registers (governed provenance only). */
+  async historical2025Ids(): Promise<string[]> {
+    try {
+      return await loadProvenanceTargetIds(this.admin as unknown as ProvenanceClient, {
+        organisationId: this.organisationId,
+        target: "fm_work_instructions",
+        sheets: FM_HISTORICAL_2025_SHEETS,
+      });
+    } catch (error) {
+      throwDb({ message: error instanceof Error ? error.message : undefined }, "Unable to load Work Instruction provenance.");
+    }
+  }
+
   private async facilityIdOrNull(value: string): Promise<string | null> {
     if (UUID_RE.test(value)) return value;
     const { data, error } = await this.admin
@@ -394,15 +432,49 @@ export class FmWorkInstructionRepository {
   async relationsFor(rows: FmWorkInstructionRow[]): Promise<Map<string, FmWorkInstructionRelations>> {
     const out = new Map<string, FmWorkInstructionRelations>();
     if (rows.length === 0) return out;
-    const workIds = [...new Set(rows.map((r) => r.work_id))];
+    const instructionIds = rows.map((r) => r.id);
+    const [links, extraFacilities, importedValues] = await Promise.all([
+      this.admin
+        .from("fm_work_instruction_works")
+        .select("work_instruction_id, work_id")
+        .eq("organisation_id", this.organisationId)
+        .in("work_instruction_id", instructionIds),
+      this.admin
+        .from("fm_work_instruction_facilities")
+        .select("work_instruction_id, facility_id")
+        .eq("organisation_id", this.organisationId)
+        .in("work_instruction_id", instructionIds),
+      this.importedOrderValues(rows.filter((r) => r.record_origin === "migrated_historical").map((r) => r.id)),
+    ]);
+    if (links.error) throwDb(links.error, "Unable to load submitted Works.");
+    if (extraFacilities.error) throwDb(extraFacilities.error, "Unable to load WO/JO facilities.");
+    const linkedByInstruction = new Map<string, string[]>();
+    for (const link of links.data ?? []) {
+      const rec = link as { work_instruction_id: string; work_id: string };
+      linkedByInstruction.set(rec.work_instruction_id, [...(linkedByInstruction.get(rec.work_instruction_id) ?? []), rec.work_id]);
+    }
+    const facilitiesByInstruction = new Map<string, string[]>();
+    for (const f of extraFacilities.data ?? []) {
+      const rec = f as { work_instruction_id: string; facility_id: string };
+      facilitiesByInstruction.set(rec.work_instruction_id, [...(facilitiesByInstruction.get(rec.work_instruction_id) ?? []), rec.facility_id]);
+    }
+
+    const workIds = [
+      ...new Set([
+        ...rows.map((r) => r.work_id).filter((v): v is string => !!v),
+        ...[...linkedByInstruction.values()].flat(),
+      ]),
+    ];
     const parentIds = [...new Set(rows.map((r) => r.parent_instruction_id).filter((v): v is string => !!v))];
 
     const [work, parents, approvals, clientPayments] = await Promise.all([
-      this.admin
-        .from("fm_work")
-        .select("id, code, incident_id, commercial_route")
-        .eq("organisation_id", this.organisationId)
-        .in("id", workIds),
+      workIds.length
+        ? this.admin
+            .from("fm_work")
+            .select("id, code, incident_id, commercial_route")
+            .eq("organisation_id", this.organisationId)
+            .in("id", workIds)
+        : Promise.resolve({ data: [], error: null }),
       parentIds.length
         ? this.admin
             .from("fm_work_instructions")
@@ -416,7 +488,12 @@ export class FmWorkInstructionRepository {
         .from("fm_approvals")
         .select("code, work_instruction_id, work_id")
         .eq("organisation_id", this.organisationId)
-        .or(`work_instruction_id.in.(${rows.map((r) => r.id).join(",")}),work_id.in.(${workIds.join(",")})`),
+        .or(
+          [
+            `work_instruction_id.in.(${instructionIds.join(",")})`,
+            ...(workIds.length ? [`work_id.in.(${workIds.join(",")})`] : []),
+          ].join(",")
+        ),
       // The Work Order's active Client Payment (fm_cost_submissions.work_instruction_id) — its receipt state stays there.
       this.admin
         .from("fm_cost_submissions")
@@ -468,19 +545,258 @@ export class FmWorkInstructionRepository {
       if (rec.work_id) approvalCodeByWork.set(rec.work_id, String(rec.code));
     }
     for (const row of rows) {
-      const w = workById.get(row.work_id);
+      const w = row.work_id ? workById.get(row.work_id) : undefined;
+      const submittedWorkIds = [...new Set([...(row.work_id ? [row.work_id] : []), ...(linkedByInstruction.get(row.id) ?? [])])];
       out.set(row.id, {
         workCode: w?.code,
         incidentCode: w?.incident,
         parentCode: row.parent_instruction_id ? parentCode.get(row.parent_instruction_id) : undefined,
         approvalCode:
           approvalCodeByInstruction.get(row.id) ??
-          (row.order_type === "job_order" ? approvalCodeByWork.get(row.work_id) : undefined),
+          (row.order_type === "job_order" && row.work_id ? approvalCodeByWork.get(row.work_id) : undefined),
         workCommercialRoute: w?.route,
         clientPaymentCode: clientPaymentByInstruction.get(row.id),
+        linkedWorkCodes: submittedWorkIds.map((id) => workById.get(id)?.code).filter((v): v is string => !!v),
+        additionalFacilityIds: facilitiesByInstruction.get(row.id) ?? [],
+        importedOrderValue: importedValues.get(row.id),
       });
     }
     return out;
+  }
+
+  /**
+   * Imported WO/JO value: the amount stated by the WO/JO's OWN order-register source row, which was imported as an
+   * fm_cost_records row linked to this Work Instruction. Read-time only (governed provenance), never copied.
+   */
+  private async importedOrderValues(instructionIds: string[]): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    if (instructionIds.length === 0) return out;
+    const { data: costs, error } = await this.admin
+      .from("fm_cost_records")
+      .select("id, work_instruction_id, actual_amount")
+      .eq("organisation_id", this.organisationId)
+      .eq("record_origin", "migrated_historical")
+      .in("work_instruction_id", instructionIds);
+    if (error) throwDb(error, "Unable to load imported WO/JO values.");
+    const rows = (costs ?? []) as Array<{ id: string; work_instruction_id: string; actual_amount: number }>;
+    if (rows.length === 0) return out;
+    const { data: prov, error: provError } = await this.admin
+      .from("fm_migration_provenance")
+      .select("target_id")
+      .eq("organisation_id", this.organisationId)
+      .eq("workbook", FM_SOURCE_REGISTER_WORKBOOK)
+      .eq("target_table", "fm_cost_records")
+      .in("source_sheet", [...FM_ORDER_REGISTER_SHEETS])
+      .in("target_id", rows.map((r) => r.id));
+    if (provError) throwDb(provError, "Unable to load imported WO/JO provenance.");
+    const fromOrderRegister = new Set((prov ?? []).map((p) => String((p as { target_id: string }).target_id)));
+    for (const row of rows) {
+      if (!fromOrderRegister.has(String(row.id))) continue;
+      const key = String(row.work_instruction_id);
+      out.set(key, Math.round(((out.get(key) ?? 0) + (Number(row.actual_amount) || 0)) * 100) / 100);
+    }
+    return out;
+  }
+
+  /** Resolve facility refs (UUID or code) in tenant, refusing any the actor cannot operate in. */
+  private async submissionFacilities(refs: string[]): Promise<string[]> {
+    const ids: string[] = [];
+    for (const ref of refs) {
+      const id = await this.facilityIdOrNull(ref);
+      if (!id) throw new FmWorkInstructionValidationError(`Facility ${ref} not found in this organisation.`);
+      if (!this.scope.canOperateIn(id)) {
+        throw new FmWorkInstructionValidationError("You are not authorised to submit Work Orders or Job Orders for this facility.");
+      }
+      if (!ids.includes(id)) ids.push(id);
+    }
+    return ids;
+  }
+
+  /** Works submitted in a WO/JO: optional; each must be current Work within the WO/JO's facilities. */
+  private async submissionWorks(refs: string[], facilityIds: string[]): Promise<WorkRef[]> {
+    const works: WorkRef[] = [];
+    for (const ref of refs) {
+      const work = await this.resolveWork(ref);
+      // Imported historical Work is evidence: it is never re-packaged into a new submission.
+      if (work.record_origin === "migrated_historical") throw new FmWorkInstructionReadOnlyError(
+        `${work.code} is imported historical Work and cannot be added to a new submission.`
+      );
+      if (!facilityIds.includes(work.facility_id)) {
+        throw new FmWorkInstructionValidationError(`${work.code} belongs to a facility this WO/JO does not cover.`);
+      }
+      if (!works.some((w) => w.id === work.id)) works.push(work);
+    }
+    return works;
+  }
+
+  private async replaceSubmissionLinks(instructionId: string, works: WorkRef[] | undefined, extraFacilities: string[] | undefined, actor: string) {
+    if (works) {
+      const del = await this.admin.from("fm_work_instruction_works").delete().eq("organisation_id", this.organisationId).eq("work_instruction_id", instructionId);
+      if (del.error) throwDb(del.error, "Unable to update submitted Works.");
+      if (works.length) {
+        const ins = await this.admin.from("fm_work_instruction_works").insert(
+          works.map((w) => ({ organisation_id: this.organisationId, work_instruction_id: instructionId, work_id: w.id, created_by_profile_id: actor }))
+        );
+        if (ins.error) throwDb(ins.error, "Unable to link submitted Works.");
+      }
+    }
+    if (extraFacilities) {
+      const del = await this.admin.from("fm_work_instruction_facilities").delete().eq("organisation_id", this.organisationId).eq("work_instruction_id", instructionId);
+      if (del.error) throwDb(del.error, "Unable to update WO/JO facilities.");
+      if (extraFacilities.length) {
+        const ins = await this.admin.from("fm_work_instruction_facilities").insert(
+          extraFacilities.map((facility_id) => ({ organisation_id: this.organisationId, work_instruction_id: instructionId, facility_id }))
+        );
+        if (ins.error) throwDb(ins.error, "Unable to record WO/JO facilities.");
+      }
+    }
+  }
+
+  /**
+   * Create a WO/JO directly as a commercial submission package — no Issue and no Work required (0..many Works may be
+   * linked). Operational lifecycle fields are left to their schema defaults and are not presented: operations live on
+   * Work. Order Type is the explicit selection; it is never inferred from the amount.
+   */
+  async createSubmission(input: ParsedCreateSubmission, actorProfileId: string): Promise<FmWorkInstructionRow> {
+    const facilityIds = await this.submissionFacilities(input.facilityRefs);
+    const works = await this.submissionWorks(input.workRefs, facilityIds);
+    for (let attempt = 0; attempt < CODE_RETRY_LIMIT; attempt += 1) {
+      const code = generateNextInstructionCode(await this.latestCodeForYear(new Date().getUTCFullYear()));
+      const { data, error } = await this.admin
+        .from("fm_work_instructions")
+        .insert({
+          organisation_id: this.organisationId,
+          code,
+          order_type: input.orderType,
+          work_id: null,
+          facility_id: facilityIds[0],
+          title: input.title,
+          submission_date: input.submissionDate,
+          submission_amount: input.submissionAmount,
+          submission_status: input.submissionStatus,
+          created_by_profile_id: actorProfileId,
+          updated_by_profile_id: actorProfileId,
+        })
+        .select(FM_WORK_INSTRUCTION_SELECT)
+        .single();
+      if (error) {
+        if (isUniqueViolation(error) && attempt < CODE_RETRY_LIMIT - 1) continue;
+        throwDb(error, "Unable to create the submission.");
+      }
+      if (!data) throw new FmWorkInstructionUnavailableError("Submission create returned no row.");
+      const row = asRow(data);
+      await this.replaceSubmissionLinks(row.id, works, facilityIds.slice(1), actorProfileId);
+      return row;
+    }
+    throw new FmWorkInstructionUnavailableError("Unable to allocate work instruction reference.");
+  }
+
+  /** Update a WO/JO's commercial submission facts (and, for a Work-less submission, its facilities and Works). */
+  async updateSubmission(input: ParsedUpdateSubmission, actorProfileId: string): Promise<FmWorkInstructionRow> {
+    const existing = await this.getByIdOrCode(input.id);
+    if (!existing) throw new FmWorkInstructionNotFoundError(`Work Instruction ${input.id} not found.`);
+    if (existing.record_origin === "migrated_historical") throw new FmWorkInstructionReadOnlyError();
+    if (!this.scope.canOperateIn(existing.facility_id)) {
+      throw new FmWorkInstructionValidationError("You are not authorised to change submissions for this facility.");
+    }
+    const patch: Record<string, unknown> = { updated_by_profile_id: actorProfileId };
+    let facilityIds: string[] | undefined;
+    if (input.facilityRefs) {
+      // A Work-linked WO/JO inherits its facility from the Work; only a Work-less submission chooses its own.
+      if (existing.work_id) throw new FmWorkInstructionValidationError("This WO/JO inherits its facility from its Work.");
+      facilityIds = await this.submissionFacilities(input.facilityRefs);
+      patch.facility_id = facilityIds[0];
+    }
+    if (input.title !== undefined) patch.title = input.title;
+    if (input.orderType !== undefined && input.orderType !== existing.order_type) {
+      if (existing.work_id) throw new FmWorkInstructionValidationError("Change the Order Type from its Work.");
+      patch.order_type = input.orderType;
+    }
+    if (input.submissionDate !== undefined) patch.submission_date = input.submissionDate;
+    if (input.submissionAmount !== undefined) patch.submission_amount = input.submissionAmount;
+    if (input.submissionStatus !== undefined) patch.submission_status = input.submissionStatus;
+    const merged = {
+      submissionStatus: (input.submissionStatus ?? existing.submission_status) as WorkOrderSubmissionStatus | null,
+      submissionDate: input.submissionDate !== undefined ? input.submissionDate : existing.submission_date,
+      submissionAmount: input.submissionAmount !== undefined ? input.submissionAmount : existing.submission_amount,
+    };
+    if (!existing.work_id && !merged.submissionStatus) {
+      throw new FmWorkInstructionValidationError("Submission status is required.");
+    }
+    assertSubmissionComplete(merged);
+    const works = input.workRefs
+      ? await this.submissionWorks(
+          input.workRefs,
+          facilityIds ?? [existing.facility_id, ...((await this.relationsFor([existing])).get(existing.id)?.additionalFacilityIds ?? [])]
+        )
+      : undefined;
+    const { data, error } = await this.admin
+      .from("fm_work_instructions")
+      .update(patch)
+      .eq("organisation_id", this.organisationId)
+      .eq("id", existing.id)
+      .select(FM_WORK_INSTRUCTION_SELECT)
+      .single();
+    if (error) throwDb(error, "Unable to update the submission.");
+    if (!data) throw new FmWorkInstructionNotFoundError(`Work Instruction ${input.id} not found.`);
+    await this.replaceSubmissionLinks(existing.id, works, facilityIds?.slice(1), actorProfileId);
+    return asRow(data);
+  }
+
+  /** Record a follow-up (chasing) event. Never changes the submission status or any payment state. */
+  async recordFollowUp(input: ParsedFollowUp, actorProfileId: string): Promise<FmWorkInstructionRow> {
+    const existing = await this.getByIdOrCode(input.id);
+    if (!existing) throw new FmWorkInstructionNotFoundError(`Work Instruction ${input.id} not found.`);
+    if (existing.record_origin === "migrated_historical") throw new FmWorkInstructionReadOnlyError();
+    if (!this.scope.canOperateIn(existing.facility_id)) {
+      throw new FmWorkInstructionValidationError("You are not authorised to follow up submissions for this facility.");
+    }
+    const ins = await this.admin.from("fm_commercial_follow_ups").insert({
+      organisation_id: this.organisationId,
+      work_instruction_id: existing.id,
+      followed_up_at: input.followedUpAt,
+      method: input.method,
+      contact_person: input.contactPerson,
+      outcome_notes: input.outcomeNotes,
+      next_follow_up_at: input.nextFollowUpAt,
+      actor_profile_id: actorProfileId,
+    });
+    if (ins.error) throwDb(ins.error, "Unable to record the follow-up.");
+    const latest = latestFollowUp(existing.last_follow_up_at, input.followedUpAt);
+    const { data, error } = await this.admin
+      .from("fm_work_instructions")
+      .update({ last_follow_up_at: latest, updated_by_profile_id: actorProfileId })
+      .eq("organisation_id", this.organisationId)
+      .eq("id", existing.id)
+      .select(FM_WORK_INSTRUCTION_SELECT)
+      .single();
+    if (error) throwDb(error, "Unable to record the follow-up.");
+    return asRow(data);
+  }
+
+  async listFollowUps(idOrCode: string): Promise<CommercialFollowUp[]> {
+    const existing = await this.getByIdOrCode(idOrCode);
+    if (!existing) throw new FmWorkInstructionNotFoundError(`Work Instruction ${idOrCode} not found.`);
+    const { data, error } = await this.admin
+      .from("fm_commercial_follow_ups")
+      .select("id, followed_up_at, method, contact_person, outcome_notes, next_follow_up_at, actor_profile_id")
+      .eq("organisation_id", this.organisationId)
+      .eq("work_instruction_id", existing.id)
+      .order("followed_up_at", { ascending: false })
+      .order("id", { ascending: true });
+    if (error) throwDb(error, "Unable to load follow-ups.");
+    return (data ?? []).map((row) => {
+      const rec = row as Record<string, string | null>;
+      return {
+        id: String(rec.id),
+        followedUpAt: String(rec.followed_up_at),
+        method: rec.method as CommercialFollowUp["method"],
+        contactPerson: rec.contact_person ?? undefined,
+        outcomeNotes: String(rec.outcome_notes),
+        nextFollowUpAt: rec.next_follow_up_at ?? undefined,
+        actorProfileId: rec.actor_profile_id ?? undefined,
+      };
+    });
   }
 
   private async latestCodeForYear(year: number): Promise<string | null> {
@@ -544,8 +860,12 @@ export class FmWorkInstructionRepository {
     // Imported historical Work Instructions are evidence: refuse BEFORE any relation resolution or write.
     if (existing.record_origin === "migrated_historical") throw new FmWorkInstructionReadOnlyError();
 
+    // A WO/JO created directly as a commercial submission has no Work lifecycle: it is edited as a submission.
+    if (!existing.work_id) {
+      throw new FmWorkInstructionValidationError("This WO/JO is a commercial submission — edit it with the submission form.");
+    }
     const patch = toColumns({ ...input, assetRef: await this.resolveAssetRef(input.assetRef) });
-    let workId = existing.work_id;
+    let workId: string = existing.work_id;
     let workRow: WorkRef | null = null;
     if (input.workRef) {
       workRow = await this.resolveWork(input.workRef);
@@ -602,6 +922,8 @@ export class FmWorkInstructionRepository {
           .from("fm_work_instructions")
           .select("status, due_at, sla_due_at")
           .eq("organisation_id", this.organisationId)
+          // A commercial submission has no operational lifecycle — operations live on Work.
+          .is("submission_status", null)
           .in("status", [...ASSIGNED_INSTRUCTION_STATUSES]),
         this.scope.read
       )
@@ -621,7 +943,9 @@ export class FmWorkInstructionRepository {
    * bare, unexplained zero. One lightweight COUNT query, no row data transferred.
    */
   async countUnrecordedStatus(): Promise<number> {
-    const { count, error } = await applyFacilityScope(
+    // Current operating picture: 2025 register history is not counted.
+    const history = await this.historical2025Ids();
+    let query = applyFacilityScope(
       this.admin
         .from("fm_work_instructions")
         .select("id", { count: "exact", head: true })
@@ -629,6 +953,8 @@ export class FmWorkInstructionRepository {
         .eq("status", "unknown"),
       this.scope.read
     );
+    if (history.length) query = query.not("id", "in", notInList(history));
+    const { count, error } = await query;
     if (error) throwDb(error, "Unable to load Work Instruction historical total.");
     return count ?? 0;
   }

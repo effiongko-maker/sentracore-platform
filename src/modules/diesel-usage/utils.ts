@@ -32,41 +32,54 @@ export function toDateInputValue(iso?: string): string {
 }
 
 /**
- * Consumption (L) = Opening + Added − Closing.
- * Missing / invalid Added is treated as 0. Rounded to 2 decimal places.
+ * Arithmetic consumption (L) = Opening + Added − Closing — a HELPER for the entry form's suggestion only; the stored
+ * consumption is what was recorded. Returns null when a reading is missing (a missing Added is "no delivery entered").
  */
 export function calculateDieselConsumption(
-  openingLevel: number,
-  closingLevel: number,
+  openingLevel: number | null | undefined,
+  closingLevel: number | null | undefined,
   added?: number | null
-): number {
+): number | null {
+  if (openingLevel == null || closingLevel == null) return null;
   const opening = Number(openingLevel);
   const closing = Number(closingLevel);
-  const addedLitres = added == null ? 0 : Number(added);
-  if (!Number.isFinite(opening) || !Number.isFinite(closing)) return 0;
-  const add = Number.isFinite(addedLitres) ? addedLitres : 0;
-  const consumption = opening + add - closing;
-  return Math.round(consumption * 100) / 100;
-}
-
-export function isHighUsage(consumption: number): boolean {
-  return Number.isFinite(consumption) && consumption > DIESEL_HIGH_USAGE_THRESHOLD_L;
-}
-
-export function isNegativeConsumption(consumption: number): boolean {
-  return Number.isFinite(consumption) && consumption < 0;
+  const add = added == null ? 0 : Number(added);
+  if (!Number.isFinite(opening) || !Number.isFinite(closing) || !Number.isFinite(add)) return null;
+  return Math.round((opening + add - closing) * 100) / 100;
 }
 
 /**
- * Spec flags for a calculated consumption value.
+ * Reading variance (L) = (Opening + Added − Closing) − recorded Consumption: shown to the reviewer, never corrected.
+ * null unless opening, closing and consumption were all recorded. `addedRecorded` says whether Added was part of it.
+ */
+export function dieselVariance(entry: Pick<DieselUsage, "openingLevel" | "closingLevel" | "consumption" | "added">): { variance: number; addedRecorded: boolean } | null {
+  if (entry.openingLevel == null || entry.closingLevel == null || entry.consumption == null) return null;
+  const expected = calculateDieselConsumption(entry.openingLevel, entry.closingLevel, entry.added);
+  if (expected == null) return null;
+  return { variance: Math.round((expected - entry.consumption) * 100) / 100, addedRecorded: entry.added != null };
+}
+
+/** Litres for display; null → "Not recorded" (never 0). */
+export function formatLitres(value: number | null | undefined): string {
+  return value == null || !Number.isFinite(value) ? "Not recorded" : `${value.toLocaleString("en-GB", { maximumFractionDigits: 2 })} L`;
+}
+
+export function isHighUsage(consumption: number | null | undefined): boolean {
+  return consumption != null && Number.isFinite(consumption) && consumption > DIESEL_HIGH_USAGE_THRESHOLD_L;
+}
+
+export function isNegativeConsumption(consumption: number | null | undefined): boolean {
+  return consumption != null && Number.isFinite(consumption) && consumption < 0;
+}
+
+/**
+ * Spec flags for a consumption value (null = not recorded → no flag).
  *
  * `high_usage` is a per-generator-entry threshold (DIESEL_HIGH_USAGE_THRESHOLD_L litres for one generator's entry).
- * A migrated historical row is a WHOLE-SITE tank checklist measurement (hundreds to thousands of litres per day
- * across every generator), so that threshold does not apply and the flag would be a false alarm on every row.
- * Negative consumption is arithmetic and applies to every row.
+ * A migrated historical row is a WHOLE-SITE tank observation, so that threshold does not apply.
  */
 export function getDieselUsageFlagKinds(
-  consumption: number,
+  consumption: number | null | undefined,
   origin?: "operational" | "migrated_historical"
 ): DieselUsageFlagKind[] {
   const flags: DieselUsageFlagKind[] = [];
@@ -76,7 +89,7 @@ export function getDieselUsageFlagKinds(
 }
 
 export function getDieselUsageFlagLabels(
-  consumption: number,
+  consumption: number | null | undefined,
   origin?: "operational" | "migrated_historical"
 ): string[] {
   return getDieselUsageFlagKinds(consumption, origin).map(
@@ -98,33 +111,30 @@ export function dieselGeneratorPresentation(entry: {
 }
 
 export function toCreateFormValues(entry?: DieselUsage | null) {
+  const str = (v: number | null | undefined) => (v != null ? String(v) : "");
   return {
     date: toDateInputValue(entry?.date) || "",
     facilityId: entry?.facilityId ?? "",
     generatorId: entry?.generatorId ?? "",
-    openingLevel: entry?.openingLevel != null ? String(entry.openingLevel) : "",
-    added: entry?.added != null ? String(entry.added) : "",
-    closingLevel: entry?.closingLevel != null ? String(entry.closingLevel) : "",
+    openingLevel: str(entry?.openingLevel),
+    added: str(entry?.added),
+    closingLevel: str(entry?.closingLevel),
+    consumption: str(entry?.consumption),
+    undergroundTankQty: str(entry?.undergroundTankQty),
+    surfaceTankQty: str(entry?.surfaceTankQty),
   };
 }
 
-function parseOptionalNumber(value: string | number | undefined): number | undefined {
-  if (value == null) return undefined;
+/** Blank → null (not recorded), never 0. */
+function parseRecorded(value: string | number | undefined): number | null {
+  if (value == null) return null;
   const raw = String(value).trim();
-  if (!raw) return undefined;
+  if (!raw) return null;
   const n = Number(raw);
-  return Number.isFinite(n) ? n : undefined;
+  return Number.isFinite(n) ? n : null;
 }
 
-function parseRequiredNumber(value: string | number): number {
-  if (typeof value === "number") return value;
-  return Number(String(value).trim());
-}
-
-/**
- * Build create payload from form-shaped strings.
- * Consumption is always derived — never taken from the form.
- */
+/** Build the create/update payload from form strings: every blank value is sent as null (not recorded). */
 export function toCreateDieselUsageInput(values: {
   date: string;
   facilityId: string;
@@ -132,17 +142,19 @@ export function toCreateDieselUsageInput(values: {
   openingLevel: string | number;
   added?: string | number;
   closingLevel: string | number;
+  consumption?: string | number;
+  undergroundTankQty?: string | number;
+  surfaceTankQty?: string | number;
 }): CreateDieselUsageInput {
-  const openingLevel = parseRequiredNumber(values.openingLevel);
-  const closingLevel = parseRequiredNumber(values.closingLevel);
-  const added = parseOptionalNumber(values.added);
-
   return {
     date: values.date.trim(),
     facilityId: values.facilityId.trim(),
     generatorId: values.generatorId.trim(),
-    openingLevel: Number.isFinite(openingLevel) ? openingLevel : 0,
-    closingLevel: Number.isFinite(closingLevel) ? closingLevel : 0,
-    ...(added != null ? { added } : {}),
+    openingLevel: parseRecorded(values.openingLevel),
+    added: parseRecorded(values.added),
+    closingLevel: parseRecorded(values.closingLevel),
+    consumption: parseRecorded(values.consumption),
+    undergroundTankQty: parseRecorded(values.undergroundTankQty),
+    surfaceTankQty: parseRecorded(values.surfaceTankQty),
   };
 }

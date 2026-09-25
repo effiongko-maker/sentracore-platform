@@ -66,7 +66,8 @@ async function main() {
   // authoritative table instead of assuming emptiness. No due date is NOT overdue.
   const noDue = await admin.from("fm_work_instructions").select("id", { count: "exact", head: true }).eq("organisation_id", orgId).is("due_at", null);
   assert(!noDue.error, "no_due expectation unreadable");
-  assert((await repo.listPage({ dueDate: "no_due" })).total === (noDue.count ?? 0), "dueDate no_due matches the rows with a NULL due_at");
+  // Full register incl. 2025 history (hidden only by default) — this checks the due-date filter.
+  assert((await repo.listPage({ dueDate: "no_due", includeHistory: true })).total === (noDue.count ?? 0), "dueDate no_due matches the rows with a NULL due_at");
   const startOfToday = new Date();
   startOfToday.setUTCHours(0, 0, 0, 0);
   const overdue = await admin.from("fm_work_instructions").select("id", { count: "exact", head: true }).eq("organisation_id", orgId).lt("due_at", startOfToday.toISOString());

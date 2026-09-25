@@ -43,6 +43,10 @@ export type CostRecordListParams = {
   workId?: string;
   workOrderId?: string;
   jobOrderId?: string;
+  /** "costs" (default): the cost register proper. "order_values": imported WO/JO values (never costs). */
+  valueScope?: "costs" | "order_values";
+  /** Include 2025 register history (default: current operating picture only). */
+  includeHistory?: boolean;
 };
 
 export type CreateCostRecordInput = {
@@ -182,6 +186,8 @@ export const CostRecordService = {
           workId: params.workId,
           workOrderId: params.workOrderId,
           jobOrderId: params.jobOrderId,
+          valueScope: params.valueScope,
+          includeHistory: params.includeHistory,
         },
         { signal: options?.signal }
       );
@@ -198,6 +204,9 @@ export const CostRecordService = {
     historicalUnrecordedReimbursabilityCount: number;
     reimbursableCount: number;
     nonReimbursableCount: number;
+    /** Imported order-register rows — the WO/JO value, never counted as cost. */
+    orderValueCount: number;
+    orderValueAmount: number;
   }> {
     return postCostRecords("getTotals", {}, { signal: options?.signal });
   },
@@ -215,6 +224,9 @@ export const CostRecordService = {
     totalAmount: number;
     currency: string;
     unclassifiedCount: number;
+    /** That year's imported order-register rows — the WO/JO value, already included in spend. */
+    orderValueCount: number;
+    orderValueAmount: number;
   }> {
     return postCostRecords("getTotals", { operatingYear }, { signal: options?.signal });
   },

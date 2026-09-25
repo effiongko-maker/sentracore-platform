@@ -11,7 +11,10 @@ import {
   mapFmWorkInstructionRowToWorkOrder,
   paginateInstructionRows,
   parseCreateInstructionInput,
+  parseCreateSubmissionInput,
+  parseFollowUpInput,
   parseInstructionIdPayload,
+  parseUpdateSubmissionInput,
   parseInstructionListParams,
   parseUpdateInstructionInput,
   summarizeInstructionOperationalPicture,
@@ -92,6 +95,22 @@ export class FmWorkInstructionServerService {
     return { workOrder: (await this.hydrate([row]))[0]!, previousStatus };
   }
 
+  /** A WO/JO created directly as a commercial submission package (no Issue / Work required). */
+  async createSubmission(payload: unknown): Promise<WorkOrder> {
+    const row = await this.repo().createSubmission(parseCreateSubmissionInput(payload), this.ctx.profileId);
+    return (await this.hydrate([row]))[0]!;
+  }
+
+  async updateSubmission(payload: unknown): Promise<WorkOrder> {
+    const row = await this.repo().updateSubmission(parseUpdateSubmissionInput(payload), this.ctx.profileId);
+    return (await this.hydrate([row]))[0]!;
+  }
+
+  async recordFollowUp(payload: unknown): Promise<WorkOrder> {
+    const row = await this.repo().recordFollowUp(parseFollowUpInput(payload), this.ctx.profileId);
+    return (await this.hydrate([row]))[0]!;
+  }
+
   async deactivate(payload: unknown): Promise<WorkOrder> {
     const id = parseInstructionIdPayload(payload);
     return (await this.update({ id, status: "cancelled" })).workOrder;
@@ -113,6 +132,14 @@ export class FmWorkInstructionServerService {
         return (await this.update(payload)).workOrder;
       case "deactivate":
         return this.deactivate(payload);
+      case "createSubmission":
+        return this.createSubmission(payload);
+      case "updateSubmission":
+        return this.updateSubmission(payload);
+      case "recordFollowUp":
+        return this.recordFollowUp(payload);
+      case "listFollowUps":
+        return this.repo().listFollowUps(parseInstructionIdPayload(payload));
       default:
         throw new ActionError("VALIDATION_ERROR", `Unknown work-orders action: ${action}`);
     }

@@ -5,7 +5,7 @@ import type {
   GeneratorLogListParams,
   UpdateGeneratorLogInput,
 } from "@/modules/generator-log/types";
-import { calculateGeneratorLogHours } from "@/modules/generator-log/utils";
+import { calculateRunHoursFromReadings } from "@/modules/generator-log/utils";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
 import {
@@ -33,14 +33,24 @@ function toNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function toNumberOrNull(value: unknown): number | null {
+  if (value == null || String(value).trim() === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 function mapRemoteGeneratorLog(raw: RemoteGeneratorLog): GeneratorLog {
-  const startedAt = String(pickField(raw, "startedAt", "Start") ?? "");
-  const endedAt = String(pickField(raw, "endedAt", "End") ?? "");
+  const startedAt = pickField(raw, "startedAt", "Start");
+  const endedAt = pickField(raw, "endedAt", "End");
+  const startMeterReading = toNumberOrNull(pickField(raw, "startMeterReading"));
+  const endMeterReading = toNumberOrNull(pickField(raw, "endMeterReading"));
+  const logBasis = pickField(raw, "logBasis") === "clock_times" ? "clock_times" : "hour_meter";
+  // Run hours are the database's derivation; the readings are the fallback, never clock arithmetic.
   const storedHours = pickField(raw, "hours", "Hours");
   const hours =
     storedHours != null && String(storedHours).trim() !== ""
       ? toNumber(storedHours)
-      : calculateGeneratorLogHours(startedAt, endedAt);
+      : calculateRunHoursFromReadings(startMeterReading, endMeterReading) ?? 0;
 
   const remarksRaw = pickField(raw, "remarks", "Remarks");
   const createdBy = pickField(raw, "createdByUserId", "Created By");
@@ -50,10 +60,15 @@ function mapRemoteGeneratorLog(raw: RemoteGeneratorLog): GeneratorLog {
     id: String(pickField(raw, "id", "Generator Log ID") ?? ""),
     date: String(pickField(raw, "date", "Date") ?? "").slice(0, 10),
     generator: String(pickField(raw, "generator", "Generator") ?? ""),
-    startedAt,
-    endedAt,
+    startMeterReading,
+    endMeterReading,
     hours,
-    fuelUsed: toNumber(pickField(raw, "fuelUsed", "Fuel Used")),
+    // Not recorded stays null — never coerced to 0.
+    fuelUsed: toNumberOrNull(pickField(raw, "fuelUsed", "Fuel Used")),
+    logBasis,
+    startedAt: startedAt == null ? null : String(startedAt),
+    endedAt: endedAt == null ? null : String(endedAt),
+    recordOrigin: pickField(raw, "recordOrigin") === "migrated_historical" ? "migrated_historical" : "operational",
     remarks:
       remarksRaw != null && String(remarksRaw).trim() !== ""
         ? String(remarksRaw)

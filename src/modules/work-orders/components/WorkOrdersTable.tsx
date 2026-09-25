@@ -3,25 +3,18 @@
 import { useMemo } from "react";
 import { ClipboardList } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
-import { OperationalTone } from "@/components/operational";
 import { DataTable, type Column } from "@/components/tables/DataTable";
 import { formatDate } from "@/lib/utils";
-import {
-  useAssetName,
-  useFacilityName,
-  useUserName,
-} from "@/hooks/useEntityLabel";
-import {
-  WORK_ORDER_STATUS_VARIANT,
-  type WorkOrderOrderTypeScope,
-} from "../constants";
+import { useFacilityName } from "@/hooks/useEntityLabel";
+import { formatFinancialAmount } from "@/modules/finance/utils/formatFinancialAmount";
+import { type WorkOrderOrderTypeScope } from "../constants";
 import {
   resolveWorkInstructionKind,
   WORK_INSTRUCTION_KIND_LABELS,
   type WorkInstructionKind,
 } from "../instructionKind";
-import { displayWorkOrderTitle, labelize } from "../utils";
-import type { WorkOrder } from "../types";
+import { displayWorkOrderTitle } from "../utils";
+import { WORK_ORDER_SUBMISSION_STATUS_LABELS, type WorkOrder } from "../types";
 import { WorkOrderRowActions } from "./WorkOrderRowActions";
 
 interface WorkOrdersTableProps {
@@ -42,14 +35,18 @@ function FacilityLabel({ id }: { id: string }) {
   return <>{useFacilityName(id) || "—"}</>;
 }
 
-function AssetLabel({ id }: { id?: string }) {
-  const name = useAssetName(id);
-  return <>{id ? name || "—" : "—"}</>;
-}
-
-function AssigneeLabel({ id }: { id?: string }) {
-  const name = useUserName(id);
-  return <>{id ? name || "—" : "—"}</>;
+/** Every facility the WO/JO covers (primary first). */
+function FacilitiesLabel({ ids }: { ids: string[] }) {
+  return (
+    <>
+      {ids.map((id, index) => (
+        <span key={id}>
+          {index > 0 ? " + " : ""}
+          <FacilityLabel id={id} />
+        </span>
+      ))}
+    </>
+  );
 }
 
 function orderTypeBadgeVariant(
@@ -102,65 +99,64 @@ export function WorkOrdersTable({
         },
       },
       {
-        key: "type",
-        header: "Work Category",
-        render: (workOrder) => (
-          <span className="text-sm text-muted">{labelize(workOrder.type)}</span>
-        ),
-      },
-      {
         key: "facilityId",
         header: "Facility",
         render: (workOrder) => (
           <span className="text-muted">
-            <FacilityLabel id={workOrder.facilityId} />
+            <FacilitiesLabel ids={workOrder.facilityIds?.length ? workOrder.facilityIds : [workOrder.facilityId]} />
           </span>
         ),
       },
       {
-        key: "assetId",
-        header: "Asset",
+        key: "linkedWorkIds",
+        header: "Work",
+        render: (workOrder) => {
+          const works = workOrder.linkedWorkIds ?? [];
+          return (
+            <span className="text-muted" title={works.join(", ")}>
+              {works.length === 0 ? "None linked" : works.length === 1 ? works[0] : `${works.length} Works`}
+            </span>
+          );
+        },
+      },
+      {
+        key: "submissionDate",
+        header: "Submitted",
         render: (workOrder) => (
-          <span className="text-muted">
-            <AssetLabel id={workOrder.assetId} />
-          </span>
+          <span className="text-muted">{workOrder.submissionDate ? formatDate(workOrder.submissionDate) : "—"}</span>
         ),
       },
       {
-        key: "assignedToUserId",
-        header: "Assigned To",
-        render: (workOrder) => (
-          <span className="text-muted">
-            <AssigneeLabel id={workOrder.assignedToUserId} />
-          </span>
-        ),
+        key: "submissionAmount",
+        header: "Amount",
+        render: (workOrder) =>
+          workOrder.submissionAmount != null || workOrder.executionCost != null ? (
+            <span className="font-medium text-foreground">
+              {formatFinancialAmount(workOrder.submissionAmount ?? workOrder.executionCost, "NGN")}
+              <span className="block text-xs font-normal text-muted">
+                {workOrder.submissionAmount != null ? "Submitted amount" : "Execution cost · source register"}
+              </span>
+            </span>
+          ) : <span className="text-muted">Not recorded</span>,
       },
       {
-        key: "priority",
-        header: "Priority",
+        key: "submissionStatus",
+        header: "Submission",
         render: (workOrder) => (
-          <OperationalTone
-            value={workOrder.priority}
-            label={labelize(workOrder.priority)}
-          />
-        ),
-      },
-      {
-        key: "status",
-        header: "Status",
-        render: (workOrder) => (
-          <Badge variant={WORK_ORDER_STATUS_VARIANT[workOrder.status]}>
-            {labelize(workOrder.status)}
-          </Badge>
-        ),
-      },
-      {
-        key: "dueAt",
-        header: "Due Date",
-        render: (workOrder) => (
-          <span className="text-muted">
-            {workOrder.dueAt ? formatDate(workOrder.dueAt) : "—"}
-          </span>
+          <div>
+            {workOrder.submissionStatus ? (
+              <Badge variant={workOrder.submissionStatus === "draft" ? "default" : "info"}>
+                {WORK_ORDER_SUBMISSION_STATUS_LABELS[workOrder.submissionStatus]}
+              </Badge>
+            ) : (
+              <span className="text-muted">
+                {workOrder.recordOrigin === "migrated_historical" ? "Imported — not recorded" : "Not recorded"}
+              </span>
+            )}
+            {workOrder.lastFollowUpAt ? (
+              <p className="mt-0.5 text-xs text-muted">Followed up {formatDate(workOrder.lastFollowUpAt)}</p>
+            ) : null}
+          </div>
         ),
       },
       {

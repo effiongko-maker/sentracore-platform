@@ -110,6 +110,13 @@ export type CostRecord = {
   recordedBy: string;
   notes?: string;
   /**
+   * "order_value" when governed provenance places this imported row in an MBORA order register: its amount is the
+   * execution cost from the Work Order / Job Order register, already included in spend. Default "cost".
+   */
+  valueKind?: "cost" | "order_value";
+  /** Source register (provenance) for imported rows, e.g. "2026 JOB ORDERS". */
+  sourceRegister?: string;
+  /**
    * An operationally useful read-only summary composed from a CERTAIN-linked Platform Finance historical
    * commercial fact (platform_finance_historical_commercial_facts), resolved via the CERTAIN fm_work_id
    * relationship. Platform Finance remains the sole authority for every value here — nothing is copied into
@@ -297,6 +304,8 @@ export type CostSubmission = {
   clientLocation?: string;
   /** Verbatim note from the source register — read-only evidence. */
   sourceNote?: string;
+  /** Most recent recorded follow-up (chasing) — never implies payment; payment state is derived from receipts. */
+  lastFollowUpAt?: string;
 
   /** Submission support package — distinct from per-cost evidence. */
   submissionPackage?: CostSubmissionPackage;

@@ -1,4 +1,9 @@
 import "server-only";
+import {
+  FM_HISTORICAL_2025_SHEETS,
+  loadProvenanceTargetIds,
+  type ProvenanceClient,
+} from "@/lib/fm/sourceRegisterScope";
 import { jobOrderExecutionBlock, workReopenBlock } from "@/modules/maintenance/commercialRoute";
 import { FmAssetRepository } from "@/modules/assets/server/FmAssetRepository";
 import { uuidsOnly } from "@/modules/assets/server/fmAssetDomain";
@@ -159,6 +164,19 @@ export class FmWorkRepository {
     return rows.filter((r) => scopeAllowsFacilities(this.scope.read, [r.facility_id, ...(extra.get(r.id) ?? [])]));
   }
 
+  /** Work imported from the 2025 registers (governed provenance only) — history, not the current operating picture. */
+  async historical2025Ids(): Promise<string[]> {
+    try {
+      return await loadProvenanceTargetIds(this.admin as unknown as ProvenanceClient, {
+        organisationId: this.organisationId,
+        target: "fm_work",
+        sheets: FM_HISTORICAL_2025_SHEETS,
+      });
+    } catch (error) {
+      throwDb({ message: error instanceof Error ? error.message : undefined }, "Unable to load Work provenance.");
+    }
+  }
+
   async listRows(): Promise<FmWorkRow[]> {
     const rows: FmWorkRow[] = [];
     const batchSize = 500;
@@ -226,6 +244,33 @@ export class FmWorkRepository {
   }
 
 
+  /** Additional facilities a Work covers ("Both"): resolved in tenant, each one the actor may operate in. */
+  private async resolveAdditionalFacilities(primaryId: string, refs: string[] | undefined): Promise<string[]> {
+    const out: string[] = [];
+    for (const ref of refs ?? []) {
+      const id = await this.resolveFacilityId(ref);
+      if (!this.scope.canOperateIn(id)) {
+        throw new FmWorkValidationError("You are not authorised to use Work in every selected facility.");
+      }
+      if (id !== primaryId && !out.includes(id)) out.push(id);
+    }
+    return out;
+  }
+
+  /**
+   * fm_work_facilities is the record of EVERY facility a multi-facility Work covers, including facility_id (existing
+   * pattern). A single-facility Work has no rows. Never splits cost or commercial value.
+   */
+  private async replaceCoveredFacilities(workId: string, primaryId: string, additional: string[]): Promise<void> {
+    const del = await this.admin.from("fm_work_facilities").delete().eq("organisation_id", this.organisationId).eq("work_id", workId);
+    if (del.error) throwDb(del.error, "Unable to update Work facilities.");
+    if (additional.length === 0) return;
+    const ins = await this.admin.from("fm_work_facilities").insert(
+      [primaryId, ...additional].map((facility_id) => ({ organisation_id: this.organisationId, work_id: workId, facility_id }))
+    );
+    if (ins.error) throwDb(ins.error, "Unable to record Work facilities.");
+  }
+
   /** Attach display codes of each row's source Request and treated Incident. */
   private async withRequestCodes(rows: FmWorkRow[]): Promise<FmWorkRow[]> {
     const requestIds = [
@@ -287,12 +332,17 @@ export class FmWorkRepository {
       }
       return codes;
     };
-    const [requestCodes, incidentCodes] = await Promise.all([
+    const [requestCodes, incidentCodes, covered] = await Promise.all([
       lookup("fm_requests", requestIds),
       lookup("fm_incidents", incidentIds),
+      this.extraFacilities(workIds.length > 200 ? undefined : workIds),
     ]);
     return rows.map((row) => ({
       ...row,
+      // Every facility the Work covers (fm_work_facilities, primary first); empty = its single facility_id.
+      covered_facility_ids: covered.get(row.id)
+        ? [row.facility_id, ...covered.get(row.id)!.filter((id) => id !== row.facility_id)]
+        : [],
       source_request_code: row.source_request_id
         ? (requestCodes.get(row.source_request_id) ?? null)
         : null,
@@ -384,16 +434,18 @@ export class FmWorkRepository {
     return String((data as { id: string }).id);
   }
 
+  /** The assignee must hold an active assignment at the Work's facility (any of them, for a multi-facility Work). */
   async assertAssigneeAtFacility(
     profileId: string,
-    facilityId: string
+    facilityId: string | string[]
   ): Promise<void> {
+    const facilities = Array.isArray(facilityId) ? facilityId : [facilityId];
     const { data, error } = await this.admin
       .from("fm_facility_assignments")
       .select("id")
       .eq("organisation_id", this.organisationId)
       .eq("profile_id", profileId)
-      .eq("facility_id", facilityId)
+      .in("facility_id", facilities)
       .eq("status", "active")
       .limit(1);
     if (error) throwDb(error, "Unable to validate assignee.");
@@ -431,6 +483,7 @@ export class FmWorkRepository {
     if (!this.scope.canOperateIn(facilityId)) {
       throw new FmWorkValidationError("You are not authorised to create Work in this facility.");
     }
+    const additionalFacilityIds = await this.resolveAdditionalFacilities(facilityId, input.additionalFacilityRefs);
     // New Job Order Work has no Approval or Job Order yet, so it cannot be created as already executing.
     const executionBlock = jobOrderExecutionBlock({
       route: input.commercialRoute,
@@ -440,10 +493,7 @@ export class FmWorkRepository {
     });
     if (executionBlock) throw new FmWorkValidationError(executionBlock);
     if (input.assignedToProfileId) {
-      await this.assertAssigneeAtFacility(
-        input.assignedToProfileId,
-        facilityId
-      );
+      await this.assertAssigneeAtFacility(input.assignedToProfileId, [facilityId, ...additionalFacilityIds]);
     }
 
     const sourceRequestId = input.sourceRequestRef
@@ -476,7 +526,7 @@ export class FmWorkRepository {
       // Legacy compatibility only: classified Work never writes requires_work_instruction (column default applies);
       // its execution basis and actual Work Instructions answer the question.
       ...(input.commercialRoute ? {} : { requires_work_instruction: input.requiresWorkInstruction }),
-      commercial_route: input.commercialRoute,
+      commercial_route: input.commercialRoute ?? null,
       operational_event_id: input.operationalEventId ?? null,
       reported_at: input.reportedAt,
       due_at: input.dueAt ?? null,
@@ -499,7 +549,9 @@ export class FmWorkRepository {
 
     if (error) throwDb(error, "Unable to create work.");
     if (!data) throw new FmWorkUnavailableError("Work create returned no row.");
-    return (await this.withRequestCodes([asRow(data)]))[0]!;
+    const created = asRow(data);
+    await this.replaceCoveredFacilities(created.id, facilityId, additionalFacilityIds);
+    return (await this.withRequestCodes([created]))[0]!;
   }
 
   async update(
@@ -514,7 +566,7 @@ export class FmWorkRepository {
     // Imported historical Work is evidence: refuse BEFORE any relation resolution or write. This covers edit, treat,
     // progress, complete, cancel (deactivate delegates here), assign, date/status/priority and relationship changes.
     if (existing.record_origin === "migrated_historical") throw new FmWorkReadOnlyError();
-    assertCommercialRouteChangeAllowed(existing, input.commercialRoute);
+    assertCommercialRouteChangeAllowed(existing, input.commercialRoute ?? undefined);
 
     const facilityId = input.facilityId
       ? await this.resolveFacilityId(input.facilityId)
@@ -522,6 +574,13 @@ export class FmWorkRepository {
     if (facilityId !== existing.facility_id && !this.scope.canOperateIn(facilityId)) {
       throw new FmWorkValidationError("You are not authorised to move Work to this facility.");
     }
+    // Coverage ("Both") changes only when facilities are supplied; otherwise the Work keeps what it covers.
+    const additionalFacilityIds =
+      input.additionalFacilityRefs !== undefined
+        ? await this.resolveAdditionalFacilities(facilityId, input.additionalFacilityRefs)
+        : input.facilityId !== undefined && facilityId !== existing.facility_id
+          ? []
+          : (existing.covered_facility_ids ?? []).filter((id) => id !== facilityId);
 
     const assignee =
       input.assignedToProfileId !== undefined
@@ -529,7 +588,7 @@ export class FmWorkRepository {
         : existing.assigned_to_profile_id;
 
     if (assignee) {
-      await this.assertAssigneeAtFacility(assignee, facilityId);
+      await this.assertAssigneeAtFacility(assignee, [facilityId, ...additionalFacilityIds]);
     }
 
     const nextStatus = input.status ?? existing.status;
@@ -636,6 +695,9 @@ export class FmWorkRepository {
 
     if (error) throwDb(error, "Unable to update work.");
     if (!data) throw new FmWorkNotFoundError(`Work ${idOrCode} not found.`);
+    if (input.additionalFacilityRefs !== undefined || input.facilityId !== undefined) {
+      await this.replaceCoveredFacilities(existing.id, facilityId, additionalFacilityIds);
+    }
     return {
       row: (await this.withRequestCodes([asRow(data)]))[0]!,
       previousStatus: existing.status,

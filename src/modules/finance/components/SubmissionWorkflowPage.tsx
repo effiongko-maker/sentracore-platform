@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CostsClaimsNav } from "./CostsClaimsNav";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -109,7 +110,7 @@ export function SubmissionWorkflowPage({
         }
         if ((record.submissionKind ?? "reimbursement_claim") !== "reimbursement_claim") {
           setExisting(record);
-          setFormError("This client payment is not a reimbursement claim and is managed from its own page.");
+          setFormError("This pending payment is not a reimbursement claim and is managed from its own page.");
           return;
         }
         if (record.status !== "draft" && record.status !== "queried") {
@@ -379,6 +380,7 @@ export function SubmissionWorkflowPage({
   return (
     <ModeFrame mode="act">
       <div className="fin-page">
+        <CostsClaimsNav recordKind="reimbursement_claim" />
         <div className="mb-4">
           <Link
             href={

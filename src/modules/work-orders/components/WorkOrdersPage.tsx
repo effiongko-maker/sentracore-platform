@@ -21,6 +21,10 @@ import {
 import { useWorkOrders } from "../hooks/useWorkOrders";
 import type { WorkOrderModalState } from "../types";
 import { WorkOrderFormModal } from "./WorkOrderFormModal";
+import { WorkOrderSubmissionFormModal } from "./WorkOrderSubmissionFormModal";
+import { CommercialFollowUpModal } from "@/components/commercial/CommercialFollowUpModal";
+import { FM_2025_HISTORY_NOTE } from "@/lib/fm/sourceRegisterScope";
+import type { WorkOrder, WorkOrderOrderType } from "../types";
 import { WorkOrdersTable } from "./WorkOrdersTable";
 import { WorkOrdersToolbar } from "./WorkOrdersToolbar";
 import { ViewWorkOrderModal } from "./ViewWorkOrderModal";
@@ -55,6 +59,8 @@ export function WorkOrdersPage() {
     setMaintenanceId,
     sort,
     setSort,
+    includeHistory,
+    setIncludeHistory,
     clearAll,
     page,
     setPage,
@@ -67,15 +73,26 @@ export function WorkOrdersPage() {
 
   const [modal, setModal] = useState<WorkOrderModalState>({ type: "closed" });
   const [deactivating, setDeactivating] = useState(false);
+  // WO/JO are commercial submission packages: created directly from their own tab (no Issue or Work required).
+  const [submissionForm, setSubmissionForm] = useState<
+    | { mode: "create"; orderType: WorkOrderOrderType }
+    | { mode: "edit"; workOrder: WorkOrder }
+    | null
+  >(null);
+  const [followUpFor, setFollowUpFor] = useState<WorkOrder | null>(null);
+  const [followUpsVersion, setFollowUpsVersion] = useState(0);
 
+  // The All tab keeps its existing behaviour (no create); the Work Orders / Job Orders tabs create their own type.
   const createAction =
     orderTypeScope === "work_order"
-      ? {
-          label: "New Work Order",
-          initialOrderType: "work_order" as const,
-        }
-      : // Job Orders are recorded from approved Job Order-route Work ("Record issued Job Order"), never created here.
-        null;
+      ? { label: "New Work Order", orderType: "work_order" as const }
+      : orderTypeScope === "job_order"
+        ? { label: "New Job Order", orderType: "job_order" as const }
+        : null;
+  const isHistorical = (workOrder: WorkOrder) => workOrder.recordOrigin === "migrated_historical";
+  // Legacy Work-linked WO/JO keep the operational form; commercial submissions edit as submissions.
+  const openEdit = (workOrder: WorkOrder) =>
+    workOrder.maintenanceId ? setModal({ type: "edit", workOrder }) : setSubmissionForm({ mode: "edit", workOrder });
 
   useEffect(() => {
     if (!openId) return;
@@ -155,6 +172,11 @@ export function WorkOrdersPage() {
         })}
       </div>
 
+      <label className="mb-3 inline-flex items-center gap-2 text-sm text-muted" title={FM_2025_HISTORY_NOTE}>
+        <input type="checkbox" checked={includeHistory} onChange={(event) => setIncludeHistory(event.target.checked)} />
+        Include 2025 history
+      </label>
+
       <WorkOrdersToolbar
         search={search}
         onSearchChange={setSearch}
@@ -180,11 +202,7 @@ export function WorkOrdersPage() {
         onClearAll={clearAll}
         onCreate={
           createAction
-            ? () =>
-                setModal({
-                  type: "create",
-                  initialOrderType: createAction.initialOrderType,
-                })
+            ? () => setSubmissionForm({ mode: "create", orderType: createAction.orderType })
             : undefined
         }
         createLabel={createAction?.label}
@@ -210,7 +228,7 @@ export function WorkOrdersPage() {
             total={total}
             onPageChange={setPage}
             onView={(workOrder) => setModal({ type: "view", workOrder })}
-            onEdit={(workOrder) => setModal({ type: "edit", workOrder })}
+            onEdit={openEdit}
             onDeactivate={(workOrder) =>
               setModal({ type: "deactivate", workOrder })
             }
@@ -237,10 +255,45 @@ export function WorkOrdersPage() {
         workOrder={modal.type === "view" ? modal.workOrder : null}
         onClose={() => setModal({ type: "closed" })}
         onEdit={
-          canMutateOps && !(modal.type === "view" && modal.workOrder.recordOrigin === "migrated_historical")
+          canMutateOps && !(modal.type === "view" && isHistorical(modal.workOrder))
             ? (workOrder) => setModal({ type: "edit", workOrder })
             : undefined
         }
+        onEditSubmission={
+          canMutateOps && !(modal.type === "view" && isHistorical(modal.workOrder))
+            ? (workOrder) => setSubmissionForm({ mode: "edit", workOrder })
+            : undefined
+        }
+        onRecordFollowUp={
+          canMutateOps && !(modal.type === "view" && isHistorical(modal.workOrder))
+            ? (workOrder) => setFollowUpFor(workOrder)
+            : undefined
+        }
+        followUpsVersion={followUpsVersion}
+      />
+
+      <WorkOrderSubmissionFormModal
+        open={submissionForm !== null}
+        mode={submissionForm?.mode ?? "create"}
+        workOrder={submissionForm?.mode === "edit" ? submissionForm.workOrder : null}
+        initialOrderType={submissionForm?.mode === "create" ? submissionForm.orderType : null}
+        onClose={() => setSubmissionForm(null)}
+        onSaved={async () => {
+          await reloadFirstPage();
+        }}
+      />
+
+      <CommercialFollowUpModal
+        open={followUpFor !== null}
+        reference={followUpFor?.id ?? ""}
+        onClose={() => setFollowUpFor(null)}
+        onSave={async (draft) => {
+          if (!followUpFor) return;
+          const updated = await WorkOrderService.recordFollowUp(followUpFor.id, draft);
+          setFollowUpsVersion((v) => v + 1);
+          if (modal.type === "view" && modal.workOrder.id === updated.id) setModal({ type: "view", workOrder: updated });
+          await reload();
+        }}
       />
 
       <ConfirmDialog

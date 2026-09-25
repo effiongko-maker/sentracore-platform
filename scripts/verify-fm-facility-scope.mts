@@ -128,10 +128,10 @@ async function main() {
   // Ground truth (unscoped) for comparison.
   const truth = {
     work: await new FmWorkRepository(org, admin).listRows(),
-    wi: (await new FmWorkInstructionRepository(org, admin).listPage({ page: 1, pageSize: 1000 } as never)).rows,
+    wi: (await new FmWorkInstructionRepository(org, admin).listPage({ page: 1, pageSize: 1000, includeHistory: true } as never)).rows,
     req: (await new FmRequestRepository(org, admin).listPage({ page: 1, pageSize: 1000 } as never)).rows,
     apr: (await new FmApprovalRepository(org, admin).listPage({ page: 1, pageSize: 500 } as never)).rows,
-    cost: (await new FmCostRepository(org, admin).listCosts({ page: 1, pageSize: 1000 } as never)).rows,
+    cost: (await new FmCostRepository(org, admin).listCosts({ page: 1, pageSize: 1000, includeHistory: true } as never)).rows,
     sub: (await new FmCostRepository(org, admin).listSubmissions({ page: 1, pageSize: 500 } as never)).rows,
   };
   const { data: wf } = await admin.from("fm_work_facilities").select("work_id,facility_id").eq("organisation_id", org);
@@ -144,11 +144,12 @@ async function main() {
   for (const [name, scope] of Object.entries(users)) {
     const allows = (ids: Array<string | null>) => S.scopeAllowsFacilities(scope.read, ids);
     const work = await new FmWorkRepository(org, admin, scope).listRows();
-    const wi = (await new FmWorkInstructionRepository(org, admin, scope).listPage({ page: 1, pageSize: 1000 } as never)).rows;
+    const wi = (await new FmWorkInstructionRepository(org, admin, scope).listPage({ page: 1, pageSize: 1000, includeHistory: true } as never)).rows;
     const req = (await new FmRequestRepository(org, admin, scope).listPage({ page: 1, pageSize: 1000 } as never)).rows;
     const apr = (await new FmApprovalRepository(org, admin, scope).listPage({ page: 1, pageSize: 500 } as never)).rows;
     const costRepo = new FmCostRepository(org, admin, scope);
-    const cost = (await costRepo.listCosts({ page: 1, pageSize: 1000 } as never)).rows;
+    // Full register incl. 2025 history (hidden only by default) — this verifier is about FACILITY scope.
+    const cost = (await costRepo.listCosts({ page: 1, pageSize: 1000, includeHistory: true } as never)).rows;
     const sub = (await costRepo.listSubmissions({ page: 1, pageSize: 500 } as never)).rows;
     const totals = await costRepo.aggregateTotals();
 

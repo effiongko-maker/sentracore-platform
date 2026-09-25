@@ -244,6 +244,7 @@ export function mapRemoteCostSubmission(
     description: optionalString(raw, "description"),
     clientLocation: optionalString(raw, "clientLocation"),
     sourceNote: optionalString(raw, "sourceNote"),
+    lastFollowUpAt: optionalString(raw, "lastFollowUpAt"),
     submissionPackage: mapSubmissionPackage(raw),
     refs: mapRefs(raw),
     executionKind: optionalString(

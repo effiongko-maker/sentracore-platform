@@ -3,7 +3,7 @@ import "@/styles/finance.css";
 import { ClientPaymentFormPage } from "@/modules/finance/components/ClientPaymentFormPage";
 
 export const metadata: Metadata = {
-  title: "New client payment",
+  title: "Payment request",
 };
 
 type PageProps = {

@@ -1,5 +1,7 @@
 "use client";
 
+import { CostsClaimsNav } from "@/modules/finance/components/CostsClaimsNav";
+
 import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { FileCheck2 } from "lucide-react";
 import { useState } from "react";
@@ -115,8 +117,9 @@ export function ApprovalsPage() {
 
   return (
     <ModeFrame mode="act">
+      <CostsClaimsNav />
       <OperateHeader
-        title="Approvals"
+        title="Payment Approvals"
         description="Formal client authorisation requests requiring submission, follow-up and decision tracking."
         signalValue={loading ? "—" : total}
         signalLabel="In view"

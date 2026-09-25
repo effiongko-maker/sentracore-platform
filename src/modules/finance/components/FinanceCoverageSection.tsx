@@ -12,7 +12,7 @@ export function FinanceCoverageSection({
   const rows = [
     { label: "Operational costs", status: operationalCostsStatus },
     { label: "Reimbursement submissions", status: reimbursementsStatus },
-    { label: "Client authorisations", status: clientAuthorisationsStatus },
+    { label: "Payment Approvals", status: clientAuthorisationsStatus },
     { label: "Payments", status: paymentsStatus },
   ];
 

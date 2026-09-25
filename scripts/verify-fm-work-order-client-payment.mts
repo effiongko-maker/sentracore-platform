@@ -91,8 +91,8 @@ async function main() {
     check(workOrderClientPaymentBlock({ kind, orderType: "work_order", route: "work_order", recordOrigin: "operational" }) !== null, `${kind} refused`);
   }
   check(workOrderClientPaymentBlock({ kind: "payment_request", orderType: "job_order", route: "job_order", recordOrigin: "operational" }) !== null, "Job Order refused");
-  check(/already has client payment \$\{found\.code\}/.test(costRepo) && costRepo.includes('.neq("status", "cancelled").limit(1)'), "repository refuses a duplicate");
-  check(costRepo.includes("A client payment's Work Order is set when it is created and cannot be changed."), "link fixed on update");
+  check(/already has payment request \$\{found\.code\}/.test(costRepo) && costRepo.includes('.neq("status", "cancelled").limit(1)'), "repository refuses a duplicate");
+  check(costRepo.includes("A payment request's Work Order is set when it is raised and cannot be changed."), "link fixed on update");
   check(parseCreateSubmissionInput({ submissionKind: "payment_request", workOrderId: "WO-2026-000001" }).workOrderRef === "WO-2026-000001", "create carries the Work Order");
   check(parseUpdateSubmissionInput({ submissionId: "SUB-2026-000001" }).workOrderRef === undefined, "updates do not carry it by default");
   out.push("PASS 5 a Work Order produces / links exactly one active payment request (domain + repository + DB)");

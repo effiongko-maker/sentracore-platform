@@ -101,13 +101,6 @@ export function normalizeDate(value: unknown, label: string): string {
   if (!Number.isFinite(ms)) throw new FmLogValidationError(`${label} is invalid.`);
   return new Date(ms).toISOString().slice(0, 10);
 }
-function isoInstant(value: unknown, label: string): string {
-  const raw = text(value);
-  if (!raw) throw new FmLogValidationError(`${label} is required.`);
-  const ms = Date.parse(raw);
-  if (!Number.isFinite(ms)) throw new FmLogValidationError(`${label} is invalid.`);
-  return new Date(ms).toISOString();
-}
 export function sanitizeSearchTerm(value: string): string {
   return value.replace(/[,()%_*\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
 }
@@ -162,6 +155,8 @@ function put(cols: Record<string, unknown>, key: string, value: unknown) {
 }
 const s = (row: Record<string, unknown>, key: string) => String(row[key] ?? "");
 const n = (row: Record<string, unknown>, key: string) => (row[key] == null ? 0 : Number(row[key]));
+/** Nullable numeric: NULL stays null (not recorded), never 0. */
+const nn = (row: Record<string, unknown>, key: string) => (row[key] == null ? null : Number(row[key]));
 const optS = (row: Record<string, unknown>, key: string) => (row[key] != null && String(row[key]) !== "" ? String(row[key]) : undefined);
 function base(row: Record<string, unknown>) {
   return {
@@ -180,23 +175,71 @@ const eq = (raw: Record<string, unknown>, ...pairs: Array<[string, string]>): Li
     return v && v.toLowerCase() !== "all" ? ([[col, v]] as Array<[string, string]>) : [];
   });
 
+/**
+ * Generator Log: Start and End are GENERATOR HOUR-METER READINGS (the source register's "Start Reading" /
+ * "End Reading"), never clock times. The log's date is separate. Run hours are derived by the database
+ * (end reading − start reading) for the hour_meter basis. Diesel used is the DATE TOTAL for all generators (operator
+ * clarification) — carried by at most one log of the date (unique index), never this generator's own consumption, so it
+ * is never double-counted and no per-generator fuel efficiency can be derived. Blank is "not recorded" (NULL), never 0.
+ * Every product write uses the hour_meter basis; the legacy clock_times basis is never written.
+ */
+function meterReading(raw: Record<string, unknown>, key: string, label: string): number {
+  const v = number(raw, key, label);
+  if (v < 0) throw new FmLogValidationError(`${label} cannot be negative.`);
+  return v;
+}
+function optionalFuel(raw: Record<string, unknown>): number | null | undefined {
+  const v = looseNumber(raw, "fuelUsed", "Diesel used");
+  if (v != null && v < 0) throw new FmLogValidationError("Diesel used cannot be negative.");
+  return v;
+}
+function assertReadingOrder(start: number | undefined, end: number | undefined) {
+  if (start !== undefined && end !== undefined && end < start) {
+    throw new FmLogValidationError("End reading cannot be lower than the start reading.");
+  }
+}
+
 export const GENERATOR_SPEC: FmLogSpec = {
   resource: "generator-log", label: "Generator log", table: "fm_generator_logs", prefix: "GENLOG", facility: false,
   select: `${COMMON}, generator, started_at, ended_at, hours, fuel_used, remarks, log_basis, start_meter_reading, end_meter_reading, asset_id, record_origin`,
   searchColumns: ["generator", "remarks", "code"],
   parseCreate(p) {
     const r = asRecord(p);
-    // Hours are always DERIVED from start/end — a supplied value is ignored.
-    return { columns: { log_date: normalizeDate(r.date, "Date"), generator: requiredText(r, "generator", "Generator"), started_at: isoInstant(r.startedAt, "Start"), ended_at: isoInstant(r.endedAt, "End"), fuel_used: number(r, "fuelUsed", "Fuel used"), remarks: nullableText(r.remarks) ?? null } };
+    const start = meterReading(r, "startMeterReading", "Start reading");
+    const end = meterReading(r, "endMeterReading", "End reading");
+    assertReadingOrder(start, end);
+    // Run hours are always DERIVED from the readings — a supplied value is ignored.
+    return {
+      columns: {
+        log_date: normalizeDate(r.date, "Date"),
+        generator: requiredText(r, "generator", "Generator"),
+        log_basis: "hour_meter",
+        start_meter_reading: start,
+        end_meter_reading: end,
+        started_at: null,
+        ended_at: null,
+        fuel_used: optionalFuel(r) ?? null,
+        remarks: nullableText(r.remarks) ?? null,
+      },
+    };
   },
   parseUpdate(p) {
     const r = asRecord(p);
     const c: Record<string, unknown> = {};
     if (r.date !== undefined) c.log_date = normalizeDate(r.date, "Date");
     put(c, "generator", optionalRequiredText(r, "generator", "Generator"));
-    if (r.startedAt !== undefined) c.started_at = isoInstant(r.startedAt, "Start");
-    if (r.endedAt !== undefined) c.ended_at = isoInstant(r.endedAt, "End");
-    put(c, "fuel_used", optionalNumber(r, "fuelUsed", "Fuel used"));
+    const start = r.startMeterReading === undefined ? undefined : meterReading(r, "startMeterReading", "Start reading");
+    const end = r.endMeterReading === undefined ? undefined : meterReading(r, "endMeterReading", "End reading");
+    assertReadingOrder(start, end);
+    if (start !== undefined || end !== undefined) {
+      put(c, "start_meter_reading", start);
+      put(c, "end_meter_reading", end);
+      // Readings are the hour-meter basis; clock times are never kept alongside them.
+      c.log_basis = "hour_meter";
+      c.started_at = null;
+      c.ended_at = null;
+    }
+    put(c, "fuel_used", optionalFuel(r));
     put(c, "remarks", nullableText(r.remarks));
     return { id: updateId(r, "Generator log"), columns: c };
   },
@@ -241,31 +284,69 @@ export const ENERGY_SPEC: FmLogSpec = {
   map: (row) => ({ ...base(row), date: s(row, "log_date"), meter: s(row, "meter"), reading: n(row, "reading"), remarks: optS(row, "remarks") }),
 };
 
+/**
+ * Diesel usage. The source checklist records the underground and surface tank quantities separately; they are kept as
+ * two optional fields (NULL = not recorded) that, when both are stated, add up to the opening level — the rule every
+ * imported row satisfies (enforced by the database).
+ */
+/**
+ * Diesel observation values: each is recorded or NULL (not recorded, never 0). No arithmetic is enforced between them
+ * — tank readings are physical measurements that may not reconcile exactly with consumption (a variance is shown to the
+ * reviewer, never corrected). `undefined` = not supplied (update leaves the column alone).
+ */
+function dieselValues(r: Record<string, unknown>, c: Record<string, unknown>) {
+  const fields: Array<[string, string, string]> = [
+    ["openingLevel", "opening_level", "Opening level"],
+    ["closingLevel", "closing_level", "Closing level"],
+    ["added", "added", "Added"],
+    ["consumption", "consumption", "Consumption"],
+    ["undergroundTankQty", "underground_tank_qty", "Underground tank quantity"],
+    ["surfaceTankQty", "surface_tank_qty", "Surface tank quantity"],
+  ];
+  for (const [key, column, label] of fields) {
+    const v = looseNumber(r, key, label);
+    if (v != null && v < 0) throw new FmLogValidationError(`${label} cannot be negative.`);
+    put(c, column, v);
+  }
+}
+const DIESEL_OBSERVATION_COLUMNS = ["opening_level", "closing_level", "consumption", "underground_tank_qty", "surface_tank_qty"];
+
 export const DIESEL_SPEC: FmLogSpec = {
   resource: "diesel-usage", label: "Diesel usage", table: "fm_diesel_usage", prefix: "DSLU", facility: true,
-  select: `${COMMON}, facility_id, generator_ref, opening_level, added, closing_level, consumption, record_origin`,
+  select: `${COMMON}, facility_id, generator_ref, opening_level, added, closing_level, consumption, underground_tank_qty, surface_tank_qty, record_origin`,
   searchColumns: ["generator_ref", "code"],
   parseCreate(p) {
     const r = asRecord(p);
-    // Consumption is DERIVED (opening + added − closing); a supplied value is ignored.
-    const added = looseNumber(r, "added", "Added");
-    return { facilityRef: requiredText(r, "facilityId", "Facility"), columns: { log_date: normalizeDate(r.date, "Date"), generator_ref: requiredText(r, "generatorId", "Generator"), opening_level: number(r, "openingLevel", "Opening level"), added: added ?? 0, closing_level: number(r, "closingLevel", "Closing level") } };
+    const columns: Record<string, unknown> = { log_date: normalizeDate(r.date, "Date"), generator_ref: requiredText(r, "generatorId", "Generator") };
+    dieselValues(r, columns);
+    for (const k of ["opening_level", "closing_level", "added", "consumption", "underground_tank_qty", "surface_tank_qty"]) columns[k] ??= null;
+    if (DIESEL_OBSERVATION_COLUMNS.every((k) => columns[k] == null)) {
+      throw new FmLogValidationError("Record at least one observation: a tank level, a tank quantity or consumption.");
+    }
+    return { facilityRef: requiredText(r, "facilityId", "Facility"), columns };
   },
   parseUpdate(p) {
     const r = asRecord(p);
     const c: Record<string, unknown> = {};
     if (r.date !== undefined) c.log_date = normalizeDate(r.date, "Date");
-    put(c, "generator_ref", optionalRequiredText(r, "generatorId", "Generator"));
-    put(c, "opening_level", optionalNumber(r, "openingLevel", "Opening level"));
-    const added = looseNumber(r, "added", "Added");
-    if (added !== undefined) c.added = added ?? 0;
-    put(c, "closing_level", optionalNumber(r, "closingLevel", "Closing level"));
+    // A migrated whole-site row has no generator; a blank generator on update leaves the column unchanged.
+    if (r.generatorId != null && String(r.generatorId).trim() !== "") put(c, "generator_ref", optionalRequiredText(r, "generatorId", "Generator"));
+    dieselValues(r, c);
+    const supplied = DIESEL_OBSERVATION_COLUMNS.filter((k) => k in c);
+    if (supplied.length === DIESEL_OBSERVATION_COLUMNS.length && supplied.every((k) => c[k] == null)) {
+      throw new FmLogValidationError("Record at least one observation: a tank level, a tank quantity or consumption.");
+    }
     return { id: updateId(r, "Diesel usage"), facilityRef: optionalRequiredText(r, "facilityId", "Facility"), columns: c };
   },
   parseExtras: (r) => ({ eq: eq(r, ["generatorId", "generator_ref"]) }),
-  // A migrated historical row is a whole-site tank measurement: generator_ref is NULL (no generator evidenced) and
-  // stays null — never "" and never a source label.
-  map: (row) => ({ ...base(row), date: s(row, "log_date"), facilityId: s(row, "facility_id"), generatorId: row.generator_ref == null ? null : String(row.generator_ref), openingLevel: n(row, "opening_level"), added: n(row, "added"), closingLevel: n(row, "closing_level"), consumption: n(row, "consumption"), recordOrigin: row.record_origin === "migrated_historical" ? "migrated_historical" : "operational" }),
+  // A migrated historical row is a whole-site tank observation: generator_ref is NULL (no generator evidenced). Every
+  // value is as recorded; NULL = not recorded — never 0.
+  map: (row) => ({
+    ...base(row), date: s(row, "log_date"), facilityId: s(row, "facility_id"), generatorId: row.generator_ref == null ? null : String(row.generator_ref),
+    openingLevel: nn(row, "opening_level"), added: nn(row, "added"), closingLevel: nn(row, "closing_level"), consumption: nn(row, "consumption"),
+    undergroundTankQty: nn(row, "underground_tank_qty"), surfaceTankQty: nn(row, "surface_tank_qty"),
+    recordOrigin: row.record_origin === "migrated_historical" ? "migrated_historical" : "operational",
+  }),
 };
 
 export const WASTE_SPEC: FmLogSpec = {

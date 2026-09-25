@@ -339,7 +339,7 @@ function buildPendingActions(options: {
         workOrderId: approval.workOrderId,
         facilityId: approval.facilityId,
         amountLabel,
-        stageLabel: "Client authorisation awaiting decision",
+        stageLabel: "Payment approval awaiting decision",
         ageLabel: ageLabel(approval.submittedAt ?? approval.updatedAt),
         href: `/approvals?id=${encodeURIComponent(approval.id)}`,
       });
@@ -355,7 +355,7 @@ function buildPendingActions(options: {
         workOrderId: approval.workOrderId,
         facilityId: approval.facilityId,
         amountLabel,
-        stageLabel: "Client authorisation returned",
+        stageLabel: "Payment approval returned",
         ageLabel: ageLabel(approval.lastActivityAt ?? approval.updatedAt),
         href: `/approvals?id=${encodeURIComponent(approval.id)}`,
       });
@@ -371,7 +371,7 @@ function buildPendingActions(options: {
         workOrderId: approval.workOrderId,
         facilityId: approval.facilityId,
         amountLabel,
-        stageLabel: "Client authorisation draft",
+        stageLabel: "Payment approval draft",
         href: `/approvals?id=${encodeURIComponent(approval.id)}`,
       });
     }
@@ -582,7 +582,7 @@ function buildPosition(options: {
     {
       id: "client_auth_awaiting",
       group: "client_authorisation",
-      label: "Client authorisation awaiting decision",
+      label: "Payment approval awaiting decision",
       value: options.approvalsAvailable
         ? awaitingDecision.length > 0
           ? formatFinancialAmount(awaitingAuthTotal)
@@ -771,6 +771,17 @@ export function deriveFinanceOverview(
       payments,
       authorizations,
     }),
+    // Payment Approvals card: the approval items only (awaiting → returned → draft), independent of other queues.
+    paymentApprovals: approvalsAvailable
+      ? buildPendingActions({
+          approvals,
+          costRecords: [],
+          submissions: [],
+          submissionsTruncated: false,
+          payments: [],
+          authorizations: [],
+        })
+      : [],
     operationalCostLenses: costRecordsAvailable
       ? buildOperationalCostLenses(costRecords, totalCostRecords)
       : OPERATIONAL_COST_LENSES.map((lens) => ({

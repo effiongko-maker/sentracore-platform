@@ -1,6 +1,9 @@
 import type { PaginatedResult } from "@/types";
 import type {
+  CommercialFollowUp,
   CreateWorkOrderInput,
+  CreateWorkOrderSubmissionInput,
+  RecordCommercialFollowUpInput,
   UpdateWorkOrderInput,
   WorkOrder,
   WorkOrderFilterCatalog,
@@ -238,6 +241,20 @@ function mapRemoteWorkOrder(raw: RemoteWorkOrder): WorkOrder {
       return value === "work_order" || value === "job_order" ? value : undefined;
     })(),
     recordOrigin: readRecordOrigin(raw),
+    submissionDate: optionalMappedString(raw, "submissionDate"),
+    submissionAmount: optionalNumber(raw, "submissionAmount"),
+    executionCost: optionalNumber(raw, "executionCost"),
+    submissionAmountSource: (() => {
+      const value = optionalMappedString(raw, "submissionAmountSource");
+      return value === "recorded" ? value : undefined;
+    })(),
+    submissionStatus: (() => {
+      const value = optionalMappedString(raw, "submissionStatus");
+      return value === "draft" || value === "submitted" ? value : undefined;
+    })(),
+    lastFollowUpAt: optionalMappedString(raw, "lastFollowUpAt"),
+    linkedWorkIds: Array.isArray(raw.linkedWorkIds) ? raw.linkedWorkIds.map(String) : [],
+    facilityIds: Array.isArray(raw.facilityIds) ? raw.facilityIds.map(String) : undefined,
     createdAt: String(
       pickField(raw, "createdAt", "Created At") ?? new Date().toISOString()
     ),
@@ -331,6 +348,8 @@ export const WorkOrderService = {
       dueDate: params.dueDate ?? "",
       includeOperationalPictureTotals: !!params.includeOperationalPictureTotals,
       asOf: params.asOf ?? "",
+      includeHistory: !!params.includeHistory,
+      orderType: params.orderType ?? "all",
     });
     return sharedRequest(key, async () => {
       const response = await apiClient.post<unknown>(
@@ -418,6 +437,50 @@ export const WorkOrderService = {
     const updated = mapRemoteWorkOrder(response.data as unknown as RemoteWorkOrder);
     onWorkOrderMutation();
     return updated;
+  },
+
+  /** Create a WO/JO directly as a commercial submission package — no Issue or Work required. */
+  async createSubmission(input: CreateWorkOrderSubmissionInput): Promise<WorkOrder> {
+    const response = await apiClient.post<WorkOrder>("/work-orders", {
+      resource: "work-orders",
+      action: "createSubmission",
+      payload: input,
+    });
+    const created = mapRemoteWorkOrder(response.data as unknown as RemoteWorkOrder);
+    onWorkOrderMutation();
+    return created;
+  },
+
+  async updateSubmission(id: string, input: Partial<CreateWorkOrderSubmissionInput>): Promise<WorkOrder> {
+    const response = await apiClient.post<WorkOrder>("/work-orders", {
+      resource: "work-orders",
+      action: "updateSubmission",
+      payload: { id, ...input },
+    });
+    const updated = mapRemoteWorkOrder(response.data as unknown as RemoteWorkOrder);
+    onWorkOrderMutation();
+    return updated;
+  },
+
+  /** Record a follow-up on a WO/JO submission. Never changes its status or implies payment. */
+  async recordFollowUp(id: string, input: RecordCommercialFollowUpInput): Promise<WorkOrder> {
+    const response = await apiClient.post<WorkOrder>("/work-orders", {
+      resource: "work-orders",
+      action: "recordFollowUp",
+      payload: { id, ...input },
+    });
+    const updated = mapRemoteWorkOrder(response.data as unknown as RemoteWorkOrder);
+    onWorkOrderMutation();
+    return updated;
+  },
+
+  async listFollowUps(id: string): Promise<CommercialFollowUp[]> {
+    const response = await apiClient.post<CommercialFollowUp[]>("/work-orders", {
+      resource: "work-orders",
+      action: "listFollowUps",
+      payload: { id },
+    });
+    return Array.isArray(response.data) ? (response.data as CommercialFollowUp[]) : [];
   },
 
   /** Soft-cancel — work orders are never deleted. Maps to status=cancelled. */

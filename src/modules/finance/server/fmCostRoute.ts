@@ -29,8 +29,9 @@ import { FmCostServerService, resolveFmCostOrganisation, type FmCostResource } f
  * are never reachable through the generic create/update path without it.
  */
 
-const READ_ACTIONS = new Set(["getAll", "getById", "getBySubmissionId", "getTotals"]);
-const WRITE_ACTIONS = new Set(["create", "update"]);
+const READ_ACTIONS = new Set(["getAll", "getById", "getBySubmissionId", "getTotals", "listFollowUps"]);
+// recordFollowUp: an event on a client payment (contract instalment / payment request); gated like any write.
+const WRITE_ACTIONS = new Set(["create", "update", "recordFollowUp"]);
 
 /** The only protected action each (resource, action) may carry. */
 const PROTECTED_FOR: Partial<Record<FmCostResource, ProtectedActionId>> = {

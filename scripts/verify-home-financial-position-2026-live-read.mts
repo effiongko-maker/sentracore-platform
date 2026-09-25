@@ -69,7 +69,7 @@ async function main() {
   assert(!/CostRecordService\.getTotals\(/.test(hook), "Home never uses the all-year register total");
   assert(hook.includes("operatingYear: HOME_FINANCIAL_POSITION_YEAR"), "snapshot is derived year-scoped");
   const section = readFileSync("src/modules/workspace/components/FinancialPositionSection.tsx", "utf8");
-  for (const label of ["Financial Position · {HOME_FINANCIAL_POSITION_YEAR}", "Spent ({HOME_FINANCIAL_POSITION_YEAR})", "Client payments requested ({HOME_FINANCIAL_POSITION_YEAR})", "Client payments outstanding ({HOME_FINANCIAL_POSITION_YEAR})"]) {
+  for (const label of ["Financial Position · {HOME_FINANCIAL_POSITION_YEAR}", "Spent · recorded costs ({HOME_FINANCIAL_POSITION_YEAR})", "Payment requests ({HOME_FINANCIAL_POSITION_YEAR})", "Pending payments ({HOME_FINANCIAL_POSITION_YEAR})"]) {
     assert(section.includes(label), `label present: ${label}`);
   }
   results.push("PASS Home wiring + labels: 2026 period explicit on the section and every metric");
@@ -80,9 +80,9 @@ async function main() {
   const financePage = readFileSync("src/modules/finance/components/FinancePage.tsx", "utf8");
   assert(financePage.includes("overview?.operatingYearSpend") && !/summary\.sampleAmount/.test(financePage), "headline uses operatingYearSpend, never the all-year / preview amount");
   const financeHeader = readFileSync("src/modules/finance/components/FinanceHeader.tsx", "utf8");
-  assert(financeHeader.includes("Operational spend · {operatingYear}"), "headline labelled with the operating year");
+  assert(financeHeader.includes("Costs recorded · {operatingYear}"), "headline labelled with the operating year");
   assert(!/complete cost register recorded/i.test(financeHeader), "headline copy no longer calls the figure the complete register");
-  assert(financeHeader.includes("Client Approvals") && !financeHeader.includes("Work Order approvals"), "summary card reads Client Approvals");
+  assert(financeHeader.includes("Payment Approvals") && !financeHeader.includes("Work Order approvals"), "summary card reads Payment Approvals");
   const { deriveFinanceOverview } = await import("../src/modules/finance/utils/deriveFinanceOverview");
   const base = { approvals: [], totalApprovals: 0, costRecords: [], totalCostRecords: 0, submissions: [], totalSubmissions: 0 };
   assert(deriveFinanceOverview({ ...base, operatingYearCostTotals: null }).operatingYearSpend === null, "failed year total ⇒ headline unavailable (null)");
@@ -115,8 +115,10 @@ async function main() {
   const native2026Kobo = native2026.reduce((s, r) => s + kobo(Number(r.actual_amount)), 0);
 
   const y2026 = await repo.aggregateTotalsForYear(2026);
-  assert(y2026.totalCount === IMPORTED_2026.count + native2026.length, `2026 total count = imported 52 + native ${native2026.length} (got ${y2026.totalCount})`);
-  assert(kobo(y2026.totalAmount) === IMPORTED_2026.kobo + native2026Kobo, `2026 total amount = imported + native 2026 (got ${y2026.totalAmount})`);
+  // Imported WO/JO Cost amounts are execution expenditure, included exactly once.
+  assert(y2026.totalCount === native2026.length + IMPORTED_2026.count, "2026 count includes native and source execution costs");
+  assert(kobo(y2026.totalAmount) === native2026Kobo + IMPORTED_2026.kobo, "2026 spend includes source execution costs exactly once");
+  assert(y2026.orderValueCount === IMPORTED_2026.count && kobo(y2026.orderValueAmount) === IMPORTED_2026.kobo, `2026 WO/JO value = imported 52 / NGN 426,174,848.25 (got ${y2026.orderValueCount} / ${y2026.orderValueAmount})`);
   assert(y2026.unclassifiedCount === 0, `no unclassified cost records (got ${y2026.unclassifiedCount})`);
 
   const in2026 = new Set(rows.filter((r) => {
@@ -128,9 +130,9 @@ async function main() {
 
   const all = await repo.aggregateTotals();
   const y2025 = await repo.aggregateTotalsForYear(2025);
-  assert(y2025.totalCount === 84 && kobo(y2025.totalAmount) === 71_778_584_285, `2025 records remain intact: 84 / NGN 717,785,842.85 (got ${y2025.totalCount} / ${y2025.totalAmount})`);
-  assert(all.totalCount === y2025.totalCount + y2026.totalCount, "full register (Costs & Claims) still holds every year");
-  results.push(`PASS live: 2026 = ${y2026.totalCount} records / NGN ${y2026.totalAmount.toLocaleString("en-NG", { minimumFractionDigits: 2 })} (imported 52 + native ${native2026.length}); 2025 = 84 records kept in the full register; 0 unclassified; 0 leaked`);
+  assert(y2025.orderValueCount === 84 && kobo(y2025.orderValueAmount) === 71_778_584_285, `2025 records remain intact (as WO/JO value): 84 / NGN 717,785,842.85 (got ${y2025.orderValueCount} / ${y2025.orderValueAmount})`);
+  assert(all.orderValueCount === y2025.orderValueCount + y2026.orderValueCount && all.totalCount === y2025.totalCount + y2026.totalCount, "every year is still held: costs and WO/JO values reconcile across years");
+  results.push(`PASS live: 2026 = ${y2026.totalCount} records / NGN ${y2026.totalAmount.toLocaleString("en-NG", { minimumFractionDigits: 2 })} (native costs) + WO/JO value ${y2026.orderValueCount} / NGN ${y2026.orderValueAmount}; 2025 = 84 value records kept; 0 unclassified; 0 leaked`);
 
   for (const line of results) console.log(line);
   console.log("verify-home-financial-position-2026: PASS");

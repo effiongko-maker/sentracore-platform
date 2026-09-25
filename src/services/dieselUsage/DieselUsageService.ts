@@ -5,7 +5,6 @@ import type {
   DieselUsageListParams,
   UpdateDieselUsageInput,
 } from "@/modules/diesel-usage/types";
-import { calculateDieselConsumption } from "@/modules/diesel-usage/utils";
 import { apiClient } from "@/services/api/ApiClient";
 import { ApiError } from "@/services/api/ApiResponse";
 import {
@@ -29,11 +28,6 @@ function pickField(raw: RemoteDieselUsage, ...keys: string[]): unknown {
   return undefined;
 }
 
-function toNumber(value: unknown, fallback = 0): number {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
-
 function toOptionalNumber(value: unknown): number | undefined {
   if (value == null || String(value).trim() === "") return undefined;
   const n = Number(value);
@@ -41,18 +35,11 @@ function toOptionalNumber(value: unknown): number | undefined {
 }
 
 function mapRemoteDieselUsage(raw: RemoteDieselUsage): DieselUsage {
-  const openingLevel = toNumber(
-    pickField(raw, "openingLevel", "Opening Level")
-  );
-  const closingLevel = toNumber(
-    pickField(raw, "closingLevel", "Closing Level")
-  );
-  const added = toOptionalNumber(pickField(raw, "added", "Added"));
-  const storedConsumption = pickField(raw, "consumption", "Consumption");
-  const consumption =
-    storedConsumption != null && String(storedConsumption).trim() !== ""
-      ? toNumber(storedConsumption)
-      : calculateDieselConsumption(openingLevel, closingLevel, added);
+  // Every value as recorded; missing → null (not recorded), never 0 and never recalculated.
+  const openingLevel = toOptionalNumber(pickField(raw, "openingLevel", "Opening Level")) ?? null;
+  const closingLevel = toOptionalNumber(pickField(raw, "closingLevel", "Closing Level")) ?? null;
+  const added = toOptionalNumber(pickField(raw, "added", "Added")) ?? null;
+  const consumption = toOptionalNumber(pickField(raw, "consumption", "Consumption")) ?? null;
 
   const createdBy = pickField(raw, "createdByUserId", "Created By");
   const updatedBy = pickField(raw, "updatedByUserId", "Updated By");
@@ -63,9 +50,11 @@ function mapRemoteDieselUsage(raw: RemoteDieselUsage): DieselUsage {
     facilityId: String(pickField(raw, "facilityId", "Facility ID") ?? ""),
     generatorId: String(pickField(raw, "generatorId", "Generator ID") ?? ""),
     openingLevel,
-    ...(added != null ? { added } : {}),
+    added,
     closingLevel,
     consumption,
+    undergroundTankQty: toOptionalNumber(pickField(raw, "undergroundTankQty")) ?? null,
+    surfaceTankQty: toOptionalNumber(pickField(raw, "surfaceTankQty")) ?? null,
     recordOrigin: readRecordOrigin(raw),
     createdAt: String(
       pickField(raw, "createdAt", "Created At") ?? new Date().toISOString()
@@ -120,15 +109,6 @@ function toPaginatedDieselUsage(
     total: 0,
     totalPages: 1,
   };
-}
-
-/** Drop consumption if a caller accidentally includes it on create/update. */
-function withoutManualConsumption<T extends Record<string, unknown>>(
-  input: T
-): T {
-  if (!("consumption" in input)) return input;
-  const { consumption: _ignored, ...rest } = input;
-  return rest as T;
 }
 
 /**
@@ -189,9 +169,7 @@ export const DieselUsageService = {
   async createDieselUsage(
     input: CreateDieselUsageInput
   ): Promise<DieselUsage> {
-    const payload = withoutManualConsumption(
-      input as CreateDieselUsageInput & Record<string, unknown>
-    );
+    const payload = input;
     const response = await apiClient.post<DieselUsage>("/diesel-usage", {
       resource: "diesel-usage",
       action: "create",
@@ -207,10 +185,7 @@ export const DieselUsageService = {
     id: string,
     input: Omit<UpdateDieselUsageInput, "id">
   ): Promise<DieselUsage> {
-    const payload = withoutManualConsumption({
-      id,
-      ...(input as Record<string, unknown>),
-    });
+    const payload = { id, ...input };
     const response = await apiClient.post<DieselUsage>("/diesel-usage", {
       resource: "diesel-usage",
       action: "update",

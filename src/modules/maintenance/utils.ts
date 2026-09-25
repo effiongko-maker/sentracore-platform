@@ -1,3 +1,4 @@
+import { selectionForFacilityIds } from "@/components/operational/AuthorisedFacilitySelect";
 import type {
   CreateMaintenanceInput,
   Maintenance,
@@ -216,7 +217,8 @@ export function toCreateFormValues(
     source: maintenance?.source ?? "manual",
     categoryId: maintenance?.categoryId ?? "",
     department: maintenance?.department ?? "",
-    facilityId: maintenance?.facilityId ?? "",
+    // A multi-facility Work (fm_work_facilities) opens as "Both".
+    facilityId: selectionForFacilityIds(maintenance?.facilityIds, maintenance?.facilityId ?? ""),
     assetId: maintenance?.assetId ?? "",
     reportedByUserId: maintenance?.reportedByUserId ?? "",
     assignedToUserId: maintenance?.assignedToUserId ?? "",

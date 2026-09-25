@@ -120,6 +120,7 @@ export function mapRemoteMaintenance(raw: RemoteMaintenance): Maintenance {
     categoryId: optionalMappedString(raw, "categoryId", "Category ID"),
     department: optionalMappedString(raw, "department", "Department"),
     facilityId: String(pickField(raw, "facilityId", "Facility ID") ?? ""),
+    facilityIds: Array.isArray(raw.facilityIds) ? raw.facilityIds.map(String) : undefined,
     assetId: optionalMappedString(raw, "assetId", "Asset ID"),
     reportedByUserId: optionalMappedString(
       raw,
@@ -309,6 +310,7 @@ export const MaintenanceService = {
       includeCriticalWorkTotal: !!params.includeCriticalWorkTotal,
       includeOperationalPictureTotals: !!params.includeOperationalPictureTotals,
       asOf: params.asOf ?? "",
+      includeHistory: !!params.includeHistory,
     });
     return sharedRequest(key, async () => {
       const response = await apiClient.post<unknown>(

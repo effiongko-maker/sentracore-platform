@@ -8,8 +8,7 @@ import { useToast } from "@/components/ui/Toast";
 import { GENERATOR_LOG_FIELD_LABELS } from "../constants";
 import { GeneratorLogService } from "../services/GeneratorLogService";
 import {
-  calculateGeneratorLogHours,
-  fromDatetimeLocalValue,
+  calculateRunHoursFromReadings,
   toCreateFormValues,
   toCreateGeneratorLogInput,
 } from "../utils";
@@ -45,14 +44,11 @@ export function GeneratorLogFormModal({
     setErrors({});
   }, [open, mode, entry]);
 
-  const displayHours = useMemo(
-    () =>
-      calculateGeneratorLogHours(
-        fromDatetimeLocalValue(form.startedAt),
-        fromDatetimeLocalValue(form.endedAt)
-      ),
-    [form.startedAt, form.endedAt]
-  );
+  const displayHours = useMemo(() => {
+    const start = form.startMeterReading.trim() ? Number(form.startMeterReading) : null;
+    const end = form.endMeterReading.trim() ? Number(form.endMeterReading) : null;
+    return calculateRunHoursFromReadings(start, end);
+  }, [form.startMeterReading, form.endMeterReading]);
 
   function updateField<K extends keyof FormValues>(key: K, value: FormValues[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -63,25 +59,25 @@ export function GeneratorLogFormModal({
     const next: Partial<Record<keyof FormValues, string>> = {};
     if (!form.date.trim()) next.date = "Date is required";
     if (!form.generator.trim()) next.generator = "Generator is required";
-    if (!form.startedAt.trim()) next.startedAt = "Start is required";
-    if (!form.endedAt.trim()) next.endedAt = "End is required";
-
-    const startMs = Date.parse(fromDatetimeLocalValue(form.startedAt));
-    const endMs = Date.parse(fromDatetimeLocalValue(form.endedAt));
-    if (
-      form.startedAt.trim() &&
-      form.endedAt.trim() &&
-      Number.isFinite(startMs) &&
-      Number.isFinite(endMs) &&
-      endMs <= startMs
-    ) {
-      next.endedAt = "End must be after Start";
+    const readings = (["startMeterReading", "endMeterReading"] as const).map((key) => {
+      const raw = form[key].trim();
+      const label = key === "startMeterReading" ? "Start reading" : "End reading";
+      if (!raw) {
+        next[key] = `${label} is required`;
+        return null;
+      }
+      const value = Number(raw);
+      if (!Number.isFinite(value)) next[key] = `${label} must be a number`;
+      else if (value < 0) next[key] = `${label} cannot be negative`;
+      return Number.isFinite(value) ? value : null;
+    });
+    if (readings[0] != null && readings[1] != null && readings[1] < readings[0]) {
+      next.endMeterReading = "End reading cannot be lower than the start reading";
     }
 
+    // Diesel Used is optional: blank means not recorded (never 0).
     const fuelRaw = String(form.fuelUsed).trim();
-    if (!fuelRaw) {
-      next.fuelUsed = "Diesel Used is required";
-    } else {
+    if (fuelRaw) {
       const fuelUsed = Number(fuelRaw);
       if (!Number.isFinite(fuelUsed)) {
         next.fuelUsed = "Diesel Used must be a number";
@@ -150,8 +146,8 @@ export function GeneratorLogFormModal({
       title={isEdit ? "Edit generator log" : "New generator log"}
       description={
         isEdit
-          ? "Update run details. Hours are calculated from Start and End."
-          : "Record a generator run. Hours are calculated from Start and End."
+          ? "Update run details. Start and End are generator hour-meter readings; run hours are calculated from them."
+          : "Record a generator run. Start and End are generator hour-meter readings; run hours are calculated from them."
       }
       size="lg"
       footer={
@@ -218,44 +214,54 @@ export function GeneratorLogFormModal({
         ) : null}
 
         <FormField
-          label={GENERATOR_LOG_FIELD_LABELS.startedAt}
+          label={GENERATOR_LOG_FIELD_LABELS.startMeterReading}
           htmlFor="generator-log-start"
           required
-          error={errors.startedAt}
+          hint="Hour-meter reading at the start of the run."
+          error={errors.startMeterReading}
         >
           <input
             id="generator-log-start"
-            type="datetime-local"
+            type="number"
+            min={0}
+            step="0.1"
+            inputMode="decimal"
             className={inputClassName}
-            value={form.startedAt}
-            onChange={(event) => updateField("startedAt", event.target.value)}
+            placeholder="e.g. 3265.1"
+            value={form.startMeterReading}
+            onChange={(event) => updateField("startMeterReading", event.target.value)}
           />
         </FormField>
 
         <FormField
-          label={GENERATOR_LOG_FIELD_LABELS.endedAt}
+          label={GENERATOR_LOG_FIELD_LABELS.endMeterReading}
           htmlFor="generator-log-end"
           required
-          error={errors.endedAt}
+          hint="Hour-meter reading at the end of the run."
+          error={errors.endMeterReading}
         >
           <input
             id="generator-log-end"
-            type="datetime-local"
+            type="number"
+            min={0}
+            step="0.1"
+            inputMode="decimal"
             className={inputClassName}
-            value={form.endedAt}
-            onChange={(event) => updateField("endedAt", event.target.value)}
+            placeholder="e.g. 3271.5"
+            value={form.endMeterReading}
+            onChange={(event) => updateField("endMeterReading", event.target.value)}
           />
         </FormField>
 
         <FormField
           label={GENERATOR_LOG_FIELD_LABELS.hours}
           htmlFor="generator-log-hours"
-          hint="Calculated from Start and End. Not editable."
+          hint="End reading − start reading. Not editable."
         >
           <input
             id="generator-log-hours"
             className={inputClassName}
-            value={displayHours.toFixed(2)}
+            value={displayHours == null ? "—" : displayHours.toFixed(2)}
             disabled
             readOnly
           />
@@ -264,7 +270,7 @@ export function GeneratorLogFormModal({
         <FormField
           label={GENERATOR_LOG_FIELD_LABELS.fuelUsed}
           htmlFor="generator-log-fuel"
-          required
+          hint="Total diesel for ALL generators on this date — record it once, on one log of the date. Leave blank on the other generators' logs or if not recorded."
           error={errors.fuelUsed}
         >
           <input

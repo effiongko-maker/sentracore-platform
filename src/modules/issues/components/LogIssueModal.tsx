@@ -1,6 +1,7 @@
 "use client";
 
-import { AuthorisedFacilitySelect } from "@/components/operational/AuthorisedFacilitySelect";
+import { AuthorisedFacilitySelect, facilityIdsForSelection } from "@/components/operational/AuthorisedFacilitySelect";
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/modals/Modal";
 import { Button } from "@/components/ui/Button";
@@ -16,8 +17,6 @@ import {
   facilityDisplayName,
 } from "@/lib/platform/scopedFacility";
 import { labelize } from "@/modules/incidents/utils";
-import { ExecutionBasisField } from "@/modules/maintenance/components/ExecutionBasisField";
-import type { WorkCommercialRoute } from "@/modules/maintenance/types";
 import { logIssue, type LogIssueResult } from "../actions/logIssue";
 
 const URGENCY = ["low", "medium", "high", "critical"] as const;
@@ -41,8 +40,6 @@ export function LogIssueModal({ open, onClose, onCreated }: Props) {
   const [locationDetail, setLocationDetail] = useState("");
   const [urgency, setUrgency] =
     useState<(typeof URGENCY)[number]>("medium");
-  const [commercialRoute, setCommercialRoute] = useState<WorkCommercialRoute | "">("");
-  const [commercialRouteError, setCommercialRouteError] = useState<string>();
   const [saving, setSaving] = useState(false);
 
   const resolveScoped = useScopedFacilityResolver();
@@ -52,26 +49,21 @@ export function LogIssueModal({ open, onClose, onCreated }: Props) {
     setDescription("");
     setLocationDetail("");
     setUrgency("medium");
-    setCommercialRoute("");
-    setCommercialRouteError(undefined);
     setFacilityId(resolveScoped(facilities));
   }, [open, facilities, resolveScoped]);
 
   const facilityName = facilityDisplayName(facilities, facilityId);
+  const { access } = useOperatingAccess();
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (!commercialRoute) {
-      setCommercialRouteError("Execution basis is required");
-      return;
-    }
     setSaving(true);
     try {
       const result = await logIssue({
         title,
-        commercialRoute,
         description: description || undefined,
-        facilityId,
+        // "Both" is persisted as a genuine multi-facility Work (primary + fm_work_facilities), never one arbitrary site.
+        facilityIds: facilityIdsForSelection(facilityId, access?.authorisedFacilities ?? []),
         locationDetail: locationDetail || undefined,
         urgency,
       });
@@ -144,20 +136,12 @@ export function LogIssueModal({ open, onClose, onCreated }: Props) {
           <AuthorisedFacilitySelect
             id="log-issue-facility"
             value={facilityId}
+            allowBoth
             currentName={facilityName}
             onChange={setFacilityId}
           />
         </FormField>
 
-        <ExecutionBasisField
-          id="log-issue-execution-basis"
-          value={commercialRoute}
-          onChange={(value) => {
-            setCommercialRoute(value);
-            setCommercialRouteError(undefined);
-          }}
-          error={commercialRouteError}
-        />
         <FormField label="Location detail" htmlFor="log-issue-location">
           <input
             id="log-issue-location"

@@ -143,6 +143,8 @@ export function mapRemoteCostRecord(raw: RemoteCostRecord): CostRecord {
       raw.compactDate && typeof raw.compactDate === "object"
         ? (raw.compactDate as CostRecord["compactDate"])
         : undefined,
+    valueKind: raw.valueKind === "order_value" ? "order_value" : "cost",
+    sourceRegister: typeof raw.sourceRegister === "string" && raw.sourceRegister ? raw.sourceRegister : undefined,
   };
 }
 

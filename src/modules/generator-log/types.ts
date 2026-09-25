@@ -9,13 +9,23 @@ export interface GeneratorLog {
   date: string;
   /** Generator identity / label for v1 (no asset link yet). */
   generator: string;
-  /** Run start (ISO datetime). */
-  startedAt: string;
-  /** Run end (ISO datetime). */
-  endedAt: string;
-  /** Derived from startedAt → endedAt; never manually entered. */
+  /** Generator hour-meter reading at the start of the run (the register's "Start Reading"). Not a time. */
+  startMeterReading: number | null;
+  /** Generator hour-meter reading at the end of the run (the register's "End Reading"). Not a time. */
+  endMeterReading: number | null;
+  /** Run hours — derived by the database (end reading − start reading); never manually entered. */
   hours: number;
-  fuelUsed: number;
+  /**
+   * Diesel used on this DATE by all generators (the date total), carried by at most one log of the date — never this
+   * generator's own consumption. null = not recorded on this log (never 0).
+   */
+  fuelUsed: number | null;
+  /** hour_meter (readings) | clock_times (legacy basis; never written by the product). */
+  logBasis: "hour_meter" | "clock_times";
+  /** Legacy clock-time basis only: run start/end instants. null for every hour-meter log. */
+  startedAt: string | null;
+  endedAt: string | null;
+  recordOrigin: "operational" | "migrated_historical";
   remarks?: string;
   createdAt: string;
   updatedAt: string;
@@ -24,15 +34,15 @@ export interface GeneratorLog {
 }
 
 /**
- * Create input — hours are calculated by the domain util / future service,
- * not accepted as a manual field.
+ * Create input — run hours are derived from the meter readings, never accepted as a manual field.
  */
 export interface CreateGeneratorLogInput {
   date: string;
   generator: string;
-  startedAt: string;
-  endedAt: string;
-  fuelUsed: number;
+  startMeterReading: number;
+  endMeterReading: number;
+  /** null = not recorded. */
+  fuelUsed: number | null;
   remarks?: string;
   createdByUserId?: string;
   updatedByUserId?: string;

@@ -28,6 +28,9 @@ function isUnique(error: { code?: string; message?: string } | null) {
 }
 function throwDb(error: { code?: string; message?: string } | null, fallback: string): never {
   const message = error?.message ?? "";
+  if (isUnique(error) && /one_daily_diesel_total/.test(error?.message ?? "")) {
+    throw new FmLogValidationError("Diesel used is already recorded for this site and date. It is one total for all generators — record it on one log only.");
+  }
   if (isUnique(error)) throw new FmLogValidationError("A record with this reference already exists.");
   if (error?.code === "23503" || /foreign key/i.test(message)) throw new FmLogValidationError("The record references an invalid facility or person for this organisation.");
   if (error?.code === "23514" || /check constraint/i.test(message)) throw new FmLogValidationError("Values failed validation.");

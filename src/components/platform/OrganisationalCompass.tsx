@@ -4,7 +4,7 @@ import { ChevronDown, Home, ShieldCheck } from "lucide-react";
 import { EXECUTIVE_OFFICE_NAV_ITEMS, isExecutiveNavItemActive } from "@/modules/command-centre/nav";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import {
   COMMAND_HOME,
   filterOperatingLayers,
@@ -35,6 +35,8 @@ import { AppFooter } from "@/components/layout/AppFooter";
 import { ADMIN_NAV_ITEMS } from "@/modules/platform-admin/nav";
 import { SentraCoreLogo } from "@/components/brand";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import { CostsClaimsSubnav } from "./CostsClaimsSubnav";
+import { COSTS_CLAIMS_HOME, isCostsClaimsPath } from "@/modules/finance/costsClaimsSections";
 import {
   ECC_NAV_GROUPS,
   isEccNavItemActive,
@@ -119,6 +121,17 @@ export function OrganisationalCompass() {
       return next;
     });
   }, [inPlatformFinance, pathname]);
+
+  /**
+   * Costs & Claims group: open on any of its routes (a collapse there holds until the route changes); elsewhere it
+   * follows the user's last toggle, closed by default.
+   */
+  const inCostsClaims = isCostsClaimsPath(pathname);
+  const [costsClaimsToggle, setCostsClaimsToggle] = useState<{ path: string; open: boolean } | null>(null);
+  const costsClaimsOpen =
+    costsClaimsToggle && (!inCostsClaims || costsClaimsToggle.path === pathname)
+      ? costsClaimsToggle.open
+      : inCostsClaims;
 
   function isFinanceGroupOpen(item: PlatformFinanceNavItem): boolean {
     if (!item.children?.length) return false;
@@ -389,7 +402,7 @@ export function OrganisationalCompass() {
                             );
                           }
 
-                          return (
+                          const link = (
                             <Link
                               key={mod.href}
                               href={mod.href}
@@ -404,6 +417,55 @@ export function OrganisationalCompass() {
                               <span>{mod.label}</span>
                             </Link>
                           );
+                          // Costs & Claims: an expandable group — its five areas nest under the parent (same
+                          // parent + toggle pattern as the Platform Finance groups); it opens on any of its routes.
+                          if (mod.href === COSTS_CLAIMS_HOME || mod.matchHrefs?.includes("/approvals")) {
+                            return (
+                              <div
+                                key={mod.href}
+                                className={cn(
+                                  "os-compass-finance-section",
+                                  inCostsClaims && "os-compass-finance-section-active"
+                                )}
+                              >
+                                <div className="os-compass-finance-parent">
+                                  <Link
+                                    href={mod.href}
+                                    onClick={closeMobileNav}
+                                    aria-current={active ? "page" : undefined}
+                                    className={cn(
+                                      "os-compass-module os-compass-finance-parent-label",
+                                      active && "os-compass-module-active"
+                                    )}
+                                  >
+                                    <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                                    <span>{mod.label}</span>
+                                  </Link>
+                                  <button
+                                    type="button"
+                                    className="os-compass-finance-toggle"
+                                    aria-expanded={costsClaimsOpen}
+                                    aria-label={`${costsClaimsOpen ? "Collapse" : "Expand"} ${mod.label}`}
+                                    onClick={() => setCostsClaimsToggle({ path: pathname, open: !costsClaimsOpen })}
+                                  >
+                                    <ChevronDown
+                                      className={cn(
+                                        "h-3.5 w-3.5 transition-transform",
+                                        costsClaimsOpen && "rotate-180"
+                                      )}
+                                      aria-hidden
+                                    />
+                                  </button>
+                                </div>
+                                {costsClaimsOpen ? (
+                                  <Suspense fallback={null}>
+                                    <CostsClaimsSubnav onNavigate={closeMobileNav} />
+                                  </Suspense>
+                                ) : null}
+                              </div>
+                            );
+                          }
+                          return link;
                         })}
                       </div>
                     </div>

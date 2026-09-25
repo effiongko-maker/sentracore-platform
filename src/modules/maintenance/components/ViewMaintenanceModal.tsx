@@ -1,5 +1,6 @@
 "use client";
 
+import { FacilityNames } from "@/components/operational/FacilityNames";
 import { useState } from "react";
 import { Modal } from "@/components/modals/Modal";
 import { Badge } from "@/components/ui/Badge";
@@ -147,7 +148,7 @@ export function ViewMaintenanceModal({
           label="Facility"
           value={
             <div>
-              <div>{facilityName || maintenance.facilityId}</div>
+              <div>{(maintenance.facilityIds?.length ?? 0) > 1 ? <FacilityNames ids={maintenance.facilityIds} /> : facilityName || maintenance.facilityId}</div>
               {notes.location ? (
                 <p className="mt-1 text-xs text-muted">{notes.location}</p>
               ) : null}

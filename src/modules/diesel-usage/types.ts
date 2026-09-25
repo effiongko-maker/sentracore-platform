@@ -14,17 +14,22 @@ export interface DieselUsage {
    * whole-site tank row: no generator is evidenced and none is inferred.
    */
   generatorId: string | null;
-  /** Opening tank level in litres. */
-  openingLevel: number;
-  /** Diesel added in litres (optional). */
-  added?: number;
-  /** Closing tank level in litres. */
-  closingLevel: number;
   /**
-   * Derived: Opening + Added − Closing.
-   * Never manually entered; recalculated on create/update.
+   * Every value below is AS RECORDED; null = not recorded (never 0). Tank readings are physical observations: no
+   * arithmetic between them is enforced (see dieselVariance for the shown-not-corrected difference).
    */
-  consumption: number;
+  /** Opening tank reading in litres. */
+  openingLevel: number | null;
+  /** Underground tank quantity (source checklist column). */
+  undergroundTankQty?: number | null;
+  /** Surface tank quantity (source checklist column). */
+  surfaceTankQty?: number | null;
+  /** Diesel delivered in litres. */
+  added?: number | null;
+  /** Closing tank reading / balance in litres. */
+  closingLevel: number | null;
+  /** Consumption in litres as recorded (not derived). */
+  consumption: number | null;
   /**
    * migrated_historical rows come from the MBORA diesel-tank checklist: a whole-site tank measurement with no
    * generator (`generatorId` is null) to which no per-generator threshold applies. Never set from input.
@@ -36,17 +41,17 @@ export interface DieselUsage {
   updatedByUserId?: string;
 }
 
-/**
- * Create input — consumption is calculated by the domain util / service,
- * not accepted as a manual field.
- */
+/** Create input — each value as recorded; null/omitted = not recorded. At least one observation is required. */
 export interface CreateDieselUsageInput {
   date: string;
   facilityId: string;
   generatorId: string;
-  openingLevel: number;
-  added?: number;
-  closingLevel: number;
+  openingLevel?: number | null;
+  added?: number | null;
+  closingLevel?: number | null;
+  consumption?: number | null;
+  undergroundTankQty?: number | null;
+  surfaceTankQty?: number | null;
   createdByUserId?: string;
   updatedByUserId?: string;
 }

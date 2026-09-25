@@ -1,3 +1,4 @@
+import { parseCommercialFollowUp, type ParsedCommercialFollowUp } from "@/lib/fm/commercialFollowUp";
 import type { PaginatedResult } from "@/types";
 import type {
   CostCategory,
@@ -182,6 +183,13 @@ export function parseOperatingYear(value: unknown): number | undefined {
   if (!Number.isInteger(year) || year < 2000 || year > 2100) throw new FmCostValidationError("Invalid operating year.");
   return year;
 }
+/** Client-payment follow-ups: the shared commercial follow-up fields, in this domain's error class. */
+export function parseSubmissionFollowUpInput(payload: unknown): ParsedCommercialFollowUp {
+  const parsed = parseCommercialFollowUp(payload);
+  if (!parsed.ok) throw new FmCostValidationError(parsed.message);
+  return parsed.value;
+}
+
 export const generateNextSubmissionCode = (latest: string | null | undefined, now = new Date()) => nextCode("SUB", latest, now);
 export const generateNextAuthorizationCode = (latest: string | null | undefined, now = new Date()) => nextCode("AUTH", latest, now);
 export const generateNextPaymentCode = (latest: string | null | undefined, now = new Date()) => nextCode("PAY", latest, now);
@@ -284,9 +292,19 @@ export function parseCostIdPayload(payload: unknown): string {
   return requireTrimmed(raw.costId ?? raw.id, "Cost id");
 }
 
+/**
+ * costs         the cost register proper (default) — all recorded execution costs including imported WO/JO costs;
+ * order_values  a provenance-filtered subset of execution costs from imported WO/JO registers.
+ */
+export type CostRegisterValueScope = "costs" | "order_values";
+
 export type CostRecordListParams = {
   page: number; pageSize: number; search?: string; facilityId?: string;
   category?: CostCategory; reimbursability?: CostReimbursability; workId?: string; workOrderId?: string;
+  /** Default "costs". */
+  valueScope?: CostRegisterValueScope;
+  /** Include records from the 2025 registers (history). Default false: current operating picture only. */
+  includeHistory?: boolean;
 };
 export function parseCostRecordListParams(payload: unknown): CostRecordListParams {
   const raw = asRecord(payload);
@@ -300,10 +318,19 @@ export function parseCostRecordListParams(payload: unknown): CostRecordListParam
     reimbursability: !reimb || reimb === "all" ? undefined : parseEnum(reimb, REIMBURSABILITY_VALUES, "reimbursability"),
     workId: optionalTrimmed(raw.workId),
     workOrderId: optionalTrimmed(raw.workOrderId),
+    valueScope: raw.valueScope === "order_values" ? "order_values" : "costs",
+    includeHistory: raw.includeHistory === true || raw.includeHistory === "true",
   };
 }
 
-export type CostRecordRelations = { workCode?: string; workInstructionCode?: string };
+export type CostRecordRelations = {
+  workCode?: string;
+  workInstructionCode?: string;
+  /** "order_value" when governed provenance places the row in an MBORA order register (WO/JO execution cost provenance). */
+  valueKind?: "cost" | "order_value";
+  /** Source register (provenance) for imported rows. */
+  sourceRegister?: string;
+};
 
 /** Row → the frozen CostRecord compatibility contract. `workId`/`workOrderId` are display codes derived from the UUID FKs. */
 export function mapFmCostRecordRow(row: FmCostRecordRow, relations: CostRecordRelations = {}): CostRecord & { costUuid: string; notes?: string } {
@@ -333,6 +360,8 @@ export function mapFmCostRecordRow(row: FmCostRecordRow, relations: CostRecordRe
     },
     recordedBy: row.recorded_by_profile_id ?? "",
     notes: row.notes ?? undefined,
+    valueKind: relations.valueKind ?? "cost",
+    sourceRegister: relations.sourceRegister,
   };
 }
 
@@ -347,11 +376,13 @@ export type FmCostSubmissionRow = {
   approval_id: string | null; submitted_at: string | null; submitted_by_profile_id: string | null;
   /** The Work Order a payment request bills (Work Order route). */
   work_instruction_id: string | null;
+  /** Most recent recorded follow-up (fm_commercial_follow_ups) — never a payment state. */
+  last_follow_up_at: string | null;
   queried_at: string | null; query_notes: string | null; notes: string | null;
   created_by_profile_id: string | null; updated_by_profile_id: string | null; created_at: string; updated_at: string;
 };
 export const FM_COST_SUBMISSION_SELECT =
-  "id, organisation_id, code, status, currency, claim_amount, markup_amount, markup_rate_percent, no_markup, facility_id, department_id, period_label, submission_kind, description, client_location, source_note, package_reference, package_type, package_date, package_notes, approval_id, work_instruction_id, submitted_at, submitted_by_profile_id, queried_at, query_notes, notes, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
+  "id, organisation_id, code, status, currency, claim_amount, markup_amount, markup_rate_percent, no_markup, facility_id, department_id, period_label, submission_kind, description, client_location, source_note, package_reference, package_type, package_date, package_notes, approval_id, work_instruction_id, last_follow_up_at, submitted_at, submitted_by_profile_id, queried_at, query_notes, notes, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
 
 export type SubmissionFields = {
   costRefs?: string[];
@@ -472,20 +503,21 @@ export function assertSubmissionShape(input: {
     throw new FmCostValidationError("Cost records can only be linked to reimbursement claims.");
   }
   if (live && !(input.claimAmount != null && input.claimAmount > 0)) {
-    throw new FmCostValidationError("A requested amount is required when a client payment is submitted.");
+    throw new FmCostValidationError("A requested amount is required when a payment request is submitted.");
   }
   if (live && !input.description?.trim()) {
-    throw new FmCostValidationError("A description of what was requested is required when a client payment is submitted.");
+    throw new FmCostValidationError("A description of what was requested is required when a payment request is submitted.");
   }
 }
 
-export type SubmissionListParams = { page: number; pageSize: number; search?: string; facilityId?: string; status?: CostSubmissionLifecycleStatus; approvalId?: string; kind?: ClientPaymentKindValue };
+export type SubmissionListParams = { includeHistory?: boolean; page: number; pageSize: number; search?: string; facilityId?: string; status?: CostSubmissionLifecycleStatus; approvalId?: string; kind?: ClientPaymentKindValue };
 export function parseSubmissionListParams(payload: unknown): SubmissionListParams {
   const raw = asRecord(payload);
   const status = optionalTrimmed(raw.status);
   const facilityId = optionalTrimmed(raw.facilityId);
   return {
     ...listBase(raw),
+    includeHistory: raw.includeHistory === true || raw.includeHistory === "true",
     facilityId: !facilityId || facilityId === "all" ? undefined : facilityId,
     status: !status || status === "all" ? undefined : parseEnum(status, SUBMISSION_STATUS_VALUES, "submission status"),
     approvalId: optionalTrimmed(raw.approvalId),
@@ -522,6 +554,7 @@ export function mapFmCostSubmissionRow(row: FmCostSubmissionRow, relations: Subm
     description: row.description ?? undefined,
     clientLocation: row.client_location ?? undefined,
     sourceNote: row.source_note ?? undefined,
+    lastFollowUpAt: row.last_follow_up_at ?? undefined,
     submissionPackage: hasPackage
       ? {
           reference: row.package_reference ?? undefined,

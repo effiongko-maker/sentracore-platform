@@ -36,9 +36,10 @@ const READ_ACTIONS = new Set([
   "getEntitySummary",
   "getSnapshot",
   "diagnostics",
+  "listFollowUps",
 ]);
 
-const CREATE_ACTIONS = new Set(["create", "createFromMaintenance"]);
+const CREATE_ACTIONS = new Set(["create", "createFromMaintenance", "createSubmission"]);
 
 const EDIT_ACTIONS = new Set(["update", "deactivate", "delete"]);
 

@@ -177,7 +177,7 @@ function staticChecks() {
   const page = read("src/modules/finance/components/FinancePage.tsx");
   assert(page.includes("FinancePositionSection"), "position section");
   assert(page.includes("FinanceSubmissionsSection"), "submissions section");
-  assert(page.includes("FinancePendingActionSection"), "needs attention section");
+  assert(page.includes("FinancePaymentApprovalsSection") && !page.includes("FinancePendingActionSection"), "Payment Approvals card replaces needs attention");
   assert(page.includes("FinanceSummaryRow"), "finance at a glance");
   assert(page.includes("CostRecordFormModal"), "cost entry modal");
   assert(!page.includes("FinanceFlowRail"), "flow rail removed from home");
@@ -191,13 +191,9 @@ function staticChecks() {
 
   const header = read("src/modules/finance/components/FinanceHeader.tsx");
   assert(header.includes("Record cost"), "record cost action");
-  assert(
-    header.includes("New client payment") &&
-      header.includes("Payment request") &&
-      header.includes("Contract instalment") &&
-      header.includes('href="/finance/submissions/new">Reimbursement claim'),
-    "new client payment action exposes all three types (reimbursement claim path preserved)"
-  );
+  assert(header.includes("Raise payment request") && header.includes("/finance/client-payments/new?kind=payment_request"), "payment request directly discoverable");
+  const registersNav = read("src/modules/finance/components/CostsClaimsNav.tsx");
+  assert(registersNav.includes("Contract Payments") && registersNav.includes("Reimbursements"), "contract and reimbursement routes preserved in Costs & Claims");
   assert(header.includes("Costs &amp; Claims</h1>"), "Costs & Claims title");
   assert(!/APR|this period|reporting period/i.test(header), "header not APR-period framed");
   assert(!header.includes("client authorisation records"), "header not APR-centric period");

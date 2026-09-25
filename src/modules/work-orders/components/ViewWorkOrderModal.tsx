@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Modal } from "@/components/modals/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -20,7 +21,10 @@ import {
   WORK_INSTRUCTION_KIND_SUMMARIES,
 } from "../instructionKind";
 import { displayWorkOrderTitle, labelize } from "../utils";
-import type { WorkOrder } from "../types";
+import { WORK_ORDER_SUBMISSION_STATUS_LABELS, type CommercialFollowUp, type WorkOrder } from "../types";
+import { WorkOrderService } from "@/services/workOrders/WorkOrderService";
+import { formatFinancialAmount } from "@/modules/finance/utils/formatFinancialAmount";
+import { COMMERCIAL_FOLLOW_UP_METHODS } from "@/components/commercial/CommercialFollowUpModal";
 import { WorkOrderClientApprovalSection } from "./WorkOrderClientApprovalSection";
 
 interface ViewWorkOrderModalProps {
@@ -28,6 +32,15 @@ interface ViewWorkOrderModalProps {
   workOrder: WorkOrder | null;
   onClose: () => void;
   onEdit?: (workOrder: WorkOrder) => void;
+  /** Edit the commercial submission facts (date, amount, status, facilities, Works). */
+  onEditSubmission?: (workOrder: WorkOrder) => void;
+  onRecordFollowUp?: (workOrder: WorkOrder) => void;
+  /** Bumped by the parent after a follow-up is recorded, to reload the history. */
+  followUpsVersion?: number;
+}
+
+function FacilityName({ id }: { id: string }) {
+  return <>{useFacilityName(id) || id}</>;
 }
 
 function Detail({ label, value }: { label: string; value: React.ReactNode }) {
@@ -46,7 +59,22 @@ export function ViewWorkOrderModal({
   workOrder,
   onClose,
   onEdit,
+  onEditSubmission,
+  onRecordFollowUp,
+  followUpsVersion = 0,
 }: ViewWorkOrderModalProps) {
+  const [followUps, setFollowUps] = useState<CommercialFollowUp[] | null>(null);
+  const workOrderId = open ? workOrder?.id : undefined;
+  useEffect(() => {
+    if (!workOrderId) return;
+    let cancelled = false;
+    WorkOrderService.listFollowUps(workOrderId)
+      .then((list) => !cancelled && setFollowUps(list))
+      .catch(() => !cancelled && setFollowUps(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [workOrderId, followUpsVersion]);
   const facilityName = useFacilityName(workOrder?.facilityId);
   const assetName = useAssetName(workOrder?.assetId);
   const assigneeName = useUserName(workOrder?.assignedToUserId);
@@ -59,6 +87,9 @@ export function ViewWorkOrderModal({
   if (!workOrder) return null;
 
   const title = displayWorkOrderTitle(workOrder);
+  // A WO/JO created as a commercial submission has no operational lifecycle of its own (operations live on Work).
+  const operational = Boolean(workOrder.maintenanceId) || workOrder.recordOrigin === "migrated_historical";
+  const facilities = workOrder.facilityIds?.length ? workOrder.facilityIds : [workOrder.facilityId];
 
   return (
     <Modal
@@ -72,7 +103,23 @@ export function ViewWorkOrderModal({
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
-          {onEdit ? (
+          {onRecordFollowUp ? (
+            <Button variant="outline" onClick={() => onRecordFollowUp(workOrder)}>
+              Record follow-up
+            </Button>
+          ) : null}
+          {onEditSubmission ? (
+            <Button
+              variant={operational && onEdit ? "outline" : undefined}
+              onClick={() => {
+                onClose();
+                onEditSubmission(workOrder);
+              }}
+            >
+              Edit submission
+            </Button>
+          ) : null}
+          {onEdit && operational ? (
             <Button
               onClick={() => {
                 onClose();
@@ -93,13 +140,69 @@ export function ViewWorkOrderModal({
           </p>
         </div>
       ) : null}
+      <section className="mb-5 space-y-3 rounded-lg border border-border/70 p-4" aria-label="Commercial submission">
+        <p className="text-xs font-medium uppercase tracking-wider text-muted">Commercial submission</p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Detail
+            label="Submission status"
+            value={
+              workOrder.submissionStatus
+                ? WORK_ORDER_SUBMISSION_STATUS_LABELS[workOrder.submissionStatus]
+                : workOrder.recordOrigin === "migrated_historical"
+                  ? "Not recorded in the imported register"
+                  : "Not recorded"
+            }
+          />
+          <Detail label="Submitted" value={workOrder.submissionDate ? formatDate(workOrder.submissionDate) : "—"} />
+          <Detail label="Submitted amount" value={workOrder.submissionAmount != null ? formatFinancialAmount(workOrder.submissionAmount, "NGN") : "Not recorded"} />
+          {workOrder.executionCost != null ? (
+            <Detail label="Execution cost · source register" value={formatFinancialAmount(workOrder.executionCost, "NGN")} />
+          ) : null}
+          <Detail
+            label="Facility"
+            value={facilities.map((id, index) => (
+              <span key={id}>
+                {index > 0 ? " + " : ""}
+                <FacilityName id={id} />
+              </span>
+            ))}
+          />
+          <Detail
+            label="Work included"
+            value={(workOrder.linkedWorkIds ?? []).length ? (workOrder.linkedWorkIds ?? []).join(", ") : "None linked"}
+          />
+          <Detail label="Last follow-up" value={workOrder.lastFollowUpAt ? formatDate(workOrder.lastFollowUpAt) : "None recorded"} />
+        </div>
+        {followUps && followUps.length ? (
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted">Follow-up history</p>
+            <ul className="mt-2 space-y-2">
+              {followUps.map((f) => (
+                <li key={f.id} className="rounded-md bg-muted/30 px-3 py-2 text-sm">
+                  <p className="font-medium text-foreground">
+                    {formatDate(f.followedUpAt)} · {COMMERCIAL_FOLLOW_UP_METHODS.find((m) => m.value === f.method)?.label ?? f.method}
+                    {f.contactPerson ? ` · ${f.contactPerson}` : ""}
+                  </p>
+                  <p className="text-muted">{f.outcomeNotes}</p>
+                  {f.nextFollowUpAt ? <p className="text-xs text-muted">Next follow-up {formatDate(f.nextFollowUpAt)}</p> : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </section>
+
       <div className="flex flex-wrap items-center gap-2 border-b border-border/70 pb-5">
-        <Badge variant={WORK_ORDER_STATUS_VARIANT[workOrder.status]}>
-          {labelize(workOrder.status)}
-        </Badge>
-        <Badge variant={WORK_ORDER_PRIORITY_VARIANT[workOrder.priority]}>
-          {labelize(workOrder.priority)}
-        </Badge>
+        {operational ? (
+          <>
+            <Badge variant={WORK_ORDER_STATUS_VARIANT[workOrder.status]}>
+              {labelize(workOrder.status)}
+            </Badge>
+            <Badge variant={WORK_ORDER_PRIORITY_VARIANT[workOrder.priority]}>
+              {labelize(workOrder.priority)}
+            </Badge>
+          </>
+        ) : null}
         <Badge
           variant={instructionKind === "job_order" ? "warning" : "default"}
         >
@@ -113,6 +216,7 @@ export function ViewWorkOrderModal({
         </span>
       </div>
 
+      {operational ? (
       <div className="mt-5 grid gap-5 sm:grid-cols-2">
         <Detail label="Record ID" value={workOrder.id} />
         <Detail
@@ -200,6 +304,7 @@ export function ViewWorkOrderModal({
           value={workOrder.completionNotes || "—"}
         />
       </div>
+      ) : null}
 
       <WorkOrderClientApprovalSection workOrder={workOrder} />
     </Modal>

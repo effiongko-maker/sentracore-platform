@@ -45,7 +45,6 @@ export function useFinanceOverview() {
     const [
       approvalResult,
       costResult,
-      costTotalsResult,
       yearTotalsResult,
       submissionResult,
       paymentResult,
@@ -68,19 +67,6 @@ export function useFinanceOverview() {
           { signal }
         )
       ),
-      // The authoritative headline total: the COMPLETE register, never the bounded preview pool above.
-      (async (): Promise<{ available: true; data: Awaited<ReturnType<typeof CostRecordService.getTotals>> } | { available: false }> => {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), SOURCE_TIMEOUT_MS);
-        try {
-          const data = await CostRecordService.getTotals({ signal: controller.signal });
-          return { available: true, data };
-        } catch {
-          return { available: false };
-        } finally {
-          clearTimeout(timer);
-        }
-      })(),
       // Headline: the operating year's complete-register total (same year classification as Home).
       (async (): Promise<{ available: true; data: Awaited<ReturnType<typeof CostRecordService.getOperatingYearTotals>> } | { available: false }> => {
         const controller = new AbortController();
@@ -138,13 +124,15 @@ export function useFinanceOverview() {
         costRecords: costResult.available ? costResult.data : [],
         totalCostRecords: costResult.available ? costResult.total : 0,
         costRecordsAvailable: costResult.available,
-        costTotals: costTotalsResult.available ? costTotalsResult.data : null,
+        costTotals: null, // Supporting breakdowns describe the current-year preview, never all-year totals.
         operatingYearCostTotals: yearTotalsResult.available
           ? {
               year: yearTotalsResult.data.operatingYear,
               totalCount: yearTotalsResult.data.totalCount,
               totalAmount: yearTotalsResult.data.totalAmount,
               currency: yearTotalsResult.data.currency,
+              orderValueCount: yearTotalsResult.data.orderValueCount,
+              orderValueAmount: yearTotalsResult.data.orderValueAmount,
             }
           : null,
         submissions: submissionResult.available ? submissionResult.data : [],

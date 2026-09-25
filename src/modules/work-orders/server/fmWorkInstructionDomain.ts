@@ -1,3 +1,4 @@
+import { parseCommercialFollowUp, type ParsedCommercialFollowUp } from "@/lib/fm/commercialFollowUp";
 import type { PaginatedResult } from "@/types";
 import type {
   WorkOrder,
@@ -92,7 +93,8 @@ export type FmWorkInstructionRow = {
   organisation_id: string;
   code: string;
   order_type: string;
-  work_id: string;
+  /** NULL for a WO/JO created directly as a commercial submission (no Work). */
+  work_id: string | null;
   facility_id: string;
   title: string;
   description: string | null;
@@ -127,6 +129,11 @@ export type FmWorkInstructionRow = {
   /** The client's own reference for an issued Job Order, as supplied (never generated). */
   client_reference: string | null;
   operational_event_id: string | null;
+  /** Commercial submission facts (see the WO/JO commercial-submission migration). */
+  submission_date: string | null;
+  submission_amount: number | null;
+  submission_status: string | null;
+  last_follow_up_at: string | null;
   created_by_profile_id: string | null;
   updated_by_profile_id: string | null;
   created_at: string;
@@ -134,7 +141,7 @@ export type FmWorkInstructionRow = {
 };
 
 export const FM_WORK_INSTRUCTION_SELECT =
-  "id, organisation_id, code, order_type, work_id, facility_id, title, description, instruction_text, work_category, maintenance_type, source, category_id, asset_id, parent_instruction_id, reported_by_profile_id, assigned_to_profile_id, status, priority, hold_reason, requested_at, record_origin, scheduled_start_at, scheduled_end_at, due_at, sla_due_at, started_at, completed_at, estimated_hours, actual_hours, estimated_cost, actual_cost, downtime_minutes, completion_notes, work_performed, requires_approval, client_reference, operational_event_id, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
+  "id, organisation_id, code, order_type, work_id, facility_id, title, description, instruction_text, work_category, maintenance_type, source, category_id, asset_id, parent_instruction_id, reported_by_profile_id, assigned_to_profile_id, status, priority, hold_reason, requested_at, record_origin, scheduled_start_at, scheduled_end_at, due_at, sla_due_at, started_at, completed_at, estimated_hours, actual_hours, estimated_cost, actual_cost, downtime_minutes, completion_notes, work_performed, requires_approval, client_reference, operational_event_id, submission_date, submission_amount, submission_status, last_follow_up_at, created_by_profile_id, updated_by_profile_id, created_at, updated_at";
 
 /** Relationships derived at read time — never stored as arrays or duplicated. */
 export type FmWorkInstructionRelations = {
@@ -148,7 +155,20 @@ export type FmWorkInstructionRelations = {
   workCommercialRoute?: WorkOrderOrderType;
   /** Code of this Work Order's active Client Payment (fm_cost_submissions.work_instruction_id) — derived. */
   clientPaymentCode?: string;
+  /** Every Work this WO/JO submits: the legacy work_id plus fm_work_instruction_works (codes). */
+  linkedWorkCodes?: string[];
+  /** Facilities the WO/JO covers beyond facility_id (fm_work_instruction_facilities). */
+  additionalFacilityIds?: string[];
+  /**
+   * Imported WO/JO only: the value stated by its own order-register source row (the register's amount column, which
+   * the operator established is the WO/JO value). Derived at read time from governed provenance — never copied.
+   */
+  importedOrderValue?: number;
 };
+
+/** Commercial submission status — the vocabulary client payments already use. Follow-ups are events, not statuses. */
+export const SUBMISSION_STATUS_VALUES = ["draft", "submitted"] as const;
+export type WorkOrderSubmissionStatus = (typeof SUBMISSION_STATUS_VALUES)[number];
 
 function optionalTrimmed(value: unknown): string | undefined {
   if (value == null) return undefined;
@@ -393,6 +413,113 @@ export function parseCreateInstructionInput(payload: unknown): ParsedCreateInstr
   };
 }
 
+export type ParsedSubmissionFields = {
+  orderType?: WorkOrderOrderType;
+  title?: string;
+  /** 1..n facility refs (UUID or code). The first is the primary facility; the rest are additional ("Both"). */
+  facilityRefs?: string[];
+  submissionDate?: string | null;
+  submissionAmount?: number | null;
+  submissionStatus?: WorkOrderSubmissionStatus;
+  /** Works submitted in this WO/JO (codes or UUIDs). Optional — never required. */
+  workRefs?: string[];
+};
+
+function refList(value: unknown, label: string): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new FmWorkInstructionValidationError(`${label} must be a list.`);
+  const refs = [...new Set(value.map((v) => optionalTrimmed(v)).filter((v): v is string => !!v))];
+  if (refs.length > 100) throw new FmWorkInstructionValidationError(`${label}: too many entries.`);
+  return refs;
+}
+function isoDateOnly(value: unknown, label: string): string | null | undefined {
+  if (value === undefined) return undefined;
+  const raw = optionalTrimmed(value);
+  if (!raw) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw) || Number.isNaN(Date.parse(`${raw}T00:00:00Z`))) {
+    throw new FmWorkInstructionValidationError(`${label} must be a date (YYYY-MM-DD).`);
+  }
+  return raw;
+}
+
+function parseSubmissionFields(raw: Record<string, unknown>): ParsedSubmissionFields {
+  const out: ParsedSubmissionFields = {};
+  if (raw.orderType !== undefined) out.orderType = parseOrderType(raw.orderType);
+  if (raw.title !== undefined) out.title = requireTrimmed(raw.title, "Title");
+  const facilities = refList(raw.facilityIds, "Facility");
+  if (facilities !== undefined) {
+    if (facilities.length === 0) throw new FmWorkInstructionValidationError("Facility is required.");
+    out.facilityRefs = facilities;
+  }
+  const date = isoDateOnly(raw.submissionDate, "Submission date");
+  if (date !== undefined) out.submissionDate = date;
+  const amount = nullableNumber(raw.submissionAmount, "Amount");
+  if (amount !== undefined) out.submissionAmount = amount;
+  if (raw.submissionStatus !== undefined) {
+    out.submissionStatus = parseEnum(raw.submissionStatus, SUBMISSION_STATUS_VALUES, "submission status");
+  }
+  const works = refList(raw.workIds, "Works");
+  if (works !== undefined) out.workRefs = works;
+  return out;
+}
+
+/** A submitted WO/JO must state when and how much was submitted (a draft may not know yet). */
+export function assertSubmissionComplete(fields: {
+  submissionStatus?: WorkOrderSubmissionStatus | null;
+  submissionDate?: string | null;
+  submissionAmount?: number | null;
+}): void {
+  if (fields.submissionStatus === "submitted") {
+    if (!fields.submissionDate) throw new FmWorkInstructionValidationError("Submission date is required once submitted.");
+    if (fields.submissionAmount == null || fields.submissionAmount <= 0) {
+      throw new FmWorkInstructionValidationError("Amount is required once submitted.");
+    }
+  }
+}
+
+export type ParsedCreateSubmission = Required<Pick<ParsedSubmissionFields, "orderType" | "title" | "facilityRefs" | "submissionStatus">> &
+  Pick<ParsedSubmissionFields, "submissionDate" | "submissionAmount"> & { workRefs: string[] };
+
+/**
+ * Create a WO/JO directly as a commercial submission package: no Issue and no Work required. Order Type is an
+ * explicit selection (never inferred from the amount).
+ */
+export function parseCreateSubmissionInput(payload: unknown): ParsedCreateSubmission {
+  const raw = asRecord(payload);
+  const fields = parseSubmissionFields(raw);
+  if (!fields.orderType) throw new FmWorkInstructionValidationError("Select Order Type: Work Order or Job Order.");
+  if (!fields.title) throw new FmWorkInstructionValidationError("Title is required.");
+  if (!fields.facilityRefs?.length) throw new FmWorkInstructionValidationError("Facility is required.");
+  if (!fields.submissionStatus) throw new FmWorkInstructionValidationError("Submission status is required.");
+  const parsed: ParsedCreateSubmission = {
+    orderType: fields.orderType,
+    title: fields.title,
+    facilityRefs: fields.facilityRefs,
+    submissionStatus: fields.submissionStatus,
+    submissionDate: fields.submissionDate ?? null,
+    submissionAmount: fields.submissionAmount ?? null,
+    workRefs: fields.workRefs ?? [],
+  };
+  assertSubmissionComplete(parsed);
+  return parsed;
+}
+
+export type ParsedUpdateSubmission = ParsedSubmissionFields & { id: string };
+
+export function parseUpdateSubmissionInput(payload: unknown): ParsedUpdateSubmission {
+  const raw = asRecord(payload);
+  return { ...parseSubmissionFields(raw), id: requireTrimmed(raw.id, "WO/JO id") };
+}
+
+export type ParsedFollowUp = ParsedCommercialFollowUp;
+
+/** Same fields as an Approval follow-up. A follow-up never changes a submission or payment state. */
+export function parseFollowUpInput(payload: unknown): ParsedFollowUp {
+  const parsed = parseCommercialFollowUp(payload);
+  if (!parsed.ok) throw new FmWorkInstructionValidationError(parsed.message);
+  return parsed.value;
+}
+
 export function parseUpdateInstructionInput(payload: unknown): ParsedUpdateInstruction {
   const raw = asRecord(payload);
   return { ...parseFields(raw), id: requireTrimmed(raw.id, "Work Instruction id") };
@@ -430,6 +557,11 @@ export function parseInstructionListParams(payload: unknown): WorkOrderListParam
       sort === "oldest" || sort === "title_asc" || sort === "title_desc" ? sort : "newest",
     includeOperationalPictureTotals: raw.includeOperationalPictureTotals === true,
     asOf: opt("asOf"),
+    includeHistory: raw.includeHistory === true || raw.includeHistory === "true",
+    orderType: (() => {
+      const v = opt("orderType");
+      return v === "work_order" || v === "job_order" ? v : "all";
+    })(),
   };
 }
 
@@ -487,6 +619,14 @@ export function mapFmWorkInstructionRowToWorkOrder(
     clientReference: row.client_reference ?? undefined,
     workCommercialRoute: relations.workCommercialRoute,
     clientPaymentId: relations.clientPaymentCode,
+    submissionDate: row.submission_date ?? undefined,
+    submissionAmount: row.submission_amount != null ? Number(row.submission_amount) : undefined,
+    submissionAmountSource: row.submission_amount != null ? "recorded" : undefined,
+    executionCost: relations.importedOrderValue,
+    submissionStatus: (row.submission_status as WorkOrderSubmissionStatus | null) ?? undefined,
+    lastFollowUpAt: row.last_follow_up_at ?? undefined,
+    linkedWorkIds: relations.linkedWorkCodes ?? (relations.workCode ? [relations.workCode] : []),
+    facilityIds: [row.facility_id, ...(relations.additionalFacilityIds ?? [])],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     createdByUserId: row.created_by_profile_id ?? undefined,

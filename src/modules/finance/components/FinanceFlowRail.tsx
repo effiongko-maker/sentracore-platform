@@ -33,7 +33,7 @@ export function FinanceFlowRail({
     <section className="fin-v13-status" aria-label="Financial status">
       <p className="fin-v13-status-note">
         Reimbursement authorisation is the client&apos;s authorisation of a claim
-        — separate from Work Order approvals.
+        — separate from Payment Approvals.
       </p>
       <ul className="fin-v13-status-strip">
         {STAGES.map((stage) => {

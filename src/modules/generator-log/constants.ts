@@ -18,9 +18,9 @@ export const GENERATOR_LOG_SORT_OPTIONS: Array<{
 export const GENERATOR_LOG_FIELD_LABELS = {
   date: "Date",
   generator: "Generator",
-  startedAt: "Start",
-  endedAt: "End",
-  hours: "Hours",
-  fuelUsed: "Diesel Used",
+  startMeterReading: "Start reading",
+  endMeterReading: "End reading",
+  hours: "Run hours",
+  fuelUsed: "Diesel used · date total",
   remarks: "Remarks",
 } as const;

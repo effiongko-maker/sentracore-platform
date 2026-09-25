@@ -42,6 +42,15 @@ import {
   COST_SOURCE_REGISTER_WORKBOOK,
   costRecordOperatingYear,
 } from "./fmCostDomain";
+import {
+  FM_HISTORICAL_2025_SHEETS,
+  FM_ORDER_REGISTER_SHEETS,
+  isOrderRegisterSheet,
+  loadProvenanceTargetIds,
+  notInList,
+  type ProvenanceClient,
+} from "@/lib/fm/sourceRegisterScope";
+import { latestFollowUp, type ParsedCommercialFollowUp } from "@/lib/fm/commercialFollowUp";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 const CODE_RETRY_LIMIT = 5;
@@ -103,6 +112,7 @@ function submissionRow(rec: Record<string, unknown>): FmCostSubmissionRow {
     package_type: txt(rec, "package_type"), package_date: txt(rec, "package_date"), package_notes: txt(rec, "package_notes"),
     approval_id: txt(rec, "approval_id"), submitted_at: txt(rec, "submitted_at"), submitted_by_profile_id: txt(rec, "submitted_by_profile_id"),
     work_instruction_id: txt(rec, "work_instruction_id"),
+    last_follow_up_at: txt(rec, "last_follow_up_at"),
     queried_at: txt(rec, "queried_at"), query_notes: txt(rec, "query_notes"), notes: txt(rec, "notes"),
     created_by_profile_id: txt(rec, "created_by_profile_id"), updated_by_profile_id: txt(rec, "updated_by_profile_id"),
     created_at: str(rec, "created_at"), updated_at: str(rec, "updated_at"),
@@ -247,7 +257,7 @@ export class FmCostRepository {
       .eq("work_instruction_id", wi.id).neq("status", "cancelled").limit(1);
     if (existing.error) throwDb(existing.error, "Unable to check existing client payments.");
     const found = (existing.data ?? [])[0] as { code?: string } | undefined;
-    if (found?.code) throw new FmCostValidationError(`Work Order ${wi.code} already has client payment ${found.code}.`);
+    if (found?.code) throw new FmCostValidationError(`Work Order ${wi.code} already has payment request ${found.code}.`);
     return wi.id;
   }
 
@@ -307,6 +317,17 @@ export class FmCostRepository {
       if (!id) return { rows: [], total: 0 };
       query = query.eq("facility_id", id);
     }
+    // WO/JO source costs are part of Costs. This optional filter is a provenance subset, never an extra total.
+    if (params.valueScope === "order_values") {
+      const ids = await this.provenanceIds(FM_ORDER_REGISTER_SHEETS);
+      if (!ids.length) return { rows: [], total: 0 };
+      query = query.in("id", ids);
+    }
+    if (!params.includeHistory && !params.workId && !params.workOrderId) {
+      const hidden = await this.provenanceIds(FM_HISTORICAL_2025_SHEETS);
+      if (hidden.length) query = query.not("id", "in", notInList(hidden));
+      query = query.or("recorded_at.is.null,recorded_at.gte.2026-01-01T00:00:00+01:00");
+    }
     if (params.workId) {
       const work = await this.resolveWork(params.workId).catch((e) => (e instanceof FmCostValidationError ? null : Promise.reject(e)));
       if (!work) return { rows: [], total: 0 };
@@ -329,6 +350,35 @@ export class FmCostRepository {
     return { rows: (data ?? []).map((r) => costRow(r as unknown as Record<string, unknown>)), total: count ?? 0 };
   }
 
+  /** Cost-record ids imported from the given MBORA source registers (governed provenance only). */
+  private async provenanceIds(sheets: readonly string[]): Promise<string[]> {
+    try {
+      return await loadProvenanceTargetIds(this.admin as unknown as ProvenanceClient, {
+        organisationId: this.organisationId,
+        target: "fm_cost_records",
+        sheets,
+      });
+    } catch (error) {
+      throwDb({ message: error instanceof Error ? error.message : undefined }, "Unable to load cost provenance.");
+    }
+  }
+
+  /** Source register per cost-record id, for the rows given (governed provenance only). */
+  private async sourceRegisters(ids: string[]): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    if (ids.length === 0) return out;
+    const { data, error } = await this.admin
+      .from("fm_migration_provenance")
+      .select("target_id, source_sheet")
+      .eq("organisation_id", this.organisationId)
+      .eq("target_table", "fm_cost_records")
+      .eq("workbook", COST_SOURCE_REGISTER_WORKBOOK)
+      .in("target_id", ids);
+    if (error) throwDb(error, "Unable to load cost provenance.");
+    for (const row of data ?? []) out.set(String((row as { target_id: string }).target_id), String((row as { source_sheet: string }).source_sheet));
+    return out;
+  }
+
   async costRelations(rows: FmCostRecordRow[]): Promise<Map<string, CostRecordRelations>> {
     const out = new Map<string, CostRecordRelations>();
     if (rows.length === 0) return out;
@@ -340,14 +390,18 @@ export class FmCostRepository {
       for (const r of data ?? []) codes.set(String((r as { id: string }).id), String((r as { code: string }).code));
       return codes;
     };
-    const [work, wi] = await Promise.all([
+    const [work, wi, registers] = await Promise.all([
       lookup("fm_work", [...new Set(rows.map((r) => r.work_id).filter((v): v is string => !!v))]),
       lookup("fm_work_instructions", [...new Set(rows.map((r) => r.work_instruction_id).filter((v): v is string => !!v))]),
+      this.sourceRegisters(rows.filter((r) => r.record_origin === "migrated_historical").map((r) => r.id)),
     ]);
     for (const row of rows) {
+      const sheet = registers.get(row.id);
       out.set(row.id, {
         workCode: row.work_id ? work.get(row.work_id) : undefined,
         workInstructionCode: row.work_instruction_id ? wi.get(row.work_instruction_id) : undefined,
+        valueKind: isOrderRegisterSheet(sheet) ? "order_value" : "cost",
+        sourceRegister: sheet,
       });
     }
     return out;
@@ -391,21 +445,30 @@ export class FmCostRepository {
     historicalUnrecordedReimbursabilityCount: number;
     reimbursableCount: number;
     nonReimbursableCount: number;
+    /** Execution costs from imported WO/JO registers: a subset already included in totalAmount. */
+    orderValueCount: number;
+    orderValueAmount: number;
   }> {
     let totalCount = 0, totalAmount = 0, liveUnclassifiedCount = 0, historicalUnrecordedReimbursabilityCount = 0, reimbursableCount = 0, nonReimbursableCount = 0;
+    let orderValueCount = 0, orderValueAmount = 0;
     let currency = "NGN";
+    const orderValueIds = new Set(await this.provenanceIds(FM_ORDER_REGISTER_SHEETS));
     const batchSize = 1000;
     for (let offset = 0; ; offset += batchSize) {
       const { data, error } = await this.admin
         .from("fm_cost_records")
-        .select("actual_amount, currency, reimbursability, record_origin")
+        .select("id, actual_amount, currency, reimbursability, record_origin")
         .eq("organisation_id", this.organisationId)
         .or(facilityScopeOr(this.scope))
         .order("id", { ascending: true })
         .range(offset, offset + batchSize - 1);
       if (error) throwDb(error, "Unable to load cost totals.");
-      const batch = (data ?? []) as Array<{ actual_amount: number; currency: string; reimbursability: string; record_origin: string }>;
+      const batch = (data ?? []) as Array<{ id: string; actual_amount: number; currency: string; reimbursability: string; record_origin: string }>;
       for (const row of batch) {
+        if (orderValueIds.has(String(row.id))) {
+          orderValueCount += 1;
+          orderValueAmount += Number(row.actual_amount) || 0;
+        }
         totalCount += 1;
         totalAmount += Number(row.actual_amount) || 0;
         currency = row.currency || currency;
@@ -417,7 +480,10 @@ export class FmCostRepository {
       }
       if (batch.length < batchSize) break;
     }
-    return { totalCount, totalAmount: Math.round(totalAmount * 100) / 100, currency, liveUnclassifiedCount, historicalUnrecordedReimbursabilityCount, reimbursableCount, nonReimbursableCount };
+    return {
+      totalCount, totalAmount: Math.round(totalAmount * 100) / 100, currency, liveUnclassifiedCount, historicalUnrecordedReimbursabilityCount,
+      reimbursableCount, nonReimbursableCount, orderValueCount, orderValueAmount: Math.round(orderValueAmount * 100) / 100,
+    };
   }
 
   /**
@@ -431,6 +497,9 @@ export class FmCostRepository {
     totalAmount: number;
     currency: string;
     unclassifiedCount: number;
+    /** That year's WO/JO execution costs, already included in totalAmount; never add this subset again. */
+    orderValueCount: number;
+    orderValueAmount: number;
   }> {
     const sheetByCost = new Map<string, string>();
     const batchSize = 1000;
@@ -448,7 +517,7 @@ export class FmCostRepository {
       for (const row of batch) sheetByCost.set(String(row.target_id), String(row.source_sheet));
       if (batch.length < batchSize) break;
     }
-    let totalCount = 0, totalAmount = 0, unclassifiedCount = 0;
+    let totalCount = 0, totalAmount = 0, unclassifiedCount = 0, orderValueCount = 0, orderValueAmount = 0;
     let currency = "NGN";
     for (let offset = 0; ; offset += batchSize) {
       const { data, error } = await this.admin
@@ -472,13 +541,20 @@ export class FmCostRepository {
           continue;
         }
         if (rowYear !== year) continue;
+        if (isOrderRegisterSheet(sheet)) {
+          orderValueCount += 1;
+          orderValueAmount += Number(row.actual_amount) || 0;
+        }
         totalCount += 1;
         totalAmount += Number(row.actual_amount) || 0;
         currency = row.currency || currency;
       }
       if (batch.length < batchSize) break;
     }
-    return { operatingYear: year, totalCount, totalAmount: Math.round(totalAmount * 100) / 100, currency, unclassifiedCount };
+    return {
+      operatingYear: year, totalCount, totalAmount: Math.round(totalAmount * 100) / 100, currency, unclassifiedCount,
+      orderValueCount, orderValueAmount: Math.round(orderValueAmount * 100) / 100,
+    };
   }
 
   async createCost(input: ParsedCreateCostRecord, actorProfileId: string): Promise<FmCostRecordRow> {
@@ -554,6 +630,67 @@ export class FmCostRepository {
     return data ? submissionRow(data as unknown as Record<string, unknown>) : null;
   }
 
+  /**
+   * Record a follow-up (chasing) on a client payment — contract instalments and payment requests. Payment state stays
+   * derived from receipts: a follow-up never marks anything paid. Reimbursement claims are excluded (their workflow is
+   * pending the Reimbursements review and is not changed here).
+   */
+  async recordSubmissionFollowUp(input: ParsedCommercialFollowUp, actorProfileId: string): Promise<FmCostSubmissionRow> {
+    const existing = await this.getSubmission(input.id);
+    if (!existing) throw new FmCostNotFoundError(`Pending payment ${input.id} not found.`);
+    if (existing.submission_kind === "reimbursement_claim") {
+      throw new FmCostValidationError("Follow-ups are recorded on contract instalments and payment requests, not reimbursement claims.");
+    }
+    if (existing.facility_id && !this.scope.canOperateIn(existing.facility_id)) {
+      throw new FmCostValidationError("You are not authorised to follow up pending payments for this facility.");
+    }
+    const ins = await this.admin.from("fm_commercial_follow_ups").insert({
+      organisation_id: this.organisationId,
+      cost_submission_id: existing.id,
+      followed_up_at: input.followedUpAt,
+      method: input.method,
+      contact_person: input.contactPerson,
+      outcome_notes: input.outcomeNotes,
+      next_follow_up_at: input.nextFollowUpAt,
+      actor_profile_id: actorProfileId,
+    });
+    if (ins.error) throwDb(ins.error, "Unable to record the follow-up.");
+    const { data, error } = await this.admin
+      .from("fm_cost_submissions")
+      .update({ last_follow_up_at: latestFollowUp(existing.last_follow_up_at, input.followedUpAt), updated_by_profile_id: actorProfileId })
+      .eq("organisation_id", this.organisationId)
+      .eq("id", existing.id)
+      .select(FM_COST_SUBMISSION_SELECT)
+      .single();
+    if (error) throwDb(error, "Unable to record the follow-up.");
+    return submissionRow(data as unknown as Record<string, unknown>);
+  }
+
+  async listSubmissionFollowUps(idOrCode: string): Promise<Array<Record<string, unknown>>> {
+    const existing = await this.getSubmission(idOrCode);
+    if (!existing) throw new FmCostNotFoundError(`Pending payment ${idOrCode} not found.`);
+    const { data, error } = await this.admin
+      .from("fm_commercial_follow_ups")
+      .select("id, followed_up_at, method, contact_person, outcome_notes, next_follow_up_at, actor_profile_id")
+      .eq("organisation_id", this.organisationId)
+      .eq("cost_submission_id", existing.id)
+      .order("followed_up_at", { ascending: false })
+      .order("id", { ascending: true });
+    if (error) throwDb(error, "Unable to load follow-ups.");
+    return (data ?? []).map((row) => {
+      const rec = row as Record<string, string | null>;
+      return {
+        id: rec.id,
+        followedUpAt: rec.followed_up_at,
+        method: rec.method,
+        contactPerson: rec.contact_person ?? undefined,
+        outcomeNotes: rec.outcome_notes,
+        nextFollowUpAt: rec.next_follow_up_at ?? undefined,
+        actorProfileId: rec.actor_profile_id ?? undefined,
+      };
+    });
+  }
+
   async listSubmissions(params: SubmissionListParams): Promise<{ rows: FmCostSubmissionRow[]; total: number }> {
     let query = applyFacilityScope(
       this.admin.from("fm_cost_submissions").select(FM_COST_SUBMISSION_SELECT, { count: "exact" }).eq("organisation_id", this.organisationId),
@@ -561,6 +698,7 @@ export class FmCostRepository {
       "facility_id",
       FM_WIDE_WHEN_NO_FACILITY
     );
+    if (!params.includeHistory && !params.approvalId) query = query.or("submitted_at.is.null,submitted_at.gte.2026-01-01T00:00:00+01:00");
     if (params.status) query = query.eq("status", params.status);
     if (params.kind) query = query.eq("submission_kind", params.kind);
     if (params.facilityId) {
@@ -681,7 +819,7 @@ export class FmCostRepository {
     const columns = this.submissionColumns(input);
     if (input.facilityRef !== undefined) columns.facility_id = input.facilityRef ? await this.resolveFacilityId(input.facilityRef) : null;
     if (columns.facility_id && !this.scope.canOperateIn(String(columns.facility_id))) {
-      throw new FmCostValidationError("You are not authorised to create client payments in this facility.");
+      throw new FmCostValidationError("You are not authorised to raise payment requests in this facility.");
     }
     if (input.departmentId !== undefined) columns.department_id = input.departmentId ? await this.resolveDepartmentId(input.departmentId) : null;
     if (input.approvalRef !== undefined) columns.approval_id = input.approvalRef ? await this.resolveApprovalId(input.approvalRef) : null;
@@ -707,13 +845,13 @@ export class FmCostRepository {
       const { data, error } = UUID_RE.test(target) ? await query.eq("id", target).maybeSingle() : await query.eq("code", target.toUpperCase()).maybeSingle();
       if (error) throwDb(error, "Unable to resolve Work Order.");
       if (!data || String((data as { id: string }).id) !== existing.work_instruction_id) {
-        throw new FmCostValidationError("A client payment's Work Order is set when it is created and cannot be changed.");
+        throw new FmCostValidationError("A payment request's Work Order is set when it is raised and cannot be changed.");
       }
     }
     const patch = this.submissionColumns(input);
     if (input.facilityRef !== undefined) patch.facility_id = input.facilityRef ? await this.resolveFacilityId(input.facilityRef) : null;
     if (patch.facility_id && patch.facility_id !== existing.facility_id && !this.scope.canOperateIn(String(patch.facility_id))) {
-      throw new FmCostValidationError("You are not authorised to move client payments to this facility.");
+      throw new FmCostValidationError("You are not authorised to move pending payments to this facility.");
     }
     if (input.departmentId !== undefined) patch.department_id = input.departmentId ? await this.resolveDepartmentId(input.departmentId) : null;
     if (input.approvalRef !== undefined) patch.approval_id = input.approvalRef ? await this.resolveApprovalId(input.approvalRef) : null;

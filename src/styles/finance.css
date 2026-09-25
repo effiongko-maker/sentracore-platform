@@ -1601,6 +1601,45 @@
   white-space: nowrap;
 }
 
+/* Payment Approvals overview card: the title column takes the remaining width and clamps to two lines; status,
+   amount, age and the action stay compact on one line. min-width keeps the title readable (scrolls on very narrow). */
+.fin-v13-table--approvals {
+  min-width: 30rem;
+}
+
+.fin-v13-table--approvals .fin-v13-approvals-status {
+  width: 7.75rem;
+}
+
+.fin-v13-table--approvals .fin-v13-approvals-amount {
+  width: 8.5rem;
+}
+
+.fin-v13-table--approvals .fin-v13-approvals-age {
+  width: 4.75rem;
+}
+
+.fin-v13-table--approvals col.fin-v13-action-col {
+  width: 4rem;
+}
+
+.fin-v13-table--approvals .fin-v13-num,
+.fin-v13-table--approvals .fin-v13-pill,
+.fin-v13-table--approvals .fin-v13-approvals-nowrap,
+.fin-v13-table--approvals .fin-v13-action-col {
+  white-space: nowrap;
+}
+
+.fin-v13-approvals-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
 .fin-v13-panel--dense {
   padding-top: 0.85rem;
   padding-bottom: 0.8rem;
