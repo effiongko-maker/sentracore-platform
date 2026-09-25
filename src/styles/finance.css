@@ -1140,6 +1140,12 @@
   }
 }
 
+@media (min-width: 900px) {
+  .fin-v13-support-metrics--four {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 .fin-v13-support-card {
   display: flex;
   align-items: flex-start;

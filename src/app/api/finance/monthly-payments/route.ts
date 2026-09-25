@@ -62,43 +62,67 @@ export async function POST() {
     const admin = createAdminClient();
     const { data: instalments, error: instError } = await admin
       .from("fm_cost_submissions")
-      .select("id,code,status,claim_amount,currency,period_label,description,facility_id")
+      .select("id,code,status,claim_amount,currency,period_label,description,facility_id,submitted_at")
       .eq("organisation_id", organisationId)
       .eq("submission_kind", "contract_instalment")
-      .in("status", ["submitted", "queried"]);
+      .neq("status", "cancelled");
     if (instError) throw instError;
     // Client Payments are FM-wide: one with no facility shows in every authorised facility context; one with a facility
     // obeys facility scope.
-    const fmFee = (instalments ?? []).filter(
-      (s) => scopeAllowsFmWide(gate.access.fmFacilityScope, s.facility_id as string | null) && /Monthly Instalment Payment/i.test(String(s.description ?? "")) && /Facility Management and Maintenance Works/i.test(String(s.description ?? "")) && s.period_label
+    const scoped = (instalments ?? []).filter((s) => scopeAllowsFmWide(gate.access.fmFacilityScope, s.facility_id as string | null));
+    const fmFee = scoped.filter(
+      (s) => ["submitted", "queried"].includes(String(s.status)) && /Monthly Instalment Payment/i.test(String(s.description ?? "")) && /Facility Management and Maintenance Works/i.test(String(s.description ?? "")) && s.period_label
     );
-    const receivedById = new Map<string, number>();
-    if (fmFee.length) {
-      const { data: receipts, error: rcptError } = await admin
+    // Receipts stay separate events on the Client Payment; here they are only summed for the position.
+    const receipts = new Map<string, { received: number; count: number; last?: string }>();
+    if (scoped.length) {
+      const { data: rows, error: rcptError } = await admin
         .from("fm_reimbursement_payments")
-        .select("submission_id,received_amount")
+        .select("submission_id,received_amount,received_at")
         .eq("organisation_id", organisationId)
-        .in("submission_id", fmFee.map((s) => String(s.id)));
+        .in("submission_id", scoped.map((s) => String(s.id)));
       if (rcptError) throw rcptError;
-      for (const r of receipts ?? []) {
-        receivedById.set(String(r.submission_id), (receivedById.get(String(r.submission_id)) ?? 0) + Number(r.received_amount));
+      for (const r of rows ?? []) {
+        const key = String(r.submission_id);
+        const cur = receipts.get(key) ?? { received: 0, count: 0 };
+        const at = r.received_at ? String(r.received_at) : undefined;
+        receipts.set(key, { received: cur.received + Number(r.received_amount), count: cur.count + 1, last: at && (!cur.last || at > cur.last) ? at : cur.last });
       }
     }
+    const livePosition = (s: (typeof scoped)[number]) => {
+      const requested = Number(s.claim_amount ?? 0);
+      const r = receipts.get(String(s.id));
+      const received = r?.received ?? 0;
+      const outstandingAmount = Math.max(0, Math.round((requested - received) * 100) / 100);
+      const state = received <= 0 ? "awaiting_receipt" : outstandingAmount > 0 ? "partially_received" : "received";
+      return {
+        code: String(s.code), state, outstandingAmount, currency: String(s.currency),
+        requestedAmount: requested, receivedAmount: received, receiptCount: r?.count ?? 0,
+        lastReceiptAt: r?.last, submittedAt: s.submitted_at ? String(s.submitted_at) : undefined,
+      } as const;
+    };
     const byPeriod = new Map<string, typeof fmFee>();
     for (const s of fmFee) byPeriod.set(String(s.period_label), [...(byPeriod.get(String(s.period_label)) ?? []), s]);
+    const linked = new Set<string>();
     const clientPaymentFor = (month: string | undefined) => {
       const matches = month ? byPeriod.get(month) ?? [] : [];
       if (matches.length !== 1) return undefined; // none, or ambiguous — never guess which applies
-      const s = matches[0]!;
-      const requested = Number(s.claim_amount ?? 0);
-      const received = receivedById.get(String(s.id)) ?? 0;
-      const outstandingAmount = Math.max(0, Math.round((requested - received) * 100) / 100);
-      const state = received <= 0 ? "awaiting_receipt" : outstandingAmount > 0 ? "partially_received" : "received";
-      return { code: String(s.code), state, outstandingAmount, currency: String(s.currency) } as const;
+      linked.add(String(matches[0]!.id));
+      return livePosition(matches[0]!);
     };
     const data = monthly.map((row) => ({ ...row, clientPayment: clientPaymentFor(row.month) }));
+    // Live contract instalment requests that no monthly entry corresponds to (another contract, another period,
+    // or a draft) — still part of the Contract Payments register, as their own rows. Never matched by guesswork.
+    const unlinked = scoped
+      .filter((s) => !linked.has(String(s.id)))
+      .map((s) => ({
+        ...livePosition(s),
+        period: s.period_label ? String(s.period_label) : undefined,
+        description: s.description ? String(s.description) : undefined,
+        status: String(s.status),
+      }));
 
-    return NextResponse.json({ success: true, data }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ success: true, data, unlinked }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("[finance/monthly-payments]", error);
     return NextResponse.json({ success: false, message: "Unable to load monthly contract payments.", data: [] }, { status: 500 });

@@ -180,5 +180,28 @@ check("8 Costs overview: plain hero, amount-only Pending Payments KPI, collapsib
   assert(/aria-expanded=\{costsClaimsOpen\}/.test(compass) && /: inCostsClaims;/.test(compass) && /\{costsClaimsOpen \? \(\s*<Suspense/.test(compass), "Costs & Claims group toggles and opens on its routes");
 });
 
+check("9 Contract Payments: one lifecycle view (requested / received / outstanding) over existing records; no generic filters", () => {
+  const subs = code("src/modules/finance/components/SubmissionsPage.tsx");
+  assert(/if \(kind === "contract_instalment"\) return <ContractPaymentsPage \/>/.test(subs), "Contract Payments area renders the contract view, not the generic register");
+  assert(!/View recorded monthly contract receipts|Record contract instalment/.test(subs), "no separate receipts link; no mislabelled action");
+  const page = code("src/modules/finance/components/MonthlyContractPaymentsPage.tsx");
+  assert(/Track contract instalments requested, received and outstanding\./.test(page) && /"Requested"/.test(page) && /"Received"/.test(page) && /"Outstanding"/.test(page), "position summary");
+  assert(!/KIND_TABS|Payment requests|Reimbursement claims/.test(page), "no generic submission filters on the contract page");
+  assert(/Raise contract instalment request/.test(page) && /client-payments\/new\?kind=contract_instalment/.test(page), "the action names what it does: raises a request");
+  assert(/usedCodes/.test(page) && /\/finance\/submissions\/\$\{encodeURIComponent\(cp\.code\)\}/.test(page), "a live request is counted once and opens its own lifecycle (follow-ups, receipts)");
+  const api = code("src/app/api/finance/monthly-payments/route.ts");
+  assert(/fm_reimbursement_payments/.test(api) && !/\.(insert|update|upsert|delete)\(/.test(api), "receipts read, never written or merged");
+  assert(/matches\.length !== 1\) return undefined/.test(api), "no guessed receipt relationship");
+});
+
+check("10 Diesel Usage: one chronological register across facilities; facility filter by authorised name", () => {
+  assert(/DEFAULT_DIESEL_USAGE_SORT: DieselUsageSort = "date_desc"/.test(code("src/modules/diesel-usage/constants.ts")), "newest DATE first by default");
+  const repo = code("src/modules/operational-logs/server/FmLogRepository.ts");
+  assert(/sort === "date_desc"\) query = query\.order\("log_date", \{ ascending: false \}\)\.order\("created_at"/.test(repo), "date first, deterministic tie-break — never facility");
+  const toolbar = code("src/modules/diesel-usage/components/DieselUsageToolbar.tsx");
+  assert(/authorisedFacilities/.test(toolbar) && /All facilities/.test(toolbar) && /\{facility\.name\}/.test(toolbar) && !/Facility ID|FAC-0001/.test(toolbar), "facility filter lists authorised names, never raw ids");
+  assert(/useFacilityName/.test(code("src/modules/diesel-usage/components/DieselUsageTable.tsx")), "register shows facility names");
+});
+
 console.log(failures ? `\n${failures} check(s) failed` : "\nAll FM visual/workflow cleanup checks passed");
 process.exit(failures ? 1 : 0);

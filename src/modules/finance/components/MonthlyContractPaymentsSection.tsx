@@ -47,7 +47,7 @@ export function MonthlyContractPaymentsSection() {
         <div>
           <h2 className="fin-v13-section-title">Monthly contract payments</h2>
         </div>
-        <Link href="/finance/monthly-payments" className="fin-v13-text-action">
+        <Link href="/finance/submissions?kind=contract_instalment" className="fin-v13-text-action">
           View all →
         </Link>
       </div>

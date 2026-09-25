@@ -60,9 +60,9 @@ export function MonthlyContractPaymentDetailPage({ slug }: { slug: string }) {
           icon={CalendarClock}
           title="Unable to load monthly contract payment"
           description={error ?? "This monthly contract payment could not be found."}
-          actionLabel="Back to monthly contract payments"
+          actionLabel="Back to Contract Payments"
           onAction={() => {
-            window.location.href = "/finance/monthly-payments";
+            window.location.href = "/finance/submissions?kind=contract_instalment";
           }}
         />
       </ModeFrame>
@@ -76,10 +76,10 @@ export function MonthlyContractPaymentDetailPage({ slug }: { slug: string }) {
       <CostsClaimsNav />
       <div className="mb-4">
         <Link
-          href="/finance/monthly-payments"
+          href="/finance/submissions?kind=contract_instalment"
           className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
         >
-          <ArrowLeft className="h-4 w-4" /> Back to monthly contract payments
+          <ArrowLeft className="h-4 w-4" /> Back to Contract Payments
         </Link>
       </div>
       <OperateHeader

@@ -16,15 +16,38 @@ export type MonthlyContractPayment = {
   paymentDatetime?: string;
   commercialReference?: string;
   /** Live FM Client Payment (contract instalment) for this month, when one exists — receipt state is derived. */
-  clientPayment?: {
-    code: string;
-    state: "awaiting_receipt" | "partially_received" | "received";
-    outstandingAmount: number;
-    currency: string;
-  };
+  clientPayment?: ContractInstalmentPosition;
+};
+
+/** Position of one live contract instalment request (FM Client Payment); receipts remain separate events on it. */
+export type ContractInstalmentPosition = {
+  code: string;
+  state: "awaiting_receipt" | "partially_received" | "received";
+  outstandingAmount: number;
+  currency: string;
+  requestedAmount?: number;
+  receivedAmount?: number;
+  receiptCount?: number;
+  lastReceiptAt?: string;
+  submittedAt?: string;
+};
+
+/** A live contract instalment request no monthly entry corresponds to (e.g. another contract or period). */
+export type UnlinkedContractInstalment = ContractInstalmentPosition & {
+  period?: string;
+  description?: string;
+  status: string;
 };
 
 export const MonthlyPaymentsService = {
+  /** The complete Contract Payments register: monthly entries (with their live request) + unlinked live requests. */
+  async register(): Promise<{ monthly: MonthlyContractPayment[]; unlinked: UnlinkedContractInstalment[] }> {
+    const response = await fetch("/api/finance/monthly-payments", { method: "POST", credentials: "same-origin" });
+    const json = (await response.json()) as { success: boolean; data?: MonthlyContractPayment[]; unlinked?: UnlinkedContractInstalment[]; message?: string };
+    if (!response.ok || !json.success) throw new Error(json.message || "Unable to load contract payments.");
+    return { monthly: json.data ?? [], unlinked: json.unlinked ?? [] };
+  },
+
   async list(): Promise<MonthlyContractPayment[]> {
     const response = await fetch("/api/finance/monthly-payments", { method: "POST", credentials: "same-origin" });
     const json = (await response.json()) as { success: boolean; data?: MonthlyContractPayment[]; message?: string };

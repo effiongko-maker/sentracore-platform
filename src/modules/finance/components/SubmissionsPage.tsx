@@ -17,6 +17,7 @@ import {
   SUBMISSION_LIFECYCLE_LABELS,
 } from "../utils/submissionLifecycle";
 import { useOperatingAccess } from "@/hooks/useOperatingAccess";
+import { ContractPaymentsPage } from "./MonthlyContractPaymentsPage";
 
 function formatTimestamp(iso?: string): string {
   if (!iso) return "—";
@@ -36,8 +37,18 @@ const KIND_TABS: Array<{ id: ClientPaymentKind | "all"; label: string }> = [
   { id: "reimbursement_claim", label: "Reimbursement claims" },
 ];
 
-/** FM Pending Payments register. `?kind=reimbursement_claim` is the direct Reimbursement claims view. */
+/**
+ * FM Pending Payments register. `?kind=reimbursement_claim` is the direct Reimbursement claims view;
+ * `?kind=contract_instalment` is Contract Payments — the contract-specific lifecycle view (requested, received,
+ * outstanding) composed from the same records, with no generic submission filters.
+ */
 export function SubmissionsPage() {
+  const kind = useSearchParams().get("kind");
+  if (kind === "contract_instalment") return <ContractPaymentsPage />;
+  return <PaymentsRegister />;
+}
+
+function PaymentsRegister() {
   const [includeHistory, setIncludeHistory] = useState(false);
   const [page, setPage] = useState(1);
   const searchParams = useSearchParams();
@@ -134,11 +145,10 @@ export function SubmissionsPage() {
           </Link>
         </div>
 
-        {kind === "contract_instalment" ? <Link className="fin-v13-text-action mb-3 inline-block" href="/finance/monthly-payments">View recorded monthly contract receipts →</Link> : null}
         <label className="mb-3 flex items-center gap-2 text-sm text-muted"><input type="checkbox" checked={includeHistory} onChange={(e) => { setIncludeHistory(e.target.checked); setPage(1); }} />Include 2025 history</label>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <OperateHeader
-            title={claimsOnly ? "Reimbursements" : kind === "contract_instalment" ? "Contract Payments" : "Pending Payments"}
+            title={claimsOnly ? "Reimbursements" : "Pending Payments"}
             description={
               claimsOnly
                 ? "Prepare and track reimbursement claims from operational costs."
@@ -148,8 +158,8 @@ export function SubmissionsPage() {
             signalLabel={claimsOnly ? "Claims" : "Requests"}
           />
           {canCreateClaim && !claimsOnly ? (
-            <Link className="fin-v13-btn-primary" href={`/finance/client-payments/new?kind=${kind === "contract_instalment" ? "contract_instalment" : "payment_request"}`}>
-              <Plus className="h-4 w-4" /> {kind === "contract_instalment" ? "Record contract instalment" : "Raise payment request"}
+            <Link className="fin-v13-btn-primary" href="/finance/client-payments/new?kind=payment_request">
+              <Plus className="h-4 w-4" /> Raise payment request
             </Link>
           ) : null}
           {canCreateClaim && claimsOnly ? (

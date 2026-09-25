@@ -15,6 +15,7 @@ import {
   DIESEL_USAGE_SORT_OPTIONS,
 } from "../constants";
 import type { DieselUsageSort } from "../types";
+import { useOperatingAccess } from "@/hooks/useOperatingAccess";
 
 interface DieselUsageToolbarProps {
   search: string;
@@ -70,6 +71,13 @@ export function DieselUsageToolbar({
   canCreate = true,
 }: DieselUsageToolbarProps) {
   const [filterOpen, setFilterOpen] = useState(false);
+  // Facility filter: the actor's AUTHORISED facilities by name; the value sent is the facility id (never shown).
+  const { access } = useOperatingAccess();
+  const facilityOptions = useMemo(
+    () => [...(access?.authorisedFacilities ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
+    [access?.authorisedFacilities]
+  );
+  const facilityName = facilityOptions.find((f) => f.id === facilityId)?.name ?? "Selected facility";
 
   const activeFilterCount = countActiveFilters({
     facilityId,
@@ -92,7 +100,7 @@ export function DieselUsageToolbar({
     if (facilityId.trim()) {
       next.push({
         id: "facilityId",
-        label: facilityId.trim(),
+        label: facilityName,
         onRemove: () => onFacilityIdChange(""),
       });
     }
@@ -122,6 +130,7 @@ export function DieselUsageToolbar({
     hasSearch,
     search,
     facilityId,
+    facilityName,
     generatorId,
     dateFrom,
     dateTo,
@@ -144,7 +153,7 @@ export function DieselUsageToolbar({
       <OperationalListToolbar
         search={search}
         onSearchChange={onSearchChange}
-        searchPlaceholder="Search by facility, generator, or entry ID…"
+        searchPlaceholder="Search by generator or entry ID…"
         filterOpen={filterOpen}
         onFilterOpenChange={setFilterOpen}
         activeFilterCount={activeFilterCount}
@@ -170,14 +179,20 @@ export function DieselUsageToolbar({
         filterPanel={
           <>
             <div className="op-filter-field">
-              <label htmlFor="diesel-usage-filter-facility">Facility ID</label>
-              <input
+              <label htmlFor="diesel-usage-filter-facility">Facility</label>
+              <select
                 id="diesel-usage-filter-facility"
                 className="op-filter-select"
                 value={facilityId}
                 onChange={(event) => onFacilityIdChange(event.target.value)}
-                placeholder="e.g. FAC-0001"
-              />
+              >
+                <option value="">All facilities</option>
+                {facilityOptions.map((facility) => (
+                  <option key={facility.id} value={facility.id}>
+                    {facility.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="op-filter-field">
               <label htmlFor="diesel-usage-filter-generator">Generator ID</label>

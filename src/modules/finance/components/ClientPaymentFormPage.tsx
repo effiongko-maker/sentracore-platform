@@ -116,7 +116,7 @@ export function ClientPaymentFormPage({ initialKind, workOrderId }: { initialKin
           </Link>
         </div>
         <OperateHeader
-          title={kind === "payment_request" ? "Raise payment request" : "Record contract instalment"}
+          title={kind === "payment_request" ? "Raise payment request" : "Raise contract instalment request"}
           description="Record the request, supporting documents and current processing position. Follow-ups and receipts remain separate recorded events."
         />
         <StreamSurface className="mt-4">
@@ -187,7 +187,7 @@ export function ClientPaymentFormPage({ initialKind, workOrderId }: { initialKin
               {error ? <div className="fin-submission-error" role="alert">{error}</div> : null}
               <div className="flex flex-wrap gap-3 md:col-span-2">
                 <Button type="button" onClick={() => void submit()} disabled={saving}>
-                  {saving ? "Recording…" : kind === "payment_request" ? "Record payment request" : "Record contract instalment"}
+                  {saving ? "Recording…" : kind === "payment_request" ? "Record payment request" : "Raise instalment request"}
                 </Button>
                 <Link href="/finance/submissions/new" className="fin-v13-text-action self-center">
                   Recovering recorded costs? Create a reimbursement claim →
