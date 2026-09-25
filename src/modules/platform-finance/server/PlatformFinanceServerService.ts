@@ -55,6 +55,7 @@ import type { FinanceBalanceSheetResult } from "@/modules/platform-finance/domai
 import { PlatformFinanceRequestsRepository } from "@/modules/platform-finance/server/PlatformFinanceRequestsRepository";
 import { PlatformFinanceVendorBillsRepository } from "@/modules/platform-finance/server/PlatformFinanceVendorBillsRepository";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { journalSourceDescriptor } from "@/modules/platform-finance/domain/accountingReview";
 import { financePeriodLabel } from "@/modules/platform-finance/domain/periods";
 
 function roundMoney2(value: number): number {
@@ -1067,22 +1068,54 @@ export class PlatformFinanceServerService {
       transaction?.createdByProfileId,
     ].filter(Boolean) as string[];
     const names = await this.repo.getProfilesByIds(profileIds);
+    // Provenance by source_type (never transaction_type): a label and a link to the originating record.
     let sourceLabel: string | null = null;
     let sourceHref: string | null = null;
-    if (transaction?.sourceType === "payment" && transaction.sourceId) {
+    let payableId: string | null = null;
+    const sourceType = transaction?.sourceType ?? null;
+    const sourceId = transaction?.sourceId ?? null;
+    if (sourceType === "payment" && sourceId) {
       const { data: payment } = await createAdminClient()
         .from("finance_payments")
         .select("id,payable_id")
         .eq("organisation_id", this.organisationId)
         .eq("company_id", entry.companyId)
-        .eq("id", transaction.sourceId)
+        .eq("id", sourceId)
         .maybeSingle();
       if (payment) {
+        payableId = payment.payable_id as string;
         sourceLabel = `Payment ${String(payment.id).slice(0, 8).toUpperCase()}`;
-        sourceHref = `/platform-finance/payables/${payment.payable_id}`;
       }
+    } else if (sourceType === "vendor_bill" && sourceId) {
+      const { data: bill } = await createAdminClient()
+        .from("finance_vendor_bills")
+        .select("payee_name,invoice_reference")
+        .eq("organisation_id", this.organisationId)
+        .eq("id", sourceId)
+        .maybeSingle();
+      if (bill) sourceLabel = `${bill.payee_name as string}${bill.invoice_reference ? ` · ${bill.invoice_reference as string}` : ""}`;
+    } else if (sourceType === "invoice" && sourceId) {
+      const { data: invoice } = await createAdminClient()
+        .from("finance_invoices")
+        .select("reference")
+        .eq("organisation_id", this.organisationId)
+        .eq("id", sourceId)
+        .maybeSingle();
+      if (invoice) sourceLabel = `Invoice ${invoice.reference as string}`;
+    } else if (sourceType === "receipt" && sourceId) {
+      const { data: receipt } = await createAdminClient()
+        .from("finance_receipts")
+        .select("reference")
+        .eq("organisation_id", this.organisationId)
+        .eq("id", sourceId)
+        .maybeSingle();
+      if (receipt) sourceLabel = `Receipt ${receipt.reference as string}`;
     }
-
+    const descriptor = journalSourceDescriptor({ sourceType, sourceId, payableId });
+    if (sourceId || sourceType === "financial_account_opening_position") {
+      sourceHref = descriptor.href;
+      sourceLabel = sourceLabel ?? descriptor.label;
+    }
     const totalDebit = linesWithAccounts.reduce(
       (s, row) => s + row.line.debit,
       0
@@ -1101,8 +1134,10 @@ export class PlatformFinanceServerService {
       journalNo: entry.reference,
       description: entry.description,
       status: entry.status,
-      sourceType: (transaction?.transactionType ??
-        null) as FinanceJournalDetail["sourceType"],
+      transactionType: (transaction?.transactionType ??
+        null) as FinanceJournalDetail["transactionType"],
+      sourceType,
+      sourceTypeLabel: descriptor.label,
       reference: entry.reference,
       transactionId: entry.transactionId,
       transactionReference: transaction?.reference ?? entry.reference,

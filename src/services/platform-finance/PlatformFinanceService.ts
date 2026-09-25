@@ -402,7 +402,9 @@ export const PlatformFinanceService = {
     journalNo: string;
     description: string;
     status: string;
+    transactionType: string | null;
     sourceType: string | null;
+    sourceTypeLabel: string;
     reference: string;
     transactionId: string;
     transactionReference: string;

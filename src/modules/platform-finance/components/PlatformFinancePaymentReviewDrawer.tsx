@@ -39,7 +39,10 @@ export function PlatformFinancePaymentReviewDrawer(props: {
       setAccounts(
         list.filter(
           (account) =>
-            account.status === "active" && account.id !== next.creditAccount.id
+            account.status === "active" &&
+            account.id !== next.creditAccount.id &&
+            // Trade Payables is debited only by settling a recognised supplier bill.
+            !(account.code === "2000" && account.accountType === "liability")
         )
       );
       setDebitId(next.debitAccount?.id ?? "");
@@ -62,12 +65,16 @@ export function PlatformFinancePaymentReviewDrawer(props: {
 
   const selected = useMemo(() => accounts.find((a) => a.id === debitId) ?? null, [accounts, debitId]);
 
+  const settles = review?.treatment === "accrued_settlement";
+
   async function post() {
-    if (!debitId || !review) return;
+    if (!review || (!settles && !debitId)) return;
     if (!window.confirm(`Post ${money(review.payment.amount, review.payment.currency)} to the ledger? This cannot be undone.`)) return;
     setBusy(true); setError(null);
     try {
-      const next = await PlatformFinancePaymentsService.postPaymentAccounting(props.paymentId, debitId);
+      const next = settles
+        ? await PlatformFinancePaymentsService.settlePaymentAccounting(props.paymentId)
+        : await PlatformFinancePaymentsService.postPaymentAccounting(props.paymentId, debitId);
       setReview(next); props.onPosted?.();
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Unable to post accounting.";
@@ -91,13 +98,23 @@ export function PlatformFinancePaymentReviewDrawer(props: {
       {review ? <div className="pf-drawer-body">
         <section className="pf-rev-card"><h3>Payment lineage</h3><dl className="pf-req-dl"><div><dt>Payment status</dt><dd>Confirmed</dd></div><div><dt>Accounting status</dt><dd>{review.status === "posted" ? "Posted" : review.blockingReason ? "Blocked" : "Awaiting accounting"}</dd></div><div><dt>Payment</dt><dd>{review.payment.id}</dd></div><div><dt>Originating Payable</dt><dd><Link href={`/platform-finance/payables/${review.payable.id}`}>{review.payable.payeeName}</Link></dd></div><div><dt>Payable source</dt><dd><Link href={review.payable.sourceType === "vendor_bill" ? `/platform-finance/vendor-bills/${review.payable.sourceId}` : `/platform-finance/requests/${review.payable.sourceId}`}>{review.payable.sourceType === "vendor_bill" ? "Vendor Bill" : "Financial Request"}</Link></dd></div><div><dt>Company</dt><dd>{review.companyName}</dd></div><div><dt>Amount</dt><dd>{money(review.payment.amount, review.payment.currency)}</dd></div><div><dt>Payment date</dt><dd>{review.payment.paymentDate}</dd></div><div><dt>Source account</dt><dd>{sourceAccountLabel(review.payment.sourceFinancialAccount)}</dd></div>{review.payment.externalReference ? <div><dt>External reference</dt><dd>{review.payment.externalReference}</dd></div> : null}</dl></section>
         <section className="pf-rev-card"><h3>Accounting treatment</h3>
-          <p className="pf-payd-muted">Select the authoritative debit treatment. The credit is derived from the corporate source account’s configured control GL and cannot be overridden here.</p>
-          <label className="pf-field"><span>Debit account</span><select value={debitId} onChange={(e) => setDebitId(e.target.value)} disabled={review.status === "posted" || busy}><option value="">Select debit account…</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}</select></label>
-          <p><strong>{selected ? `${selected.code} — ${selected.name}` : "Debit account not selected"}</strong><br />{money(review.payment.amount, review.payment.currency)} DR</p>
+          {settles ? (
+            <>
+              <p className="pf-payd-muted">This payment settles a supplier bill whose cost was recognised when the bill was reviewed and posted. It reduces Trade Accounts Payable; choosing an expense here would recognise the cost twice.</p>
+              <p className="pf-payd-muted">Supplier bill recognition: {review.supplierRecognition?.status === "posted" ? <>Posted{review.supplierRecognition.journalEntryId ? <> · <Link href={`/platform-finance/accounting/journal/${review.supplierRecognition.journalEntryId}`}>View Journal Entry</Link></> : null}</> : <>Not yet posted · <Link href={`/platform-finance/vendor-bills/${review.payable.sourceId}`}>Open supplier bill</Link></>}</p>
+              <p><strong>{review.debitAccount ? `${review.debitAccount.code} — ${review.debitAccount.name}` : "Trade Accounts Payable unavailable"}</strong> <span className="pf-payd-muted">System-derived</span><br />{money(review.payment.amount, review.payment.currency)} DR</p>
+            </>
+          ) : (
+            <>
+              <p className="pf-payd-muted">This payment does not settle a recognised supplier bill. Select the authoritative debit treatment. The credit is derived from the corporate source account’s configured control GL and cannot be overridden here.</p>
+              <label className="pf-field"><span>Debit account</span><select value={debitId} onChange={(e) => setDebitId(e.target.value)} disabled={review.status === "posted" || busy}><option value="">Select debit account…</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}</select></label>
+              <p><strong>{selected ? `${selected.code} — ${selected.name}` : "Debit account not selected"}</strong><br />{money(review.payment.amount, review.payment.currency)} DR</p>
+            </>
+          )}
           <p><strong>{review.creditAccount.code} — {review.creditAccount.name}</strong> <span className="pf-payd-muted">System-derived</span><br />{money(review.payment.amount, review.payment.currency)} CR</p>
-          {review.period ? <p className="pf-payd-muted">Accounting period: {review.period.year}-{String(review.period.month).padStart(2, "0")} · Open</p> : <div className="pf-vb-alert is-danger" role="status">Accounting status: Blocked. {review.blockingReason ?? "No open accounting period covers the payment date."} <Link href="/platform-finance/accounting/periods">Manage periods</Link></div>}
+          {review.status !== "posted" && review.blockingReason ? <div className="pf-vb-alert is-danger" role="status">Accounting status: Blocked. {review.blockingReason}{/period/i.test(review.blockingReason) ? <> <Link href="/platform-finance/accounting/periods">Manage periods</Link></> : null}</div> : review.period ? <p className="pf-payd-muted">Accounting period: {review.period.year}-{String(review.period.month).padStart(2, "0")} · Open</p> : null}
         </section>
-        {review.status === "posted" && review.journalEntryId ? <div className="pf-vb-alert is-success" role="status">Accounting status: Posted. <Link href={`/platform-finance/accounting/journal/${review.journalEntryId}`}>View authoritative Journal Entry</Link></div> : <button type="button" className="pf-btn is-primary" disabled={!debitId || !review.period || busy} onClick={() => void post()}>{busy ? "Posting…" : "Review & Post"}</button>}
+        {review.status === "posted" && review.journalEntryId ? <div className="pf-vb-alert is-success" role="status">Accounting status: Posted. <Link href={`/platform-finance/accounting/journal/${review.journalEntryId}`}>View authoritative Journal Entry</Link></div> : <button type="button" className="pf-btn is-primary" disabled={(!settles && !debitId) || !review.period || Boolean(review.blockingReason) || busy} onClick={() => void post()}>{busy ? "Posting…" : "Review & Post"}</button>}
       </div> : null}
     </section>
   </div>;

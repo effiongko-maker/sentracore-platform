@@ -100,4 +100,9 @@ export const PlatformFinancePaymentsService = {
   postPaymentAccounting(paymentId: string, debitAccountId: string): Promise<PaymentAccountingReview> {
     return postAction("postPaymentAccounting", { input: { paymentId, debitAccountId } });
   },
+
+  /** Payment settling a recognised supplier bill: Dr 2000 / Cr source control GL (no debit choice). */
+  settlePaymentAccounting(paymentId: string): Promise<PaymentAccountingReview> {
+    return postAction("settlePaymentAccounting", { input: { paymentId } });
+  },
 };

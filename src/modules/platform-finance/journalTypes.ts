@@ -75,7 +75,11 @@ export type FinanceJournalDetail = {
   journalNo: string;
   description: string;
   status: FinanceJournalEntryStatus;
-  sourceType: FinanceTransactionType | null;
+  /** Economic classification of the transaction (finance_transactions.transaction_type) — not its origin. */
+  transactionType: FinanceTransactionType | null;
+  /** Where the journal came from (finance_transactions.source_type), e.g. vendor_bill, payment, invoice. */
+  sourceType: string | null;
+  sourceTypeLabel: string;
   reference: string;
   transactionId: string;
   transactionReference: string;

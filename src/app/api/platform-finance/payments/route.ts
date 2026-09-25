@@ -24,7 +24,8 @@ type PaymentApiAction =
   | "revealPayableDestination"
   | "listPaymentAccountingWork"
   | "getPaymentAccountingReview"
-  | "postPaymentAccounting";
+  | "postPaymentAccounting"
+  | "settlePaymentAccounting";
 
 type RequestBody = {
   action?: PaymentApiAction;
@@ -272,6 +273,14 @@ export async function POST(request: Request) {
         ? await service.post(actorFrom(preliminary), paymentId, requireUuid(body.input?.debitAccountId, "debitAccountId"))
         : await service.getOrCreateReview(actorFrom(preliminary), paymentId);
       return NextResponse.json({ success: true, data });
+    }
+
+    if (action === "settlePaymentAccounting") {
+      // Payment settling a recognised supplier bill: Dr 2000 / Cr source control GL — no debit is chosen.
+      const paymentId = requireUuid(body.input?.paymentId, "paymentId");
+      const preliminary = await requirePlatformFinanceAccessAny({ capabilities: [PLATFORM_FINANCE_CAPABILITIES.post] });
+      const service = new PlatformFinancePaymentAccountingServerService(preliminary.organisationId);
+      return NextResponse.json({ success: true, data: await service.settle(actorFrom(preliminary), paymentId) });
     }
 
     return NextResponse.json(

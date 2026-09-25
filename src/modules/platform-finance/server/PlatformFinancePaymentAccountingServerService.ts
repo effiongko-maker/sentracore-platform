@@ -1,10 +1,12 @@
 import { ActionError } from "@/lib/actions/errors";
 import {
   paymentAccountingBlockingReason,
+  paymentAccountingTreatment,
   paymentPeriodBlockingReason,
   type PaymentAccountingReview,
   type PaymentAccountingWorkItem,
 } from "@/modules/platform-finance/domain/paymentAccounting";
+import { AP_CONTROL_CODE, SUPPLIER_PAYMENT_AWAITING_RECOGNITION_REASON } from "@/modules/platform-finance/domain/accountingReview";
 import type { FinanceAccount, FinancePeriod } from "@/modules/platform-finance/types";
 import { PlatformFinanceRepository } from "./PlatformFinanceRepository";
 import { PlatformFinanceServerService } from "./PlatformFinanceServerService";
@@ -43,7 +45,7 @@ export class PlatformFinancePaymentAccountingServerService {
       { data: sourceAccounts, error: sourceError },
     ] = await Promise.all([
       admin.from("finance_transactions").select("id,source_id,status,journal_entry_id").eq("organisation_id", this.organisationId).eq("source_type", "payment").in("source_id", paymentIds),
-      admin.from("finance_payables").select("id,payee_name").eq("organisation_id", this.organisationId).in("id", (payments ?? []).map((p) => p.payable_id as string)),
+      admin.from("finance_payables").select("id,payee_name,source_type,source_id").eq("organisation_id", this.organisationId).in("id", (payments ?? []).map((p) => p.payable_id as string)),
       admin.from("finance_periods").select("company_id,start_date,end_date,status").eq("organisation_id", this.organisationId).in("company_id", companyIds),
       admin.from("finance_financial_accounts").select("id,status,company_id,currency,control_gl_account_id").eq("organisation_id", this.organisationId).in("id", sourceAccountIds),
     ]);
@@ -61,6 +63,14 @@ export class PlatformFinancePaymentAccountingServerService {
     if (controlError) throw new ActionError("INTERNAL_ERROR", "Unable to load payment accounting work.");
     const ftByPayment = new Map((fts ?? []).map((ft) => [ft.source_id as string, ft]));
     const payeeById = new Map((payables ?? []).map((p) => [p.id as string, p.payee_name as string]));
+    const payableById = new Map((payables ?? []).map((p) => [p.id as string, p]));
+    // Supplier-bill recognition state for payments that settle an accrued liability (authoritative FT lookup).
+    const billIds = (payables ?? []).filter((p) => p.source_type === "vendor_bill").map((p) => p.source_id as string);
+    const { data: recognitions, error: recognitionError } = billIds.length
+      ? await admin.from("finance_transactions").select("source_id,status,journal_entry_id").eq("organisation_id", this.organisationId).eq("source_type", "vendor_bill").in("source_id", billIds)
+      : { data: [], error: null };
+    if (recognitionError) throw new ActionError("INTERNAL_ERROR", "Unable to load payment accounting work.");
+    const recognisedBills = new Set((recognitions ?? []).filter((r) => r.status === "posted" && r.journal_entry_id).map((r) => r.source_id as string));
     const sourceById = new Map((sourceAccounts ?? []).map((a) => [a.id as string, a]));
     const controlById = new Map((controlAccounts ?? []).map((a) => [a.id as string, a]));
     const periodRows = (periods ?? []).map((row) => ({
@@ -76,6 +86,11 @@ export class PlatformFinancePaymentAccountingServerService {
       const posted = ft?.status === "posted" && Boolean(ft.journal_entry_id);
       const source = sourceById.get(p.source_financial_account_id as string);
       const control = source ? controlById.get(source.control_gl_account_id as string) : undefined;
+      const payable = payableById.get(p.payable_id as string);
+      const payableSourceType = (payable?.source_type as string | undefined) ?? "unknown";
+      const payableSourceId = (payable?.source_id as string | undefined) ?? "";
+      const treatment = paymentAccountingTreatment(payableSourceType);
+      const awaitingRecognition = treatment === "accrued_settlement" && !recognisedBills.has(payableSourceId);
       return {
         paymentId: p.id as string, payableId: p.payable_id as string,
         companyId: p.company_id as string, payeeName: payeeById.get(p.payable_id as string) ?? "Payee",
@@ -83,7 +98,9 @@ export class PlatformFinancePaymentAccountingServerService {
         accountingStatus: posted ? "posted" : ft ? "draft" : "pending",
         blockingReason: posted
           ? null
-          : paymentAccountingBlockingReason({
+          : awaitingRecognition
+            ? SUPPLIER_PAYMENT_AWAITING_RECOGNITION_REASON
+            : paymentAccountingBlockingReason({
               companyId: p.company_id as string,
               currency: p.currency as string,
               paymentDate: p.payment_date as string,
@@ -97,6 +114,10 @@ export class PlatformFinancePaymentAccountingServerService {
             }),
         transactionId: (ft?.id as string | undefined) ?? null,
         journalEntryId: posted ? ((ft?.journal_entry_id as string | null | undefined) ?? null) : null,
+        treatment,
+        payableSourceType,
+        payableSourceId,
+        sourceControlAccountId: (source?.control_gl_account_id as string | undefined) ?? null,
       };
     });
   }
@@ -122,6 +143,10 @@ export class PlatformFinancePaymentAccountingServerService {
     await this.assertCapability(actor, "createTransaction");
     const review = await this.getReview(actor, paymentId);
     if (review.transaction.status === "posted") return review;
+    if (review.treatment === "accrued_settlement") {
+      // The liability is already recognised: choosing a debit here would recognise the expense twice.
+      throw new ActionError("VALIDATION_ERROR", "This payment settles a recognised supplier bill; its debit is Trade Accounts Payable and cannot be chosen.");
+    }
     if (!review.period) {
       // Explain WHY: no period at all, or a closed one. Never post, never change payment truth.
       const periods = await this.repo.listPeriods(review.transaction.companyId);
@@ -169,6 +194,29 @@ export class PlatformFinancePaymentAccountingServerService {
     return this.loadReview(actor, paymentId, review.transaction.id);
   }
 
+  /**
+   * Payment that settles a recognised supplier bill: Dr 2000 Trade Payables / Cr the source control GL.
+   * Lines are built and enforced by the database (finance_payment_accounting_settle_accrued); no debit is chosen.
+   */
+  async settle(actor: Actor, paymentId: string): Promise<PaymentAccountingReview> {
+    await this.assertCapability(actor, "post");
+    await this.assertCapability(actor, "createTransaction");
+    const review = await this.getReview(actor, paymentId);
+    if (review.treatment !== "accrued_settlement") {
+      throw new ActionError("VALIDATION_ERROR", "This payment does not settle a recognised supplier bill; review its debit instead.");
+    }
+    if (review.transaction.status === "posted") return review;
+    const { error } = await createAdminClient().rpc("finance_payment_accounting_settle_accrued", {
+      p_actor_profile_id: actor.profileId, p_payment_id: paymentId,
+    });
+    if (error) {
+      const latest = await this.getReview(actor, paymentId);
+      if (latest.transaction.status === "posted" && latest.journalEntryId) return latest;
+      throw new ActionError("VALIDATION_ERROR", error.message || "Unable to post payment accounting.");
+    }
+    return this.getReview(actor, paymentId);
+  }
+
   private async loadReview(actor: Actor, paymentId: string, transactionId: string): Promise<PaymentAccountingReview> {
     const admin = createAdminClient();
     const { data: payment, error } = await admin.from("finance_payments")
@@ -188,7 +236,22 @@ export class PlatformFinancePaymentAccountingServerService {
     const credit = this.requireValidControlAccount(
       await this.repo.getAccount(account.control_gl_account_id as string)
     );
-    const debitId = typeof transaction.metadata.debit_account_id === "string" ? transaction.metadata.debit_account_id : null;
+    const treatment = paymentAccountingTreatment(payable.source_type as string);
+    let supplierRecognition: PaymentAccountingReview["supplierRecognition"] = null;
+    if (treatment === "accrued_settlement") {
+      const { data: recognition } = await admin.from("finance_transactions").select("status,journal_entry_id")
+        .eq("organisation_id", this.organisationId)
+        .eq("source_type", "vendor_bill")
+        .eq("source_id", payable.source_id as string)
+        .maybeSingle();
+      supplierRecognition = recognition
+        ? { status: recognition.status === "posted" && recognition.journal_entry_id ? "posted" : "draft", journalEntryId: (recognition.journal_entry_id as string | null) ?? null }
+        : { status: "pending", journalEntryId: null };
+    }
+    // Accrued settlement: the debit is the recognised liability (2000), never a reviewer choice.
+    const debitId = treatment === "accrued_settlement"
+      ? ((await this.repo.getAccountByCode(AP_CONTROL_CODE))?.id ?? null)
+      : typeof transaction.metadata.debit_account_id === "string" ? transaction.metadata.debit_account_id : null;
     const debit = debitId ? await this.repo.getAccount(debitId) : null;
     const period = await this.accounting.findOpenPeriodForDate(transaction.companyId, transaction.transactionDate);
     const blockingReason =
@@ -199,6 +262,10 @@ export class PlatformFinancePaymentAccountingServerService {
             transaction.companyId,
             transaction.transactionDate
           );
+    const effectiveBlockingReason =
+      transaction.status !== "posted" && supplierRecognition && supplierRecognition.status !== "posted"
+        ? SUPPLIER_PAYMENT_AWAITING_RECOGNITION_REASON
+        : blockingReason;
     const [{ data: viewGrant }, { data: restrictedGrant }] = await Promise.all([
       admin.from("finance_capability_grants").select("id").eq("organisation_id", this.organisationId).eq("profile_id", actor.profileId).eq("capability", "platform_finance.financial_account.view").maybeSingle(),
       admin.from("finance_financial_account_access").select("id").eq("financial_account_id", account.id).eq("profile_id", actor.profileId).maybeSingle(),
@@ -208,8 +275,9 @@ export class PlatformFinancePaymentAccountingServerService {
       status: transaction.status === "posted" ? "posted" : "draft",
       payment: { id: payment.id as string, organisationId: payment.organisation_id as string, companyId: payment.company_id as string, payableId: payment.payable_id as string, amount: Number(payment.amount), currency: payment.currency as string, paymentDate: payment.payment_date as string, externalReference: payment.external_reference as string | null, status: "confirmed", recordedByProfileId: payment.recorded_by_profile_id as string, createdAt: payment.created_at as string, updatedAt: payment.updated_at as string, sourceFinancialAccount: canSeeSourceAccount ? { visibility: "visible", name: account.name as string, last4: account.account_number_last4 as string | null } : { visibility: "restricted", label: "Restricted corporate financial account" } },
       payable: { id: payable.id as string, payeeName: payable.payee_name as string, sourceType: payable.source_type as string, sourceId: payable.source_id as string },
+      treatment, supplierRecognition,
       companyName: (company?.name as string | undefined) ?? "Company", transaction, debitAccount: debit,
-      creditAccount: credit, period: period as FinancePeriod | null, blockingReason, journalEntryId: transaction.journalEntryId,
+      creditAccount: credit, period: period as FinancePeriod | null, blockingReason: effectiveBlockingReason, journalEntryId: transaction.journalEntryId,
     };
   }
 

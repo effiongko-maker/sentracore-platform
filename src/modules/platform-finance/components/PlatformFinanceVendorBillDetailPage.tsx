@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { FormField, inputClassName } from "@/components/forms/FormField";
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog";
+import { PlatformFinanceSupplierBillAccountingCard } from "@/modules/platform-finance/components/PlatformFinanceSupplierBillReviewDrawer";
 import {
   PlatformFinanceVendorBillsService,
   type FinanceVendorBillCapabilities,
@@ -700,6 +701,8 @@ export function PlatformFinanceVendorBillDetailPage() {
                   </Link>
                 </section>
               ) : null}
+
+              {detail.payable ? <PlatformFinanceSupplierBillAccountingCard vendorBillId={bill.id} /> : null}
 
               {bill.status === "rejected" ? (
                 <section className="pf-rev-card">

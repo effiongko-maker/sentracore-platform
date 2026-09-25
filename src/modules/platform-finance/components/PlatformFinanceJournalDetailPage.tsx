@@ -46,7 +46,7 @@ function formatDateTime(iso: string): string {
   });
 }
 
-function sourceTypeLabel(value: string | null): string {
+function transactionTypeLabel(value: string | null): string {
   if (!value) return "—";
   const known =
     PLATFORM_FINANCE_TRANSACTION_TYPE_LABELS[
@@ -160,10 +160,12 @@ export function PlatformFinanceJournalDetailPage() {
               <dd>{detail.periodLabel}</dd>
             </div>
             <div>
-              <dt>Source Type</dt>
-              <dd className="pf-journal-source">
-                {sourceTypeLabel(detail.sourceType)}
-              </dd>
+              <dt>Source</dt>
+              <dd className="pf-journal-source">{detail.sourceTypeLabel.toUpperCase()}</dd>
+            </div>
+            <div>
+              <dt>Transaction Type</dt>
+              <dd>{transactionTypeLabel(detail.transactionType)}</dd>
             </div>
             <div>
               <dt>Posting Date</dt>
@@ -191,7 +193,7 @@ export function PlatformFinanceJournalDetailPage() {
                 )}
               </dd>
             </div>
-            {detail.sourceId ? (
+            {detail.sourceId || detail.sourceHref ? (
               <div>
                 <dt>Source Record</dt>
                 <dd>

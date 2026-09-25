@@ -3,6 +3,19 @@ import type { FinancePayment } from "./payments";
 
 export type PaymentAccountingStatus = "pending" | "draft" | "posted";
 
+/**
+ * How a confirmed Payment is accounted for — derived from the authoritative Payable source, never guessed:
+ *   accrued_settlement  the Payable came from a Vendor Bill: the liability was recognised (Dr expense / Cr 2000)
+ *                       by supplier-bill Review & Post, so the payment settles it: Dr 2000 / Cr cash-bank control.
+ *   reviewer_debit      the Payable came from a Financial Request (no accrual exists): the reviewer chooses the
+ *                       debit, as before, except that Trade Payables (2000) cannot be chosen.
+ */
+export type PaymentAccountingTreatment = "accrued_settlement" | "reviewer_debit";
+
+export function paymentAccountingTreatment(payableSourceType: string): PaymentAccountingTreatment {
+  return payableSourceType === "vendor_bill" ? "accrued_settlement" : "reviewer_debit";
+}
+
 export type PaymentAccountingSourceFinancialAccount =
   | {
       visibility: "visible";
@@ -25,6 +38,9 @@ export type PaymentAccountingReview = {
   status: PaymentAccountingStatus;
   payment: PaymentAccountingPayment;
   payable: { id: string; payeeName: string; sourceType: string; sourceId: string };
+  treatment: PaymentAccountingTreatment;
+  /** For accrued_settlement: the supplier bill's recognition (its own accounting transaction). */
+  supplierRecognition: { status: PaymentAccountingStatus; journalEntryId: string | null } | null;
   companyName: string;
   transaction: FinanceTransaction;
   debitAccount: FinanceAccount | null;
@@ -48,6 +64,10 @@ export type PaymentAccountingWorkItem = {
   blockingReason: string | null;
   transactionId: string | null;
   journalEntryId: string | null;
+  treatment: PaymentAccountingTreatment;
+  payableSourceType: string;
+  payableSourceId: string;
+  sourceControlAccountId: string | null;
 };
 
 /**

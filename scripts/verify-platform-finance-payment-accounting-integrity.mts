@@ -149,7 +149,10 @@ async function main() {
     assert(/source_type, source_id/.test(mig) && /'payment', v_payment\.id/.test(mig), "G: the Finance Transaction is sourced from the Payment (existing source model)");
     assert(/payable_id/.test(svc) && /source_type,source_id/.test(svc), "G: the review carries Payment → Payable → Request/Vendor Bill");
     const server = src("src/modules/platform-finance/server/PlatformFinanceServerService.ts");
-    assert(/transaction\?\.sourceType === "payment" && transaction\.sourceId/.test(server) && /sourceHref = `\/platform-finance\/payables\//.test(server), "G: the Journal Entry detail links back to the Payment's Payable");
+    // Accounting Bridge Tranche 1 generalised provenance by source_type; a payment journal still resolves to its Payable.
+    assert(/sourceType === "payment" && sourceId/.test(server) && /payableId = payment\.payable_id/.test(server) && /journalSourceDescriptor\(\{ sourceType, sourceId, payableId \}\)/.test(server), "G: the Journal Entry detail resolves a payment's Payable");
+    const { journalSourceDescriptor } = await import("../src/modules/platform-finance/domain/accountingReview");
+    assert(journalSourceDescriptor({ sourceType: "payment", sourceId: "pay-1", payableId: "payable-1" }).href === "/platform-finance/payables/payable-1", "G: the Journal Entry detail links back to the Payment's Payable");
     assert(/journal_entry_id/.test(svc), "G: the Payment's accounting record holds its Journal Entry");
     const drawer = src("src/modules/platform-finance/components/PlatformFinancePaymentReviewDrawer.tsx");
     assert(/Originating Payable/.test(drawer) && /Payable source/.test(drawer) && /View authoritative Journal Entry/.test(drawer), "G: the accountant can see where it came from and open the resulting Journal Entry");
