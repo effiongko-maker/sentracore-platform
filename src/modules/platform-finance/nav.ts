@@ -183,11 +183,10 @@ export const PLATFORM_FINANCE_NAV_ITEMS: readonly PlatformFinanceNavItem[] = [
     icon: BarChart3,
   },
   {
-    href: null,
+    href: "/platform-finance/settings",
     label: "Settings",
     match: "prefix",
     icon: Settings,
-    comingSoon: true,
   },
 ] as const;
 
