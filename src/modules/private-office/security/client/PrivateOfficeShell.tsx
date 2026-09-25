@@ -64,6 +64,52 @@ async function api<T>(action: string, fields: Record<string, unknown> = {}): Pro
   return body.data as T;
 }
 
+/**
+ * Recovery keys are pasted into a VISIBLE plain-text field: never a password field, so password managers do not fill
+ * or append to it and the owner can see exactly what will be checked. Checking happens only in this browser.
+ */
+function RecoveryKeyField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label>
+      {label}
+      <textarea
+        className="po-key-field"
+        name="private-office-recovery-key"
+        rows={3}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        data-1p-ignore="true"
+        data-lpignore="true"
+        data-bwignore="true"
+        data-form-type="other"
+        placeholder="SCPO-P1.…"
+      />
+    </label>
+  );
+}
+
+function CopyRecoveryKey({ value }: { value: string }) {
+  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (!navigator.clipboard) {
+          setState("failed");
+          return;
+        }
+        navigator.clipboard.writeText(value).then(() => setState("copied"), () => setState("failed"));
+      }}
+    >
+      {state === "copied" ? "Copied" : state === "failed" ? "Copy failed — select the key and copy it" : "Copy recovery key"}
+    </button>
+  );
+}
+
 type VaultContext = {
   status: Status | null;
   unlocked: boolean;
@@ -380,10 +426,7 @@ export function PrivateOfficeShell({ children }: { children: ReactNode }) {
                 </button>
                 <details>
                   <summary>Recover with your recovery artifact</summary>
-                  <label>
-                    Recovery artifact
-                    <input type="password" autoComplete="off" spellCheck={false} value={recovery} onChange={(e) => setRecovery(e.target.value)} />
-                  </label>
+                  <RecoveryKeyField label="Recovery key" value={recovery} onChange={setRecovery} />
                   <button type="button" disabled={busy || !recovery} onClick={() => void recover()}>
                     Recover Private Office
                   </button>
@@ -398,13 +441,11 @@ export function PrivateOfficeShell({ children }: { children: ReactNode }) {
                   SentraCore cannot show or retrieve this again. Store it somewhere independent of this device. If you lose every passkey and this
                   artifact, your encrypted information cannot be recovered by anyone.
                 </p>
-                <textarea readOnly value={artifact} aria-label="Recovery artifact" />
+                <textarea readOnly value={artifact} aria-label="Recovery key" spellCheck={false} />
+                <CopyRecoveryKey value={artifact} />
                 {settingUp ? (
                   <>
-                    <label>
-                      Paste your saved copy to confirm you have it
-                      <input type="password" autoComplete="off" spellCheck={false} value={confirmRecovery} onChange={(e) => setConfirmRecovery(e.target.value)} />
-                    </label>
+                    <RecoveryKeyField label="Paste your saved copy into this empty field to confirm you have it" value={confirmRecovery} onChange={setConfirmRecovery} />
                     <button type="button" disabled={busy || !confirmRecovery} onClick={() => void confirmSetup()}>
                       Confirm and establish Private Office
                     </button>

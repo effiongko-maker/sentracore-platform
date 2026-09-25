@@ -14,6 +14,8 @@ import { resolve } from "node:path";
 import {
   createVault,
   decodeRecoveryArtifact,
+  RecoveryArtifactError,
+  unlockWithRecovery,
   decryptItem,
   destroyVault,
   encodeRecoveryArtifact,
@@ -596,6 +598,80 @@ await check("recovery artifact / secret never cross the network: setup confirmat
   assert(!/console\.|sendBeacon|navigator\.sendBeacon|analytics|telemetry|audit/i.test(shell + flows), "no logging, beacons, telemetry or audit from the client");
   const route = code("src/app/api/private-office/vault/route.ts");
   assert(!/console\.|audit|recordOperationalEvent|emitActionEvent/i.test(route), "the API route logs and audits nothing");
+});
+
+// ── Recovery key copy/paste hardening ──────────────────────────────────────────────────────────────────────
+await check("recovery key copy/paste: presentation artifacts are tolerated, anything that changes the key is refused with a distinct reason", async () => {
+  const { vault, recoveryArtifact: key, publication } = await createVault({ vaultId: crypto.randomUUID(), passkeyWrapperId: crypto.randomUUID(), prfOutput: randomBytes(32) });
+  const opens = async (text: string) => {
+    const v = await unlockWithRecovery({ artifact: text, vaultId: vault.vaultId, wrapped: publication.recoveryWrapped, wrappedAuthorityKey: publication.wrappedAuthorityKey });
+    const same = v.rootKeyId === vault.rootKeyId;
+    destroyVault(v);
+    return same;
+  };
+  const problem = async (text: string) => {
+    try {
+      await decodeRecoveryArtifact(text);
+      return "accepted";
+    } catch (e) {
+      return e instanceof RecoveryArtifactError ? e.problem : `unexpected: ${(e as Error).message}`;
+    }
+  };
+  // A key whose hyphen-bearing sections exercise the dash rules: the UUID always contains hyphens.
+  const accepted: Array<[string, string]> = [
+    ["clean round trip", key],
+    ["surrounding whitespace / CRLF", `  \t${key}\r\n\n`],
+    ["hard-wrapped lines", key.replace(/(.{40})/g, "$1\n")],
+    ["non-breaking spaces", key.replace(/(.{30})/g, "$1 ")],
+    ["zero-width characters", [...key].map((c, i) => (i % 17 === 0 ? `${c}${["​", "‌", "‍", "⁠", "﻿"][i % 5]}` : c)).join("")],
+    ["soft hyphens", key.replace(/(.{25})/g, "$1­")],
+    ...["‐", "‑", "‒", "–", "—", "―", "−"].map((d) => [`Unicode dash U+${d.charCodeAt(0).toString(16).toUpperCase()}`, key.replace(/-/g, d)] as [string, string]),
+  ];
+  for (const [name, text] of accepted) {
+    assert((await problem(text)) === "accepted" && (await opens(text)), `${name}: should open the same vault`);
+  }
+  const letterIndex = [...key].findIndex((c, i) => i > 60 && /[a-zA-Z]/.test(c));
+  const flipped = key.slice(0, letterIndex) + (key[letterIndex] === key[letterIndex]!.toLowerCase() ? key[letterIndex]!.toUpperCase() : key[letterIndex]!.toLowerCase()) + key.slice(letterIndex + 1);
+  const checkStart = key.lastIndexOf(".") + 1;
+  const corruptCheck = key.slice(0, checkStart) + (key[checkStart] === "A" ? "B" : "A") + key.slice(checkStart + 1);
+  const rejected: Array<[string, string, string]> = [
+    ["password manager text before the key (was hidden by a password field)", `AutoFilledStrongPw-1${key}`, "malformed"],
+    ["activation credential pasted instead", `SCPO-A1.${crypto.randomUUID()}.${crypto.randomUUID()}.${toB64u(randomBytes(138))}`, "wrong-artifact"],
+    ["prototype recovery key pasted instead", key.replace("SCPO-P1.", "SCPO-R1."), "wrong-artifact"],
+    ["unrelated text", "correct horse battery staple", "wrong-artifact"],
+    ["truncated", key.slice(0, -3), "malformed"],
+    ["extra trailing text", `${key}X`, "malformed"],
+    ["missing section", key.split(".").filter((_, i) => i !== 2).join("."), "malformed"],
+    ["changed case of one character", flipped, "altered"],
+    ["changed case of everything", key.toLowerCase(), "wrong-artifact"],
+    ["checksum corrupted", corruptCheck, "altered"],
+    ["secret corrupted", key.slice(0, 80) + (key[80] === "A" ? "B" : "A") + key.slice(81), "altered"],
+  ];
+  for (const [name, text, expected] of rejected) {
+    const got = await problem(text);
+    assert(got === expected, `${name}: expected ${expected}, got ${got}`);
+  }
+  const messages = new Set<string>();
+  for (const [, text] of rejected) {
+    try {
+      await decodeRecoveryArtifact(text);
+    } catch (e) {
+      messages.add((e as Error).message.split(":")[0]!.split("(")[0]!.trim());
+    }
+  }
+  assert(messages.size >= 3, "the owner sees distinct explanations for wrong key, malformed text and an altered copy");
+  destroyVault(vault);
+
+  // UI: both recovery-key inputs are visible, unmanaged plain-text fields; the generated key has a copy button.
+  const shell = readFileSync(resolve("src/modules/private-office/security/client/PrivateOfficeShell.tsx"), "utf8");
+  const field = /function RecoveryKeyField[\s\S]*?\n}\n/.exec(shell)?.[0] ?? "";
+  assert(/<textarea/.test(field) && !/type="password"/.test(field), "recovery key field is a visible textarea");
+  for (const attr of ['autoComplete="off"', 'autoCorrect="off"', 'autoCapitalize="off"', "spellCheck={false}", 'data-1p-ignore="true"', 'data-lpignore="true"', 'data-bwignore="true"']) {
+    assert(field.includes(attr), `recovery key field sets ${attr}`);
+  }
+  assert(!/name="[^"]*pass/i.test(field), "field name does not invite password managers");
+  assert((shell.match(/<RecoveryKeyField /g) ?? []).length === 2 && !/value=\{(recovery|confirmRecovery)\}[^>]*type="password"|type="password"[^>]*value=\{(recovery|confirmRecovery)\}/.test(shell), "recovery unlock and setup confirmation both use it; neither is a password field");
+  assert(/<CopyRecoveryKey value=\{artifact\} \/>/.test(shell) && /navigator\.clipboard\.writeText\(value\)/.test(shell), "copy recovery key button");
 });
 
 // ── Browser security baseline ──────────────────────────────────────────────────────────────────────────────

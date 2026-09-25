@@ -122,20 +122,60 @@ export async function encodeRecoveryArtifact(vaultId: string, keyId: string, sec
 
 export type ParsedRecoveryArtifact = { vaultId: string; rootKeyId: string; secret: Uint8Array<ArrayBuffer> };
 
-export async function decodeRecoveryArtifact(text: string): Promise<ParsedRecoveryArtifact> {
-  const invalid = () => new Error("Recovery material is not valid.");
-  const parts = text.trim().replace(/\s+/g, "").split(".");
-  if (parts.length !== 5 || parts[0] !== ARTIFACT_PREFIX) throw invalid();
-  const [, vaultId, keyId, secretText, check] = parts as [string, string, string, string, string];
-  const expected = utf8(await artifactCheck(parts.slice(0, 4).join(".")));
-  if (!constantTimeEqual(expected, utf8(check))) throw invalid();
-  let secret: Uint8Array<ArrayBuffer>;
-  try {
-    secret = fromB64u(secretText);
-  } catch {
-    throw invalid();
+/** Why a pasted recovery key was refused — distinct so the owner can tell what went wrong. */
+export type RecoveryArtifactProblem = "wrong-artifact" | "malformed" | "altered";
+
+export class RecoveryArtifactError extends Error {
+  constructor(readonly problem: RecoveryArtifactProblem, message: string) {
+    super(message);
   }
-  if (secret.length !== KEY_BYTES) throw invalid();
+}
+
+/**
+ * Undo ONLY what copying, wrapping or saving can add to otherwise-identical text: whitespace and line breaks
+ * (including non-breaking spaces), zero-width characters, soft hyphens, and typographic dash substitutions of "-".
+ * Letter case is never changed and nothing is guessed; the checksum remains the authority on whether the result is
+ * exactly the key that was issued.
+ */
+export function normalizeRecoveryArtifactText(text: string): string {
+  return text
+    .replace(/[\u200B-\u200D\u2060\uFEFF\u00AD]/g, "")
+    .replace(/[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g, "-")
+    .replace(/\s+/g, "");
+}
+
+const UUID_TEXT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const B64U_TEXT = (length: number) => new RegExp(`^[A-Za-z0-9_-]{${length}}$`);
+
+export async function decodeRecoveryArtifact(text: string): Promise<ParsedRecoveryArtifact> {
+  const normalized = normalizeRecoveryArtifactText(text);
+  const malformed = () =>
+    new RecoveryArtifactError(
+      "malformed",
+      `The recovery key is incomplete or has extra text (${normalized.length} characters; a recovery key has 120). Paste the whole key, and only the key, into an empty field.`
+    );
+  // A key preceded by other text (e.g. something a password manager filled in) is extra text, not a wrong key.
+  if (!normalized.startsWith(`${ARTIFACT_PREFIX}.`) && normalized.includes(`${ARTIFACT_PREFIX}.`)) throw malformed();
+  if (!normalized.startsWith(`${ARTIFACT_PREFIX}.`)) {
+    if (normalized.startsWith("SCPO-A1.")) {
+      throw new RecoveryArtifactError("wrong-artifact", "This is your owner activation credential, not your recovery key. Recovery keys begin with SCPO-P1.");
+    }
+    throw new RecoveryArtifactError("wrong-artifact", "This is not a Private Office recovery key. Recovery keys begin with SCPO-P1.");
+  }
+  const parts = normalized.split(".");
+  const [, vaultId = "", keyId = "", secretText = "", check = ""] = parts;
+  if (parts.length !== 5 || !UUID_TEXT.test(vaultId) || !B64U_TEXT(22).test(keyId) || !B64U_TEXT(43).test(secretText) || !B64U_TEXT(8).test(check)) {
+    throw malformed();
+  }
+  const expected = utf8(await artifactCheck(parts.slice(0, 4).join(".")));
+  if (!constantTimeEqual(expected, utf8(check))) {
+    throw new RecoveryArtifactError(
+      "altered",
+      "The recovery key does not match its checksum: some characters differ from the key that was shown (for example changed letter case or substituted characters). Use an exact copy."
+    );
+  }
+  const secret = fromB64u(secretText);
+  if (secret.length !== KEY_BYTES) throw malformed();
   return { vaultId, rootKeyId: keyId, secret };
 }
 
